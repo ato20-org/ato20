@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Check,
   ChevronRight,
@@ -17,7 +23,6 @@ import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { aoTeclar, useMarcarAoFocar } from "@/components/mestre/atributos-personagem";
 import { IconeD20 } from "@/components/mestre/icone-d20";
 import { RolagemDoDetalhe } from "@/components/mestre/rolagem-do-detalhe";
-import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,7 +36,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { achadosNosDetalhes } from "@/lib/busca-nos-detalhes";
 import { t } from "@/lib/i18n/personagens";
+import { normaliza } from "@/lib/search";
 import { useMoldeDeDetalhes, useMoldeDeDetalhesStore } from "@/lib/store/use-molde-de-detalhes-store";
 import { cn } from "@/lib/utils";
 import {
@@ -85,18 +92,21 @@ export function useDetalhesDaFicha(personagemId: string): DetalhesDaFicha {
 }
 
 /**
- * Os grupos de detalhes da aba Ficha, na ordem do molde.
+ * Os grupos da ficha, na ordem do molde, para as pílulas da barra lateral.
+ * `null` enquanto o molde ou os detalhes não chegaram.
  *
  * Os do molde aparecem mesmo vazios: o grupo Poderes vazio ainda é onde o "+"
  * mora. Os que só a ficha conhece (veio de outra campanha, ou o grupo saiu do
  * molde) aparecem no fim, em linhas.
  */
-export function GruposDeDetalhes({
-  personagemId,
-  personagemNome,
-  detalhes,
-  aoGravar,
-}: {
+export function useGruposDaFicha(detalhes: DetalhesDaFicha): GrupoDeDetalhes[] | null {
+  const molde = useMoldeDeDetalhes();
+  if (!molde || !detalhes.lista) return null;
+
+  return gruposDaFicha(molde.grupos, detalhes.lista);
+}
+
+type PropsDosDetalhes = {
   personagemId: string;
   /** Para o fio dizer de quem é a rolagem: "Dante · Luta". */
   personagemNome: string;
@@ -107,32 +117,71 @@ export function GruposDeDetalhes({
    * atributo. Sem isto o jogador via a Defesa velha até recarregar a página.
    */
   aoGravar?: () => void;
-}) {
-  const molde = useMoldeDeDetalhes();
-  if (!molde || !detalhes.lista) return null;
+};
 
-  const lista = detalhes.lista;
-  const grupos = gruposDaFicha(molde.grupos, lista);
-  if (grupos.length === 0) return null;
+/** O grupo que a pílula abriu, inteiro, com o "+" e o arrasto. */
+export function GrupoAberto({
+  grupo,
+  ...props
+}: PropsDosDetalhes & { grupo: GrupoDeDetalhes }) {
+  const molde = useMoldeDeDetalhes();
+  if (!molde || !props.detalhes.lista) return null;
+
+  const lista = props.detalhes.lista;
 
   return (
-    <>
-      {grupos.map((grupo) => (
+    <GrupoDaFicha
+      key={grupo.id}
+      personagemId={props.personagemId}
+      personagemNome={props.personagemNome}
+      grupo={grupo}
+      todos={lista}
+      detalhes={doGrupo(lista, grupo)}
+      modelos={doGrupo(molde.modelos, grupo)}
+      onChanged={() => {
+        props.detalhes.recarregar();
+        props.aoGravar?.();
+      }}
+    />
+  );
+}
+
+/**
+ * O que a busca da barra lateral achou, de todos os grupos, cada um com o
+ * nome em cima -- a mesma conta do celular (`achadosNosDetalhes`). Sem "+" nem
+ * arrasto: a lista está cortada, e reordenar um pedaço dela embaralharia o
+ * resto.
+ */
+export function AchadosNaFicha({ busca, ...props }: PropsDosDetalhes & { busca: string }) {
+  const molde = useMoldeDeDetalhes();
+  if (!molde || !props.detalhes.lista) return null;
+
+  const lista = props.detalhes.lista;
+  const achados = achadosNosDetalhes(gruposDaFicha(molde.grupos, lista), lista, normaliza(busca.trim()));
+
+  if (achados.length === 0) {
+    return <p className="text-muted-foreground px-1 py-6 text-center text-xs">{t.detalhes.nadaNaBusca}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {achados.map(({ grupo, detalhes }) => (
         <GrupoDaFicha
           key={grupo.id}
-          personagemId={personagemId}
-          personagemNome={personagemNome}
+          personagemId={props.personagemId}
+          personagemNome={props.personagemNome}
           grupo={grupo}
           todos={lista}
-          detalhes={doGrupo(lista, grupo)}
+          detalhes={detalhes}
           modelos={doGrupo(molde.modelos, grupo)}
+              filtrado
           onChanged={() => {
-            detalhes.recarregar();
-            aoGravar?.();
+            props.detalhes.recarregar();
+            props.aoGravar?.();
           }}
         />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -143,6 +192,7 @@ function GrupoDaFicha({
   todos,
   detalhes,
   modelos,
+  filtrado = false,
   onChanged,
 }: {
   personagemId: string;
@@ -151,6 +201,8 @@ function GrupoDaFicha({
   todos: Detalhe[];
   detalhes: Detalhe[];
   modelos: ModeloDeDetalhe[];
+  /** Pedaço da lista, da busca: com o nome em cima, sem "+" nem arrasto. Ver `AchadosNaFicha`. */
+  filtrado?: boolean;
   onChanged: () => void;
 }) {
   /** O recém-criado: o rótulo dele nasce em edição, como a sigla do atributo. */
@@ -226,66 +278,82 @@ function GrupoDaFicha({
     }
   }
 
+  // No fim da lista, e não no canto de um cabeçalho: na barra lateral o grupo
+  // não tem cabeçalho -- o nome está na pílula --, e o "+" fica onde o
+  // detalhe novo vai aparecer.
   const acao = (
     <Tooltip>
       <TooltipTrigger
         render={
           <Button
             variant="ghost"
-            size="icon-xs"
-            aria-label={t.detalhes.criar(grupo.nome)}
+            size="sm"
             disabled={cheio}
             onClick={() => void criar()}
+            className="text-muted-foreground hover:text-foreground h-7 w-full justify-start text-xs"
           >
             <Plus />
+            {t.detalhes.criar(grupo.nome)}
           </Button>
         }
       />
-      <TooltipContent>
-        <p className="font-medium">{t.detalhes.criar(grupo.nome)}</p>
-        {cheio ? <p className="text-muted-foreground max-w-48">{t.detalhes.limite(MAX_DETALHES)}</p> : null}
-      </TooltipContent>
+      {cheio ? (
+        <TooltipContent>
+          <p className="max-w-48">{t.detalhes.limite(MAX_DETALHES)}</p>
+        </TooltipContent>
+      ) : null}
     </Tooltip>
   );
 
+  const corpo =
+    lista.length === 0 ? (
+      <p className="text-muted-foreground text-[11px] leading-snug">{t.detalhes.vazio}</p>
+    ) : (
+      <ul
+        ref={listRef}
+        className={
+          grupo.exibicao === "lista"
+            ? "space-y-1"
+            : "grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-1.5"
+        }
+      >
+        {lista.map((detalhe, index) => {
+          const comum = {
+            detalhe,
+            editarRotulo: detalhe.id === novo,
+            dropTarget: dropIndex === index,
+            onReorderStart: (evento: ReactPointerEvent) => {
+              if (!filtrado && pegaOCartao(evento)) startReorder(evento, detalhe.id, LIMIAR_DO_ARRASTO);
+            },
+            onGravar: (patch: PatchDetalhe) => {
+              if (patch.rotulo !== undefined) setNovo(null);
+              void gravar(detalhe.id, patch);
+            },
+            onApagar: () => void apagar(detalhe.id),
+            rolavel: rolaveis.has(chaveDoNome(detalhe.rotulo)),
+            rotuloDaRolagem: `${personagemNome} · ${detalhe.rotulo}`,
+          };
+          return grupo.exibicao === "lista" ? (
+            <EntradaDeLista key={detalhe.id} {...comum} />
+          ) : (
+            <LinhaDeDetalhe key={detalhe.id} {...comum} />
+          );
+        })}
+      </ul>
+    );
+
+  // Sem moldura: a barra lateral já é a moldura. O nome só aparece nos
+  // achados da busca, que juntam grupos; no grupo aberto ele está na pílula.
   return (
-    <SecaoFicha secao={`det:${chaveDoNome(grupo.nome)}`} titulo={grupo.nome} contagem={lista.length} acao={acao}>
-      {lista.length === 0 ? (
-        <p className="text-muted-foreground text-[11px] leading-snug">{t.detalhes.vazio}</p>
-      ) : (
-        <ul
-          ref={listRef}
-          className={
-            grupo.exibicao === "lista"
-              ? "space-y-1"
-              : "grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-1.5"
-          }
-        >
-          {lista.map((detalhe, index) => {
-            const comum = {
-              detalhe,
-              editarRotulo: detalhe.id === novo,
-              dropTarget: dropIndex === index,
-              onReorderStart: (evento: ReactPointerEvent) => {
-                if (pegaOCartao(evento)) startReorder(evento, detalhe.id, LIMIAR_DO_ARRASTO);
-              },
-              onGravar: (patch: PatchDetalhe) => {
-                if (patch.rotulo !== undefined) setNovo(null);
-                void gravar(detalhe.id, patch);
-              },
-              onApagar: () => void apagar(detalhe.id),
-              rolavel: rolaveis.has(chaveDoNome(detalhe.rotulo)),
-              rotuloDaRolagem: `${personagemNome} · ${detalhe.rotulo}`,
-            };
-            return grupo.exibicao === "lista" ? (
-              <EntradaDeLista key={detalhe.id} {...comum} />
-            ) : (
-              <LinhaDeDetalhe key={detalhe.id} {...comum} />
-            );
-          })}
-        </ul>
-      )}
-    </SecaoFicha>
+    <section className="space-y-1.5">
+      {filtrado ? (
+        <h3 className="text-muted-foreground truncate text-[10px] font-medium tracking-wide uppercase">
+          {grupo.nome}
+        </h3>
+      ) : null}
+      {corpo}
+      {filtrado ? null : acao}
+    </section>
   );
 }
 

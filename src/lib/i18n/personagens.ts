@@ -49,6 +49,13 @@ const pt = {
       rotulo: "Partes da ficha",
       ficha: "Ficha",
     },
+    /** A barra lateral dos grupos de detalhes, na aba Ficha. */
+    barra: {
+      rotulo: "Grupos da ficha",
+      buscar: "Buscar nos grupos...",
+      buscarRotulo: "Buscar nos detalhes da ficha",
+      limparBusca: "Limpar a busca",
+    },
     abrirFicha: (arquivo: string) => `Abrir a ficha (${arquivo})`,
     anexarFicha: "Anexar a ficha",
     verCampos: "Ficha, retrato e miniatura",
@@ -277,6 +284,7 @@ const pt = {
 
   /** Os detalhes da ficha: Identidade, Perícias, Poderes. Ver `vault/detalhes.rs`. */
   detalhes: {
+    nadaNaBusca: "Nada com isso nos detalhes desta ficha.",
     apagarTitulo: (rotulo: string) => `Apagar ${rotulo}?`,
     apagarItens: (rotulo: string) => [`o detalhe ${rotulo} desta ficha`, "o valor e a descrição dele"],
     novo: "Novo",
@@ -622,6 +630,12 @@ const en: typeof pt = {
       rotulo: "Sheet sections",
       ficha: "Sheet",
     },
+    barra: {
+      rotulo: "Sheet groups",
+      buscar: "Search the groups...",
+      buscarRotulo: "Search the sheet details",
+      limparBusca: "Clear the search",
+    },
     abrirFicha: (arquivo: string) => `Open the sheet (${arquivo})`,
     anexarFicha: "Attach the sheet",
     verCampos: "Sheet, portrait and token",
@@ -844,6 +858,7 @@ const en: typeof pt = {
   },
 
   detalhes: {
+    nadaNaBusca: "Nothing like that in this sheet's details.",
     apagarTitulo: (rotulo) => `Delete ${rotulo}?`,
     apagarItens: (rotulo) => [`the ${rotulo} detail from this sheet`, "its value and description"],
     novo: "New",

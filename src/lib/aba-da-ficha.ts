@@ -57,16 +57,17 @@ export function lerLembradas(cru: string | null): Lembradas {
 }
 
 /**
- * O mapa com esta ficha lembrada, e no fim da fila.
+ * O mapa com esta ficha lembrada, e no fim da fila. Serve também ao grupo de
+ * detalhes lembrado -- ver `grupo-da-ficha.ts`.
  *
  * Tirar e repor é o que faz a ordem de inserção valer como "mais recente por
  * último", e o corte do teto levar as que não se abrem há mais tempo.
  */
-export function lembrar(
-  lembradas: Lembradas,
+export function lembrar<T extends string>(
+  lembradas: Record<string, T>,
   personagemId: string,
-  aba: AbaDaFicha,
-): Lembradas {
+  aba: T,
+): Record<string, T> {
   const resto = Object.entries(lembradas).filter(([id]) => id !== personagemId);
   const ordem = [...resto, [personagemId, aba] as const];
 

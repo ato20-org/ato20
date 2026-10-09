@@ -92,7 +92,6 @@ import {
 } from "./secao-ficha";
 import { Substituto } from "@/components/mestre/substituto";
 import { abaLembrada, lembrarAba, type AbaDaFicha } from "@/lib/aba-da-ficha";
-import { SecoesDeExtensao } from "@/components/mestre/secoes-de-extensao";
 import { formatBytes } from "@/lib/player/session";
 import {
   attachToCharacter,
@@ -116,11 +115,8 @@ import type {
   Personagem,
 } from "@/types/character";
 import { doJogador } from "@/types/character";
-import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
-import { AtributosPersonagem } from "@/components/mestre/atributos-personagem";
-import { GruposDeDetalhes, useDetalhesDaFicha } from "@/components/mestre/detalhes-personagem";
-import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
-import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
+import { AbaFicha, BarraDosGrupos, useBarraAoLado } from "@/components/mestre/aba-ficha";
+import { useDetalhesDaFicha } from "@/components/mestre/detalhes-personagem";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
   image: FileImage,
@@ -289,173 +285,144 @@ function Ficha({
   // Lida no primeiro render, e não num efeito: ver `abaLembrada`.
   const [aba, setAba] = useState<AbaDaFicha>(() => abaLembrada(personagem.id));
 
+  const raizRef = useRef<HTMLDivElement>(null);
+  const barraAoLado = useBarraAoLado(raizRef);
+
   return (
     // `@container`, e nao breakpoint de tela: esta janela flutua, atraca numa
     // coluna e redimensiona na mao. A largura dela nao tem relacao nenhuma com
     // a da tela, e um `md:` aqui quebraria em duas colunas uma ficha de 360
     // pixels so porque o monitor e grande.
-    <div className="@container/ficha flex min-h-0 flex-1 flex-col">
+    //
+    // Larga, duas colunas: o personagem (cabecalho e abas) a esquerda, e a
+    // barra dos grupos de detalhes na altura toda a direita, a vista em
+    // qualquer aba. Estreita, a barra desce para o fim da rolagem da aba que
+    // estiver aberta. Ver `useBarraAoLado`.
+    <div ref={raizRef} className="@container/ficha flex min-h-0 flex-1">
       <PersonagemDaFichaContext.Provider value={personagem.id}>
-        <Cabecalho
-          personagem={personagem}
-          jogadores={jogadores}
-          donos={donos}
-          donosNomes={donosNomes}
-          onChanged={onChanged}
-          // Os dois: preencher um campo muda o ÍNDICE (o campo) e a pasta de
-          // anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
-          // ficava dizendo "nada anexado" com a ficha já posta.
-          onCamposChanged={() => {
-            onChanged();
-            relerAnexos();
-          }}
-          // Os dois de novo: vincular muda quem são os donos DESTA ficha, que
-          // é leitura local, e muda o nome que a lista de personagens mostra
-          // embaixo do nome dele — outra janela. Ver `useCharacterOwners`.
-          onDonosChanged={() => {
-            relerAnexos();
-            onChanged();
-          }}
-          onRemoved={onRemoved}
-          onAbrirAnexo={abrirAnexo}
-          onAbrirImagem={abrirImagem}
-        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <Cabecalho
+              personagem={personagem}
+              jogadores={jogadores}
+              donos={donos}
+              donosNomes={donosNomes}
+              onChanged={onChanged}
+              // Os dois: preencher um campo muda o ÍNDICE (o campo) e a pasta de
+              // anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
+              // ficava dizendo "nada anexado" com a ficha já posta.
+              onCamposChanged={() => {
+                onChanged();
+                relerAnexos();
+              }}
+              // Os dois de novo: vincular muda quem são os donos DESTA ficha, que
+              // é leitura local, e muda o nome que a lista de personagens mostra
+              // embaixo do nome dele — outra janela. Ver `useCharacterOwners`.
+              onDonosChanged={() => {
+                relerAnexos();
+                onChanged();
+              }}
+              onRemoved={onRemoved}
+              onAbrirAnexo={abrirAnexo}
+              onAbrirImagem={abrirImagem}
+            />
 
-        {/* `gap-0`: o `Tabs` separa lista e painel por padrão, e aqui a lista
-            é um cabeçalho colado no conteúdo. */}
-        <Tabs
-          value={aba}
-          onValueChange={(valor) => {
-            setAba(valor as AbaDaFicha);
-            lembrarAba(personagem.id, valor as AbaDaFicha);
-          }}
-          className="min-h-0 flex-1 gap-0"
-        >
-          <TabsList
-            variant="line"
-            aria-label={t.ficha.abas.rotulo}
-            className="h-auto w-full shrink-0 justify-start gap-1 rounded-none border-b px-2 py-1"
+          {/* `gap-0`: o `Tabs` separa lista e painel por padrão, e aqui a lista
+              é um cabeçalho colado no conteúdo. */}
+          <Tabs
+            value={aba}
+            onValueChange={(valor) => {
+              setAba(valor as AbaDaFicha);
+              lembrarAba(personagem.id, valor as AbaDaFicha);
+            }}
+            className="min-h-0 flex-1 gap-0"
           >
-            <TabsTrigger value="ficha" className="flex-none">
-              {t.ficha.abas.ficha}
-            </TabsTrigger>
-
-            {/* O rótulo também é ALVO: um item largado aqui entra no
-                inventário com a aba fechada. Sem isso, passar um item do
-                Edgar para a Mira pedia abrir antes o inventário dela, e a
-                aba que estava aberta era quase sempre a outra. */}
-            <TabsTrigger
-              value="inventario"
-              data-inventario
-              data-personagem-id={personagem.id}
-              className={cn(
-                "flex-none",
-                recebendo && "ring-primary text-foreground ring-2",
-              )}
+            <TabsList
+              variant="line"
+              aria-label={t.ficha.abas.rotulo}
+              className="h-auto w-full shrink-0 justify-start gap-1 rounded-none border-b px-2 py-1"
             >
-              {t.inventario.titulo}
-              <Contagem quantos={inventario.itens?.length} />
-            </TabsTrigger>
+              <TabsTrigger value="ficha" className="flex-none">
+                {t.ficha.abas.ficha}
+              </TabsTrigger>
 
-            <TabsTrigger value="arquivos" className="flex-none">
-              {t.ficha.arquivos}
-              <Contagem quantos={soltos.length} />
-            </TabsTrigger>
-          </TabsList>
+              {/* O rótulo também é ALVO: um item largado aqui entra no
+                  inventário com a aba fechada. Sem isso, passar um item do
+                  Edgar para a Mira pedia abrir antes o inventário dela, e a
+                  aba que estava aberta era quase sempre a outra. */}
+              <TabsTrigger
+                value="inventario"
+                data-inventario
+                data-personagem-id={personagem.id}
+                className={cn(
+                  "flex-none",
+                  recebendo && "ring-primary text-foreground ring-2",
+                )}
+              >
+                {t.inventario.titulo}
+                <Contagem quantos={inventario.itens?.length} />
+              </TabsTrigger>
 
-          {/* A rolagem é das abas, e o cabeçalho fica parado: quem é o
-              personagem não sai de vista ao descer até as condições. Cada aba
-              desmonta ao sair, como a seção fechada: o inventário e as notas
-              não montam numa ficha aberta para mexer na vida. */}
-          <ScrollArea className="min-h-0 flex-1">
-            <TabsContent value="ficha" className="p-3">
-              {/* Duas colunas a partir de 640. À esquerda, o que o personagem
-                  É: atributos e, logo abaixo, os grupos de detalhes
-                  (Identidade, Perícias, Poderes), juntos porque se leem
-                  juntos. À direita, o que muda na mesa: medidores no topo,
-                  para vinte e oito perícias não empurrarem o PV para fora da
-                  vista, depois aparência e condição. Iguais, e não a da
-                  esquerda mais larga: a linha de condição guarda lugar para o
-                  olho e a lixeira mesmo escondidos. Abaixo de 640, uma
-                  coluna. */}
-              <div className="grid gap-3 @[640px]/ficha:grid-cols-2">
-                <div className="min-w-0 space-y-3">
-                  <AtributosPersonagem
+              <TabsTrigger value="arquivos" className="flex-none">
+                {t.ficha.arquivos}
+                <Contagem quantos={soltos.length} />
+              </TabsTrigger>
+            </TabsList>
+
+            {/* A rolagem é das abas, e o cabeçalho fica parado: quem é o
+                personagem não sai de vista ao descer até as condições. Cada
+                aba desmonta ao sair, como a seção fechada: o inventário e as
+                notas não montam numa ficha aberta para mexer na vida. A barra
+                dos grupos, sem lugar ao lado, vem no fim dela, em qualquer
+                aba. */}
+            <ScrollArea className="min-h-0 flex-1">
+              <TabsContent value="ficha">
+                <AbaFicha personagem={personagem} onChanged={onChanged} />
+              </TabsContent>
+
+              <TabsContent value="inventario" className="p-3">
+                <ModoDaSecaoContext.Provider value="aba">
+                  <InventarioPersonagem
                     personagem={personagem}
-                    onChanged={onChanged}
+                    inventario={inventario}
                   />
+                </ModoDaSecaoContext.Provider>
+              </TabsContent>
 
-                  <GruposDeDetalhes
+              <TabsContent value="arquivos" className="p-3">
+                <ModoDaSecaoContext.Provider value="aba">
+                  <Files
                     personagemId={personagem.id}
-                    personagemNome={personagem.nome}
-                    detalhes={detalhes}
-                    aoGravar={onChanged}
+                    soltos={soltos}
+                    anexando={anexando}
+                    onAnexar={() => void anexar()}
+                    onAbrir={abrirAnexo}
+                    onRemover={async (anexo) => {
+                      await detachFromCharacter(
+                        personagem.id,
+                        anexo.autor,
+                        anexo.arquivo,
+                      );
+                      relerAnexos();
+                      // Apagar o anexo da ficha limpa o CAMPO ficha do lado
+                      // nativo — ver `remove_anexo`. Sem reler o índice, a linha
+                      // da ficha continuaria mostrando o nome de um arquivo que
+                      // saiu do disco.
+                      onChanged();
+                    }}
                   />
-                </div>
+                </ModoDaSecaoContext.Provider>
+              </TabsContent>
 
-                <div className="min-w-0 space-y-3">
-                  <MedidoresPersonagem
-                    personagem={personagem}
-                    onChanged={onChanged}
-                  />
+              {barraAoLado ? null : (
+                <BarraDosGrupos personagem={personagem} detalhes={detalhes} onChanged={onChanged} />
+              )}
+            </ScrollArea>
+          </Tabs>
+        </div>
 
-                  <AparenciasPersonagem
-                    personagem={personagem}
-                    onChanged={onChanged}
-                  />
-
-                  <CondicoesPersonagem
-                    personagem={personagem}
-                    onChanged={onChanged}
-                  />
-                </div>
-
-                {/* As seções que os plugins trouxeram, na largura toda e
-                    depois das de fábrica: um plugin desenha o que quiser ali,
-                    e meia coluna seria pouco para uma aba de habilidades.
-                    `empty:hidden` porque sem plugin isto é um vazio, e o vão
-                    da grade continuaria somando embaixo. */}
-                <div className="min-w-0 space-y-3 empty:hidden @[640px]/ficha:col-span-2">
-                  <SecoesDeExtensao personagemId={personagem.id} />
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="inventario" className="p-3">
-              <ModoDaSecaoContext.Provider value="aba">
-                <InventarioPersonagem
-                  personagem={personagem}
-                  inventario={inventario}
-                />
-              </ModoDaSecaoContext.Provider>
-            </TabsContent>
-
-            <TabsContent value="arquivos" className="p-3">
-              <ModoDaSecaoContext.Provider value="aba">
-                <Files
-                  personagemId={personagem.id}
-                  soltos={soltos}
-                  anexando={anexando}
-                  onAnexar={() => void anexar()}
-                  onAbrir={abrirAnexo}
-                  onRemover={async (anexo) => {
-                    await detachFromCharacter(
-                      personagem.id,
-                      anexo.autor,
-                      anexo.arquivo,
-                    );
-                    relerAnexos();
-                    // Apagar o anexo da ficha limpa o CAMPO ficha do lado
-                    // nativo — ver `remove_anexo`. Sem reler o índice, a linha
-                    // da ficha continuaria mostrando o nome de um arquivo que
-                    // saiu do disco.
-                    onChanged();
-                  }}
-                />
-              </ModoDaSecaoContext.Provider>
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+        {barraAoLado ? (
+          <BarraDosGrupos personagem={personagem} detalhes={detalhes} aoLado onChanged={onChanged} />
+        ) : null}
       </PersonagemDaFichaContext.Provider>
     </div>
   );

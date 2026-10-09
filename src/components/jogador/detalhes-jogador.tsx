@@ -8,6 +8,7 @@ import { lancarNoVidro } from "@/components/jogador/dados-na-tela";
 import { DadoParado } from "@/components/playground/dado-parado";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { achadosNosDetalhes } from "@/lib/busca-nos-detalhes";
 import { t } from "@/lib/i18n/jogador";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { normaliza } from "@/lib/search";
@@ -151,15 +152,8 @@ export function DetalhesDoJogador({
 
   return (
     <>
-      {gruposDaFicha(ficha.grupos, ficha.detalhes).map((grupo) => {
-        const todos = doGrupo(ficha.detalhes, grupo);
-        const detalhes =
-          busca && !normaliza(grupo.nome).includes(busca)
-            ? todos.filter((detalhe) => casa(detalhe, busca))
-            : todos;
-        if (detalhes.length === 0) return null;
-
-        return (
+      {achadosNosDetalhes(gruposDaFicha(ficha.grupos, ficha.detalhes), ficha.detalhes, busca).map(
+        ({ grupo, detalhes }) => (
           <GrupoDoJogador
             key={grupo.id}
             codigo={codigo}
@@ -168,16 +162,9 @@ export function DetalhesDoJogador({
             detalhes={detalhes}
             busca={busca}
           />
-        );
-      })}
+        ),
+      )}
     </>
-  );
-}
-
-/** O detalhe casa com a busca pelo rótulo, pelo valor ou pela descrição. */
-function casa(detalhe: DetalheDoJogador, busca: string): boolean {
-  return [detalhe.rotulo, detalhe.valor === undefined ? "" : String(detalhe.valor), detalhe.descricao ?? ""].some(
-    (texto) => normaliza(texto).includes(busca),
   );
 }
 
