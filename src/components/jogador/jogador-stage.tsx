@@ -151,14 +151,17 @@ export function JogadorStage({
           </p>
         ) : null}
 
-        <SoundToggle className="absolute top-2 right-12" />
+        {/* `z-30` nos dois botões: o de tela cheia mora no canto, por cima da
+            faixa preta lateral do mapa, e com cena carregada uma camada dele
+            pintava por cima -- o som, mais para dentro, escapava. */}
+        <SoundToggle className="absolute top-2 right-12 z-30" />
 
         <button
           type="button"
           aria-label={expanded ? t.palco.sairDaTelaCheia : t.palco.telaCheia}
           // Alvo generoso e fundo próprio: por cima de mapa escuro ou claro,
           // um ícone sem contraste desaparece.
-          className="absolute top-2 right-2 rounded-md bg-black/60 p-2 text-white backdrop-blur"
+          className="absolute top-2 right-2 z-30 rounded-md bg-black/60 p-2 text-white backdrop-blur"
           onClick={() => toggle(frameRef.current)}
         >
           {expanded ? (

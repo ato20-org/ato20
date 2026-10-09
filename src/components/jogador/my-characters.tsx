@@ -9,6 +9,7 @@ import {
   FileVideo,
   Loader2,
   Paperclip,
+  Search,
   TriangleAlert,
   Trash2,
   X,
@@ -17,26 +18,26 @@ import { toast } from "sonner";
 
 import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { t } from "@/lib/i18n/jogador";
+import { normaliza } from "@/lib/search";
 import { MINIATURA } from "@/lib/miniatura";
 
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
 import { BlocosDePlugin } from "./blocos-de-plugin";
+import { DetalhesDoJogador } from "./detalhes-jogador";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
   characterFileThumbUrl,
   characterFileUrl,
   characterFiles,
-  characterNote,
   deleteCharacterFile,
   myCharacters,
   revokeCharacterFileUrl,
   uploadCharacterFile,
-  writeCharacterNote,
 } from "@/lib/player/characters";
 import { formatBytes, MAX_ATTACHMENT_BYTES } from "@/lib/player/session";
 import { cn } from "@/lib/utils";
@@ -55,9 +56,6 @@ const ICONE: Record<AttachmentKind, typeof File> = {
   other: File,
 };
 
-/** Espera antes de gravar a nota, em milissegundos. */
-const DEBOUNCE_MS = 800;
-
 /**
  * Os personagens deste jogador.
  *
@@ -68,28 +66,34 @@ const DEBOUNCE_MS = 800;
  * uma miniatura no mapa.
  *
  * Agora o personagem é do mestre e da campanha, e o jogador recebe acesso. O
- * que ele pode: ler os arquivos, mandar os próprios, e escrever notas. O que
+ * que ele pode: ler os arquivos e mandar os próprios -- as notas moram no
+ * caderno do personagem, na aba Anotações. O que
  * ele não pode: apagar o que o mestre pôs ali.
  *
  * Sem personagem vinculado a lista fica vazia, e isso é estado normal — não
  * erro. Quem entrega personagem é o mestre.
  */
 /**
- * Que parte do personagem mostrar.
- *
- * Existe porque a tela deitada quebrou o cartão em gavetas: ficha, inventário e
- * arquivos viraram três ferramentas da trilha lateral, e cada uma abre só o seu
- * pedaço. Em pé continua tudo junto — lá o cartão inteiro É a tela.
+ * Que parte do personagem mostrar: o cartão inteiro (a aba Personagem, e a
+ * gaveta dela deitado) ou os arquivos (aba e gaveta Arquivos). O inventário
+ * saiu para a mochila, ver `MochilaFlutuante`; a nota, para o caderno do
+ * personagem, ver `AnotacoesJogador`.
  */
-export type SecaoPersonagem =
-  "tudo" | "personagem" | "inventario" | "arquivos" | "notas";
+export type SecaoPersonagem = "tudo" | "arquivos";
 
 export function MyCharacters({
   codigo,
   secao = "tudo",
+  comBusca = true,
 }: {
   codigo: string;
   secao?: SecaoPersonagem;
+  /**
+   * O campo de busca preso no alto do cartão. Sem ele na barra lateral da tela
+   * deitada, onde a busca é um ícone da faixa e abre no meio da tela. Ver
+   * `BuscaDoJogador`.
+   */
+  comBusca?: boolean;
 }) {
   const [personagens, setPersonagens] = useState<Personagem[] | null>(null);
   // Relê quando o Mestre avisa que o elenco mudou -- o medidor que um botão
@@ -146,6 +150,7 @@ export function MyCharacters({
           codigo={codigo}
           personagem={personagem}
           secao={secao}
+          comBusca={comBusca}
         />
       ))}
     </div>
@@ -159,10 +164,12 @@ function CharacterCard({
   codigo,
   personagem,
   secao,
+  comBusca,
 }: {
   codigo: string;
   personagem: Personagem;
   secao: SecaoPersonagem;
+  comBusca: boolean;
 }) {
   const [anexos, setAnexos] = useState<AnexoPersonagem[]>([]);
   const [versao, setVersao] = useState(0);
@@ -186,6 +193,10 @@ function CharacterCard({
   );
 
   const entrada = useRef<HTMLInputElement>(null);
+
+  // A busca da aba em pé. Do cartão, e não da aba: com dois personagens cada
+  // um procura no que é seu.
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     let ativo = true;
@@ -291,61 +302,6 @@ function CharacterCard({
     setUrl(null);
     setAbrindo(null);
   }
-
-  // A MINIATURA, grande, quando existe uma. É ela que o mestre põe no mapa, e
-  // é por ela que a mesa reconhece o personagem durante a sessão — a imagem
-  // que o jogador tem na cabeça quando alguém fala o nome dele.
-  //
-  // Retrato serve de reserva: é a mesma pessoa de outro ângulo, e um quadro
-  // vazio ao lado do nome é pior que a segunda escolha.
-  const heroi = personagem.miniatura ?? personagem.retrato;
-
-  // Só a nota: é a gaveta de anotações, que junta o caderno do jogador com o
-  // que ele escreveu sobre cada personagem. Sai por cima para não arrastar a
-  // moldura do cartão inteiro atrás de um `<textarea>`.
-  if (secao === "notas") {
-    return (
-      <section className="space-y-1">
-        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          {t.personagens.sobre(personagem.nome)}
-        </p>
-        <CharacterNote codigo={codigo} personagemId={personagem.id} />
-      </section>
-    );
-  }
-
-  /** O token de corpo inteiro, grande e clicável. */
-  const retratoGrande = (className: string) =>
-    heroi ? (
-      <button
-        type="button"
-        onClick={() =>
-          setZoom({
-            titulo: personagem.miniatura
-              ? t.personagens.miniatura
-              : t.personagens.retrato,
-            assetId: heroi,
-          })
-        }
-        aria-label={t.personagens.ampliarImagem(personagem.nome)}
-        className={className}
-      >
-        {/* `/asset/{id}` inteiro, e não a variante `mini`: aqui a imagem é o
-            assunto, e a redução existe para caber num quadrado de 80px.
-            `object-contain` porque o token costuma ser um recorte de corpo
-            inteiro — cortar a cabeça para preencher a caixa é o oposto do que
-            ele serve.
-
-            Aberto para a mesa: o celular alcança sem credencial própria. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/asset/${heroi}`}
-          alt={personagem.nome}
-          draggable={false}
-          className="max-h-72 w-full rounded-md object-contain object-bottom"
-        />
-      </button>
-    ) : null;
 
   /**
    * Os medidores deste personagem, como a mesa os vê.
@@ -508,11 +464,6 @@ function CharacterCard({
       </ul>
     ) : null;
 
-  /** Os campos com título próprio: é como a gaveta da tela deitada os mostra. */
-  const blocoDeArquivos = camposDeArquivo ? (
-    <Secao titulo={t.personagens.arquivosDoPersonagem}>{camposDeArquivo}</Secao>
-  ) : null;
-
   /** O que o mestre entregou e o que o jogador juntou. */
   const gruposDeArquivos = (
     <>
@@ -611,8 +562,6 @@ function CharacterCard({
     </>
   );
 
-  // Uma entrada só, fora dos grupos: a gaveta chama o seletor pelo botão do
-  // pé da lista, e o cartão em pé pelo do título da seção.
   const entradaDeArquivo = (
     <input
       ref={entrada}
@@ -627,25 +576,6 @@ function CharacterCard({
     <Loader2 className="animate-spin" />
   ) : (
     <Paperclip />
-  );
-
-  /** A gaveta dos arquivos: os grupos e o botão de mandar mais embaixo. */
-  const listaDeArquivos = (
-    <>
-      {gruposDeArquivos}
-      {entradaDeArquivo}
-
-      <Button
-        variant="secondary"
-        size="sm"
-        className="w-full"
-        disabled={enviando}
-        onClick={() => entrada.current?.click()}
-      >
-        {iconeDeEnvio}
-        {t.personagens.enviarArquivo}
-      </Button>
-    </>
   );
 
   const visualizadores = (
@@ -672,94 +602,18 @@ function CharacterCard({
     </>
   );
 
-  // A GAVETA da tela deitada: uma coisa só, numa coluna só.
-  //
-  // Nome no alto, token embaixo dele, e os arquivos embaixo do token — nessa
-  // ordem porque a gaveta é estreita e alta, o contrário do cartão largo da
-  // tela em pé. Pôr o token ao lado dos arquivos ali dentro espremia os dois.
-  if (secao !== "tudo") {
+  // Os ARQUIVOS, aba própria em pé e gaveta própria deitado: a ficha, o
+  // retrato e a miniatura, o que o mestre entregou e o que o jogador juntou.
+  // Saíram do fim da aba Personagem, onde ficavam a várias rolagens de
+  // distância embaixo dos detalhes e do inventário. O nome no alto diz de quem
+  // são, e o botão de mandar fica ao lado dele, à vista sem rolar.
+  if (secao === "arquivos") {
     return (
       <section className="space-y-3">
-        {secao === "personagem" ? (
-          <>
-            <h3 className="truncate text-2xl leading-tight font-semibold">
-              {personagem.nome}
-            </h3>
-            {retratoGrande("block w-full")}
-            {blocoDeCondicoes}
-            {blocoDeMedidores}
-            {blocoDeAtributos}
-            <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
-            {blocoDeArquivos}
-          </>
-        ) : null}
-
-        {/* Sem moldura por dentro: a gaveta já é o cartão, e dois retângulos
-            encaixados só roubam largura dos quadros. */}
-        {secao === "inventario" ? (
-          <InventarioJogador codigo={codigo} personagemId={personagem.id} />
-        ) : null}
-
-        {secao === "arquivos" ? listaDeArquivos : null}
-
-        {visualizadores}
-      </section>
-    );
-  }
-
-  // O cartão da tela em pé, SEM moldura: o painel já é a moldura, e cada caixa
-  // a mais por dentro comia largura do celular e repetia a mesma borda três
-  // vezes, uma dentro da outra. As seções se separam pelo título e por uma
-  // linha fina.
-  return (
-    <section>
-      {/* Preso no alto do painel enquanto se rola: é o nome que diz de quem é o
-          inventário lá embaixo. Com dois personagens, o do segundo empurra o do
-          primeiro para fora, porque cada um só prende dentro do próprio cartão.
-          Puxado até as bordas para o fundo cobrir o que passa por baixo. */}
-      <h3 className="bg-background sticky top-0 z-10 -mx-3 truncate border-b px-3 py-2 text-lg leading-tight font-semibold">
-        {personagem.nome}
-      </h3>
-
-      {/* O token à esquerda e o resto do personagem do lado. O inventário fica
-          na coluna da direita: sem medidor nem atributo, ela seria só o token
-          ao lado de um vão. Os quadros dele se medem pela largura que recebem,
-          e não ficam maiores que o próprio personagem. */}
-      <div
-        className={cn(
-          "grid items-start gap-x-3 pt-3",
-          heroi &&
-            "grid-cols-[minmax(5rem,8rem)_1fr] sm:grid-cols-[minmax(9rem,13rem)_1fr]",
-        )}
-      >
-        {retratoGrande("block")}
-
-        <div className={cn("min-w-0", PILHA)}>
-          {blocoDeCondicoes}
-
-          {blocoDeMedidores}
-
-          {/* Depois dos medidores: eles mudam a cada turno e o atributo só na
-              hora de rolar, e o que se confere mais vem antes. */}
-          {blocoDeAtributos}
-
-          {/* As seções dos plugins, entre os medidores e o inventário: são o
-              personagem em cena, como eles. Sem plugin o componente devolve
-              `null`, e a pilha não ganha linha. */}
-          <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
-
-          <InventarioJogador codigo={codigo} personagemId={personagem.id} />
-        </div>
-      </div>
-
-      {/* Os arquivos todos numa seção só: a ficha que o mestre nomeou, o que ele
-          entregou e o que o jogador juntou. Eram dois lugares, um no alto e
-          outro no pé do cartão, e o botão de mandar ocupava a largura inteira
-          embaixo dos dois. */}
-      <Secao
-        className="mt-3 border-t pt-3"
-        titulo={t.ferramentas.arquivos}
-        acao={
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <h3 className="min-w-0 truncate text-lg leading-tight font-semibold">
+            {personagem.nome}
+          </h3>
           <Button
             variant="ghost"
             size="sm"
@@ -769,13 +623,172 @@ function CharacterCard({
             {iconeDeEnvio}
             {t.personagens.enviarArquivo}
           </Button>
-        }
-      >
+        </div>
         {camposDeArquivo}
         {gruposDeArquivos}
-      </Secao>
+        {entradaDeArquivo}
+        {visualizadores}
+      </section>
+    );
+  }
 
-      {entradaDeArquivo}
+  /** O que se procura, sem acento nem caixa. Vazio = o cartão inteiro. */
+  const termo = normaliza(busca.trim());
+
+  /**
+   * O rosto e o nome. O RETRATO, que é o rosto, e a miniatura de reserva,
+   * pequenos e recortados no alto, onde a cabeça costuma estar; tocar amplia.
+   */
+  const rosto = personagem.retrato
+    ? { id: personagem.retrato, titulo: t.personagens.retrato }
+    : personagem.miniatura
+      ? { id: personagem.miniatura, titulo: t.personagens.miniatura }
+      : null;
+
+  const nomeComRosto = (
+    <div className="flex min-w-0 items-center gap-2.5">
+      {rosto ? (
+        <button
+          type="button"
+          onClick={() => setZoom({ titulo: rosto.titulo, assetId: rosto.id })}
+          aria-label={t.personagens.ampliarImagem(personagem.nome)}
+          className="bg-muted size-10 shrink-0 overflow-hidden rounded-full border"
+        >
+          {/* A variante `mini`: o quadrado é de 40px, e o arquivo inteiro vem
+              só no diálogo de ampliar. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/asset/${rosto.id}/mini`}
+            alt={personagem.nome}
+            draggable={false}
+            className="size-full object-cover object-top"
+            {...MINIATURA}
+          />
+        </button>
+      ) : null}
+      <h3 className="min-w-0 truncate text-lg leading-tight font-semibold">
+        {personagem.nome}
+      </h3>
+    </div>
+  );
+
+  // O cartão da tela em pé, SEM moldura: o painel já é a moldura, e cada caixa
+  // a mais por dentro comia largura do celular e repetia a mesma borda três
+  // vezes, uma dentro da outra. As seções se separam pelo título e por uma
+  // linha fina.
+  return (
+    // `@container`: o alto do cartão escolhe uma ou duas colunas pela largura
+    // DELE, que é a aba inteira em pé e a ficha fixa, mais estreita, deitado.
+    <section className="@container">
+      {/* A busca, presa no alto do painel enquanto se rola: achar o poder certo
+          no meio do combate não pode pedir rolar até ele. Com dois personagens,
+          a do segundo empurra a do primeiro para fora, porque cada uma só prende
+          dentro do próprio cartão. Puxada até as bordas para o fundo cobrir o
+          que passa por baixo.
+
+          Só a busca, e não o nome junto: os dois presos comiam duas linhas da
+          tela o tempo todo. O nome desceu para o começo do cartão. */}
+      {/* O fundo vem de `--fundo-da-busca` quando quem embrulha o cartão o
+          define -- a gaveta deitada é cor de cartão, e o fundo da página
+          viraria uma faixa mais escura ali. */}
+      {comBusca ? (
+        <div className="sticky top-0 z-10 -mx-3 border-b bg-[var(--fundo-da-busca,var(--color-background))] px-3 py-2">
+          <div className="relative">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setBusca("");
+              }}
+              enterKeyHint="search"
+              placeholder={t.personagens.buscar}
+              aria-label={t.personagens.buscar}
+              className="h-9 pr-9 pl-8"
+            />
+            {busca ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t.personagens.limparBusca}
+                onClick={() => setBusca("")}
+                className="absolute top-1/2 right-1.5 -translate-y-1/2"
+              >
+                <X />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {termo ? (
+        // Só o que casou, numa coluna: os detalhes (com a descrição aberta
+        // quando foi nela que casou) e os itens. Medidor e atributo saem, porque
+        // não são o que se procura pelo nome. O nome fica no alto, para os
+        // achados dizerem de quem são quando há dois personagens. O aviso de
+        // "nada" vem PRIMEIRO e só aparece sozinho (`only:`), para a pilha não
+        // ganhar uma linha sobrando embaixo do último resultado.
+        <>
+          <div className="pt-3 pb-2">{nomeComRosto}</div>
+          <div className={cn("min-w-0", PILHA)}>
+            <p className="text-muted-foreground hidden text-xs only:block">
+              {t.personagens.nadaEncontrado(busca.trim())}
+            </p>
+            <DetalhesDoJogador codigo={codigo} personagemId={personagem.id} busca={termo} />
+            <InventarioJogador codigo={codigo} personagemId={personagem.id} busca={termo} />
+          </div>
+        </>
+      ) : (
+        // Uma coluna só, na largura toda, com o token grande fora -- ele tomava
+        // um terço da largura e espremia os cartões dos detalhes; a imagem está
+        // na aba Arquivos.
+        <div className={cn("min-w-0 pt-3", PILHA)}>
+          {/* O alto do cartão em duas colunas: o rosto, o nome e os números que
+              mudam a cada turno à esquerda, os atributos à direita. Os dois são
+              o que se consulta de relance, e lado a lado cabem numa tela só. A
+              esquerda não desce dos 11,5rem, que é a largura do medidor
+              desenhado.
+
+              Lado a lado só com 26rem de CARTÃO, medidos no próprio cartão
+              (`@container`), e não na janela: na ficha fixa da tela deitada a
+              coluna dos atributos sobrava com um quadro por linha. Mais estreito,
+              os atributos descem para baixo dos medidores, numa fileira. */}
+          <div
+            className={cn(
+              "grid items-start gap-x-4 gap-y-3",
+              blocoDeAtributos && "@[26rem]:grid-cols-[minmax(11.5rem,1fr)_minmax(0,1fr)]",
+            )}
+          >
+            <div className="min-w-0 space-y-3">
+              {nomeComRosto}
+              {blocoDeCondicoes}
+              {blocoDeMedidores}
+            </div>
+            {blocoDeAtributos}
+          </div>
+
+          {/* Os grupos da ficha (Identidade, Combate, Poderes), cada um uma
+              seção da pilha, depois do alto: o atributo é o número de base, e
+              o detalhe é o que se monta em cima dele. */}
+          <DetalhesDoJogador
+            codigo={codigo}
+            personagemId={personagem.id}
+            abas
+            topoDasAbas={comBusca ? 53 : 0}
+          />
+
+          {/* As seções dos plugins, depois dos detalhes: são o personagem em
+              cena, como eles. Sem plugin o componente devolve `null`, e a pilha
+              não ganha linha.
+
+              O inventário saiu daqui: mora na mochila, a bolinha do canto. A
+              busca ainda acha os itens, e é por ela que eles aparecem nesta aba. */}
+          <BlocosDePlugin codigo={codigo} personagemId={personagem.id} />
+        </div>
+      )}
 
       {visualizadores}
     </section>
@@ -791,36 +804,6 @@ function CharacterCard({
  */
 const PILHA =
   "divide-y [&>*:not(:first-child)]:pt-3 [&>*:not(:last-child)]:pb-3";
-
-/**
- * Uma seção do cartão: o título à esquerda e, quando há, a ação à direita.
- *
- * O mesmo cabeçalho do inventário, que já punha o "+ Item" ali. Botão no título
- * e não no pé: com a lista comprida, o pé fica a uma rolagem de distância.
- */
-function Secao({
-  titulo,
-  acao,
-  className,
-  children,
-}: {
-  titulo: string;
-  acao?: React.ReactNode;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={cn("space-y-2", className)}>
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-          {titulo}
-        </p>
-        {acao}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 /**
  * Um bloco de arquivos com título.
@@ -1045,76 +1028,5 @@ function FichaTile({
         fallbackClassName="size-7"
       />
     </button>
-  );
-}
-
-/**
- * A nota deste jogador sobre este personagem.
- *
- * Com atraso antes de gravar, e não a cada tecla: a escrita vai pela rede, e
- * uma requisição por letra numa mão pesada é dezenas de PUTs por frase. O
- * mestre grava no `blur` porque a janela dele é a mesma que escreve no disco;
- * aqui a aba pode fechar antes, e por isso o atraso é curto.
- */
-function CharacterNote({
-  codigo,
-  personagemId,
-}: {
-  codigo: string;
-  personagemId: string;
-}) {
-  const [texto, setTexto] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    let ativo = true;
-
-    void characterNote(codigo, personagemId).then(
-      (lido) => {
-        if (ativo) setTexto(lido);
-      },
-      () => {
-        if (ativo) setTexto("");
-      },
-    );
-
-    return () => {
-      ativo = false;
-    };
-  }, [codigo, personagemId]);
-
-  // O que estava pendente ao sair da tela ainda vai: o jogador que troca de aba
-  // no meio de uma frase não deveria perdê-la.
-  useEffect(() => {
-    return () => clearTimeout(timer.current);
-  }, []);
-
-  if (texto === null) return null;
-
-  return (
-    <div className="space-y-1">
-      <label
-        className="text-muted-foreground text-[10px]"
-        htmlFor={`nota-${personagemId}`}
-      >
-        {t.personagens.suasAnotacoes}
-      </label>
-      <Textarea
-        id={`nota-${personagemId}`}
-        className="min-h-20 resize-y text-sm"
-        placeholder={t.personagens.anotacoesDica}
-        defaultValue={texto}
-        onChange={(event) => {
-          const valor = event.target.value;
-
-          clearTimeout(timer.current);
-          timer.current = setTimeout(() => {
-            void writeCharacterNote(codigo, personagemId, valor).catch(() =>
-              toast.error(t.personagens.naoGravouAnotacao),
-            );
-          }, DEBOUNCE_MS);
-        }}
-      />
-    </div>
   );
 }

@@ -27,6 +27,7 @@
 //! detalhe em cada ficha, e dali em diante ele e do personagem. Editar ou
 //! apagar o modelo nao mexe no que as fichas ja tem.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -755,34 +756,56 @@ pub struct RolagemDaFicha {
 /// "luta" acha a Luta de cada personagem. A expressao sem o d20 ligado no
 /// molde fica guardada e nao aparece, como na ficha.
 pub fn rolagens(vault: &Vault) -> AppResult<Vec<RolagemDaFicha>> {
-    let rolaveis: Vec<(String, String)> = molde(vault)?
-        .modelos
-        .iter()
-        .filter(|m| m.rolavel)
-        .map(|m| chave(&m.grupo, &m.rotulo))
-        .collect();
-    if rolaveis.is_empty() {
+    let rolaveis = Rolaveis::do_molde(&molde(vault)?);
+    if rolaveis.0.is_empty() {
         return Ok(Vec::new());
     }
 
     let mut saida = Vec::new();
     for personagem in characters::todos_os_ids(vault)? {
         for detalhe in load(vault, &personagem)? {
-            let Some(rolagem) = detalhe.rolagem else {
+            let Some(rolagem) = rolaveis.expressao(&detalhe) else {
                 continue;
             };
-            if rolaveis.contains(&chave(&detalhe.grupo, &detalhe.rotulo)) {
-                saida.push(RolagemDaFicha {
-                    personagem_id: personagem.clone(),
-                    grupo: detalhe.grupo,
-                    rotulo: detalhe.rotulo,
-                    rolagem,
-                });
-            }
+            saida.push(RolagemDaFicha {
+                personagem_id: personagem.clone(),
+                rolagem: rolagem.to_string(),
+                grupo: detalhe.grupo,
+                rotulo: detalhe.rotulo,
+            });
         }
     }
 
     Ok(saida)
+}
+
+/// Quais detalhes rolam, pelo grupo e rotulo dos modelos com o d20 ligado.
+///
+/// Lido do molde a cada pergunta, e nao copiado para a ficha: e o que faz
+/// ligar o d20 na configuracao valer para a ficha que ja existe. Ver
+/// `Modelo::rolavel`.
+pub struct Rolaveis(HashSet<(String, String)>);
+
+impl Rolaveis {
+    pub fn do_molde(molde: &Molde) -> Self {
+        Self(
+            molde
+                .modelos
+                .iter()
+                .filter(|m| m.rolavel)
+                .map(|m| chave(&m.grupo, &m.rotulo))
+                .collect(),
+        )
+    }
+
+    /// A expressao que este detalhe rola, ou nenhuma: o molde nao liga o d20
+    /// dele, ou a ficha ainda nao escreveu a expressao.
+    pub fn expressao<'a>(&self, detalhe: &'a Detalhe) -> Option<&'a str> {
+        let rolagem = detalhe.rolagem.as_deref()?;
+        self.0
+            .contains(&chave(&detalhe.grupo, &detalhe.rotulo))
+            .then_some(rolagem)
+    }
 }
 
 /// Junta os grupos e os detalhes de um sistema ao molde da campanha. Grupo

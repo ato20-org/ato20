@@ -39,7 +39,7 @@ pub struct Player {
 }
 
 /// Versao do schema do banco da campanha, em `PRAGMA user_version`.
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 /// Abre o banco da campanha.
 ///
@@ -178,6 +178,73 @@ fn migrate(conn: &Connection) -> AppResult<()> {
             "delete from jogador_personagem
              where jogador_id not in (select id from jogadores);",
         )?;
+    }
+
+    if current < 6 {
+        // O caderno passou a ser do PERSONAGEM, e a nota solta dele entrou no
+        // caderno.
+        //
+        // Cada nota ganha o personagem a que pertence. As que ja existiam vao
+        // para o primeiro personagem vinculado ao dono -- o mais antigo, que e
+        // o que a mesa de um jogador so costuma ter --; as de quem nao tem
+        // personagem ficam sem, e o primeiro que ele receber as reclama. Ver
+        // `character_notes`.
+        //
+        // A nota solta ("Sobre o Corvo"), uma por par jogador e personagem,
+        // vira uma nota do caderno daquele personagem, sem titulo, com a hora
+        // em que foi gravada. A tabela dela sai: eram dois lugares para
+        // escrever sobre o mesmo personagem, e a tela mostrava os dois um
+        // embaixo do outro.
+        //
+        // Cada passo confere antes de agir: o `user_version` so e gravado no
+        // fim, e um app fechado no meio desta migracao a roda de novo no banco
+        // que ja tem a coluna -- e o `alter table` repetido derrubaria o
+        // caderno inteiro com "duplicate column".
+        let tem_coluna: i64 = conn.query_row(
+            "select count(*) from pragma_table_info('jogador_notas') where name = 'personagem_id'",
+            [],
+            |row| row.get(0),
+        )?;
+        if tem_coluna == 0 {
+            conn.execute_batch("alter table jogador_notas add column personagem_id text;")?;
+        }
+
+        conn.execute_batch(
+            "update jogador_notas set personagem_id = (
+                 select v.personagem_id from jogador_personagem v
+                 where v.jogador_id = jogador_notas.jogador_id
+                 order by v.vinculado_em asc, v.personagem_id asc
+                 limit 1
+             )
+             where personagem_id is null;
+
+             create index if not exists jogador_notas_por_personagem
+                 on jogador_notas (jogador_id, personagem_id, atualizado_em desc);",
+        )?;
+
+        let tem_solta: i64 = conn.query_row(
+            "select count(*) from sqlite_master where type = 'table' and name = 'personagem_notas'",
+            [],
+            |row| row.get(0),
+        )?;
+        if tem_solta > 0 {
+            // Numa transacao so: copiar e nao apagar repetiria cada nota solta
+            // na proxima vez que a migracao rodasse.
+            conn.execute_batch(
+                "begin;
+
+                 insert into jogador_notas
+                     (id, jogador_id, personagem_id, titulo, texto, tags, criado_em, atualizado_em)
+                 select lower(hex(randomblob(16))), jogador_id, personagem_id, '', texto, '',
+                        gravado_em, gravado_em
+                 from personagem_notas
+                 where trim(texto) <> '';
+
+                 drop table personagem_notas;
+
+                 commit;",
+            )?;
+        }
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -528,8 +595,10 @@ pub fn forget_character(vault: &Vault, personagem_id: &str) -> AppResult<()> {
         "delete from jogador_personagem where personagem_id = ?1",
         [personagem_id],
     )?;
+    // O caderno do personagem vai junto, como ia a nota solta dele: o que se
+    // escreveu sobre um personagem que nao existe mais nao tem onde aparecer.
     conn.execute(
-        "delete from personagem_notas where personagem_id = ?1",
+        "delete from jogador_notas where personagem_id = ?1",
         [personagem_id],
     )?;
 
@@ -562,72 +631,28 @@ pub fn is_linked(vault: &Vault, jogador_id: &str, personagem_id: &str) -> AppRes
 /// sobre um personagem numa campanha.
 const MAX_NOTA: usize = 20_000;
 
-pub fn note(vault: &Vault, personagem_id: &str, jogador_id: &str) -> AppResult<String> {
-    let conn = open(vault)?;
-
-    let texto = conn
-        .query_row(
-            "select texto from personagem_notas where personagem_id = ?1 and jogador_id = ?2",
-            rusqlite::params![personagem_id, jogador_id],
-            |row| row.get(0),
-        )
-        .or_else(|cause| match cause {
-            // Personagem sem nota ainda: texto vazio, nao erro. E o estado
-            // inicial de todo personagem novo.
-            rusqlite::Error::QueryReturnedNoRows => Ok(String::new()),
-            outro => Err(outro),
-        })?;
-
-    Ok(texto)
-}
-
-/// Grava a nota de um jogador sobre um personagem.
+/// A nota solta de um `_notas.json` de campanha exportada antes da v6 entra no
+/// caderno do personagem, como a migracao fez com as do banco. Ver `migrate`.
 ///
-/// O mesmo caminho serve ao jogador, pela rota, e ao mestre, pelo IPC -- ele
-/// pode editar a nota do jogador, e o `jogador_id` diz de quem e a nota que
-/// esta sendo escrita, nao quem esta escrevendo. Quem confere permissao e a
-/// camada de cima: a rota exige o token do jogador e que ele esteja vinculado.
-pub fn set_note(vault: &Vault, personagem_id: &str, jogador_id: &str, texto: &str) -> AppResult<()> {
-    open(vault)?.execute(
-        "insert into personagem_notas (personagem_id, jogador_id, texto, gravado_em)
-         values (?1, ?2, ?3, ?4)
-         on conflict(personagem_id, jogador_id) do update set texto = ?3, gravado_em = ?4",
-        rusqlite::params![
-            personagem_id,
-            jogador_id,
-            texto.chars().take(MAX_NOTA).collect::<String>(),
-            now_ms(),
-        ],
-    )?;
-
+/// Vazia nao vira nota, e o teto do caderno vale -- e entrada de zip, tao pouco
+/// confiavel quanto um celular.
+pub fn fold_old_character_note(
+    vault: &Vault,
+    personagem_id: &str,
+    jogador_id: &str,
+    texto: &str,
+) -> AppResult<()> {
+    if texto.trim().is_empty() {
+        return Ok(());
+    }
+    create_note(vault, jogador_id, personagem_id, "", texto, &[])?;
     Ok(())
 }
 
-/// Todas as notas de um personagem, por jogador.
-///
-/// Existe para o export: as notas vivem no banco, que nao viaja no zip, e sem
-/// materializa-las uma campanha importada chegaria com os personagens e os
-/// anexos intactos e sem uma linha do que os jogadores escreveram.
-///
-/// Inclui nota de quem NAO esta mais vinculado, de proposito: desvincular e
-/// mudanca de acesso, nao destruicao, e o zip nao deveria ser mais destrutivo
-/// que a operacao normal.
-pub fn notes_of_character(vault: &Vault, personagem_id: &str) -> AppResult<Vec<(String, String)>> {
-    let conn = open(vault)?;
-
-    let mut stmt = conn.prepare(
-        "select jogador_id, texto from personagem_notas
-         where personagem_id = ?1 order by jogador_id asc",
-    )?;
-
-    let notas = stmt
-        .query_map([personagem_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(notas)
-}
-
 // --- caderno do jogador -----------------------------------------------------
+//
+// Desde a v6 o caderno e de um PERSONAGEM: cada nota pertence ao par jogador e
+// personagem, e o jogador com dois personagens tem dois cadernos.
 //
 // O que o jogador anota durante a sessao, e que nao e sobre a ficha de ninguem:
 // o nome do PNJ que mentiu, o numero que o mestre falou uma vez, a suspeita que
@@ -655,6 +680,10 @@ pub struct Nota {
     pub tags: Vec<String>,
     pub criado_em: i64,
     pub atualizado_em: i64,
+    /// O personagem dono do caderno. Ausente so em nota de jogador que ainda
+    /// nao recebeu personagem, e em zip anterior a v6. Ver `migrate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub personagem_id: Option<String>,
 }
 
 /// Quantas notas um jogador pode ter.
@@ -676,7 +705,7 @@ const MAX_TAGS: usize = 12;
 const MAX_TAG: usize = 24;
 
 /// As colunas de uma nota, na ordem que `read_nota` le.
-const COLUNAS_NOTA: &str = "id, titulo, texto, tags, criado_em, atualizado_em";
+const COLUNAS_NOTA: &str = "id, titulo, texto, tags, criado_em, atualizado_em, personagem_id";
 
 fn corta(texto: &str, teto: usize) -> String {
     texto.chars().take(teto).collect()
@@ -738,6 +767,7 @@ fn read_nota(row: &rusqlite::Row<'_>) -> rusqlite::Result<Nota> {
         tags: separa_tags(&row.get::<_, String>(3)?),
         criado_em: row.get(4)?,
         atualizado_em: row.get(5)?,
+        personagem_id: row.get(6)?,
     })
 }
 
@@ -760,10 +790,47 @@ pub fn notes(vault: &Vault, jogador_id: &str) -> AppResult<Vec<Nota>> {
     Ok(notas)
 }
 
-/// Abre uma nota nova no caderno de um jogador.
+/// O caderno de um personagem, do que este jogador escreveu.
+///
+/// O primeiro personagem do jogador reclama, aqui, as notas que ficaram sem
+/// dono: as de quem escreveu antes de receber personagem, e as que a v6 nao
+/// soube a quem dar. Uma vez reclamadas, sao dele.
+pub fn character_notes(
+    vault: &Vault,
+    jogador_id: &str,
+    personagem_id: &str,
+) -> AppResult<Vec<Nota>> {
+    let primeiro = characters_of(vault, jogador_id)?.into_iter().next();
+    let conn = open(vault)?;
+
+    if primeiro.as_deref() == Some(personagem_id) {
+        conn.execute(
+            "update jogador_notas set personagem_id = ?2
+             where jogador_id = ?1 and personagem_id is null",
+            rusqlite::params![jogador_id, personagem_id],
+        )?;
+    }
+
+    let mut stmt = conn.prepare(&format!(
+        "select {COLUNAS_NOTA} from jogador_notas
+         where jogador_id = ?1 and personagem_id = ?2 order by atualizado_em desc"
+    ))?;
+
+    let notas = stmt
+        .query_map(rusqlite::params![jogador_id, personagem_id], read_nota)?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(notas)
+}
+
+/// Abre uma nota nova no caderno de um personagem.
+///
+/// O teto de notas continua sendo POR JOGADOR: e ele quem escreve pela rede, e
+/// dois personagens nao dobram o espaco que ele pode ocupar no disco do mestre.
 pub fn create_note(
     vault: &Vault,
     jogador_id: &str,
+    personagem_id: &str,
     titulo: &str,
     texto: &str,
     tags: &[String],
@@ -793,12 +860,22 @@ pub fn create_note(
         tags: separa_tags(&tags),
         criado_em: agora,
         atualizado_em: agora,
+        personagem_id: Some(personagem_id.to_string()),
     };
 
     conn.execute(
-        "insert into jogador_notas (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em)
-         values (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        rusqlite::params![nota.id, jogador_id, nota.titulo, nota.texto, tags, agora],
+        "insert into jogador_notas
+             (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em, personagem_id)
+         values (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7)",
+        rusqlite::params![
+            nota.id,
+            jogador_id,
+            nota.titulo,
+            nota.texto,
+            tags,
+            agora,
+            personagem_id
+        ],
     )?;
 
     Ok(nota)
@@ -852,6 +929,7 @@ pub fn update_note(
         },
         criado_em: atual.criado_em,
         atualizado_em: now_ms(),
+        personagem_id: atual.personagem_id,
     };
 
     conn.execute(
@@ -889,11 +967,12 @@ pub fn restore_notes(vault: &Vault, jogador_id: &str, notas: &[Nota]) -> AppResu
 
     for nota in notas.iter().take(MAX_NOTAS) {
         conn.execute(
-            "insert into jogador_notas (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em)
-             values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "insert into jogador_notas
+                 (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em, personagem_id)
+             values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              on conflict(id) do update set
                  jogador_id = ?2, titulo = ?3, texto = ?4, tags = ?5,
-                 criado_em = ?6, atualizado_em = ?7",
+                 criado_em = ?6, atualizado_em = ?7, personagem_id = ?8",
             rusqlite::params![
                 nota.id,
                 jogador_id,
@@ -902,6 +981,7 @@ pub fn restore_notes(vault: &Vault, jogador_id: &str, notas: &[Nota]) -> AppResu
                 junta_tags(&nota.tags),
                 nota.criado_em,
                 nota.atualizado_em,
+                nota.personagem_id,
             ],
         )?;
     }
@@ -1165,6 +1245,7 @@ mod tests {
         let nota = create_note(
             &vault,
             &player.id,
+            "p1",
             "A taverna",
             "o dono mentiu",
             // A mesma gaveta escrita de tres jeitos, mais uma vazia do campo
@@ -1184,7 +1265,7 @@ mod tests {
         let (edgar, _) = join(&vault, "Edgar").expect("join");
         let (mira, _) = join(&vault, "Mira").expect("join");
 
-        let nota = create_note(&vault, &edgar.id, "O alcapao", "atras do balcao", &[])
+        let nota = create_note(&vault, &edgar.id, "p1", "O alcapao", "atras do balcao", &[])
             .expect("nota");
 
         // O id nao basta: o dono entra no `where` de toda consulta, e e ele que
@@ -1362,50 +1443,128 @@ mod tests {
     }
 
     #[test]
-    fn desvincular_nao_apaga_a_nota() {
+    fn o_caderno_e_de_cada_personagem() {
         let (_tmp, vault) = campanha();
         link(&vault, "j1", "p1").unwrap();
-        set_note(&vault, "p1", "j1", "o alcapao").unwrap();
+        link(&vault, "j1", "p2").unwrap();
+
+        create_note(&vault, "j1", "p1", "do corvo", "", &[]).unwrap();
+        create_note(&vault, "j1", "p2", "da lyra", "", &[]).unwrap();
+        create_note(&vault, "j2", "p1", "do outro jogador", "", &[]).unwrap();
+
+        let titulos = |personagem: &str| -> Vec<String> {
+            character_notes(&vault, "j1", personagem)
+                .unwrap()
+                .into_iter()
+                .map(|nota| nota.titulo)
+                .collect()
+        };
+        assert_eq!(titulos("p1"), vec!["do corvo"]);
+        assert_eq!(titulos("p2"), vec!["da lyra"]);
+    }
+
+    #[test]
+    fn desvincular_nao_apaga_o_caderno() {
+        let (_tmp, vault) = campanha();
+        link(&vault, "j1", "p1").unwrap();
+        create_note(&vault, "j1", "p1", "o alcapao", "", &[]).unwrap();
 
         unlink(&vault, "j1", "p1").unwrap();
+        link(&vault, "j1", "p1").unwrap();
 
         // Desvincular e mudanca de acesso, nao destruicao: revincular devolve o
-        // que o jogador escreveu. Quem apaga nota e remover o personagem.
-        assert_eq!(note(&vault, "p1", "j1").unwrap(), "o alcapao");
+        // que o jogador escreveu. Quem apaga o caderno e remover o personagem.
+        assert_eq!(character_notes(&vault, "j1", "p1").unwrap().len(), 1);
     }
 
     #[test]
-    fn nota_nasce_vazia_e_e_por_par() {
-        let (_tmp, vault) = campanha();
-
-        assert_eq!(note(&vault, "p1", "j1").unwrap(), "");
-
-        set_note(&vault, "p1", "j1", "do j1").unwrap();
-        set_note(&vault, "p1", "j2", "do j2").unwrap();
-
-        assert_eq!(note(&vault, "p1", "j1").unwrap(), "do j1");
-        assert_eq!(note(&vault, "p1", "j2").unwrap(), "do j2");
-    }
-
-    #[test]
-    fn nota_tem_teto() {
-        let (_tmp, vault) = campanha();
-
-        set_note(&vault, "p1", "j1", &"a".repeat(MAX_NOTA + 500)).unwrap();
-
-        assert_eq!(note(&vault, "p1", "j1").unwrap().chars().count(), MAX_NOTA);
-    }
-
-    #[test]
-    fn remover_personagem_leva_vinculo_e_nota() {
+    fn remover_personagem_leva_vinculo_e_caderno() {
         let (_tmp, vault) = campanha();
         link(&vault, "j1", "p1").unwrap();
-        set_note(&vault, "p1", "j1", "algo").unwrap();
+        create_note(&vault, "j1", "p1", "algo", "", &[]).unwrap();
 
         forget_character(&vault, "p1").unwrap();
 
         assert!(characters_of(&vault, "j1").unwrap().is_empty());
-        assert_eq!(note(&vault, "p1", "j1").unwrap(), "");
+        assert!(notes(&vault, "j1").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_nota_sem_personagem_vai_para_o_primeiro() {
+        let (_tmp, vault) = campanha();
+        // Uma nota de antes de o jogador ter personagem: sem dono.
+        open(&vault)
+            .unwrap()
+            .execute(
+                "insert into jogador_notas (id, jogador_id, titulo, texto, tags, criado_em, atualizado_em)
+                 values ('n1', 'j1', 'antiga', '', '', 1, 1)",
+                [],
+            )
+            .unwrap();
+        link(&vault, "j1", "p1").unwrap();
+        link(&vault, "j1", "p2").unwrap();
+
+        // O segundo nao a ve; o primeiro a reclama, e dali em diante e dele.
+        assert!(character_notes(&vault, "j1", "p2").unwrap().is_empty());
+        assert_eq!(character_notes(&vault, "j1", "p1").unwrap()[0].titulo, "antiga");
+        assert_eq!(
+            notes(&vault, "j1").unwrap()[0].personagem_id.as_deref(),
+            Some("p1")
+        );
+    }
+
+    #[test]
+    fn a_v6_leva_o_caderno_e_a_nota_solta_para_o_personagem() {
+        let (_tmp, vault) = campanha();
+        std::fs::create_dir_all(vault.state_dir()).unwrap();
+
+        // Um banco na v5, como o de uma campanha de antes: o caderno do jogador
+        // e a nota solta dele sobre o personagem, cada um no seu lugar.
+        {
+            let conn = Connection::open(vault.state_dir().join("estado.db")).unwrap();
+            conn.execute_batch(
+                "create table jogadores (id text primary key, token_hash text not null unique,
+                     nome text not null, entrou_em integer not null, visto_em integer not null);
+                 create table jogador_personagem (jogador_id text not null,
+                     personagem_id text not null, vinculado_em integer not null,
+                     primary key (jogador_id, personagem_id));
+                 create table personagem_notas (personagem_id text not null,
+                     jogador_id text not null, texto text not null default '',
+                     gravado_em integer not null, primary key (personagem_id, jogador_id));
+                 create table jogador_notas (id text primary key, jogador_id text not null,
+                     titulo text not null default '', texto text not null default '',
+                     tags text not null default '', criado_em integer not null,
+                     atualizado_em integer not null);
+                 insert into jogador_personagem values ('j1', 'p2', 2), ('j1', 'p1', 1);
+                 insert into jogador_notas values ('n1', 'j1', 'do caderno', '', '', 5, 5);
+                 insert into personagem_notas values ('p2', 'j1', 'sobre a lyra', 7),
+                     ('p1', 'j1', '   ', 8);
+                 pragma user_version = 5;",
+            )
+            .unwrap();
+        }
+
+        // A nota do caderno vai para o vinculo mais antigo; a solta, para o
+        // personagem dela; a solta em branco nao vira nota.
+        let p1 = character_notes(&vault, "j1", "p1").unwrap();
+        let p2 = character_notes(&vault, "j1", "p2").unwrap();
+        assert_eq!(p1.len(), 1);
+        assert_eq!(p1[0].titulo, "do caderno");
+        assert_eq!(p2.len(), 1);
+        assert_eq!(p2[0].texto, "sobre a lyra");
+        assert_eq!(p2[0].atualizado_em, 7);
+    }
+
+    #[test]
+    fn a_nota_solta_de_zip_antigo_entra_no_caderno() {
+        let (_tmp, vault) = campanha();
+
+        fold_old_character_note(&vault, "p1", "j1", "o alcapao range").unwrap();
+        fold_old_character_note(&vault, "p1", "j1", "  ").unwrap();
+
+        let notas = character_notes(&vault, "j1", "p1").unwrap();
+        assert_eq!(notas.len(), 1);
+        assert_eq!(notas[0].texto, "o alcapao range");
     }
 
     #[test]

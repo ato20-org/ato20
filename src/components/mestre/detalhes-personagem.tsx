@@ -43,7 +43,8 @@ import {
 } from "@/lib/vault/detalhes";
 import {
   chaveDoNome,
-  grupoAvulso,
+  doGrupo,
+  gruposDaFicha,
   MAX_DESCRICAO_DETALHE,
   MAX_DETALHES,
   MAX_NUMERO_DETALHE,
@@ -94,22 +95,24 @@ export function GruposDeDetalhes({
   personagemId,
   personagemNome,
   detalhes,
+  aoGravar,
 }: {
   personagemId: string;
   /** Para o fio dizer de quem é a rolagem: "Dante · Luta". */
   personagemNome: string;
   detalhes: DetalhesDaFicha;
+  /**
+   * Depois de cada escrita, além de reler a lista: é o que relê o elenco e
+   * sobe a versão das fichas que o celular escuta -- o mesmo caminho do
+   * atributo. Sem isto o jogador via a Defesa velha até recarregar a página.
+   */
+  aoGravar?: () => void;
 }) {
   const molde = useMoldeDeDetalhes();
   if (!molde || !detalhes.lista) return null;
 
   const lista = detalhes.lista;
-  const conhecidos = new Set(molde.grupos.map((grupo) => chaveDoNome(grupo.nome)));
-  const avulsos = [...new Set(lista.map((detalhe) => detalhe.grupo))]
-    .filter((nome) => !conhecidos.has(chaveDoNome(nome)))
-    .map(grupoAvulso);
-
-  const grupos = [...molde.grupos, ...avulsos];
+  const grupos = gruposDaFicha(molde.grupos, lista);
   if (grupos.length === 0) return null;
 
   return (
@@ -121,9 +124,12 @@ export function GruposDeDetalhes({
           personagemNome={personagemNome}
           grupo={grupo}
           todos={lista}
-          detalhes={lista.filter((detalhe) => chaveDoNome(detalhe.grupo) === chaveDoNome(grupo.nome))}
-          modelos={molde.modelos.filter((modelo) => chaveDoNome(modelo.grupo) === chaveDoNome(grupo.nome))}
-          onChanged={detalhes.recarregar}
+          detalhes={doGrupo(lista, grupo)}
+          modelos={doGrupo(molde.modelos, grupo)}
+          onChanged={() => {
+            detalhes.recarregar();
+            aoGravar?.();
+          }}
         />
       ))}
     </>

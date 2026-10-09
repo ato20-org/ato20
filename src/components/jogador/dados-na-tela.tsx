@@ -11,7 +11,8 @@ import {
 import { t } from "@/lib/i18n/jogador";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { rolarDado } from "@/lib/player/rolagens";
-import { useDadosStore } from "@/lib/store/use-dados-store";
+import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
+import type { FacesDado, Lance } from "@/types/dado";
 
 /**
  * A largura do espaço, na unidade em que os dados vivem aqui.
@@ -35,6 +36,48 @@ import { useDadosStore } from "@/lib/store/use-dados-store";
  * gesto do mestre, e o mesmo resultado na vista.
  */
 const LARGURA = 900;
+
+/** Velocidade do arremesso sem gesto, em unidades do espaço por segundo. */
+const IMPULSO = 400;
+
+/**
+ * Joga sobre o vidro os dados que o DAEMON já sorteou, sem gesto.
+ *
+ * É o caminho da ficha: o jogador tocou na Defesa, e não pegou dado nenhum no
+ * saquinho. Os dados nascem no meio da tela, em roda, cada um empurrado para
+ * fora -- o mesmo arranjo de `lancarNaMesa`, no espaço deste vidro.
+ *
+ * Sem a conferência de mesa cheia: quem chama confere ANTES de pedir a
+ * rolagem, pela razão de `aoArremessar` -- o daemon já registrou a jogada, e
+ * aqui só resta animá-la. O dado que não couber se perde da animação, não da
+ * mesa.
+ */
+export function lancarNoVidro(
+  dados: ReadonlyArray<{ faces: FacesDado; valor: number }>,
+  lance: Lance,
+): void {
+  const { lancar } = useDadosStore.getState();
+  const escala = window.innerWidth / LARGURA;
+  if (escala <= 0) return;
+
+  const centro = { x: LARGURA / 2, y: window.innerHeight / escala / 2 };
+  const roda = dados.length === 1 ? 0 : RAIO_DADO * 1.5;
+
+  dados.forEach(({ faces, valor }, i) => {
+    const angulo = (i / dados.length) * Math.PI * 2;
+    const direcao = { x: Math.cos(angulo), y: Math.sin(angulo) };
+
+    lancar(
+      faces,
+      centro.x + direcao.x * roda,
+      centro.y + direcao.y * roda,
+      { x: direcao.x * IMPULSO, y: direcao.y * IMPULSO },
+      undefined,
+      valor,
+      lance,
+    );
+  });
+}
 
 /**
  * Os dados sobre a TELA do jogador.

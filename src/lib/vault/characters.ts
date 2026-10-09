@@ -692,28 +692,3 @@ export function characterLinks(): Promise<Array<[string, string]>> {
 export function characterPlayers(id: string): Promise<string[]> {
   return call<string[]>("character_players", { id });
 }
-
-// --- notas ------------------------------------------------------------------
-
-/**
- * A nota que um jogador escreveu sobre um personagem.
- *
- * O par (personagem, jogador) é a chave, e não só o personagem: dois jogadores
- * com o mesmo personagem escrevem coisas diferentes sobre ele.
- */
-export function characterNote(id: string, jogadorId: string): Promise<string> {
-  return call<string>("character_note", { id, jogadorId });
-}
-
-/**
- * O mestre reescreve a nota de um jogador.
- *
- * O `jogadorId` diz de QUEM é a nota, não quem está escrevendo.
- */
-export function setCharacterNote(
-  id: string,
-  jogadorId: string,
-  texto: string,
-): Promise<void> {
-  return call("character_set_note", { id, jogadorId, texto });
-}

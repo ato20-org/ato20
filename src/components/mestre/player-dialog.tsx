@@ -105,7 +105,11 @@ export function PlayerDialog({
 }) {
   return (
     <Dialog open={Boolean(player)} onOpenChange={(open) => !open && onVoltar()}>
-      <DialogContent className="sm:max-w-md">
+      {/* `top-8`: abaixo da barra de título, como os outros diálogos da
+          janela -- sem ele o fundo desfocado cobria os botões de minimizar e
+          fechar. `min-w-0` nos filhos da grade: uma palavra enorme no caderno
+          alargava a coluna e empurrava as rolagens e o botão para fora. */}
+      <DialogContent className="sm:max-w-md [&>*]:min-w-0" overlayClassName="top-8">
         {player ? (
           <Ficha
             player={player}
@@ -658,7 +662,12 @@ function Ficha({
         vazio={caderno.length === 0 ? t.jogador.cadernoVazio : null}
         dica={t.jogador.cadernoDica}
       >
-        {caderno.length > 0 ? <Caderno notas={caderno} /> : null}
+        {caderno.length > 0 ? (
+          <Caderno
+            notas={caderno}
+            nomeDe={(id) => personagens?.find((personagem) => personagem.id === id)?.nome}
+          />
+        ) : null}
       </Secao>
 
       {/* O mesmo visualizador do Jogador, com o zoom que ele já traz: a
@@ -729,7 +738,14 @@ function Ficha({
  * que a mesa anotou, e uma caixa de rolagem por nota transformaria isso em
  * dezenas de janelinhas de três linhas.
  */
-function Caderno({ notas }: { notas: Nota[] }) {
+function Caderno({
+  notas,
+  nomeDe,
+}: {
+  notas: Nota[];
+  /** O personagem de cada nota: o caderno é um por personagem. */
+  nomeDe: (personagemId: string) => string | undefined;
+}) {
   if (notas.length === 0) {
     return (
       <p className="text-muted-foreground text-xs">
@@ -746,6 +762,11 @@ function Caderno({ notas }: { notas: Nota[] }) {
             <p className="min-w-0 flex-1 truncate text-xs font-medium">
               {nota.titulo || t.jogador.semTitulo}
             </p>
+            {nota.personagemId && nomeDe(nota.personagemId) ? (
+              <span className="text-muted-foreground max-w-[40%] shrink-0 truncate rounded border px-1 text-[10px]">
+                {nomeDe(nota.personagemId)}
+              </span>
+            ) : null}
             <span className="text-muted-foreground shrink-0 text-[10px]">
               {desde(nota.atualizadoEm)}
             </span>
@@ -758,7 +779,7 @@ function Caderno({ notas }: { notas: Nota[] }) {
           ) : null}
 
           {nota.texto ? (
-            <p className="mt-1 text-xs whitespace-pre-wrap">{nota.texto}</p>
+            <p className="mt-1 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{nota.texto}</p>
           ) : null}
         </li>
       ))}

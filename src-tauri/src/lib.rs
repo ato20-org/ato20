@@ -295,8 +295,6 @@ pub fn run() {
             commands::player_characters,
             commands::character_players,
             commands::character_links,
-            commands::character_note,
-            commands::character_set_note,
             commands::inventory_list,
             commands::inventory_add,
             commands::inventory_update,
