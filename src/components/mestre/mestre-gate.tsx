@@ -34,6 +34,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { chaveDoSistema, sistemasDosPlugins } from "@/lib/extensoes/sistemas";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useAtualizacao } from "@/hooks/use-atualizacao";
 import { useCaminhoCurto } from "@/hooks/use-caminho-curto";
 import { useCapaDaCampanha } from "@/hooks/use-capa-da-campanha";
@@ -692,6 +701,17 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
 
   const [nome, setNome] = useState("");
 
+  // O sistema é opcional, e o campo só aparece quando algum plugin ligado
+  // traz um: para quem não tem nenhum, ele seria uma pergunta sem resposta.
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+  const carregarExtensoes = useExtensoesStore((state) => state.carregar);
+  useEffect(() => {
+    void carregarExtensoes();
+  }, [carregarExtensoes]);
+  const sistemas = sistemasDosPlugins(extensoes);
+  const [sistema, setSistema] = useState("");
+  const escolhido = sistemas.find((item) => chaveDoSistema(item) === sistema);
+
   return (
     <Centered>
       <FolderPlus className="text-muted-foreground size-8" aria-hidden />
@@ -706,7 +726,10 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
         className="w-full space-y-3 text-left"
         onSubmit={(event) => {
           event.preventDefault();
-          void create(nome);
+          void create(
+            nome,
+            escolhido && { extensaoId: escolhido.extensaoId, sistemaId: escolhido.sistema.id },
+          );
         }}
       >
         <div className="space-y-1.5">
@@ -720,6 +743,38 @@ function CreateForm({ onCancel }: { onCancel: () => void }) {
             placeholder={t.porta.nomeExemplo}
           />
         </div>
+
+        {sistemas.length > 0 && (
+          <div className="space-y-1.5">
+            <Label htmlFor="campaign-system">{t.porta.sistema}</Label>
+            <Select<string>
+              items={{
+                "": t.porta.semSistema,
+                ...Object.fromEntries(
+                  sistemas.map((item) => [
+                    chaveDoSistema(item),
+                    t.porta.sistemaDoPlugin(item.sistema.titulo, item.extensaoNome),
+                  ]),
+                ),
+              }}
+              value={sistema}
+              onValueChange={(novo) => setSistema(novo ?? "")}
+            >
+              <SelectTrigger id="campaign-system" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">{t.porta.semSistema}</SelectItem>
+                {sistemas.map((item) => (
+                  <SelectItem key={chaveDoSistema(item)} value={chaveDoSistema(item)}>
+                    {t.porta.sistemaDoPlugin(item.sistema.titulo, item.extensaoNome)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">{t.porta.sistemaDica}</p>
+          </div>
+        )}
 
         {error ? <p className="text-destructive text-sm">{error}</p> : null}
 
