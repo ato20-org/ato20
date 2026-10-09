@@ -233,6 +233,19 @@ export type Dado = {
   semente: number;
   /** Quando foi lançado, em `Date.now()`. A animação sai da idade dele. */
   lancadoEm: number;
+  /** A rolagem com nome de que este dado faz parte. Ver `Lance`. */
+  lance?: Lance;
+};
+
+/**
+ * Uma rolagem com nome ou modificador -- "Dante · Luta", `2d20+10` --, que é
+ * o que os dados dela levam junto para o saquinho somar o `+10` e juntar os
+ * dois d20 numa linha. O dado do saquinho e o "2d6" da paleta vão sem.
+ */
+export type Lance = {
+  id: string;
+  rotulo?: string;
+  modificador: number;
 };
 
 /** Uma linha do histórico. */
@@ -242,6 +255,7 @@ export type Rolagem = {
   /** O número gravado, como no `Dado`. Ver `valorDaRolagem`. */
   valor: number;
   quando: number;
+  lance?: Lance;
 };
 
 /**

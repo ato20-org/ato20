@@ -35,8 +35,11 @@ import { executarComando } from "@/lib/extensoes/carregar";
 import { centeredBox } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/mestre";
 import { atalhos, rotuloDoGrupo } from "@/lib/mestre/atalhos";
-import { rolarNaMesa } from "@/lib/mestre/dados-actions";
-import { lerNotacaoDeDados } from "@/lib/mestre/notacao-de-dados";
+import { useCharacters } from "@/hooks/use-characters";
+import { rolarExpressao } from "@/lib/mestre/dados-actions";
+import { lerExpressaoDeRolagem, textoDaExpressao } from "@/lib/mestre/expressao-de-rolagem";
+import { listarRolagens } from "@/lib/vault/detalhes";
+import type { RolagemDaFicha } from "@/types/detalhe";
 import { normaliza } from "@/lib/search";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePaineisStore } from "@/lib/store/use-paineis-store";
@@ -242,6 +245,14 @@ function useComandos(consulta: string): Comando[] {
 
   const extensoes = useExtensoesStore((state) => state.extensoes);
 
+  // As rolagens das fichas, lidas ao abrir a paleta: ela abre de vez em
+  // quando, e a expressão que o mestre acabou de escrever tem de estar aqui.
+  const { personagens } = useCharacters();
+  const [rolagens, setRolagens] = useState<RolagemDaFicha[]>([]);
+  useEffect(() => {
+    listarRolagens().then(setRolagens, () => setRolagens([]));
+  }, []);
+
   return useMemo(() => {
     const termo = normaliza(consulta.trim());
     const vazia = termo === "";
@@ -249,17 +260,42 @@ function useComandos(consulta: string): Comando[] {
 
     const lista: Comando[] = [];
 
-    // Dados primeiro: quem digitou "2d6" quer jogar, não ler uma lista.
-    const jogada = lerNotacaoDeDados(consulta);
-    if (jogada) {
+    // Dados primeiro: quem digitou "2d6" ou "1d20+5" quer jogar, não ler uma
+    // lista. O "roll"/"rolar" na frente continua valendo, como valia.
+    const leitura = lerExpressaoDeRolagem(consulta.replace(/^\s*(?:roll|rolar|r)\s+/i, ""));
+    if (leitura.ok) {
+      const texto = textoDaExpressao(leitura.expressao);
       lista.push({
-        id: `dado-${jogada.quantidade}d${jogada.faces}`,
+        id: `dado-${texto}`,
         grupo: t.paleta.dados,
-        titulo: t.paleta.rolar(`${jogada.quantidade}d${jogada.faces}`),
+        titulo: t.paleta.rolar(texto),
         detalhe: t.paleta.naMesa,
         icone: Dices,
-        executar: () => void rolarNaMesa(jogada),
+        executar: () => void rolarExpressao(leitura.expressao),
       });
+    }
+
+    // As rolagens das fichas, pelo nome: "luta" acha a Luta de cada
+    // personagem, "dante" acha as do Dante. Só com algo digitado -- trinta
+    // perícias de dez personagens soterrariam a lista vazia.
+    if (!vazia) {
+      const nomes = new Map((personagens ?? []).map((personagem) => [personagem.id, personagem.nome]));
+      for (const rolagem of rolagens) {
+        const nome = nomes.get(rolagem.personagemId);
+        if (!nome || !casa(t.paleta.buscaRolagem(rolagem.rotulo, nome))) continue;
+
+        const lida = lerExpressaoDeRolagem(rolagem.rolagem);
+        if (!lida.ok) continue;
+
+        lista.push({
+          id: `rolagem-${rolagem.personagemId}-${rolagem.grupo}-${rolagem.rotulo}`,
+          grupo: t.paleta.rolagens,
+          titulo: t.paleta.rolarDe(rolagem.rotulo, nome),
+          detalhe: textoDaExpressao(lida.expressao),
+          icone: Dices,
+          executar: () => void rolarExpressao(lida.expressao, `${nome} · ${rolagem.rotulo}`),
+        });
+      }
     }
 
     if (live && editingSceneId && live.id !== editingSceneId) {
@@ -405,5 +441,7 @@ function useComandos(consulta: string): Comando[] {
     abrirNoPainel,
     assets,
     extensoes,
+    personagens,
+    rolagens,
   ]);
 }

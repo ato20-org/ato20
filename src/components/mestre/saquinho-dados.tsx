@@ -41,8 +41,11 @@ import {
   entraNaSoma,
   textoDoResultado,
   type Dado,
+  type Lance,
+  type Rolagem,
   type TipoDado,
 } from "@/types/dado";
+import { textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
 
 /** Diâmetro da bolinha, em pixel de tela. */
 const BOLINHA = 44;
@@ -332,7 +335,24 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   const pousados = dados
     .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
     .map((dado) => valorDaRolagem(dado.faces, dado.valor));
-  const soma = pousados.reduce((total, valor) => total + valor, 0);
+
+  /**
+   * Os lances dos dados na mesa, um por id: o `+10` da Luta entra UMA vez na
+   * conta, e não uma por d20. Contam mesmo com dado ainda no ar -- o
+   * modificador não cai, ele já é sabido.
+   */
+  const lances = new Map<string, Lance>();
+  for (const dado of dados) if (dado.lance) lances.set(dado.lance.id, dado.lance);
+  const modificadores = [...lances.values()]
+    .map((lance) => lance.modificador)
+    .filter((modificador) => modificador !== 0);
+  const soma =
+    pousados.reduce((total, valor) => total + valor, 0) +
+    modificadores.reduce((total, modificador) => total + modificador, 0);
+
+  // A mesa inteira é de UM lance com nome: a linha diz de quem é a conta.
+  const doLance =
+    lances.size === 1 && dados.every((dado) => dado.lance) ? [...lances.values()][0]?.rotulo : undefined;
 
   /**
    * Pega um dado do saquinho e arremessa.
@@ -403,10 +423,11 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
           Só os que já pousaram. Enquanto algum está no ar, a conta diz quantos
           faltam em vez de embutir um valor que ninguém viu cair — ver
           `useDadosNoAr`. */}
-      {pousados.length >= 2 || (pousados.length >= 1 && noAr.size > 0) ? (
+      {pousados.length >= 2 ||
+      (pousados.length >= 1 && (noAr.size > 0 || modificadores.length > 0)) ? (
         <div className="flex items-baseline gap-2 border-t pt-2.5">
-          <span className="text-muted-foreground flex-1 text-xs font-medium">
-            {t.saquinho.naMesa}
+          <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-medium">
+            {doLance ?? t.saquinho.naMesa}
           </span>
 
           {/* Os termos, na ordem em que caíram: é o que deixa conferir a conta
@@ -418,6 +439,14 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
               soma quer o valor. */}
           <span className="text-muted-foreground/70 text-[11px] tabular-nums">
             {pousados.join(" + ")}
+            {/* O modificador separado dos dados, e não somado neles: é o que
+                deixa ver que o 24 é 18 + 1 de dado e 5 de bônus. */}
+            {modificadores.map((modificador, i) => (
+              <span key={i} className="text-foreground/80 font-medium">
+                {" "}
+                {textoDoModificador(modificador)}
+              </span>
+            ))}
           </span>
 
           {/* Em vão próprio, e não emendado nos termos: escrito na mesma linha,
@@ -441,7 +470,12 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
           </p>
 
           <ul className="space-y-0.5">
-            {historico.map((rolagem) => {
+            {linhasDoHistorico(historico).map((linha) => {
+              if (linha.tipo === "lance") {
+                return <LinhaDeLance key={linha.rolagens[0]!.id} linha={linha} noAr={noAr} />;
+              }
+
+              const { rolagem } = linha;
               const tipo = tipoDado(rolagem.faces);
 
               /**
@@ -509,6 +543,97 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
   );
 }
 
+type LinhaDoHistorico =
+  | { tipo: "dado"; rolagem: Rolagem }
+  | { tipo: "lance"; lance: Lance; rolagens: Rolagem[] };
+
+/**
+ * O histórico em linhas: o dado solto numa linha só dele, e os dados de um
+ * mesmo lance juntos -- os dois d20 da Luta são uma rolagem, e listá-los
+ * soltos esconderia o `+10` que faz a conta. Juntos pelo id do lance, e só
+ * os VIZINHOS: o lance entra todo de uma vez, então os dados dele estão lado
+ * a lado na lista.
+ */
+function linhasDoHistorico(historico: readonly Rolagem[]): LinhaDoHistorico[] {
+  const linhas: LinhaDoHistorico[] = [];
+
+  for (const rolagem of historico) {
+    const anterior = linhas[linhas.length - 1];
+    if (rolagem.lance && anterior?.tipo === "lance" && anterior.lance.id === rolagem.lance.id) {
+      anterior.rolagens.push(rolagem);
+    } else if (rolagem.lance) {
+      linhas.push({ tipo: "lance", lance: rolagem.lance, rolagens: [rolagem] });
+    } else {
+      linhas.push({ tipo: "dado", rolagem });
+    }
+  }
+
+  return linhas;
+}
+
+/** Quantas bolinhas de cor a linha do lance mostra. O resto está na conta. */
+const BOLINHAS_DO_LANCE = 4;
+
+/**
+ * Um lance no histórico: as cores dos dados, o nome ("Dante · Luta", ou a
+ * notação quando não tem), o modificador e o total. A conta inteira fica no
+ * `title`, para quem quer conferir dado por dado.
+ */
+function LinhaDeLance({
+  linha,
+  noAr,
+}: {
+  linha: Extract<LinhaDoHistorico, { tipo: "lance" }>;
+  noAr: ReadonlySet<string>;
+}) {
+  const { lance, rolagens } = linha;
+  // O histórico é do mais novo para o mais velho; a conta lê na ordem da jogada.
+  const naOrdem = [...rolagens].reverse();
+  const caindo = naOrdem.some((rolagem) => noAr.has(rolagem.id));
+
+  const valores = naOrdem
+    .filter((rolagem) => entraNaSoma(rolagem.faces))
+    .map((rolagem) => valorDaRolagem(rolagem.faces, rolagem.valor));
+  const total = valores.reduce((soma, valor) => soma + valor, 0) + lance.modificador;
+
+  const faces: number[] = [];
+  const porFaces = new Map<number, number>();
+  for (const rolagem of naOrdem) {
+    if (!porFaces.has(rolagem.faces)) faces.push(rolagem.faces);
+    porFaces.set(rolagem.faces, (porFaces.get(rolagem.faces) ?? 0) + 1);
+  }
+  const notacao =
+    faces.map((lados) => `${porFaces.get(lados)}d${lados}`).join("+") + textoDoModificador(lance.modificador);
+  const conta = `${valores.join(" + ")} ${textoDoModificador(lance.modificador)} = ${total}`.replace("  ", " ");
+
+  return (
+    <li className="flex items-center gap-2 text-xs" title={caindo ? notacao : `${notacao}: ${conta}`}>
+      <span aria-hidden className="flex shrink-0 -space-x-1">
+        {naOrdem.slice(0, BOLINHAS_DO_LANCE).map((rolagem) => (
+          <span
+            key={rolagem.id}
+            className="size-2.5 rounded-full border border-white/20"
+            style={{ background: tipoDado(rolagem.faces).hex }}
+          />
+        ))}
+      </span>
+      <span className="text-muted-foreground min-w-0 flex-1 truncate">{lance.rotulo ?? notacao}</span>
+      {lance.modificador !== 0 ? (
+        <span className="text-muted-foreground/70 tabular-nums">{textoDoModificador(lance.modificador)}</span>
+      ) : null}
+      <span className={cn("font-semibold tabular-nums", caindo && "text-muted-foreground/50")}>
+        {caindo ? "…" : total}
+      </span>
+      <span className="text-muted-foreground/70 tabular-nums">
+        {new Date(naOrdem[0]!.quando).toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </span>
+    </li>
+  );
+}
+
 /**
  * Os dados que ainda estão no ar, por id.
  *
@@ -566,7 +691,7 @@ function useDadosNoAr(dados: Dado[]): ReadonlySet<string> {
  * Mostra o MAIOR número de cada dado. Duplo propósito: identifica o dado sem
  * precisar de rótulo — `20` só existe no d20 — e é o que a mesa quer ver.
  */
-function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+export function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
   const rotulos = rotulosDoDado(tipo.faces);
 
   /**
