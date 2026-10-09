@@ -20,9 +20,16 @@ import { AttachmentViewer } from "@/components/attachments/attachment-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { t } from "@/lib/i18n/jogador";
+import { repartirAtributos } from "@/lib/atributos-em-imagem";
 import { normaliza } from "@/lib/search";
 import { MINIATURA } from "@/lib/miniatura";
 
+import {
+  AtributosEmImagem,
+  CAIXA_DO_LUGAR,
+  estiloDoLugar,
+  useEstiloDosAtributos,
+} from "@/components/playground/atributos-em-imagem";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
@@ -183,6 +190,9 @@ function CharacterCard({
 
   const [abrindo, setAbrindo] = useState<AnexoPersonagem | null>(null);
   const [url, setUrl] = useState<string | null>(null);
+
+  // O desenho dos atributos que a campanha escolheu, que chega pelo declarativo.
+  const estiloDosAtributos = useEstiloDosAtributos();
 
   // O retrato e a miniatura ampliados. Estado à parte do `abrindo`: aqueles são
   // ANEXOS, atrás do token e baixados para uma blob que depois se revoga; estes
@@ -347,9 +357,59 @@ function CharacterCard({
    *
    * Só leitura, como os medidores, e pela mesma razão: quem escreve é o mestre.
    * Em cartões, como na ficha dele, para o jogador achar o FOR na hora de rolar
-   * sem ler uma lista.
+   * sem ler uma lista. Com o desenho de um plugin escolhido na campanha (o
+   * ritual do Ordem), o mesmo desenho da ficha do Mestre, e os cartões só para
+   * quem não tem lugar nele.
    */
   const atributos = personagem.atributos ?? [];
+  const cartoesDeAtributo = (lista: typeof atributos) =>
+    lista.length > 0 ? (
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] gap-1.5">
+        {lista.map((atributo) => (
+          <li
+            key={atributo.id}
+            className="bg-background/40 flex flex-col items-center rounded-md border py-1"
+          >
+            <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+              {atributo.sigla}
+            </span>
+            <span className="text-xl leading-tight font-medium tabular-nums">
+              {atributo.valor}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  let atributosDesenhados: React.ReactNode = cartoesDeAtributo(atributos);
+  if (estiloDosAtributos) {
+    const { noLugar, fora } = repartirAtributos(atributos, estiloDosAtributos.lugares);
+
+    atributosDesenhados = (
+      <>
+        {/* Menor que no Mestre: ao lado dos medidores, na largura da ficha
+            dele, o ritual tomava a altura da tela antes dos detalhes. */}
+        <AtributosEmImagem
+          estilo={estiloDosAtributos}
+          reserva={cartoesDeAtributo(noLugar.map(({ atributo }) => atributo))}
+          className="max-w-56"
+        >
+          {noLugar.map(({ atributo, lugar }) => (
+            <span
+              key={atributo.id}
+              title={atributo.descricao ? `${atributo.sigla}: ${atributo.descricao}` : atributo.sigla}
+              className={CAIXA_DO_LUGAR}
+              style={estiloDoLugar(lugar, estiloDosAtributos)}
+            >
+              {atributo.valor}
+            </span>
+          ))}
+        </AtributosEmImagem>
+        {cartoesDeAtributo(fora)}
+      </>
+    );
+  }
+
   const blocoDeAtributos =
     atributos.length > 0 ? (
       <section className="space-y-1.5">
@@ -357,21 +417,7 @@ function CharacterCard({
           {t.personagens.atributos}
         </p>
 
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] gap-1.5">
-          {atributos.map((atributo) => (
-            <li
-              key={atributo.id}
-              className="bg-background/40 flex flex-col items-center rounded-md border py-1"
-            >
-              <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
-                {atributo.sigla}
-              </span>
-              <span className="text-xl leading-tight font-medium tabular-nums">
-                {atributo.valor}
-              </span>
-            </li>
-          ))}
-        </ul>
+        {atributosDesenhados}
       </section>
     ) : null;
 

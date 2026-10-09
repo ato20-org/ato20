@@ -38,6 +38,11 @@ pub struct Aplicado {
     /// Quantos personagens que ja existiam ganharam alguma coisa. Zero quando
     /// o mestre nao pediu.
     pub alcancados: usize,
+    /// O estilo de atributos que o sistema traz, para a TELA gravar na
+    /// configuracao da campanha. A tela, e nao este modulo: o registro de
+    /// configuracoes guarda o arquivo inteiro em memoria e o regrava, e uma
+    /// escrita daqui seria apagada pela proxima de la.
+    pub estilo_dos_atributos: Option<String>,
 }
 
 /// Junta o sistema ao padrao da campanha. NAO mexe nas fichas: quem pede isso
@@ -52,6 +57,7 @@ pub fn aplicar(vault: &Vault, sistema: &Sistema) -> AppResult<Aplicado> {
         detalhes,
         condicoes: condicoes::juntar(vault, &sistema.condicoes)?,
         alcancados: 0,
+        estilo_dos_atributos: sistema.estilo_dos_atributos.clone(),
     })
 }
 
@@ -110,6 +116,7 @@ mod tests {
                 icone: Some("caveira".into()),
                 efeito: None,
             }],
+            estilo_dos_atributos: Some("ordem-paranormal/ritual".into()),
         }
     }
 
@@ -123,6 +130,10 @@ mod tests {
         assert_eq!(aplicado.grupos.entraram, 1);
         assert_eq!(aplicado.detalhes.entraram, 1);
         assert_eq!(aplicado.condicoes.entraram, 1);
+        assert_eq!(
+            aplicado.estilo_dos_atributos.as_deref(),
+            Some("ordem-paranormal/ritual")
+        );
 
         let medidor = &modelos::load(&vault).unwrap()[0];
         assert_eq!(medidor.maximo, 20);

@@ -65,7 +65,8 @@ function useGruposDeAjustes(escopo: Escopo, busca: string) {
     // A `lista` fica de fora: não há controle genérico para ela. Ver
     // `TipoConfiguracao`.
     const visiveis = Object.values(definicoes).filter(
-      (d) => d.tipo !== "lista" && escoposDe(d).includes(escopo) && bateNaBusca(d, busca),
+      (d) =>
+        d.tipo !== "lista" && !d.oculta && escoposDe(d).includes(escopo) && bateNaBusca(d, busca),
     );
 
     const porDono = new Map<string, Definicao[]>();

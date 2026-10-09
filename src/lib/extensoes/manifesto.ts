@@ -38,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 10;
+export const API_VERSAO = 11;
 
 /**
  * O que uma extensão diz de si.
@@ -95,6 +95,8 @@ export type Contribuicoes = {
   secoes?: SecaoDeclarada[];
   substitutos?: SubstitutoDeclarado[];
   estilosDeMedidor?: EstiloDeMedidorDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 11. */
+  estilosDeAtributos?: EstiloDeAtributosDeclarado[];
   paginas?: PaginaDeclarada[];
   /** Ausente em lista lida por um Rust anterior à API 6. */
   efeitos?: EfeitoDeclarado[];
@@ -133,6 +135,11 @@ export type SistemaDeclarado = {
     }>;
   };
   condicoes: Array<{ nome: string; cor: string; icone?: string | null; efeito?: string | null }>;
+  /**
+   * `{plugin}/{estilo}` dos atributos: aplicar o sistema põe a campanha nesse
+   * desenho. Ausente antes da API 11.
+   */
+  estiloDosAtributos?: string | null;
 };
 
 /**
@@ -217,6 +224,28 @@ export type EstiloDeMedidorDeclarado = {
   camadas?: CamadasDoMedidor | null;
   rotulo?: RotuloDoMedidor | null;
 };
+
+/**
+ * Um jeito de desenhar a seção de atributos: a imagem, e onde o número de
+ * cada sigla entra nela -- o ritual do Ordem. Espelho de
+ * `extensoes::EstiloDeAtributos`, que é quem valida. Ver `AtributosEmImagem`.
+ */
+export type EstiloDeAtributosDeclarado = {
+  id: string;
+  titulo: string;
+  /** Raster, relativa à pasta do plugin. */
+  imagem: string;
+  /** A altura da imagem em fração da largura. 1 é o quadrado. */
+  proporcao: number;
+  lugares: LugarDoAtributo[];
+  texto?: { cor?: string | null; contorno?: string | null } | null;
+};
+
+/**
+ * Onde o número de uma sigla entra: `x` e `y` são o CENTRO, em fração da
+ * imagem; `tamanho` é o corpo do número (a fonte) em fração da LARGURA.
+ */
+export type LugarDoAtributo = { sigla: string; x: number; y: number; tamanho: number };
 
 /**
  * O que a linha acima da forma mostra. Espelho de `ROTULOS`.
@@ -494,6 +523,7 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       itensDeMenu: c.itensDeMenu?.map(titulo),
       secoes: c.secoes?.map(titulo),
       estilosDeMedidor: c.estilosDeMedidor?.map(titulo),
+      estilosDeAtributos: c.estilosDeAtributos?.map(titulo),
       paginas: c.paginas?.map(titulo),
       efeitos: c.efeitos?.map((efeito) => ({
         ...titulo(efeito),

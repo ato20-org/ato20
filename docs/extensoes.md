@@ -83,7 +83,11 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 10 é a atual: ela acrescentou as `fichasPdf` (ver
+mais do que ele tem.** A 11 é a atual: ela acrescentou os
+`estilosDeAtributos` e o `estiloDosAtributos` do sistema (ver
+[Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual)),
+que um ATO20 anterior ignoraria calado, com a ficha nos cartões sem dizer por
+quê. A 10 acrescentou as `fichasPdf` (ver
 [Ficha em PDF](#ficha-em-pdf-o-plugin-ensina-a-ler)) e os `sistemas` (ver
 [Sistema de jogo](#sistema-de-jogo-o-padrão-da-campanha)), que um ATO20
 anterior ignoraria calado, e o plugin instalado só para isso não faria nada. A 9
@@ -845,12 +849,74 @@ a **API 10**:
   (`ordem-segredo-na-floresta/pv`); sem ele instalado, a barra sai no `estilo`.
 - **`icone`** da condição é um nome da lista de ícones da tela, e **`efeito`**
   é um efeito de fábrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+- **`estiloDosAtributos`** (API 11) é o desenho dos atributos,
+  `{plugin}/{estilo}`, do próprio plugin ou de outro. Aplicar o sistema põe a
+  campanha nesse desenho: ver
+  [Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual).
 - Os tetos são os da campanha: 12 atributos, 6 medidores, 16 grupos, 200
   detalhes e 16 condições. Detalhe de `escolha` precisa de opções, e o grupo
   de cada detalhe tem de estar declarado ao lado.
 
 Um plugin com sistema **e** ficha em PDF fecha o ciclo: use na ficha os mesmos
 grupos e rótulos do sistema, e o personagem importado cai certinho no molde.
+
+## Atributos desenhados pelo plugin: o ritual
+
+A seção de atributos pode sair de uma imagem do plugin, com o número de cada
+sigla no lugar dela: o ritual do Ordem, com AGI, FOR, INT, PRE e VIG nos cinco
+círculos. Declarativo, como o medidor em camadas, e pela mesma razão: o
+celular desenha igual ao Mestre sem uma linha do plugin rodar fora dele. Pede
+a **API 11**:
+
+```json
+"estilosDeAtributos": [{
+  "id": "ritual",
+  "titulo": "Ritual",
+  "imagem": "atributos/ritual.png",
+  "proporcao": 1,
+  "lugares": [
+    { "sigla": "AGI", "x": 0.501, "y": 0.164, "tamanho": 0.085 },
+    { "sigla": "FOR", "x": 0.194, "y": 0.382, "tamanho": 0.085 }
+  ],
+  "texto": { "cor": "#ffffff", "contorno": "#000000" }
+}]
+```
+
+- **A imagem traz o que não muda**: o desenho e o nome de cada atributo. A
+  ficha escreve só o número. Raster (png, webp, gif, jpg, avif), até 2 MB,
+  servida pelo daemon arquivo por arquivo, como as camadas do medidor.
+- **`proporcao`** é a altura da imagem em fração da largura, de 0,25 a 3: a
+  ficha reserva o lugar antes de a imagem chegar e não pula. Uma imagem que
+  não bate com ela estica junto com os lugares, e o número segue no círculo.
+- **Cada lugar** é o CENTRO do número, `x` e `y` em fração da imagem, e o
+  `tamanho` é o corpo do número em fração da LARGURA, de 0,02 a 0,4. Fração e
+  não pixel: a imagem escala com a coluna da ficha e com a tela do celular.
+  Até 12 lugares, sigla de até 6 letras, sem repetir.
+- **A sigla casa sem diferença de caixa.** Atributo da ficha sem lugar na
+  imagem (o SOR de uma mesa) fica num cartão logo abaixo; lugar sem atributo
+  fica vazio.
+- **`texto`** tem a cor e o contorno do número, só em hex. Ausente, branco com
+  contorno quase preto. A fonte é a do aplicativo.
+
+No Mestre, o número é um campo: clique e escreva, as setas sobem e descem. O
+botão direito no círculo troca a sigla, escreve a descrição ou apaga, e o
+hover mostra a descrição. No celular é só leitura, como o resto da ficha.
+
+**Quem escolhe é o sistema**, e não um seletor: campanha de Ordem é ritual.
+Aplicar um sistema que declara `estiloDosAtributos` põe a campanha nesse
+desenho; sistema sem desenho não mexe nele. A escolha fica no registro de
+configurações, em `ato20.ficha.estiloDosAtributos` (`""` são os cartões),
+oculta da lista de Ajustes, e viaja no zip. Com o plugin desligado ou a imagem
+fora da pasta, a ficha volta aos cartões, e a escolha espera no arquivo pela
+volta dele.
+
+No Mestre de desenvolvimento (`next dev`, a janela em `http://localhost:3000`)
+a imagem vem pelo daemon, como no celular: o WebKitGTK não pede `<img>` do
+protocolo `ato20-ext` a partir de página http. No release a janela é
+`tauri://`, e o protocolo serve.
+
+A escolha e os estilos viajam ao celular pelo `/sala/declarativo`, junto com
+os estilos de medidor.
 
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 

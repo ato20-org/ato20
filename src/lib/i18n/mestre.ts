@@ -886,6 +886,9 @@ const pt = {
     },
     imagemDescricao:
       "Só a janela do espectador muda. Cada mapa pode ter o próprio ajuste, por cima deste.",
+    estiloDosAtributos: "Aparência dos atributos",
+    estiloDosAtributosDescricao:
+      "O desenho de um plugin, como plugin/estilo. Vazio são os cartões. Quem escolhe é o sistema aplicado.",
   },
 
   /** As réguas do ajuste de imagem da janela do espectador. */
@@ -1760,6 +1763,9 @@ const en: typeof pt = {
     },
     imagemDescricao:
       "Only the spectator window changes. Each map can have its own adjustment on top of this one.",
+    estiloDosAtributos: "Attribute look",
+    estiloDosAtributosDescricao:
+      "A plugin's drawing, as plugin/style. Empty means the cards. The applied system picks it.",
   },
 
   imagemDoEspectador: {

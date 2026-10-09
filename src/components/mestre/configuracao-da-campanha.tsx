@@ -151,8 +151,8 @@ export function ConfiguracaoDaCampanhaBody() {
 
   const ajustes = useMemo(
     () =>
-      Object.values(definicoes).filter((definicao) =>
-        escoposDe(definicao).includes("campanha"),
+      Object.values(definicoes).filter(
+        (definicao) => !definicao.oculta && escoposDe(definicao).includes("campanha"),
       ),
     [definicoes],
   );

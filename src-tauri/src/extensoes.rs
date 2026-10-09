@@ -75,7 +75,12 @@ use crate::error::{AppError, AppResult};
 /// ficha, e o aplicativo cria o personagem a partir dela. Um ATO20 de API 9
 /// ignoraria a chave calado, e o plugin instalado so para isso nao faria nada;
 /// pedindo 10, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 10;
+///
+/// A 11 acrescentou os `estilosDeAtributos` -- a imagem com o lugar de cada
+/// sigla, o ritual do Ordem -- e o `estiloDosAtributos` do sistema. Um ATO20
+/// de API 10 ignoraria os dois calado, e a ficha seguiria nos cartoes sem
+/// dizer por que; pedindo 11, ele ouve "atualize o ATO20".
+pub const API_VERSAO: u32 = 11;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -305,6 +310,9 @@ impl Manifesto {
         for x in &c.estilos_de_medidor {
             textos.push((caminho("estilosDeMedidor", &x.id, "titulo"), &x.titulo));
         }
+        for x in &c.estilos_de_atributos {
+            textos.push((caminho("estilosDeAtributos", &x.id, "titulo"), &x.titulo));
+        }
         for x in &c.paginas {
             textos.push((caminho("paginas", &x.id, "titulo"), &x.titulo));
         }
@@ -404,6 +412,9 @@ pub struct Contribuicoes {
     /// Estilos de medidor desenhados em SVG. Ver `EstiloDeMedidor`.
     #[serde(default)]
     pub estilos_de_medidor: Vec<EstiloDeMedidor>,
+    /// Jeitos de desenhar a secao de atributos. Ver `EstiloDeAtributos`.
+    #[serde(default)]
+    pub estilos_de_atributos: Vec<EstiloDeAtributos>,
     /// Paginas que o daemon serve na rede. Ver `Pagina`.
     #[serde(default)]
     pub paginas: Vec<Pagina>,
@@ -707,13 +718,25 @@ pub const PREFIXO_DA_CAMPANHA: &str = "campanha";
 
 impl Contribuicoes {
     /// As imagens que o daemon serve na rede por causa do que foi declarado --
-    /// dos estilos de medidor e dos efeitos --, cada uma com quem a pediu, para
+    /// dos estilos de medidor e de atributos e dos efeitos --, cada uma com quem a pediu, para
     /// o erro dizer de quem e o arquivo que falta. Ver `serve::serve_plugin`.
     pub fn imagens_servidas(&self) -> Vec<(crate::error::Texto, &str)> {
         let estilos = self.estilos_de_medidor.iter().flat_map(|estilo| {
             estilo.imagens().into_iter().map(move |imagem| {
                 (
                     crate::texto!("o estilo {:?}", "the meter style {:?}", estilo.id),
+                    imagem,
+                )
+            })
+        });
+        let atributos = self.estilos_de_atributos.iter().flat_map(|estilo| {
+            estilo.imagens().into_iter().map(move |imagem| {
+                (
+                    crate::texto!(
+                        "o estilo de atributos {:?}",
+                        "the attribute style {:?}",
+                        estilo.id
+                    ),
                     imagem,
                 )
             })
@@ -727,7 +750,7 @@ impl Contribuicoes {
             })
         });
 
-        estilos.chain(efeitos).collect()
+        estilos.chain(atributos).chain(efeitos).collect()
     }
 }
 
@@ -994,6 +1017,80 @@ pub const PROPORCAO_DO_PONTO_MAX: f64 = 4.0;
 /// Quantos quadros uma `sequencia` pode ter. Cada quadro e um arquivo que a
 /// mesa baixa; dezesseis ja distinguem cada faixa de vida que alguem le.
 pub const QUADROS_MAX: usize = 16;
+
+/// Um jeito de desenhar a secao de atributos: uma imagem, e o lugar de cada
+/// sigla nela -- o ritual do Ordem, com AGI, FOR, INT, PRE e VIG nos cinco
+/// circulos.
+///
+/// DECLARATIVO, como o medidor em camadas, e pela mesma razao: o celular
+/// desenha igual ao Mestre sem uma linha do plugin rodar fora dele. A imagem
+/// ja traz o que nao muda (o desenho, o nome de cada atributo); a ficha so
+/// escreve o NUMERO no lugar da sigla. Sigla da ficha sem lugar aqui fica na
+/// grade de cartoes embaixo, e lugar sem sigla na ficha fica vazio.
+///
+/// Quem escolhe o estilo e o sistema aplicado (`Sistema::estilo_dos_atributos`),
+/// que o grava na campanha (`ato20.ficha.estiloDosAtributos`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstiloDeAtributos {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// Raster, relativa a pasta. Ver `IMAGENS_DE_MEDIDOR`.
+    pub imagem: String,
+    /// A altura da imagem em fracao da largura: 1 e o quadrado. Declarada
+    /// para a secao reservar o lugar antes de a imagem chegar, sem pular.
+    pub proporcao: f64,
+    pub lugares: Vec<LugarDoAtributo>,
+    /// A cor do numero. Ausente e branco com contorno quase preto.
+    #[serde(default)]
+    pub texto: Option<CorDoNumero>,
+}
+
+impl EstiloDeAtributos {
+    /// O que o daemon serve na rede por causa dele. Ver `imagens_servidas`.
+    pub fn imagens(&self) -> Vec<&str> {
+        vec![self.imagem.as_str()]
+    }
+}
+
+/// Onde o numero de uma sigla entra na imagem.
+///
+/// `x` e `y` sao o CENTRO do numero, em fracao da largura e da altura da
+/// imagem; `tamanho` e o corpo do numero (a fonte) em fracao da LARGURA, para o numero
+/// nao mudar de corpo numa imagem mais alta. Fracao, e nao pixel, pela razao
+/// do encaixe do medidor: a imagem escala com a coluna da ficha e com a tela
+/// do celular, e o autor nao conhece nenhuma das duas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LugarDoAtributo {
+    pub sigla: String,
+    pub x: f64,
+    pub y: f64,
+    pub tamanho: f64,
+}
+
+/// As cores do numero. Hex e so hex, como as do `Texto` do medidor: vao
+/// parar num `style`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorDoNumero {
+    #[serde(default)]
+    pub cor: Option<String>,
+    #[serde(default)]
+    pub contorno: Option<String>,
+}
+
+/// Os limites da `proporcao` da imagem dos atributos. Abaixo de 0,25 e uma
+/// faixa em que o numero nao cabe; acima de 3, uma torre que empurra a ficha
+/// inteira para baixo.
+pub const PROPORCAO_DOS_ATRIBUTOS_MIN: f64 = 0.25;
+pub const PROPORCAO_DOS_ATRIBUTOS_MAX: f64 = 3.0;
+
+/// Os limites do `tamanho` do numero, em fracao da largura da imagem. Abaixo
+/// de 0,02 nao se le nem na coluna larga; acima de 0,4 um numero toma a
+/// imagem.
+pub const TAMANHO_DO_NUMERO_MIN: f64 = 0.02;
+pub const TAMANHO_DO_NUMERO_MAX: f64 = 0.4;
 
 /// Um item que a extensao poe num menu do aplicativo.
 ///
@@ -1375,6 +1472,12 @@ pub struct Sistema {
     pub detalhes: DetalhesDoSistema,
     #[serde(default)]
     pub condicoes: Vec<CondicaoDoSistema>,
+    /// O jeito de desenhar os atributos, `{extensao}/{estilo}` -- pode ser de
+    /// OUTRO plugin, como o estilo do medidor. Aplicar o sistema poe a
+    /// campanha nesse desenho: campanha de Ordem e ritual, sem seletor. Quem
+    /// grava e a tela, no registro de configuracoes. Ver `EstiloDeAtributos`.
+    #[serde(default)]
+    pub estilo_dos_atributos: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1458,6 +1561,7 @@ impl Sistema {
             || !self.medidores.is_empty()
             || !self.detalhes.grupos.is_empty()
             || !self.condicoes.is_empty()
+            || self.estilo_dos_atributos.is_some()
     }
 }
 
@@ -1648,6 +1752,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
         (
             "estilosDeMedidor",
             c.estilos_de_medidor.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "estilosDeAtributos",
+            c.estilos_de_atributos.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
         (
             "paginas",
@@ -2113,6 +2221,15 @@ fn validar_sistema(sistema: &Sistema) -> AppResult<()> {
         }
     }
 
+    if let Some(estilo) = &sistema.estilo_dos_atributos {
+        if !characters::estilo_extensao_valido(estilo) {
+            return invalido(crate::texto!(
+                "o sistema {id:?} pede o estilo de atributos {estilo:?}; escreva `plugin/estilo`",
+                "the system {id:?} asks for the attribute style {estilo:?}; write `plugin/style`"
+            ));
+        }
+    }
+
     let grupos: Vec<String> = sistema
         .detalhes
         .grupos
@@ -2246,6 +2363,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
 
     for estilo in &c.estilos_de_medidor {
         validar_estilo(estilo)?;
+    }
+    for estilo in &c.estilos_de_atributos {
+        validar_estilo_de_atributos(estilo)?;
     }
 
     if !c.efeitos.is_empty() && manifesto.id == PREFIXO_DA_CAMPANHA {
@@ -2684,6 +2804,104 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
                 "nao declara `arquivo` (.svg) nem `camadas`",
                 "declares neither `arquivo` (.svg) nor `camadas`"
             ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Um estilo de atributos desenha alguma coisa, e so com o que e da pasta?
+///
+/// So a FORMA, como `validar_estilo`: a imagem existir e caber no teto e da
+/// importacao (`validar_imagens_declaradas`). E recusa o que a ficha nao
+/// saberia onde por -- a sigla de sete letras, que a ficha corta, e a mesma
+/// sigla duas vezes, que poria o mesmo numero em dois circulos.
+fn validar_estilo_de_atributos(estilo: &EstiloDeAtributos) -> AppResult<()> {
+    use crate::vault::characters;
+
+    let invalido = |motivo: crate::error::Texto| {
+        Err(AppError::ExtensaoInvalida(crate::error::Texto {
+            pt: format!("o estilo de atributos {:?} {}", estilo.id, motivo.pt),
+            en: format!("the attribute style {:?} {}", estilo.id, motivo.en),
+        }))
+    };
+
+    let imagem = &estilo.imagem;
+    let extensao = imagem.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+    if !caminho_relativo_seguro(imagem) || !e_imagem {
+        return invalido(crate::texto!(
+            "aponta para {imagem:?}; tem de ser uma imagem dentro da pasta ({})",
+            "points to {imagem:?}; it must be an image inside the folder ({})",
+            IMAGENS_DE_MEDIDOR.join(", ")
+        ));
+    }
+
+    let proporcao = estilo.proporcao;
+    if !proporcao.is_finite()
+        || !(PROPORCAO_DOS_ATRIBUTOS_MIN..=PROPORCAO_DOS_ATRIBUTOS_MAX).contains(&proporcao)
+    {
+        return invalido(crate::texto!(
+            "tem proporcao {proporcao}; vai de {PROPORCAO_DOS_ATRIBUTOS_MIN} a {PROPORCAO_DOS_ATRIBUTOS_MAX}",
+            "has `proporcao` {proporcao}; the range is {PROPORCAO_DOS_ATRIBUTOS_MIN} to {PROPORCAO_DOS_ATRIBUTOS_MAX}"
+        ));
+    }
+
+    if estilo.lugares.is_empty() || estilo.lugares.len() > characters::MAX_ATRIBUTOS {
+        return invalido(crate::texto!(
+            "precisa de 1 a {} lugares",
+            "needs 1 to {} `lugares`",
+            characters::MAX_ATRIBUTOS
+        ));
+    }
+
+    let mut vistas: Vec<String> = Vec::new();
+    for lugar in &estilo.lugares {
+        let sigla = lugar.sigla.trim();
+        let letras = sigla.chars().count();
+        if letras == 0 || letras > characters::MAX_SIGLA {
+            return invalido(crate::texto!(
+                "tem a sigla {sigla:?}; ela precisa ter de 1 a {} letras",
+                "has the abbreviation {sigla:?}; it must have 1 to {} characters",
+                characters::MAX_SIGLA
+            ));
+        }
+        // Sem diferenca de caixa, como a ficha casa a sigla com o lugar.
+        let chave = sigla.to_lowercase();
+        if vistas.contains(&chave) {
+            return invalido(crate::texto!(
+                "tem a sigla {sigla:?} duas vezes",
+                "has the abbreviation {sigla:?} twice"
+            ));
+        }
+        vistas.push(chave);
+
+        let dentro = |n: f64| n.is_finite() && (0.0..=1.0).contains(&n);
+        if !dentro(lugar.x) || !dentro(lugar.y) {
+            return invalido(crate::texto!(
+                "poe {sigla:?} fora da imagem; x e y sao fracoes de 0 a 1",
+                "puts {sigla:?} outside the image; x and y are fractions from 0 to 1"
+            ));
+        }
+        if !lugar.tamanho.is_finite()
+            || !(TAMANHO_DO_NUMERO_MIN..=TAMANHO_DO_NUMERO_MAX).contains(&lugar.tamanho)
+        {
+            return invalido(crate::texto!(
+                "da a {sigla:?} o tamanho {}; vai de {TAMANHO_DO_NUMERO_MIN} a {TAMANHO_DO_NUMERO_MAX}",
+                "gives {sigla:?} the size {}; the range is {TAMANHO_DO_NUMERO_MIN} to {TAMANHO_DO_NUMERO_MAX}",
+                lugar.tamanho
+            ));
+        }
+    }
+
+    if let Some(texto) = &estilo.texto {
+        for cor in texto.cor.iter().chain(texto.contorno.iter()) {
+            if !cor_hex_valida(cor) {
+                return invalido(crate::texto!(
+                    "pede a cor {cor:?} no texto; use hex, como #fff ou #1a0d0dcc",
+                    "uses the color {cor:?} in `texto`; use hex, like #fff or #1a0d0dcc"
+                ));
+            }
         }
     }
 
@@ -4105,6 +4323,102 @@ mod tests {
         assert!(dir.join("ordem/m/vida.png").is_file());
     }
 
+    fn com_estilos_de_atributos(estilos: &str) -> String {
+        format!(
+            r#"{{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":11,"contribui":{{"estilosDeAtributos":{estilos}}}}}"#
+        )
+    }
+
+    /// O ritual, com um pedaco trocado por quem quer quebrar.
+    fn ritual(troca: &str) -> String {
+        let base = r##"{"id":"ritual","titulo":"Ritual","imagem":"atributos/ritual.png","proporcao":1,
+            "lugares":[{"sigla":"AGI","x":0.48,"y":0.17,"tamanho":0.08},
+                       {"sigla":"FOR","x":0.2,"y":0.4,"tamanho":0.08}],
+            "texto":{"cor":"#fff","contorno":"#000000"}}"##;
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        if let Some((chave, valor)) = troca.split_once('=') {
+            json[chave] = serde_json::from_str(valor).unwrap();
+        }
+        com_estilos_de_atributos(&format!("[{json}]"))
+    }
+
+    #[test]
+    fn estilo_de_atributos_entra_inteiro_e_dispensa_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &ritual("")).unwrap();
+
+        let estilo = &m.contribui.estilos_de_atributos[0];
+        assert_eq!(estilo.lugares[1].sigla, "FOR");
+        assert_eq!(estilo.texto.as_ref().unwrap().cor.as_deref(), Some("#fff"));
+        assert_eq!(estilo.imagens(), ["atributos/ritual.png"]);
+        // A imagem vai para a rede como a do medidor: o celular desenha o
+        // ritual buscando-a no daemon.
+        assert!(m
+            .contribui
+            .imagens_servidas()
+            .iter()
+            .any(|(_, imagem)| *imagem == "atributos/ritual.png"));
+
+        // Sem texto, o numero sai branco.
+        let sem_texto = ler(base.path(), &ritual(r#"texto=null"#)).unwrap();
+        assert!(sem_texto.contribui.estilos_de_atributos[0].texto.is_none());
+    }
+
+    #[test]
+    fn estilo_de_atributos_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+        let lugar = |sigla: &str, x: f64, tamanho: f64| {
+            format!(r#"lugares=[{{"sigla":"{sigla}","x":{x},"y":0.5,"tamanho":{tamanho}}}]"#)
+        };
+        let muitos = format!(
+            "lugares=[{}]",
+            (0..=crate::vault::characters::MAX_ATRIBUTOS)
+                .map(|i| format!(r#"{{"sigla":"A{i}","x":0.5,"y":0.5,"tamanho":0.1}}"#))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        for troca in [
+            // SVG nao: ele vai para a rede, e la roda script.
+            r#"imagem="ritual.svg""#.to_string(),
+            r#"imagem="../fora.png""#.to_string(),
+            r#"proporcao=0"#.to_string(),
+            r#"proporcao=5"#.to_string(),
+            r#"lugares=[]"#.to_string(),
+            muitos,
+            lugar("AGILIDADE", 0.5, 0.1),
+            lugar("", 0.5, 0.1),
+            lugar("AGI", 1.2, 0.1),
+            lugar("AGI", 0.5, 0.5),
+            r#"lugares=[{"sigla":"AGI","x":0.5,"y":0.5,"tamanho":0.1},{"sigla":"agi","x":0.2,"y":0.5,"tamanho":0.1}]"#.to_string(),
+            r#"texto={"cor":"red"}"#.to_string(),
+            r##"texto={"contorno":"#ffffff; background:url(x)"}"##.to_string(),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &ritual(&troca)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn importar_cobra_a_imagem_do_estilo_de_atributos() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-ordem");
+        escrever(&pasta, MANIFESTO, &ritual(""));
+
+        let erro = importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("atributos/ritual.png"), "{erro}");
+
+        escrever(&pasta.join("atributos"), "ritual.png", "png");
+        importar(&dir, &pasta).unwrap();
+        assert!(dir.join("ordem/atributos/ritual.png").is_file());
+    }
+
     #[cfg(unix)]
     #[test]
     fn importar_recusa_imagem_de_medidor_que_e_link() {
@@ -4883,6 +5197,7 @@ mod tests {
             r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"A","rotulo":"X","opcoes":["a"]}]}"##.to_string(),
             r##"detalhes={"grupos":[{"nome":"A"},{"nome":"a"}]}"##.to_string(),
             r##"condicoes=[{"nome":"Morrendo","cor":"#fff","efeito":"../fora"}]"##.to_string(),
+            r##"estiloDosAtributos="ritual""##.to_string(),
         ] {
             let json = com_sistema(&troca);
             // A primeira tira so os atributos: o resto ainda traz algo, e o
@@ -4897,6 +5212,17 @@ mod tests {
                 "{troca} devia ser recusado"
             );
         }
+
+        // So o estilo dos atributos ja e trazer algo: o sistema que veste a
+        // ficha de outro plugin.
+        let so_estilo = r#"{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":11,
+            "contribui":{"sistemas":[{"id":"ritual","titulo":"Ritual","estiloDosAtributos":"ordem-paranormal/ritual"}]}}"#;
+        assert_eq!(
+            ler(base.path(), so_estilo).unwrap().contribui.sistemas[0]
+                .estilo_dos_atributos
+                .as_deref(),
+            Some("ordem-paranormal/ritual")
+        );
 
         let vazio = r#"{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":10,
             "contribui":{"sistemas":[{"id":"nada","titulo":"Nada"}]}}"#;

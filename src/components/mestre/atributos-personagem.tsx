@@ -8,12 +8,26 @@ import {
   type MouseEvent,
   type RefObject,
 } from "react";
-import { Info, Plus, Trash2 } from "lucide-react";
+import { Info, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
+import {
+  AtributosEmImagem,
+  CAIXA_DO_LUGAR,
+  estiloDoLugar,
+  useEstiloDosAtributos,
+} from "@/components/playground/atributos-em-imagem";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -25,6 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { repartirAtributos } from "@/lib/atributos-em-imagem";
 import { t } from "@/lib/i18n/personagens";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +52,7 @@ import {
   MAX_DESCRICAO_ATRIBUTO,
   MAX_SIGLA,
   MAX_VALOR_ATRIBUTO,
+  type Atributo,
   type PatchAtributo,
   type Personagem,
 } from "@/types/character";
@@ -52,6 +68,10 @@ import {
  * sigla marcada para escrever por cima, e o valor se corrige no próprio
  * cartão. Para pôr os mesmos em todo personagem, o caminho é a configuração
  * da campanha -- ver `AtributosDaCampanha`.
+ *
+ * Com um estilo de plugin escolhido na campanha (o ritual do Ordem), os que
+ * têm lugar na imagem vão para ela, e o resto fica nos cartões embaixo. Ver
+ * `AtributosEmImagem`.
  */
 export function AtributosPersonagem({
   personagem,
@@ -62,6 +82,7 @@ export function AtributosPersonagem({
 }) {
   const lista = personagem.atributos ?? [];
   const cheio = lista.length >= MAX_ATRIBUTOS;
+  const estilo = useEstiloDosAtributos();
 
   /** O recém-criado, para o cartão dele nascer com a sigla em edição. */
   const [novo, setNovo] = useState<string | null>(null);
@@ -132,6 +153,65 @@ export function AtributosPersonagem({
     </Tooltip>
   );
 
+  const vazio = (
+    <p className="text-muted-foreground text-[11px] leading-snug">
+      {t.atributos.vazio}
+    </p>
+  );
+
+  const grade = (atributos: readonly Atributo[]) => (
+    <GradeDeAtributos>
+      {atributos.map((atributo) => (
+        <CartaoDeAtributo
+          key={atributo.id}
+          sigla={atributo.sigla}
+          valor={atributo.valor}
+          descricao={atributo.descricao}
+          editarSigla={atributo.id === novo}
+          onSigla={(sigla) => {
+            setNovo(null);
+            void gravar(atributo.id, { sigla });
+          }}
+          onValor={(valor) => void gravar(atributo.id, { valor })}
+          onDescricao={(descricao) => void gravar(atributo.id, { descricao })}
+          onApagar={() => void apagar(atributo.id)}
+        />
+      ))}
+    </GradeDeAtributos>
+  );
+
+  let corpo: React.ReactNode;
+  if (estilo) {
+    const { noLugar, fora } = repartirAtributos(lista, estilo.lugares);
+
+    corpo = (
+      <div className="space-y-2">
+        {/* A reserva é a grade só dos que estariam na imagem: os de fora já
+            têm a grade deles logo abaixo. */}
+        <AtributosEmImagem
+          estilo={estilo}
+          reserva={noLugar.length > 0 ? grade(noLugar.map(({ atributo }) => atributo)) : null}
+        >
+          {noLugar.map(({ atributo, lugar }) => (
+            <AtributoNoLugar
+              key={atributo.id}
+              atributo={atributo}
+              style={estiloDoLugar(lugar, estilo)}
+              onSigla={(sigla) => void gravar(atributo.id, { sigla })}
+              onValor={(valor) => void gravar(atributo.id, { valor })}
+              onDescricao={(descricao) => void gravar(atributo.id, { descricao })}
+              onApagar={() => void apagar(atributo.id)}
+            />
+          ))}
+        </AtributosEmImagem>
+
+        {fora.length > 0 ? grade(fora) : lista.length === 0 ? vazio : null}
+      </div>
+    );
+  } else {
+    corpo = lista.length === 0 ? vazio : grade(lista);
+  }
+
   return (
     <SecaoFicha
       secao="atributos"
@@ -139,31 +219,144 @@ export function AtributosPersonagem({
       contagem={lista.length}
       acao={acao}
     >
-      {lista.length === 0 ? (
-        <p className="text-muted-foreground text-[11px] leading-snug">
-          {t.atributos.vazio}
-        </p>
-      ) : (
-        <GradeDeAtributos>
-          {lista.map((atributo) => (
-            <CartaoDeAtributo
-              key={atributo.id}
-              sigla={atributo.sigla}
-              valor={atributo.valor}
-              descricao={atributo.descricao}
-              editarSigla={atributo.id === novo}
-              onSigla={(sigla) => {
-                setNovo(null);
-                void gravar(atributo.id, { sigla });
-              }}
-              onValor={(valor) => void gravar(atributo.id, { valor })}
-              onDescricao={(descricao) => void gravar(atributo.id, { descricao })}
-              onApagar={() => void apagar(atributo.id)}
-            />
-          ))}
-        </GradeDeAtributos>
-      )}
+      {corpo}
     </SecaoFicha>
+  );
+}
+
+/**
+ * Um atributo no lugar dele da imagem: só o número, que é um campo.
+ *
+ * O resto do cartão (sigla, descrição, apagar) vai para o botão direito: a
+ * imagem já escreve o nome do atributo, e um ícone em cada círculo do ritual
+ * disputaria o olho com o número. O hover diz o que é, e como mexer.
+ *
+ * A edição da sigla e da descrição abre ancorada no círculo, DEPOIS de o menu
+ * fechar: aberta no clique do item, o menu devolveria o foco ao círculo ao
+ * fechar e o campo recém-aberto o perderia. Ver `useRenomearPeloMenu`.
+ */
+function AtributoNoLugar({
+  atributo,
+  style,
+  onSigla,
+  onValor,
+  onDescricao,
+  onApagar,
+}: {
+  atributo: Atributo;
+  style: React.CSSProperties;
+  onSigla: (sigla: string) => void;
+  onValor: (valor: number) => void;
+  /** `""` apaga. */
+  onDescricao: (descricao: string) => void;
+  onApagar: () => void;
+}) {
+  const { sigla, valor, descricao } = atributo;
+
+  type Campo = "sigla" | "descricao";
+  const [editando, setEditando] = useState<Campo | null>(null);
+  const pedido = useRef<Campo | null>(null);
+  const [caixa, setCaixa] = useState<HTMLSpanElement | null>(null);
+
+  return (
+    <>
+      <ContextMenu
+        onOpenChangeComplete={(aberto) => {
+          if (aberto || !pedido.current) return;
+
+          setEditando(pedido.current);
+          pedido.current = null;
+        }}
+      >
+        <ContextMenuTrigger
+          render={<span ref={setCaixa} className={CAIXA_DO_LUGAR} style={style} />}
+        >
+          <Tooltip>
+            <TooltipTrigger render={<span className="flex size-full items-center" />}>
+              <CampoDoValor
+                sigla={sigla}
+                valor={valor}
+                onGravar={onValor}
+                className="h-full leading-none"
+              />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="font-medium">{sigla}</p>
+              {descricao ? <p className="max-w-56 whitespace-pre-line">{descricao}</p> : null}
+              <p className="text-muted-foreground max-w-56">{t.atributos.dicaNoLugar}</p>
+            </TooltipContent>
+          </Tooltip>
+        </ContextMenuTrigger>
+
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => (pedido.current = "sigla")}>
+            <Pencil />
+            {t.atributos.renomear(sigla)}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => (pedido.current = "descricao")}>
+            <Info />
+            {t.atributos.descricao(sigla)}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onClick={onApagar}>
+            <Trash2 />
+            {t.atributos.apagar(sigla)}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+
+      <Popover
+        open={editando !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setEditando(null);
+        }}
+      >
+        <PopoverContent anchor={caixa} side="bottom" className="w-64 space-y-1.5">
+          {editando === "sigla" ? (
+            <>
+              <p className="text-xs font-medium">{t.atributos.sigla(sigla)}</p>
+              <Input
+                autoFocus
+                defaultValue={sigla}
+                maxLength={MAX_SIGLA}
+                aria-label={t.atributos.sigla(sigla)}
+                className="h-8 text-sm uppercase"
+                onFocus={(evento) => evento.currentTarget.select()}
+                onKeyDown={(evento) => {
+                  if (evento.key === "Enter") evento.currentTarget.blur();
+                }}
+                onBlur={(evento) => {
+                  const lido = evento.target.value.trim();
+                  setEditando(null);
+                  // Vazio não é pedido, como no cartão: volta ao que era.
+                  if (!lido || lido === sigla) return;
+
+                  onSigla(lido);
+                }}
+              />
+            </>
+          ) : editando === "descricao" ? (
+            <>
+              <p className="text-xs font-medium">{t.atributos.descricao(sigla)}</p>
+              <Textarea
+                autoFocus
+                defaultValue={descricao ?? ""}
+                maxLength={MAX_DESCRICAO_ATRIBUTO}
+                placeholder={t.atributos.exemploDeDescricao}
+                aria-label={t.atributos.descricao(sigla)}
+                className="min-h-16 resize-y text-xs"
+                onBlur={(evento) => {
+                  const texto = evento.target.value.trim();
+                  if (texto === (descricao ?? "")) return;
+
+                  onDescricao(texto);
+                }}
+              />
+            </>
+          ) : null}
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }
 
@@ -415,10 +608,13 @@ function CampoDoValor({
   sigla,
   valor,
   onGravar,
+  className = "text-2xl leading-tight font-medium",
 }: {
   sigla: string;
   valor: number;
   onGravar: (valor: number) => void;
+  /** O corpo do número. O de fábrica é o do cartão; no ritual, o do lugar. */
+  className?: string;
 }) {
   const [rascunho, setRascunho] = useState<string | null>(null);
   const desistiu = useRef(false);
@@ -470,7 +666,10 @@ function CampoDoValor({
 
         onGravar(numero);
       }}
-      className="focus:bg-background w-full min-w-0 rounded bg-transparent text-center text-2xl leading-tight font-medium tabular-nums outline-none"
+      className={cn(
+        "focus:bg-background w-full min-w-0 rounded bg-transparent text-center tabular-nums outline-none",
+        className,
+      )}
     />
   );
 }

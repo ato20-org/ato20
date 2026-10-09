@@ -17,6 +17,11 @@ export type SistemaAplicado = {
   condicoes: Juntados;
   /** Personagens que já existiam e ganharam o que faltava. */
   alcancados: number;
+  /**
+   * O desenho dos atributos que o sistema traz. Quem o grava é a tela, no
+   * registro da campanha -- ver `estiloDoSistema`. Ausente antes da API 11.
+   */
+  estiloDosAtributos?: string | null;
 };
 
 /**

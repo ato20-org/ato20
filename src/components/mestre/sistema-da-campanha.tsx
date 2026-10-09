@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useCharacters } from "@/hooks/use-characters";
+import { estiloDoSistema } from "@/lib/configuracoes/estilo-dos-atributos";
 import { chaveDoSistema, sistemasDosPlugins, type SistemaDePlugin } from "@/lib/extensoes/sistemas";
 import { t } from "@/lib/i18n/mestre";
 import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
@@ -89,6 +90,7 @@ export function SistemaDaCampanha({ aoAplicar }: { aoAplicar: () => void }) {
         nosPersonagens && quantos > 0,
       );
 
+      await estiloDoSistema(aplicado.estiloDosAtributos);
       aoAplicar();
       useMoldeDeDetalhesStore.getState().avisarFichas();
       useCondicoesStore.getState().recarregar();

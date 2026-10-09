@@ -270,6 +270,9 @@ const pt = {
     semDescricao: "Sem descrição. Clique para escrever.",
     editarDescricao: "Clique para editar.",
     exemploDeDescricao: "Vigor: a resistência do corpo.",
+    renomear: (sigla: string) => `Renomear ${sigla}`,
+    /** O hover do número no desenho de um plugin, onde não há cartão. */
+    dicaNoLugar: "Clique para mudar o número. Botão direito: sigla, descrição, apagar.",
   },
 
   /** Os detalhes da ficha: Identidade, Perícias, Poderes. Ver `vault/detalhes.rs`. */
@@ -836,6 +839,8 @@ const en: typeof pt = {
     semDescricao: "No description. Click to write one.",
     editarDescricao: "Click to edit.",
     exemploDeDescricao: "Vigor: how tough the body is.",
+    renomear: (sigla) => `Rename ${sigla}`,
+    dicaNoLugar: "Click to change the number. Right-click: abbreviation, description, delete.",
   },
 
   detalhes: {

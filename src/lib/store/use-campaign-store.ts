@@ -5,6 +5,7 @@ import { create } from "zustand";
 
 import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
+import { estiloDoSistema } from "@/lib/configuracoes/estilo-dos-atributos";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { t } from "@/lib/i18n/mestre";
@@ -345,9 +346,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
         // campanha -- ela existe, e o sistema se aplica de novo na
         // Configuração.
         if (sistema) {
-          await aplicarSistema(sistema.extensaoId, sistema.sistemaId, false).catch(() =>
-            toast.error(t.porta.sistemaFalhou),
-          );
+          await aplicarSistema(sistema.extensaoId, sistema.sistemaId, false)
+            .then((aplicado) => estiloDoSistema(aplicado.estiloDosAtributos))
+            .catch(() => toast.error(t.porta.sistemaFalhou));
         }
 
         set({ campaign, status: "ready", busy: false });

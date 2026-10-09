@@ -93,7 +93,11 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 10 is the current one: it added
+that asks for more than it has.** Version 11 is the current one: it added
+`estilosDeAtributos` and the system's `estiloDosAtributos` (see
+[Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual)), which an
+earlier ATO20 would silently ignore, leaving the sheet on cards without saying
+why. Version 10 added
 `fichasPdf` (see [PDF sheet](#pdf-sheet-the-plugin-teaches-the-reading)) and
 `sistemas` (see [Game system](#game-system-the-campaign-defaults)), which an
 earlier ATO20 would silently ignore, leaving a plugin installed just
@@ -920,6 +924,10 @@ for **API 10**:
 - A condition's **`icone`** is a name from the app's icon list, and
   **`efeito`** is a built-in effect (`sangrando`) or a plugin one
   (`{plugin}/{effect}`).
+- **`estiloDosAtributos`** (API 11) is how the attributes are drawn,
+  `{plugin}/{style}`, from this plugin or another. Applying the system puts
+  the campaign on that drawing: see
+  [Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual).
 - The limits are the campaign's: 12 attributes, 6 meters, 16 groups, 200
   details and 16 conditions. A `escolha` (choice) detail needs options, and
   each detail's group must be declared next to it.
@@ -927,6 +935,68 @@ for **API 10**:
 A plugin with a system **and** a PDF sheet closes the loop: use the system's
 groups and labels in the sheet, and the imported character lands right in the
 template.
+
+## Plugin-drawn attributes: the ritual
+
+The attributes section can come from a plugin image, with each
+abbreviation's number in its spot: Ordem's ritual, with AGI, FOR, INT, PRE and
+VIG in the five circles. Declarative, like the layered meter, and for the same
+reason: the phone draws the same as the GM without a line of plugin code
+running outside the GM window. It asks for **API 11**:
+
+```json
+"estilosDeAtributos": [{
+  "id": "ritual",
+  "titulo": "Ritual",
+  "imagem": "atributos/ritual.png",
+  "proporcao": 1,
+  "lugares": [
+    { "sigla": "AGI", "x": 0.501, "y": 0.164, "tamanho": 0.085 },
+    { "sigla": "FOR", "x": 0.194, "y": 0.382, "tamanho": 0.085 }
+  ],
+  "texto": { "cor": "#ffffff", "contorno": "#000000" }
+}]
+```
+
+- **The image carries what doesn't change**: the drawing and each attribute's
+  name. The sheet writes only the number. Raster (png, webp, gif, jpg, avif),
+  up to 2 MB, served by the daemon file by file, like the meter layers.
+- **`proporcao`** (proportion) is the image height as a fraction of its
+  width, from 0.25 to 3: the sheet reserves the space before the image arrives
+  and doesn't jump. An image that doesn't match it stretches along with the
+  spots, and the number stays in its circle.
+- **Each spot** (`lugares`) is the CENTER of the number, `x` and `y` as
+  fractions of the image, and `tamanho` (size) is the number's font size as a
+  fraction of the WIDTH, from 0.02 to 0.4. Fractions, not pixels: the image
+  scales with the sheet column and the phone screen. Up to 12 spots,
+  abbreviations of up to 6 characters, no repeats.
+- **Abbreviations match regardless of case.** A sheet attribute with no spot
+  in the image (a table's LCK) goes on a card just below; a spot with no
+  attribute stays empty.
+- **`texto`** has the number's color and outline, hex only. Absent, white
+  with a near-black outline. The font is the app's.
+
+In the GM window, the number is a field: click and type, the arrow keys go up
+and down. Right-clicking the circle changes the abbreviation, writes the
+description or deletes it, and hovering shows the description. On the phone
+it is read-only, like the rest of the sheet.
+
+**The system picks**, not a selector: an Ordem campaign is a ritual one.
+Applying a system that declares `estiloDosAtributos` puts the campaign on that
+drawing; a system without one leaves it alone. The choice lives in the
+settings registry, at `ato20.ficha.estiloDosAtributos` (`""` means the cards),
+hidden from the Settings list, and travels in the zip. With the plugin
+disabled or the image missing from the folder, the sheet goes back to cards,
+and the choice waits in the file for the plugin to come back.
+
+In the development GM window (`next dev`, the window at
+`http://localhost:3000`) the image comes through the daemon, like on the
+phone: WebKitGTK does not request an `<img>` from the `ato20-ext` protocol on
+an http page. In the release build the window is `tauri://`, and the protocol
+serves it.
+
+The choice and the styles reach the phone through `/sala/declarativo`, along
+with the meter styles.
 
 ## The plugin's section on the phone, and the button that reaches the GM
 

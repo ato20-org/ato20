@@ -518,6 +518,7 @@ function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
   if (estilo === "fabrica") return { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
 
   return {
+    ...DECLARATIVO_VAZIO,
     versao: 1,
     plugins: ["perf"],
     efeitos: EFEITOS_DA_MEDIDA,
