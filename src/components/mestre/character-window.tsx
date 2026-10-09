@@ -387,7 +387,7 @@ function Ficha({
                     onChanged={onChanged}
                   />
 
-                  <GruposDeDetalhes personagemId={personagem.id} detalhes={detalhes} />
+                  <GruposDeDetalhes personagemId={personagem.id} personagemNome={personagem.nome} detalhes={detalhes} />
                 </div>
 
                 <div className="min-w-0 space-y-3">

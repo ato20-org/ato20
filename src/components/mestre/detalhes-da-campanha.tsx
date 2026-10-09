@@ -11,6 +11,7 @@ import {
   Lixeira,
   ValorDoDetalhe,
 } from "@/components/mestre/detalhes-personagem";
+import { IconeD20 } from "@/components/mestre/icone-d20";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import {
   AlertDialog,
@@ -426,7 +427,7 @@ function Escolha<T extends string>({
 }
 
 /** As colunas da tabela do molde: Tipo, Nome, Campo, Ações. */
-const COLUNAS = "grid grid-cols-[2.75rem_minmax(0,11rem)_minmax(0,1fr)_3.5rem] items-center gap-2";
+const COLUNAS = "grid grid-cols-[2.75rem_minmax(0,11rem)_minmax(0,1fr)_4.75rem] items-center gap-2";
 
 const ICONE_DO_TIPO: Record<TipoDeDetalhe, typeof Type> = {
   texto: Type,
@@ -481,6 +482,7 @@ function LinhaDeModelo({
       </div>
 
       <div className="flex items-center justify-end gap-0.5">
+        <Rolavel rotulo={modelo.rotulo} ligado={modelo.rolavel === true} onTrocar={(rolavel) => gravar({ rolavel })} />
         <DescricaoDoDetalhe
           rotulo={modelo.rotulo}
           descricao={modelo.descricao}
@@ -498,6 +500,40 @@ function LinhaDeModelo({
         />
       </div>
     </li>
+  );
+}
+
+/**
+ * O d20 do molde: liga a rolagem do detalhe em toda ficha. Aceso quando
+ * ligado, apagado como o resto quando não.
+ */
+function Rolavel({ rotulo, ligado, onTrocar }: { rotulo: string; ligado: boolean; onTrocar: (ligado: boolean) => void }) {
+  const texto = t.configuracao.detalhes;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={ligado ? texto.rolavel(rotulo) : texto.naoRolavel(rotulo)}
+            aria-pressed={ligado}
+            onClick={() => onTrocar(!ligado)}
+            className={cn(
+              "size-5 shrink-0 [&_svg:not([class*='size-'])]:size-3.5",
+              ligado ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <IconeD20 />
+          </Button>
+        }
+      />
+      <TooltipContent className="max-w-60">
+        <p className="font-medium">{ligado ? texto.rolavel(rotulo) : texto.naoRolavel(rotulo)}</p>
+        <p className="text-muted-foreground">{texto.rolavelDica}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -264,6 +264,32 @@ const pt = {
     vazioDoTexto: "…",
     falhaAoLer: "Não deu para ler os detalhes da ficha.",
     falhaAoLerMolde: "Não deu para ler os detalhes da campanha.",
+    escreverRolagem: (rotulo: string) => `Escrever a rolagem de ${rotulo}`,
+    rolagemDe: (rotulo: string) => `Rolagem de ${rotulo}`,
+    exemploDeRolagem: "1d20+5",
+    rolar: (rotulo: string, expressao: string) => `Rolar ${rotulo}: ${expressao}`,
+    editarRolagem: (rotulo: string) => `Editar a rolagem de ${rotulo}`,
+    opcoes: (rotulo: string) => `Opções de ${rotulo}`,
+    /** O menu de três pontos do detalhe. */
+    menu: {
+      renomear: "Renomear",
+      editar: "Editar",
+      descricao: "Descrição",
+      escreverRolagem: "Escrever a rolagem",
+      editarRolagem: "Editar a rolagem",
+      apagar: "Apagar",
+    },
+    /** Por que a expressão não serve. Ver `ErroDaExpressao`. */
+    errosDaRolagem: {
+      vazia: "Escreva uma rolagem, como 1d20+5.",
+      sintaxe: "Não entendi. Use dados e números, como 1d20+5 ou 2d6+1d4.",
+      "sem-dado": "Falta o dado: 1d20+5, e não só 5.",
+      "dado-fora-da-soma": "O dado só soma: 1d20*2 e 1d20-1d4 ainda não.",
+      faces: "A mesa não tem esse dado. Vale d2, d4, d6, d8, d10, d12, d20 e d100.",
+      "muitos-dados": "No máximo 20 dados de uma vez.",
+      "divisao-por-zero": "Tem uma divisão por zero.",
+      "modificador-grande": "O modificador passa de 10.000.",
+    },
   },
 
   medidores: {
@@ -767,6 +793,30 @@ const en: typeof pt = {
     vazioDoTexto: "…",
     falhaAoLer: "Could not read the sheet details.",
     falhaAoLerMolde: "Could not read the campaign details.",
+    escreverRolagem: (rotulo) => `Write the roll for ${rotulo}`,
+    rolagemDe: (rotulo) => `Roll for ${rotulo}`,
+    exemploDeRolagem: "1d20+5",
+    rolar: (rotulo, expressao) => `Roll ${rotulo}: ${expressao}`,
+    editarRolagem: (rotulo) => `Edit the roll for ${rotulo}`,
+    opcoes: (rotulo) => `Options for ${rotulo}`,
+    menu: {
+      renomear: "Rename",
+      editar: "Edit",
+      descricao: "Description",
+      escreverRolagem: "Write the roll",
+      editarRolagem: "Edit the roll",
+      apagar: "Delete",
+    },
+    errosDaRolagem: {
+      vazia: "Write a roll, like 1d20+5.",
+      sintaxe: "I didn't get it. Use dice and numbers, like 1d20+5 or 2d6+1d4.",
+      "sem-dado": "The die is missing: 1d20+5, not just 5.",
+      "dado-fora-da-soma": "Dice only add up: 1d20*2 and 1d20-1d4 are not supported yet.",
+      faces: "The table has no such die. Use d2, d4, d6, d8, d10, d12, d20 and d100.",
+      "muitos-dados": "At most 20 dice at once.",
+      "divisao-por-zero": "There is a division by zero.",
+      "modificador-grande": "The modifier is over 10,000.",
+    },
   },
 
   medidores: {

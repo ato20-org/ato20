@@ -236,6 +236,10 @@ const pt = {
     detalhes: {
       titulo: "Detalhes da ficha",
       nota: "Os grupos da ficha e os detalhes com que todo personagem novo nasce. Para pôr nos que já existem, use a varinha.",
+      rolavel: (rotulo: string) => `${rotulo} rola`,
+      naoRolavel: (rotulo: string) => `Fazer ${rotulo} rolar`,
+      rolavelDica:
+        "Com o d20 ligado, a ficha mostra a rolagem: cada personagem escreve a dele, como 1d20+5, e um clique rola na mesa. Vale na hora para as fichas que já existem.",
       novoGrupo: "Novo grupo",
       grupoNovo: "Grupo",
       limiteDeGrupos: (maximo: number) => `${maximo} grupos é o limite.`,
@@ -1096,6 +1100,10 @@ const en: typeof pt = {
     detalhes: {
       titulo: "Sheet details",
       nota: "The sheet's groups and the details every new character starts with. To add them to existing characters, use the wand.",
+      rolavel: (rotulo) => `${rotulo} rolls`,
+      naoRolavel: (rotulo) => `Make ${rotulo} roll`,
+      rolavelDica:
+        "With the d20 on, the sheet shows the roll: each character writes their own, like 1d20+5, and one click rolls it on the table. It applies right away to existing sheets.",
       novoGrupo: "New group",
       grupoNovo: "Group",
       limiteDeGrupos: (maximo) => `${maximo} groups is the limit.`,
