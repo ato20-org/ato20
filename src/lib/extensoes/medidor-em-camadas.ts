@@ -5,7 +5,7 @@ import type {
 import type { EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
 import type { EstiloMedidor } from "@/types/character";
 import { urlDaExtensao } from "@/lib/extensoes/manifesto";
-import { isDesktop } from "@/lib/vault/bridge";
+import { daemonAddrSeConhecido, isDesktop } from "@/lib/vault/bridge";
 
 /**
  * As contas do medidor em camadas, sem React. Quem desenha é `FormaEmCamadas`.
@@ -26,6 +26,13 @@ export const ENCAIXE_INTEIRO: EncaixeDoMedidor = { x: 0, y: 0, largura: 1, altur
  * em `/plugin/{id}/...`, relativo porque é ele quem serve a página; ele só
  * responde as imagens que o estilo declarou. A versão vai nas duas para a
  * moldura nova aparecer quando o plugin sobe de versão.
+ *
+ * O Mestre em DESENVOLVIMENTO também vai pelo daemon: lá a janela é
+ * `http://localhost:3000`, e o WebKitGTK não pede `<img>` de esquema próprio a
+ * partir de página http -- o protocolo nem é chamado, e a imagem vira o
+ * xadrez. Medido em 09/10/2026 numa bancada WebKitGTK 2.54: da página
+ * `tauri://`, que é a do release, a mesma imagem carrega. Sem o endereço do
+ * daemon ainda conhecido, fica o protocolo, que é o que já se tinha.
  */
 export function urlDaImagemDoEstilo(
   plugin: string,
@@ -33,11 +40,20 @@ export function urlDaImagemDoEstilo(
   versao: string,
   desktop: boolean = isDesktop(),
 ): string {
-  if (desktop) return urlDaExtensao(plugin, arquivo, versao);
-
   const caminho = arquivo.split("/").map(encodeURIComponent).join("/");
+  const peloDaemon = `/plugin/${encodeURIComponent(plugin)}/${caminho}?v=${encodeURIComponent(versao)}`;
 
-  return `/plugin/${encodeURIComponent(plugin)}/${caminho}?v=${encodeURIComponent(versao)}`;
+  if (!desktop) return peloDaemon;
+
+  const daemon = paginaHttp() ? daemonAddrSeConhecido() : null;
+  if (daemon) return `${daemon.url}${peloDaemon}`;
+
+  return urlDaExtensao(plugin, arquivo, versao);
+}
+
+/** A janela é servida por http -- o `next dev` do desenvolvimento. */
+function paginaHttp(): boolean {
+  return typeof location !== "undefined" && location.protocol.startsWith("http");
 }
 
 /**
