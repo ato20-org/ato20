@@ -17,7 +17,8 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { CatalogoDePlugins } from "@/components/desktop/catalogo-de-plugins";
+import { CatalogoDePlugins, DetalhesDoInstalado } from "@/components/desktop/catalogo-de-plugins";
+import { IconeDePlugin } from "@/components/desktop/icone-de-plugin";
 import { ListaDeConfiguracoes } from "@/components/desktop/lista-de-configuracoes";
 import { ChromeButton } from "@/components/desktop/window-chrome";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ import { t } from "@/lib/i18n/desktop";
 import { rico } from "@/lib/i18n/rico";
 import { SecaoIdioma } from "@/components/desktop/secao-idioma";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
+import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import {
   DEGRAUS_ZOOM,
@@ -609,6 +611,14 @@ function Grupo({
 function LinhaExtensao({ extensao }: { extensao: Extensao }) {
   const habilitar = useExtensoesStore((state) => state.habilitar);
   const remover = useExtensoesStore((state) => state.remover);
+  const [aberto, setAberto] = useState(false);
+
+  // Da pasta do plugin, e não do catálogo: esta aba não fala com a rede, e o
+  // plugin importado à mão também tem o dele. O endereço é o das imagens de
+  // estilo, que já sabe ir pelo daemon no desenvolvimento.
+  const icone = extensao.icone
+    ? urlDaImagemDoEstilo(extensao.id, extensao.icone, extensao.versao)
+    : null;
 
   // A etiqueta só para a HÍBRIDA: uma extensão de código que também traz CSS.
   // Nos outros casos o cabeçalho do grupo já disse o que ela é, e repetir na
@@ -624,26 +634,43 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
         aria-label={t.configuracoes.plugins.habilitar(extensao.nome)}
       />
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{extensao.nome}</p>
-        <p className="text-muted-foreground truncate text-xs">
-          {/* A versão sempre, o autor quando há. O `manifest.json` pode vir
+      {/* O ícone e o nome abrem a página do plugin, como o card do Catálogo.
+          O interruptor e a lixeira ficam de fora: são os gestos da linha, e um
+          clique neles não pode abrir janela. */}
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        title={t.configuracoes.plugins.abrirPagina(extensao.nome)}
+        onClick={() => setAberto(true)}
+        className="hover:bg-muted/50 focus-visible:ring-ring/50 -my-1 flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1 text-left transition-colors outline-none focus-visible:ring-3"
+      >
+        <IconeDePlugin
+          id={extensao.id}
+          nome={extensao.nome}
+          url={icone}
+          tamanho="pequeno"
+        />
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm">{extensao.nome}</p>
+          <p className="text-muted-foreground truncate text-xs">
+            {/* A versão sempre, o autor quando há. O `manifest.json` pode vir
               sem autor, e "por undefined" seria pior que só a versão. */}
-          {extensao.versao}
-          {extensao.autor ? ` · ${extensao.autor}` : ""}
-        </p>
+            {extensao.versao}
+            {extensao.autor ? ` · ${extensao.autor}` : ""}
+          </p>
+        </div>
 
-      </div>
-
-      {tambemTema ? (
-        <span
-          className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
-          title={t.configuracoes.plugins.tambemTema}
-        >
-          <Palette className="size-3" aria-hidden />
-          {t.configuracoes.plugins.tema}
-        </span>
-      ) : null}
+        {tambemTema ? (
+          <span
+            className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
+            title={t.configuracoes.plugins.tambemTema}
+          >
+            <Palette className="size-3" aria-hidden />
+            {t.configuracoes.plugins.tema}
+          </span>
+        ) : null}
+      </button>
 
       <Button
         variant="ghost"
@@ -654,6 +681,20 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
       >
         <Trash2 className="size-3.5" />
       </Button>
+
+      <DetalhesDoInstalado
+        extensao={extensao}
+        icone={
+          <IconeDePlugin
+            id={extensao.id}
+            nome={extensao.nome}
+            url={icone}
+            tamanho="grande"
+          />
+        }
+        aberto={aberto}
+        aoMudar={setAberto}
+      />
     </li>
   );
 }

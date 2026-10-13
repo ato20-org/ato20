@@ -71,6 +71,7 @@ const pt = {
         "Estendem o que o ATO20 faz. Podem executar código com o alcance da janela.",
       habilitar: (nome: string) => `Habilitar ${nome}`,
       desinstalar: (nome: string) => `Desinstalar ${nome}`,
+      abrirPagina: (nome: string) => `Abrir a página de ${nome}`,
       tambemTema: "Esta extensão também traz um tema.",
       tema: "Tema",
       abaInstalados: "Instalados",
@@ -84,11 +85,13 @@ const pt = {
         comoInstalar:
           "Instalar baixa o plugin do GitHub e o importa. Quando sai versão nova, o botão vira Atualizar.",
         por: (autor: string) => `por ${autor}`,
-        executaCodigo: "Executa código",
-        executaCodigoNota: "Traz JavaScript, que roda com o alcance da janela do Mestre.",
-        semCodigo: "Sem código",
-        semCodigoNota: "Só tema e o que o manifesto declara. Nenhum JavaScript roda.",
         instalado: "Instalado",
+        versao: (versao: string) => `v${versao}`,
+        api: (api: number) => `API ${api}`,
+        lendoReadme: "Lendo o README…",
+        semReadme: "Não deu para ler o README deste plugin. Ele continua no GitHub.",
+        semRepositorio:
+          "Este plugin não diz de onde veio: o manifest.json dele não tem repositorio, e sem ele não há README para mostrar.",
         pedeVersaoNova: "Pede ATO20 mais novo",
         pedeVersaoNovaNota: (api: number, atual: number) =>
           `Este plugin usa a API ${api}, e este ATO20 fala a ${atual}.`,
@@ -265,6 +268,7 @@ const en: typeof pt = {
         "Extend what ATO20 does. They can run code with the reach of the window.",
       habilitar: (nome) => `Enable ${nome}`,
       desinstalar: (nome) => `Uninstall ${nome}`,
+      abrirPagina: (nome) => `Open the ${nome} page`,
       tambemTema: "This plugin also ships a theme.",
       tema: "Theme",
       abaInstalados: "Installed",
@@ -278,11 +282,13 @@ const en: typeof pt = {
         comoInstalar:
           "Install downloads the plugin from GitHub and imports it. When a new version is out, the button turns into Update.",
         por: (autor) => `by ${autor}`,
-        executaCodigo: "Runs code",
-        executaCodigoNota: "Ships JavaScript, which runs with the same access as the GM window.",
-        semCodigo: "No code",
-        semCodigoNota: "Only a theme and what the manifest declares. No JavaScript runs.",
         instalado: "Installed",
+        versao: (versao) => `v${versao}`,
+        api: (api) => `API ${api}`,
+        lendoReadme: "Reading the README…",
+        semReadme: "Couldn't read this plugin's README. It's still on GitHub.",
+        semRepositorio:
+          "This plugin doesn't say where it came from: its manifest.json has no repositorio, and without one there's no README to show.",
         pedeVersaoNova: "Needs a newer ATO20",
         pedeVersaoNovaNota: (api, atual) =>
           `This plugin uses API ${api}, and this ATO20 speaks ${atual}.`,

@@ -57,6 +57,12 @@ export type Manifesto = {
   autor: string | null;
   repositorio: string | null;
   descricao: string | null;
+  /**
+   * O ícone, relativo à pasta da extensão: raster, quadrado. O que a lista de
+   * Instalados mostra ao lado do nome. Ausente em lista lida por um Rust
+   * anterior a ele.
+   */
+  icone?: string | null;
   apiVersao: number;
   /** O CSS, relativo à pasta da extensão. */
   tema: string | null;

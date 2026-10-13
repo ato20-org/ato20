@@ -240,6 +240,14 @@ pub struct Manifesto {
     pub repositorio: Option<String>,
     #[serde(default)]
     pub descricao: Option<TextoDePlugin>,
+    /// O icone, relativo a pasta: o que a lista de Instalados mostra ao lado do
+    /// nome. Raster, como as imagens de medidor (`IMAGENS_DE_MEDIDOR`): no Mestre
+    /// de desenvolvimento ele vem pelo daemon, que nao serve `.svg`.
+    ///
+    /// Sem subir a API: um ATO20 anterior ignora o campo e desenha a inicial,
+    /// que e o que ele ja desenha para todo plugin.
+    #[serde(default)]
+    pub icone: Option<String>,
     pub api_versao: u32,
     /// O CSS, relativo a pasta da extensao.
     #[serde(default)]
@@ -260,6 +268,18 @@ pub struct Manifesto {
 }
 
 impl Manifesto {
+    /// As imagens que o daemon serve na rede: as das contribuicoes e o icone.
+    /// O icone vai junto porque o Mestre de desenvolvimento o pede ao daemon,
+    /// como pede as outras -- ver `urlDaImagemDoEstilo`, em
+    /// `src/lib/extensoes/medidor-em-camadas.ts`.
+    pub fn imagens_servidas(&self) -> Vec<(crate::error::Texto, &str)> {
+        let mut imagens = self.contribui.imagens_servidas();
+        if let Some(icone) = &self.icone {
+            imagens.push((crate::texto!("o icone", "the icon"), icone.as_str()));
+        }
+        imagens
+    }
+
     /// Todo texto que o plugin mostra, com o caminho dele no manifesto.
     ///
     /// Uma lista so, e nao uma checagem em cada validacao: campo de texto novo
@@ -1668,6 +1688,18 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
         }
     }
 
+    if let Some(icone) = &manifesto.icone {
+        let extensao = icone.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+        let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+        if !caminho_relativo_seguro(icone) || !e_imagem {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "o icone aponta para {icone:?}; tem de ser uma imagem dentro da pasta ({})",
+                "the icon points to {icone:?}; it must be an image inside the folder ({})",
+                IMAGENS_DE_MEDIDOR.join(", ")
+            )));
+        }
+    }
+
     for fonte in &manifesto.retratos {
         validar_fonte(fonte)?;
     }
@@ -2915,7 +2947,7 @@ fn validar_estilo_de_atributos(estilo: &EstiloDeAtributos) -> AppResult<()> {
 /// uma imagem que some e so um medidor sem moldura, ou um fogo que nao
 /// aparece -- o daemon responde 404 e a TV desenha o resto.
 fn validar_imagens_declaradas(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
-    for (dono, imagem) in manifesto.contribui.imagens_servidas() {
+    for (dono, imagem) in manifesto.imagens_servidas() {
         // `symlink_metadata`: a copia pula link simbolico, e uma imagem que
         // fosse link passaria aqui e faltaria na pasta instalada.
         let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
@@ -4417,6 +4449,56 @@ mod tests {
         escrever(&pasta.join("atributos"), "ritual.png", "png");
         importar(&dir, &pasta).unwrap();
         assert!(dir.join("ordem/atributos/ritual.png").is_file());
+    }
+
+    fn com_icone(icone: &str) -> String {
+        format!(
+            r#"{{"id":"obs","nome":"OBS","versao":"1.0.0","apiVersao":1,"tema":"tema.css","icone":{icone:?}}}"#
+        )
+    }
+
+    #[test]
+    fn icone_entra_e_vai_para_a_rede() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_icone("img/icone.png")).unwrap();
+
+        assert_eq!(m.icone.as_deref(), Some("img/icone.png"));
+        // O Mestre de desenvolvimento pede o icone ao daemon.
+        assert!(m.imagens_servidas().iter().any(|(_, imagem)| *imagem == "img/icone.png"));
+
+        // Sem o campo, nada muda: o manifesto de antes continua valendo.
+        let sem = ler(base.path(), &manifesto_de("obs")).unwrap();
+        assert!(sem.icone.is_none());
+    }
+
+    #[test]
+    fn icone_recusa_caminho_que_sai_e_o_que_nao_e_imagem() {
+        let base = tempfile::tempdir().unwrap();
+
+        for icone in ["../icone.png", "/icone.png", "icone.svg", "icone.html", "icone"] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_icone(icone)),
+                    Err(AppError::ExtensaoInvalida(_))
+                ),
+                "{icone} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn importar_cobra_o_icone() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-obs");
+        escrever(&pasta, MANIFESTO, &com_icone("icone.png"));
+
+        let erro = importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("icone.png"), "{erro}");
+
+        escrever(&pasta, "icone.png", "png");
+        importar(&dir, &pasta).unwrap();
+        assert!(dir.join("obs/icone.png").is_file());
     }
 
     #[cfg(unix)]

@@ -1165,6 +1165,20 @@ passa da instalada. Atualizar é instalar de novo por cima, e o módulo velho é
 descarregado antes. Para o seu plugin oferecer atualização, suba a `versao` do
 manifesto a cada mudança na branch principal.
 
+Clicar no card abre a janela do plugin, como a página de uma extensão no VS
+Code: o ícone, a versão e Instalar em cima, e o `README.md` do repositório
+embaixo. A página do plugin no site (`/plugins/{id}`) mostra o mesmo README. É
+ali que o plugin se apresenta, então ponha imagens da tela e o passo a passo.
+
+- Com a tela em inglês, `README.en.md` vem antes do `README.md`.
+- Imagem e link relativos (`docs/tela.png`, `/docs/tela.png`) resolvem contra o
+  repositório, como no GitHub.
+- HTML cru (`<img width>`, `<p align>`) não é desenhado: o README vem da rede e
+  é mostrado dentro da janela do Mestre. Use a imagem do Markdown,
+  `![tela](docs/tela.png)`.
+- O ícone e a capa do card não vêm do repositório: são os do `plugins.json` do
+  site, em `public/plugins/{id}/`.
+
 ## Confiança
 
 Não há loja, não há revisão e não há sandbox. O catálogo é uma lista, não um
