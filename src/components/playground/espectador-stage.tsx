@@ -138,8 +138,11 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
       />
 
       {/* Discreto no canto: a TV fica virada para a mesa, e o controle existe
-          para o mestre escolher qual aparelho emite o som. */}
-      <SoundToggle className="absolute top-3 right-3 opacity-40 hover:opacity-100" />
+          para o mestre escolher qual aparelho emite o som. `z-30` pelo motivo
+          dos botões do `JogadorStage`: a tarja preta do palco (`z-10`) e a
+          cortina (`z-20`) pintavam por cima dele sempre que a tela sobrava em
+          cima e embaixo, e o botão continuava clicável sem aparecer. */}
+      <SoundToggle className="absolute top-3 right-3 z-30 opacity-40 hover:opacity-100" />
 
       {/* Irmão do palco, não filho — ver a nota em `JogadorStage`. */}
       {!scene ? (
