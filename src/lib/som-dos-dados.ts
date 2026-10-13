@@ -31,11 +31,19 @@ const ATRASO_ACEITO = 0.1;
 const PLINS_JUNTOS = 0.12;
 
 /**
- * Depois de quanto silêncio o contexto dorme, em milissegundos.
+ * Depois de quanto silêncio o contexto é fechado, em milissegundos.
  *
- * Um `AudioContext` acordado mantém a thread de áudio rodando, e no WebKitGTK
+ * Um `AudioContext` aberto mantém a thread de áudio rodando, e no WebKitGTK
  * isso é um pipeline do GStreamer aberto. A mesa rola dado de vez em quando, e
- * acordar custa poucos milissegundos, menos que o tempo até a primeira batida.
+ * abrir outro custa poucos milissegundos, menos que o tempo até a primeira
+ * batida.
+ *
+ * FECHADO, e não suspenso: no WebKitGTK 2.50 que o AppImage leva (o do Ubuntu
+ * 22.04), o `resume()` de um contexto suspenso prende a thread principal, e a
+ * janela inteira congela antes de o dado sair. Medido numa página só com um
+ * oscilador, três segundos dormindo entre uma batida e outra: 1,0 s, 4,5 s e
+ * 4,6 s de congelamento, crescendo a cada acordada. Fechar e abrir outro deu
+ * de 44 a 80 ms nas duas WebKits; o `resume()` no 2.52 do sistema, 45 ms.
  */
 const SONO_MS = 10_000;
 
@@ -163,12 +171,23 @@ function plim(ctx: AudioContext, quando: number, volume: number): void {
   }
 }
 
-/** O contexto, criado no primeiro dado e acordado se estava dormindo. */
+/**
+ * O contexto, criado no dado que quebra o silêncio. Ver `SONO_MS`.
+ *
+ * Nasce tocando mesmo fora de um clique -- a rolagem do jogador chega pela
+ * rede --, porque a webview do Tauri libera o autoplay. O `resume()` fica só
+ * para o caso de ela não liberar.
+ */
 function acordar(): AudioContext | null {
   if (typeof AudioContext === "undefined") return null;
 
-  contexto ??= new AudioContext();
   clearTimeout(sono);
+  if (!contexto) {
+    contexto = new AudioContext();
+    // O relógio do contexto novo recomeça do zero, e o plim do velho não é
+    // vizinho de nada aqui.
+    ultimoPlim = -Infinity;
+  }
   if (contexto.state === "suspended") void contexto.resume().catch(() => {});
 
   return contexto;
@@ -177,6 +196,8 @@ function acordar(): AudioContext | null {
 function adormecerDepois(ms: number): void {
   clearTimeout(sono);
   sono = setTimeout(() => {
-    void contexto?.suspend().catch(() => {});
+    const fechando = contexto;
+    contexto = null;
+    void fechando?.close().catch(() => {});
   }, ms + SONO_MS);
 }
