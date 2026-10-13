@@ -100,6 +100,30 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.5.0" date="2026-10-13">
+      <description>
+        <p>
+          ATO20 1.5 gives each plugin its own page, with screenshots and a step
+          by step, and shows the icon of installed plugins.
+        </p>
+        <ul>
+          <li>
+            Each plugin has its own page, with screenshots and a step by step.
+            In the Catalog, clicking a plugin opens its page, like in an
+            extension store: the icon, who made it, the version and what its
+            author wrote about it, with images. Installed plugins open the same
+            page, in Settings, Plugins, Installed, with Update when there's a
+            new version.
+          </li>
+          <li>
+            Installed plugins show their icon. The Installed list shows each
+            plugin's icon next to its name. OBS, Ordem Paranormal and Tormenta20
+            already ship theirs: just update them from the Catalog. Plugin
+            authors declare the icone in manifest.json.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.4.0" date="2026-10-09">
       <description>
         <p>

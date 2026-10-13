@@ -71,6 +71,34 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.5.0",
+    data: "2026-10-13",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Cada plugin tem a sua página, com as telas e o passo a passo",
+          en: "Each plugin has its own page, with screenshots and a step by step",
+        },
+        detalhe: {
+          pt: "No Catálogo, clicar num plugin abre a página dele, como numa loja de extensões: o ícone, quem fez, a versão e o que o autor escreveu sobre ele, com imagens. Os plugins instalados abrem a mesma página, em Configurações → Plugins → Instalados, com o Atualizar quando há versão nova.",
+          en: "In the Catalog, clicking a plugin opens its page, like in an extension store: the icon, who made it, the version and what its author wrote about it, with images. Installed plugins open the same page, in Settings → Plugins → Installed, with Update when there's a new version.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Os plugins instalados mostram o ícone",
+          en: "Installed plugins show their icon",
+        },
+        detalhe: {
+          pt: "A lista de Instalados mostra o ícone de cada plugin ao lado do nome. OBS, Ordem Paranormal e Tormenta20 já trazem o deles: é só atualizar pelo Catálogo. Quem escreve plugin declara o icone no manifest.json.",
+          en: "The Installed list shows each plugin's icon next to its name. OBS, Ordem Paranormal and Tormenta20 already ship theirs: just update them from the Catalog. Plugin authors declare the icone in manifest.json.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.4.0",
     data: "2026-10-09",
     mudancas: [
