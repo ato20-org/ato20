@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
 
 import { CenaDoJogador } from "@/components/jogador/cena-do-jogador";
@@ -10,7 +9,6 @@ import {
 } from "@/components/playground/corte-de-camera";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
-import { useFullscreen } from "@/hooks/use-fullscreen";
 import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
@@ -32,7 +30,9 @@ import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
  * `limiteDoMovimento`.
  *
  * Tela cheia é a exceção, e não conflita: ela só aumenta o que já está sendo
- * mostrado, sem mudar o enquadramento que o mestre escolheu.
+ * mostrado, sem mudar o enquadramento que o mestre escolheu. Ela vem da casca
+ * (`expandida`), e não daqui: tem de atravessar a troca de layout que girar o
+ * celular provoca. Ver `JogadorShell`.
  *
  * Renderiza o mesmo `SceneLayer` do Mestre e do Espectador, na variante
  * `mesa`: névoa preta e sólida, sem contorno nem numeração.
@@ -52,6 +52,8 @@ export function JogadorStage({
   laser,
   synced,
   stalled,
+  expandida,
+  onTelaCheia,
 }: {
   /** A mesa, para o arrasto do token falar com ela. */
   codigo: string;
@@ -75,9 +77,10 @@ export function JogadorStage({
   laser: LaserNaMesa | null;
   synced: boolean;
   stalled: boolean;
+  /** A moldura cobre a tela. Ver `JogadorShell`. */
+  expandida: boolean;
+  onTelaCheia: () => void;
 }) {
-  const { expanded, toggle } = useFullscreen();
-  const frameRef = useRef<HTMLDivElement>(null);
   // Trocar de câmera corta em fade; a mesma câmera andando interpola.
   const { cena, viewport, tripe, corte, cortando } = useCorteDeCamera(scene);
   // Com um tripé no ar quem anda é o olho, e o palco fica no plano inteiro,
@@ -87,12 +90,11 @@ export function JogadorStage({
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
       <div
-        ref={frameRef}
         className={cn(
           // Sem seleção de texto e sem o balão do iOS: segurar o dedo no mapa
           // é abrir os pings. Ver `RodaDePing`.
           "relative overflow-hidden bg-black select-none [-webkit-touch-callout:none]",
-          expanded
+          expandida
             ? // Cobre a viewport por CSS, o que funciona mesmo onde a API
               // nativa de tela cheia não existe.
               "fixed inset-0 z-50"
@@ -158,13 +160,13 @@ export function JogadorStage({
 
         <button
           type="button"
-          aria-label={expanded ? t.palco.sairDaTelaCheia : t.palco.telaCheia}
+          aria-label={expandida ? t.palco.sairDaTelaCheia : t.palco.telaCheia}
           // Alvo generoso e fundo próprio: por cima de mapa escuro ou claro,
           // um ícone sem contraste desaparece.
           className="absolute top-2 right-2 z-30 rounded-md bg-black/60 p-2 text-white backdrop-blur"
-          onClick={() => toggle(frameRef.current)}
+          onClick={onTelaCheia}
         >
-          {expanded ? (
+          {expandida ? (
             <Minimize className="size-4" />
           ) : (
             <Maximize className="size-4" />
