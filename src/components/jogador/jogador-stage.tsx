@@ -3,12 +3,14 @@
 import { Maximize, Minimize } from "lucide-react";
 
 import { CenaDoJogador } from "@/components/jogador/cena-do-jogador";
+import { ControlesDeZoom } from "@/components/playground/controles-de-zoom";
 import {
   CortinaDeCorte,
   useCorteDeCamera,
 } from "@/components/playground/corte-de-camera";
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
+import { useZoomDaMesa } from "@/hooks/use-zoom-da-mesa";
 import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
@@ -20,19 +22,20 @@ import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 /**
  * A cena no celular do jogador.
  *
- * Um controle só, e é sobre o que é dele: o token do próprio personagem anda
- * com o dedo, e a mesa vê o movimento ao vivo. Ver `CenaDoJogador`.
+ * O que é dele: o token do próprio personagem anda com o dedo, e a mesa vê o
+ * movimento ao vivo. Ver `CenaDoJogador`.
  *
- * Sem zoom nem arraste do mapa de propósito: quem enquadra é o mestre. Um
- * jogador que se perde ampliado num canto do mapa vira suporte técnico no meio
- * da sessão, e o mestre não tem como saber que aquele aparelho está olhando
- * outra coisa. Pelo mesmo motivo o token não sai do quadro da câmera -- ver
- * `limiteDoMovimento`.
+ * Quem enquadra continua sendo o mestre. O jogador tem zoom (pinça, Ctrl com a
+ * roda, Ctrl + − 0 e os botões do canto), mas só PARA DENTRO do recorte que o
+ * mestre mandou: aproxima e anda dentro dele, e nunca vê além -- ver
+ * `useZoomDaMesa`. O celular não tinha zoom nenhum porque um jogador perdido
+ * ampliado num canto vira suporte técnico no meio da sessão; o que o segura
+ * agora é a porcentagem à vista enquanto há zoom, que é também o botão de
+ * voltar, e cada corte de câmera voltando sozinho ao enquadramento. Pelo
+ * mesmo motivo o token não sai do quadro da câmera -- ver `limiteDoMovimento`.
  *
- * Tela cheia é a exceção, e não conflita: ela só aumenta o que já está sendo
- * mostrado, sem mudar o enquadramento que o mestre escolheu. Ela vem da casca
- * (`expandida`), e não daqui: tem de atravessar a troca de layout que girar o
- * celular provoca. Ver `JogadorShell`.
+ * A tela cheia vem da casca (`expandida`), e não daqui: ela tem de atravessar a
+ * troca de layout que girar o celular provoca. Ver `JogadorShell`.
  *
  * Renderiza o mesmo `SceneLayer` do Mestre e do Espectador, na variante
  * `mesa`: névoa preta e sólida, sem contorno nem numeração.
@@ -86,14 +89,24 @@ export function JogadorStage({
   // Com um tripé no ar quem anda é o olho, e o palco fica no plano inteiro,
   // como o da TV. Ver `EspectadorStage`.
   const deEsguelha = Boolean(tripe);
+  // Em tela cheia o mapa é a página inteira, e o Ctrl + vale em qualquer lugar.
+  const { viewport: recorte, zoom, direto, alvo, aproximar, afastar, voltar } = useZoomDaMesa({
+    base: deEsguelha ? undefined : viewport,
+    corte,
+    ativo: Boolean(cena),
+    tecladoSempre: expandida,
+  });
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
       <div
+        ref={alvo}
         className={cn(
           // Sem seleção de texto e sem o balão do iOS: segurar o dedo no mapa
-          // é abrir os pings. Ver `RodaDePing`.
-          "relative overflow-hidden bg-black select-none [-webkit-touch-callout:none]",
+          // é abrir os pings. Ver `RodaDePing`. `touch-none` porque a pinça
+          // aqui é o zoom do mapa, e não o da página: o mapa fica preso no alto
+          // da tela em pé, e não há rolagem que passe por ele.
+          "relative touch-none overflow-hidden bg-black select-none [-webkit-touch-callout:none]",
           expandida
             ? // Cobre a viewport por CSS, o que funciona mesmo onde a API
               // nativa de tela cheia não existe.
@@ -111,9 +124,10 @@ export function JogadorStage({
       >
         <SceneStage
           className="size-full"
-          viewport={deEsguelha ? undefined : viewport}
+          viewport={recorte}
           corDoVazio={cena?.corDoVazio}
           corte={corte}
+          semTransicao={direto}
           smooth
         >
           {/* Mesma suavização da TV: o celular também só recebe amostras, e a
@@ -172,6 +186,18 @@ export function JogadorStage({
             <Maximize className="size-4" />
           )}
         </button>
+
+        {/* No canto de baixo, longe do som e da tela cheia, que moram em cima:
+            o polegar que segura o celular deitado alcança aqui. */}
+        {cena ? (
+          <ControlesDeZoom
+            zoom={zoom}
+            onAproximar={aproximar}
+            onAfastar={afastar}
+            onVoltar={voltar}
+            className="absolute right-2 bottom-2 z-30"
+          />
+        ) : null}
       </div>
     </div>
   );

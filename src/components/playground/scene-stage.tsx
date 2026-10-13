@@ -348,6 +348,13 @@ type SceneStageProps = {
    * e deslizar até lá mostraria o caminho quando a cortina abrisse.
    */
   corte?: number;
+  /**
+   * A câmera é o gesto de quem assiste agora -- a pinça ou o arrasto do zoom da
+   * mesa, ver `useZoomDaMesa`. Cada amostra entra seca, como no corte: com
+   * `smooth`, o recorte que muda a cada quadro cairia no fluxo de 150 ms, e o
+   * mapa correria atrás dos dedos.
+   */
+  semTransicao?: boolean;
 };
 
 /**
@@ -378,6 +385,7 @@ export function SceneStage({
   limites,
   smooth = false,
   corte = 0,
+  semTransicao = false,
 }: SceneStageProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   // A cor do vazio, validada. Só no mapa; o breu volta pela classe `bg-black`,
@@ -738,6 +746,20 @@ export function SceneStage({
       return;
     }
 
+    // O gesto de quem assiste: seco, e a amostra seguinte ao gesto recomeça a
+    // contagem, como depois do corte.
+    if (semTransicao) {
+      ultimaCameraEm.current = null;
+      emFluxo.current = false;
+
+      for (const plano of planos) {
+        plano?.classList.remove("scene-smooth-camera");
+        plano?.classList.remove("scene-smooth-camera-fluxo");
+      }
+
+      return;
+    }
+
     const agora = performance.now();
     const anterior = ultimaCameraEm.current;
     ultimaCameraEm.current = agora;
@@ -752,7 +774,7 @@ export function SceneStage({
       plano?.classList.toggle("scene-smooth-camera-fluxo", fluxo);
     }
     // `amostraDaCamera` já carrega `scale`; ele entra à parte porque o corpo o lê.
-  }, [amostraDaCamera, smooth, scale, corte, controlesNo, conteudoNo]);
+  }, [amostraDaCamera, smooth, scale, corte, semTransicao, controlesNo, conteudoNo]);
 
   useEffect(() => {
     // Mais longo com a transição ligada: ali a câmera continua andando depois
