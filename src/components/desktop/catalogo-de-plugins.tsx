@@ -15,10 +15,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DetalhesDoPlugin } from "@/components/desktop/detalhes-do-plugin";
+import { IconeDePlugin, tingir, useImagem } from "@/components/desktop/icone-de-plugin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   buscarCatalogo,
+  comoPluginDoCatalogo,
   type Catalogo,
   catalogoJaLido,
   filtrarCatalogo,
@@ -40,7 +43,8 @@ type Estado = { tipo: "buscando" } | { tipo: "erro" } | Catalogo;
  *
  * Cada card instala o plugin direto do repositório (o Rust baixa o zip, ver
  * `catalogo.rs`) e, depois de instalado, oferece Atualizar quando a versão do
- * repositório passa da instalada.
+ * repositório passa da instalada. Clicar no card abre o README dele, ver
+ * `DetalhesDoPlugin`.
  *
  * Montado só com a aba aberta (o painel do `Tabs` desmonta a aba escondida):
  * é isso que faz o catálogo não buscar nada para quem nunca o abre.
@@ -152,39 +156,15 @@ function Aviso({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Um matiz estável por plugin, o mesmo do site. Sem ícone, a inicial é o que
- * distingue um card do outro, e "Ordem" e "OBS" começam com a mesma letra.
- *
- * Misturado aos tokens do tema e não uma cor fixa: o aplicativo tem claro e
- * escuro, e um tema de plugin pode trocar os dois.
+ * O manifesto do repositório de um plugin já instalado, que é de onde sai o
+ * Atualizar, ou aberto na janela de detalhes, que mostra a versão. O resto
+ * não pergunta nada à rede até o clique.
  */
-function tingir(id: string, quanto: number, sobre: string): string {
-  let matiz = 0;
-  for (const letra of id) matiz = (matiz * 31 + letra.charCodeAt(0)) % 360;
-
-  return `color-mix(in oklch, oklch(0.62 0.12 ${matiz}) ${quanto}%, var(${sobre}))`;
-}
-
-/**
- * Uma imagem do catálogo, que cai para o desenho de reserva quando não carrega.
- * Ela vem da rede: sem conexão, ou com o arquivo fora do ar no site, o card
- * fica com a inicial em vez de um ícone de imagem quebrada.
- */
-function useImagem(url: string | null) {
-  const [falhou, setFalhou] = useState(false);
-
-  return { url: falhou ? null : url, aoFalhar: () => setFalhou(true) };
-}
-
-/**
- * O manifesto do repositório de um plugin já instalado: é dele que sai o
- * Atualizar. O que não está instalado não pergunta nada à rede até o clique.
- */
-function useManifestoDoRepositorio(repositorio: string, instalado: boolean) {
+function useManifestoDoRepositorio(repositorio: string, ativo: boolean) {
   const [lido, setLido] = useState<ManifestoDoRepositorio | null>(null);
 
   useEffect(() => {
-    if (!instalado) return;
+    if (!ativo) return;
 
     let montado = true;
     void lerManifestoDoRepositorio(repositorio).then((manifesto) => montado && setLido(manifesto));
@@ -192,26 +172,29 @@ function useManifestoDoRepositorio(repositorio: string, instalado: boolean) {
     return () => {
       montado = false;
     };
-  }, [repositorio, instalado]);
+  }, [repositorio, ativo]);
 
-  return instalado ? lido : null;
+  return ativo ? lido : null;
 }
 
-function CardDoPlugin({
+/**
+ * Instalar, Atualizar, ou o aviso de que já está instalado. O mesmo no card e
+ * na janela de detalhes: o estado de "instalando" é o do store, e os dois
+ * acompanham juntos.
+ */
+function BotaoDeInstalar({
   plugin,
   instalada,
+  remoto,
+  className,
 }: {
   plugin: PluginDoCatalogo;
   instalada: Extensao | undefined;
+  remoto: ManifestoDoRepositorio | null;
+  className?: string;
 }) {
   const nome = resolverTexto(plugin.nome);
-  const descricao = resolverTexto(plugin.descricao);
-  const capa = useImagem(plugin.capa);
-  const icone = useImagem(plugin.icone);
   const texto = t.configuracoes.plugins.catalogo;
-  const instalado = instalada !== undefined;
-
-  const remoto = useManifestoDoRepositorio(plugin.repositorio, instalado);
   const instalando = useExtensoesStore((state) => state.instalando);
   const instalar = useExtensoesStore((state) => state.instalar);
   const [lendo, setLendo] = useState(false);
@@ -250,132 +233,36 @@ function CardDoPlugin({
     await executar();
   }
 
+  if (!acao) {
+    return (
+      <span
+        title={instalada ? texto.versaoInstalada(instalada.versao) : undefined}
+        className={`text-muted-foreground flex h-7 items-center justify-center gap-1 text-xs ${className ?? ""}`}
+      >
+        <Check className="size-3.5" aria-hidden />
+        {texto.instalado}
+      </span>
+    );
+  }
+
   return (
-    <li className="bg-muted/20 flex flex-col overflow-hidden rounded-lg border">
-      {capa.url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={capa.url}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={capa.aoFalhar}
-          className="aspect-video w-full border-b object-cover"
-        />
-      ) : (
-        // A pasta e não o nome, que já está logo embaixo: é a promessa de que
-        // um plugin é uma pasta, a mesma do card no site.
-        <div
-          className="grid aspect-video place-items-center border-b px-4 font-mono text-xs break-all"
-          style={{ backgroundColor: tingir(plugin.id, 16, "--muted"), color: tingir(plugin.id, 70, "--foreground") }}
-        >
-          {plugin.id}/
-        </div>
-      )}
-
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex items-center gap-2.5">
-          {icone.url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={icone.url}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              onError={icone.aoFalhar}
-              className="size-9 shrink-0 rounded-md"
-            />
-          ) : (
-            <span
-              aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-md font-mono text-sm font-medium"
-              style={{ backgroundColor: tingir(plugin.id, 30, "--muted"), color: tingir(plugin.id, 80, "--foreground") }}
-            >
-              {Array.from(nome)[0]?.toUpperCase()}
-            </span>
-          )}
-
-          <div className="min-w-0">
-            <p className="text-sm leading-tight font-medium">{nome}</p>
-            <p className="text-muted-foreground truncate text-xs">{texto.por(plugin.autor)}</p>
-          </div>
-        </div>
-
-        <p className="text-muted-foreground line-clamp-3 flex-1 text-xs" title={descricao}>
-          {descricao}
-        </p>
-
-        {/* O selo de código primeiro, e em todo card: a guarda do aplicativo é
-            contra plugin malformado, não contra plugin malicioso, e uma lista
-            dentro do próprio ATO20 parece aval. É o selo que diz, card a card,
-            quanto se confia ao instalar. */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-medium uppercase">
-          {plugin.executaCodigo ? (
-            <span
-              title={texto.executaCodigoNota}
-              className="rounded border border-amber-500/40 px-1.5 py-0.5 text-amber-600 dark:text-amber-400"
-            >
-              {texto.executaCodigo}
-            </span>
-          ) : (
-            <span title={texto.semCodigoNota} className="bg-muted rounded border px-1.5 py-0.5">
-              {texto.semCodigo}
-            </span>
-          )}
-
-          {plugin.apiVersao > API_VERSAO ? (
-            <span
-              title={texto.pedeVersaoNovaNota(plugin.apiVersao, API_VERSAO)}
-              className="text-muted-foreground rounded border border-dashed px-1.5 py-0.5"
-            >
-              {texto.pedeVersaoNova}
-            </span>
-          ) : null}
-
-          {instalada ? (
-            <span
-              title={texto.versaoInstalada(instalada.versao)}
-              className="text-muted-foreground flex items-center gap-1 px-0.5"
-            >
-              <Check className="size-3" aria-hidden />
-              {texto.instalado}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {acao ? (
-            <Button
-              size="sm"
-              className="flex-1"
-              disabled={novoDemais || instalando !== null || lendo}
-              title={novoDemais ? texto.pedeVersaoNovaNota(plugin.apiVersao, API_VERSAO) : undefined}
-              onClick={() => void pedir()}
-            >
-              {esteInstalando || lendo ? <Loader2 className="animate-spin" /> : <Download />}
-              {esteInstalando
-                ? acao === "atualizar"
-                  ? texto.atualizando
-                  : texto.instalando
-                : acao === "atualizar"
-                  ? texto.atualizar
-                  : texto.instalar}
-            </Button>
-          ) : null}
-
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              void openUrl(plugin.repositorio).catch(() => toast.error(t.novidades.semNavegador));
-            }}
-          >
-            <ExternalLink />
-            {texto.verNoGithub}
-          </Button>
-        </div>
-      </div>
+    <>
+      <Button
+        size="sm"
+        className={className}
+        disabled={novoDemais || instalando !== null || lendo}
+        title={novoDemais ? texto.pedeVersaoNovaNota(plugin.apiVersao, API_VERSAO) : undefined}
+        onClick={() => void pedir()}
+      >
+        {esteInstalando || lendo ? <Loader2 className="animate-spin" /> : <Download />}
+        {esteInstalando
+          ? acao === "atualizar"
+            ? texto.atualizando
+            : texto.instalando
+          : acao === "atualizar"
+            ? texto.atualizar
+            : texto.instalar}
+      </Button>
 
       <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
         <AlertDialogContent>
@@ -398,6 +285,176 @@ function CardDoPlugin({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+}
+
+/**
+ * Um plugin da lista: o que ele faz, e Instalar. Clicar no resto abre a
+ * janela de detalhes, com o README.
+ *
+ * Sem selo de "executa código": quem escolhe um plugin quer saber o que ele
+ * faz, e isso é a descrição e o README. A confiança é perguntada na hora em
+ * que conta, quando Instalar vai trazer código (ver `BotaoDeInstalar`).
+ */
+function CardDoPlugin({
+  plugin,
+  instalada,
+}: {
+  plugin: PluginDoCatalogo;
+  instalada: Extensao | undefined;
+}) {
+  const nome = resolverTexto(plugin.nome);
+  const descricao = resolverTexto(plugin.descricao);
+  const capa = useImagem(plugin.capa);
+  const texto = t.configuracoes.plugins.catalogo;
+  const [aberto, setAberto] = useState(false);
+
+  // A versão do repositório: o Atualizar do instalado, e o "v0.2.0" da janela.
+  const remoto = useManifestoDoRepositorio(plugin.repositorio, instalada !== undefined || aberto);
+
+  return (
+    <li className="bg-muted/20 flex flex-col overflow-hidden rounded-lg border">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        onClick={() => setAberto(true)}
+        className="hover:bg-muted/40 focus-visible:ring-ring/50 flex flex-1 flex-col text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-inset"
+      >
+        {capa.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={capa.url}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={capa.aoFalhar}
+            className="aspect-video w-full border-b object-cover"
+          />
+        ) : (
+          // A pasta e não o nome, que já está logo embaixo: é a promessa de que
+          // um plugin é uma pasta, a mesma do card no site.
+          <div
+            className="grid aspect-video w-full place-items-center border-b px-4 font-mono text-xs break-all"
+            style={{ backgroundColor: tingir(plugin.id, 16, "--muted"), color: tingir(plugin.id, 70, "--foreground") }}
+          >
+            {plugin.id}/
+          </div>
+        )}
+
+        <div className="flex flex-1 flex-col gap-2 p-3 pb-0">
+          <div className="flex items-center gap-2.5">
+            <IconeDePlugin id={plugin.id} nome={nome} url={plugin.icone} />
+
+            <div className="min-w-0">
+              <p className="text-sm leading-tight font-medium">{nome}</p>
+              <p className="text-muted-foreground truncate text-xs">{texto.por(plugin.autor)}</p>
+            </div>
+          </div>
+
+          <p className="text-muted-foreground line-clamp-3 flex-1 text-xs" title={descricao}>
+            {descricao}
+          </p>
+
+          {plugin.apiVersao > API_VERSAO ? (
+            <span
+              title={texto.pedeVersaoNovaNota(plugin.apiVersao, API_VERSAO)}
+              className="text-muted-foreground self-start rounded border border-dashed px-1.5 py-0.5 text-[10px] font-medium uppercase"
+            >
+              {texto.pedeVersaoNova}
+            </span>
+          ) : null}
+        </div>
+      </button>
+
+      <div className="p-3 pt-2.5">
+        <BotaoDeInstalar plugin={plugin} instalada={instalada} remoto={remoto} className="w-full" />
+      </div>
+
+      <DetalhesDoPlugin
+        plugin={{
+          nome,
+          descricao,
+          autor: plugin.autor,
+          versao: remoto?.versao ?? null,
+          apiVersao: plugin.apiVersao,
+          tags: plugin.tags,
+          repositorio: plugin.repositorio,
+        }}
+        aberto={aberto}
+        aoMudar={setAberto}
+        icone={<IconeDePlugin id={plugin.id} nome={nome} url={plugin.icone} tamanho="grande" />}
+        acoes={
+          <>
+            <BotaoDeInstalar plugin={plugin} instalada={instalada} remoto={remoto} />
+            <BotaoDoGithub repositorio={plugin.repositorio} />
+          </>
+        }
+      />
     </li>
+  );
+}
+
+function BotaoDoGithub({ repositorio }: { repositorio: string }) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => {
+        void openUrl(repositorio).catch(() => toast.error(t.novidades.semNavegador));
+      }}
+    >
+      <ExternalLink />
+      {t.configuracoes.plugins.catalogo.verNoGithub}
+    </Button>
+  );
+}
+
+/**
+ * A página de um plugin instalado, aberta da lista de Instalados: a mesma
+ * janela do catálogo, montada pelo manifesto da pasta.
+ *
+ * A versão é a instalada, e o README vem do `repositorio` que o manifesto
+ * declara, pedido só quando a janela abre. Com repositório no GitHub, os
+ * botões são os do card (Atualizar quando há versão nova, e o GitHub); sem
+ * ele, o plugin importado à mão abre só com o cabeçalho.
+ */
+export function DetalhesDoInstalado({
+  extensao,
+  icone,
+  aberto,
+  aoMudar,
+}: {
+  extensao: Extensao;
+  icone: React.ReactNode;
+  aberto: boolean;
+  aoMudar: (aberto: boolean) => void;
+}) {
+  const plugin = comoPluginDoCatalogo(extensao);
+  const remoto = useManifestoDoRepositorio(plugin?.repositorio ?? "", plugin !== null && aberto);
+
+  return (
+    <DetalhesDoPlugin
+      plugin={{
+        nome: extensao.nome,
+        descricao: extensao.descricao ?? "",
+        autor: extensao.autor,
+        versao: extensao.versao,
+        apiVersao: extensao.apiVersao,
+        tags: [],
+        repositorio: extensao.repositorio,
+      }}
+      aberto={aberto}
+      aoMudar={aoMudar}
+      icone={icone}
+      acoes={
+        plugin ? (
+          <>
+            <BotaoDeInstalar plugin={plugin} instalada={extensao} remoto={remoto} />
+            <BotaoDoGithub repositorio={plugin.repositorio} />
+          </>
+        ) : null
+      }
+    />
   );
 }

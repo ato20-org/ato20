@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ancoraDoTitulo,
+  comoPluginDoCatalogo,
+  enderecoDoReadme,
   filtrarCatalogo,
   lerCatalogo,
   repositorioDoGithub,
@@ -68,7 +71,7 @@ describe("lerCatalogo", () => {
     expect(plugins[0].nome).toBe("OBS");
   });
 
-  it("sem executaCodigo, o selo de código aparece", () => {
+  it("sem executaCodigo, Instalar pede confirmação", () => {
     const semCampo: Partial<typeof OBS> = { ...OBS };
     delete semCampo.executaCodigo;
 
@@ -161,5 +164,94 @@ describe("versaoMaisNova", () => {
   it("versão que não é número cai na comparação de texto", () => {
     expect(versaoMaisNova("beta", "alfa")).toBe(true);
     expect(versaoMaisNova("beta", "beta")).toBe(false);
+  });
+});
+
+describe("enderecoDoReadme", () => {
+  const REPO = "https://github.com/ato20-org/ato20.obs.plugin";
+  const imagem = (endereco: string) => enderecoDoReadme(endereco, REPO, "imagem");
+  const link = (endereco: string) => enderecoDoReadme(endereco, REPO, "link");
+
+  it("imagem relativa vem do arquivo cru do repositório", () => {
+    const tela = "https://raw.githubusercontent.com/ato20-org/ato20.obs.plugin/HEAD/docs/tela.png";
+    expect(imagem("docs/tela.png")).toBe(tela);
+    expect(imagem("./docs/tela.png")).toBe(tela);
+    // No GitHub, a barra no começo é a raiz do repositório, e não a do domínio.
+    expect(imagem("/docs/tela.png")).toBe(tela);
+  });
+
+  it("link relativo vai para a página do arquivo no GitHub", () => {
+    expect(link("docs/uso.md")).toBe(
+      "https://github.com/ato20-org/ato20.obs.plugin/blob/HEAD/docs/uso.md",
+    );
+  });
+
+  it("imagem apontada pela página do GitHub vira o arquivo", () => {
+    expect(imagem("https://github.com/ato20-org/ato20.obs.plugin/blob/main/tela.png")).toBe(
+      "https://github.com/ato20-org/ato20.obs.plugin/raw/main/tela.png",
+    );
+  });
+
+  it("endereço absoluto e âncora ficam como estão", () => {
+    expect(imagem("https://i.imgur.com/x.png")).toBe("https://i.imgur.com/x.png");
+    expect(link("https://obsproject.com/")).toBe("https://obsproject.com/");
+    expect(link("#instalar")).toBe("#instalar");
+    expect(link("mailto:a@b.c")).toBe("mailto:a@b.c");
+  });
+
+  it("recusa o que não é http(s)", () => {
+    expect(link("javascript:alert(1)")).toBeNull();
+    expect(imagem("file:///etc/passwd")).toBeNull();
+    expect(imagem("data:image/png;base64,AAAA")).toBeNull();
+    expect(imagem("mailto:a@b.c")).toBeNull();
+    expect(imagem("#topo")).toBeNull();
+  });
+
+  it("repositório fora do GitHub não resolve nada", () => {
+    expect(enderecoDoReadme("tela.png", "https://exemplo.com/plugin", "imagem")).toBeNull();
+  });
+});
+
+describe("ancoraDoTitulo", () => {
+  it("é a âncora que o GitHub dá", () => {
+    expect(ancoraDoTitulo("Instalar")).toBe("instalar");
+    expect(ancoraDoTitulo("O que vira o quê")).toBe("o-que-vira-o-quê");
+    expect(ancoraDoTitulo("Habilidades & rituais")).toBe("habilidades--rituais");
+    expect(ancoraDoTitulo("API 11: o ritual")).toBe("api-11-o-ritual");
+  });
+});
+
+describe("comoPluginDoCatalogo", () => {
+  const INSTALADO = {
+    id: "obs",
+    nome: "OBS",
+    descricao: "Leva a mesa para a live.",
+    autor: "ato20-org",
+    repositorio: "https://github.com/ato20-org/ato20.obs.plugin",
+    principal: "main.js",
+    apiVersao: 3,
+  };
+
+  it("vira a entrada do catálogo, com o código pelo principal", () => {
+    expect(comoPluginDoCatalogo(INSTALADO)).toEqual({
+      ...INSTALADO,
+      principal: undefined,
+      icone: null,
+      capa: null,
+      executaCodigo: true,
+      tags: [],
+    });
+    expect(comoPluginDoCatalogo({ ...INSTALADO, principal: null })?.executaCodigo).toBe(false);
+  });
+
+  it("sem autor nem descrição, texto vazio", () => {
+    const plugin = comoPluginDoCatalogo({ ...INSTALADO, autor: null, descricao: null });
+    expect(plugin?.autor).toBe("");
+    expect(plugin?.descricao).toBe("");
+  });
+
+  it("sem repositório do GitHub, nada: não há de onde atualizar", () => {
+    expect(comoPluginDoCatalogo({ ...INSTALADO, repositorio: null })).toBeNull();
+    expect(comoPluginDoCatalogo({ ...INSTALADO, repositorio: "https://gitlab.com/a/b" })).toBeNull();
   });
 });

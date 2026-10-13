@@ -1,4 +1,6 @@
+import type { Manifesto } from "@/lib/extensoes/manifesto";
 import { resolverTexto, type TextoDePlugin } from "@/lib/extensoes/texto";
+import { idioma, type Idioma } from "@/lib/i18n/idioma";
 import { normaliza } from "@/lib/search";
 
 /**
@@ -81,8 +83,7 @@ function endereco(valor: unknown, base: string): string | null {
  * recusa chega a quem escreveu, e aqui chegaria a quem só queria ver os
  * plugins. Entrada estragada some, e as outras aparecem.
  *
- * Sem `executaCodigo`, o pior caso: o selo de código é o aviso de confiança, e
- * na dúvida ele aparece.
+ * Sem `executaCodigo`, o pior caso: na dúvida, Instalar pede confirmação.
  */
 function lerPlugin(item: unknown, base: string): PluginDoCatalogo | null {
   if (!ehObjeto(item)) return null;
@@ -276,4 +277,138 @@ export function versaoMaisNova(doRepositorio: string, instalada: string): boolea
   }
 
   return false;
+}
+
+const readmes = new Map<string, Promise<string | null>>();
+
+/**
+ * O README do repositório, que a janela de detalhes do catálogo desenha: é ali
+ * que o autor mostra o plugin, com imagem e passo a passo, e é o mesmo texto
+ * que quem abre o repositório lê.
+ *
+ * `README.{idioma}.md` primeiro (`README.en.md` com a tela em inglês), e o
+ * `README.md` depois, a convenção do próprio repositório do ATO20. Da branch
+ * principal, como o zip que Instalar baixa.
+ *
+ * Uma vez por sessão. `null` quando não há README ou não deu para ler: a
+ * janela fica com o cabeçalho e o link do GitHub. Falha de rede não fica
+ * guardada, como a do manifesto; o 404 fica, que não muda até a sessão acabar.
+ */
+export function lerReadmeDoRepositorio(
+  repositorio: string,
+  lingua: Idioma = idioma,
+): Promise<string | null> {
+  const chave = `${repositorio} ${lingua}`;
+  const jaPedido = readmes.get(chave);
+  if (jaPedido) return jaPedido;
+
+  const partes = repositorioDoGithub(repositorio);
+  if (!partes) return Promise.resolve(null);
+
+  const raiz = `https://raw.githubusercontent.com/${partes.dono}/${partes.repo}/HEAD`;
+
+  const pedido = (async () => {
+    for (const arquivo of [`README.${lingua}.md`, "README.md"]) {
+      const resposta = await fetch(`${raiz}/${arquivo}`, { signal: AbortSignal.timeout(10_000) });
+      if (resposta.ok) return resposta.text();
+    }
+
+    return null;
+  })().catch(() => {
+    readmes.delete(chave);
+    return null;
+  });
+
+  readmes.set(chave, pedido);
+
+  return pedido;
+}
+
+/**
+ * Para onde um endereço do README aponta de verdade, ou `null` quando ele não
+ * deve sair daqui.
+ *
+ * O README é escrito para o GitHub, onde `docs/tela.png` (e `/docs/tela.png`)
+ * é relativo à raiz do repositório. Desenhado na webview, o relativo
+ * resolveria contra o endereço do próprio aplicativo. Imagem vai para o
+ * `raw.githubusercontent.com`, que serve o arquivo; link vai para a página do
+ * arquivo no GitHub. Imagem apontada pela página (`/blob/`) vira o arquivo
+ * (`/raw/`), como o GitHub faz ao desenhar.
+ *
+ * Âncora (`#instalar`) fica como está: é o próprio README. Fora isso, só
+ * `http(s)`, e `mailto` em link: o texto vem da rede, e `javascript:` ou
+ * `file:` ali seria o README mexendo na janela do Mestre.
+ */
+export function enderecoDoReadme(
+  endereco: string,
+  repositorio: string,
+  tipo: "imagem" | "link",
+): string | null {
+  const partes = repositorioDoGithub(repositorio);
+  if (!partes) return null;
+
+  if (endereco.startsWith("#")) return tipo === "link" ? endereco : null;
+
+  const base =
+    tipo === "imagem"
+      ? `https://raw.githubusercontent.com/${partes.dono}/${partes.repo}/HEAD/`
+      : `https://github.com/${partes.dono}/${partes.repo}/blob/HEAD/`;
+  const relativoARaiz = endereco.startsWith("/") && !endereco.startsWith("//");
+
+  let url: URL;
+  try {
+    url = new URL(relativoARaiz ? endereco.slice(1) : endereco, base);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol === "mailto:") return tipo === "link" ? url.href : null;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+
+  if (tipo === "imagem" && url.hostname === "github.com") {
+    url.pathname = url.pathname.replace(/^(\/[^/]+\/[^/]+)\/blob\//, "$1/raw/");
+  }
+
+  return url.href;
+}
+
+/**
+ * A âncora que o GitHub dá a um título: `## O que vira o quê` é
+ * `#o-que-vira-o-quê`. Minúsculo, sem pontuação, espaço vira hífen, e o
+ * acento fica. É o que faz o sumário de um README ("ver [Instalar](#instalar)")
+ * funcionar fora do GitHub.
+ */
+export function ancoraDoTitulo(titulo: string): string {
+  return titulo
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "")
+    .replace(/ /g, "-");
+}
+
+/**
+ * Um plugin instalado visto como entrada do catálogo, para a página dele ter o
+ * mesmo Atualizar do card. `null` quando ele não aponta para um repositório do
+ * GitHub: sem isso não há de onde baixar a versão nova, nem README.
+ *
+ * Sem tags, ícone nem capa: esses são do site, e a aba de Instalados não fala
+ * com a rede para abrir. `executaCodigo` pelo `principal`, que é o que roda.
+ */
+export function comoPluginDoCatalogo(
+  extensao: Pick<Manifesto, "id" | "nome" | "descricao" | "autor" | "repositorio" | "principal" | "apiVersao">,
+): PluginDoCatalogo | null {
+  if (!extensao.repositorio || !repositorioDoGithub(extensao.repositorio)) return null;
+
+  return {
+    id: extensao.id,
+    nome: extensao.nome,
+    descricao: extensao.descricao ?? "",
+    autor: extensao.autor ?? "",
+    repositorio: extensao.repositorio,
+    icone: null,
+    capa: null,
+    executaCodigo: Boolean(extensao.principal),
+    apiVersao: extensao.apiVersao,
+    tags: [],
+  };
 }
