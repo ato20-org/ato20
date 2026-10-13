@@ -1104,7 +1104,6 @@ async fn serve_plugin(
     // por `caminho_relativo_seguro` e so tem imagem raster (ver
     // `IMAGENS_DE_MEDIDOR`), entao nada aqui abre um `.svg` ou um `.html`.
     let de_estilo = manifesto
-        .contribui
         .imagens_servidas()
         .iter()
         .any(|(_, imagem)| *imagem == arquivo.as_str());
