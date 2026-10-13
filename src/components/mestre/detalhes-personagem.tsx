@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -80,15 +82,39 @@ export function useDetalhesDaFicha(personagemId: string): DetalhesDaFicha {
   const fichasMudaram = useMoldeDeDetalhesStore((state) => state.fichasMudaram);
 
   const recarregar = useCallback(() => {
-    listarDetalhes(personagemId).then(setLista, (cause: unknown) => {
-      toast.error(cause instanceof Error ? cause.message : t.detalhes.falhaAoLer);
-      setLista([]);
-    });
+    listarDetalhes(personagemId).then(
+      (nova) => setLista((antes) => reaproveitarIguais(antes, nova)),
+      (cause: unknown) => {
+        toast.error(cause instanceof Error ? cause.message : t.detalhes.falhaAoLer);
+        setLista([]);
+      },
+    );
   }, [personagemId]);
 
   useEffect(recarregar, [recarregar, fichasMudaram]);
 
   return { lista, recarregar };
+}
+
+/**
+ * A lista relida, com os detalhes que não mudaram trocados pelos objetos de
+ * antes.
+ *
+ * A releitura que segue cada edição devolve TODOS os objetos novos, e o `memo`
+ * dos cartões compara por referência: sem isto, mudar o valor da Acrobacia
+ * redesenhava as vinte e oito perícias -- e as cem, numa ficha cheia. Por
+ * JSON porque os dois lados vêm do mesmo serializador, na mesma ordem de
+ * campos, e um campo novo no detalhe entra na conta sem lembrar de vir aqui.
+ */
+function reaproveitarIguais(antes: Detalhe[] | null, nova: Detalhe[]): Detalhe[] {
+  if (!antes) return nova;
+
+  const porId = new Map(antes.map((detalhe) => [detalhe.id, detalhe]));
+
+  return nova.map((detalhe) => {
+    const velho = porId.get(detalhe.id);
+    return velho && JSON.stringify(velho) === JSON.stringify(detalhe) ? velho : detalhe;
+  });
 }
 
 /**
@@ -278,6 +304,17 @@ function GrupoDaFicha({
     }
   }
 
+  const acoes = useAcoesDosCartoes({
+    pegar: (evento, detalheId) => {
+      if (!filtrado && pegaOCartao(evento)) startReorder(evento, detalheId, LIMIAR_DO_ARRASTO);
+    },
+    gravar: (detalheId, patch) => {
+      if (patch.rotulo !== undefined) setNovo(null);
+      void gravar(detalheId, patch);
+    },
+    apagar: (detalheId) => void apagar(detalheId),
+  });
+
   // No fim da lista, e não no canto de um cabeçalho: na barra lateral o grupo
   // não tem cabeçalho -- o nome está na pílula --, e o "+" fica onde o
   // detalhe novo vai aparecer.
@@ -322,14 +359,7 @@ function GrupoDaFicha({
             detalhe,
             editarRotulo: detalhe.id === novo,
             dropTarget: dropIndex === index,
-            onReorderStart: (evento: ReactPointerEvent) => {
-              if (!filtrado && pegaOCartao(evento)) startReorder(evento, detalhe.id, LIMIAR_DO_ARRASTO);
-            },
-            onGravar: (patch: PatchDetalhe) => {
-              if (patch.rotulo !== undefined) setNovo(null);
-              void gravar(detalhe.id, patch);
-            },
-            onApagar: () => void apagar(detalhe.id),
+            acoes,
             rolavel: rolaveis.has(chaveDoNome(detalhe.rotulo)),
             rotuloDaRolagem: `${personagemNome} · ${detalhe.rotulo}`,
           };
@@ -384,13 +414,45 @@ function pegaOCartao(evento: ReactPointerEvent): boolean {
   );
 }
 
+/** O que um cartão pede ao grupo, pelo id do detalhe. Ver `useAcoesDosCartoes`. */
+type AcoesDoCartao = {
+  pegar: (evento: ReactPointerEvent, detalheId: string) => void;
+  gravar: (detalheId: string, patch: PatchDetalhe) => void;
+  apagar: (detalheId: string) => void;
+};
+
+/**
+ * As ações dos cartões num objeto que não muda entre renders, e que chama
+ * sempre a versão mais nova delas.
+ *
+ * O desenho do `startReorder` em `useListReorder`, e pela mesma razão: elas
+ * descem para cada cartão, e uma função nova por render derrubava o `memo` de
+ * todos. Toda edição relê o elenco e os detalhes, e cada releitura
+ * redesenhava a grade inteira -- com cem perícias, 160 ms por edição na
+ * webview. A ref é escrita num efeito: quem a lê é um clique ou um `blur`,
+ * sempre depois do commit.
+ */
+function useAcoesDosCartoes(atuais: AcoesDoCartao): AcoesDoCartao {
+  const ref = useRef(atuais);
+  useEffect(() => {
+    ref.current = atuais;
+  });
+
+  return useMemo(
+    () => ({
+      pegar: (evento, detalheId) => ref.current.pegar(evento, detalheId),
+      gravar: (detalheId, patch) => ref.current.gravar(detalheId, patch),
+      apagar: (detalheId) => ref.current.apagar(detalheId),
+    }),
+    [],
+  );
+}
+
 type PropsDaLinha = {
   detalhe: Detalhe;
   editarRotulo: boolean;
   dropTarget: boolean;
-  onReorderStart: (evento: ReactPointerEvent) => void;
-  onGravar: (patch: PatchDetalhe) => void;
-  onApagar: () => void;
+  acoes: AcoesDoCartao;
   /** O molde liga o d20 deste detalhe. */
   rolavel: boolean;
   rotuloDaRolagem: string;
@@ -475,13 +537,11 @@ function Lapis({ rotulo, ativo = false, onClick }: { rotulo: string; ativo?: boo
  * números soltos, sem dizer qual número é de quem. A alça, o balão e a
  * lixeira aparecem sob o cursor, nos cantos.
  */
-function LinhaDeDetalhe({
+const LinhaDeDetalhe = memo(function LinhaDeDetalhe({
   detalhe,
   editarRotulo,
   dropTarget,
-  onReorderStart,
-  onGravar,
-  onApagar,
+  acoes,
   rolavel,
   rotuloDaRolagem,
 }: PropsDaLinha) {
@@ -490,10 +550,12 @@ function LinhaDeDetalhe({
   const [descricaoAberta, setDescricaoAberta] = useState(false);
   const [editandoRolagem, setEditandoRolagem] = useState(false);
   const menu = useDepoisDoMenu();
+  const onGravar = (patch: PatchDetalhe) => acoes.gravar(detalhe.id, patch);
+  const onApagar = () => acoes.apagar(detalhe.id);
 
   return (
     <li
-      onPointerDown={onReorderStart}
+      onPointerDown={(evento) => acoes.pegar(evento, detalhe.id)}
       className={cn(
         "group/detalhe bg-muted/40 focus-within:border-ring flex min-w-0 flex-col rounded-md border px-1.5 pt-1 pb-1",
         CURSOR_DO_CARTAO,
@@ -567,7 +629,7 @@ function LinhaDeDetalhe({
       </div>
     </li>
   );
-}
+});
 
 /**
  * Os três pontinhos do detalhe: renomear, descrever, a rolagem e apagar.
@@ -641,13 +703,11 @@ function useDepoisDoMenu() {
  * Uma caixa de digitar sempre aberta fazia a entrada parecer um formulário
  * vazio, mesmo quando o texto já estava lá.
  */
-function EntradaDeLista({
+const EntradaDeLista = memo(function EntradaDeLista({
   detalhe,
   editarRotulo,
   dropTarget,
-  onReorderStart,
-  onGravar,
-  onApagar,
+  acoes,
   rolavel,
   rotuloDaRolagem,
 }: PropsDaLinha) {
@@ -657,10 +717,12 @@ function EntradaDeLista({
   const [editandoRolagem, setEditandoRolagem] = useState(false);
   const menu = useDepoisDoMenu();
   const resumo = detalhe.valor === undefined ? "" : String(detalhe.valor);
+  const onGravar = (patch: PatchDetalhe) => acoes.gravar(detalhe.id, patch);
+  const onApagar = () => acoes.apagar(detalhe.id);
 
   return (
     <li
-      onPointerDown={onReorderStart}
+      onPointerDown={(evento) => acoes.pegar(evento, detalhe.id)}
       className={cn(
         "group/detalhe bg-muted/30 rounded-md border px-1.5 py-1",
         CURSOR_DO_CARTAO,
@@ -788,7 +850,7 @@ function EntradaDeLista({
       ) : null}
     </li>
   );
-}
+});
 
 /**
  * Um campo de texto que grava ao sair, como a sigla do atributo: Enter grava,
@@ -966,7 +1028,17 @@ export function DescricaoDoDetalhe({
   aberto?: boolean;
   onAberto?: (aberto: boolean) => void;
 }) {
-  const ancora = soAncora;
+  if (soAncora) {
+    return (
+      <AncoraDaDescricao
+        rotulo={rotulo}
+        descricao={descricao}
+        onGravar={onGravar}
+        aberto={aberto ?? false}
+        onAberto={onAberto}
+      />
+    );
+  }
 
   return (
     <Popover open={aberto} onOpenChange={onAberto}>
@@ -979,11 +1051,10 @@ export function DescricaoDoDetalhe({
                   variant="ghost"
                   size="icon-xs"
                   aria-label={t.detalhes.descricao(rotulo)}
-                  tabIndex={ancora ? -1 : undefined}
                   className={cn(
                     "size-5 shrink-0 [&_svg:not([class*='size-'])]:size-3",
                     descricao ? "text-foreground" : "text-muted-foreground",
-                    ancora ? "pointer-events-none opacity-0" : !descricao && !sempre && SO_NA_LINHA,
+                    !descricao && !sempre && SO_NA_LINHA,
                   )}
                 >
                   <MessageSquareText />
@@ -1004,22 +1075,87 @@ export function DescricaoDoDetalhe({
         </TooltipContent>
       </Tooltip>
 
-      <PopoverContent side="bottom" align="end" className="w-72 space-y-1.5">
-        <p className="text-xs font-medium">{t.detalhes.descricao(rotulo)}</p>
-        <Textarea
-          autoFocus
-          defaultValue={descricao ?? ""}
-          maxLength={MAX_DESCRICAO_DETALHE}
-          placeholder={t.detalhes.exemploDeDescricao}
-          aria-label={t.detalhes.descricao(rotulo)}
-          className="min-h-20 resize-y text-xs"
-          onBlur={(evento) => {
-            const texto = evento.target.value.trim();
-            if (texto === (descricao ?? "")) return;
-            onGravar(texto);
-          }}
-        />
-      </PopoverContent>
+      <BalaoDaDescricao rotulo={rotulo} descricao={descricao} onGravar={onGravar} />
     </Popover>
+  );
+}
+
+/**
+ * O balão do cartão da ficha, que o menu abre: montado só enquanto aberto, e
+ * até a saída terminar.
+ *
+ * Montado sempre, eram um popover e uma dica por cartão -- e a dica nunca
+ * aparecia, porque a âncora é invisível e não recebe o ponteiro. Com cem
+ * perícias, duzentas raízes da Base UI montando a cada troca de grupo para
+ * nada. Fechado, fica só o lugar da âncora, do tamanho dela.
+ */
+function AncoraDaDescricao({
+  rotulo,
+  descricao,
+  onGravar,
+  aberto,
+  onAberto,
+}: {
+  rotulo: string;
+  descricao: string | undefined;
+  onGravar: (descricao: string) => void;
+  aberto: boolean;
+  onAberto?: (aberto: boolean) => void;
+}) {
+  const [montado, setMontado] = useState(aberto);
+  if (aberto && !montado) setMontado(true);
+
+  if (!montado) return <span className="size-5 shrink-0" aria-hidden />;
+
+  return (
+    <Popover
+      open={aberto}
+      onOpenChange={onAberto}
+      onOpenChangeComplete={(abriu) => {
+        if (!abriu) setMontado(false);
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t.detalhes.descricao(rotulo)}
+            tabIndex={-1}
+            className="pointer-events-none size-5 shrink-0 opacity-0"
+          />
+        }
+      />
+      <BalaoDaDescricao rotulo={rotulo} descricao={descricao} onGravar={onGravar} />
+    </Popover>
+  );
+}
+
+function BalaoDaDescricao({
+  rotulo,
+  descricao,
+  onGravar,
+}: {
+  rotulo: string;
+  descricao: string | undefined;
+  onGravar: (descricao: string) => void;
+}) {
+  return (
+    <PopoverContent side="bottom" align="end" className="w-72 space-y-1.5">
+      <p className="text-xs font-medium">{t.detalhes.descricao(rotulo)}</p>
+      <Textarea
+        autoFocus
+        defaultValue={descricao ?? ""}
+        maxLength={MAX_DESCRICAO_DETALHE}
+        placeholder={t.detalhes.exemploDeDescricao}
+        aria-label={t.detalhes.descricao(rotulo)}
+        className="min-h-20 resize-y text-xs"
+        onBlur={(evento) => {
+          const texto = evento.target.value.trim();
+          if (texto === (descricao ?? "")) return;
+          onGravar(texto);
+        }}
+      />
+    </PopoverContent>
   );
 }
