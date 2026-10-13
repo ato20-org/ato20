@@ -71,6 +71,23 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.5.1",
+    data: "2026-10-13",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No AppImage, rolar dado não trava mais a janela",
+          en: "In the AppImage, rolling dice no longer freezes the window",
+        },
+        detalhe: {
+          pt: "Desde a 1.4.0, o dado rolado depois de alguns segundos parado congelava a janela inteira por até oito segundos antes de cair, pela ficha, pelo saquinho ou pela paleta. Era o som dos dados acordando.",
+          en: "Since 1.4.0, a die rolled after a few idle seconds froze the whole window for up to eight seconds before falling, from the sheet, the dice bag or the command palette. It was the dice sound waking up.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.5.0",
     data: "2026-10-13",
     mudancas: [
