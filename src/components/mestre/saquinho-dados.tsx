@@ -21,7 +21,7 @@ import {
 import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
-import { DadoFacetas } from "@/components/mestre/dado-facetas";
+import { DadoFacetas, svgDasFacetas } from "@/components/mestre/dado-facetas";
 import { HistoricoDeDados, useDadosNoAr } from "@/components/playground/historico-de-dados";
 import {
   desenharDado,
@@ -493,6 +493,22 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
  * precisar de rótulo — `20` só existe no d20 — e é o que a mesa quer ver.
  */
 export function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+  const { desenho, raio } = desenhoParado(tipo, tamanho);
+
+  return (
+    <svg
+      width={tamanho}
+      height={tamanho}
+      viewBox={`0 0 ${tamanho} ${tamanho}`}
+      aria-hidden
+    >
+      <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} />
+    </svg>
+  );
+}
+
+/** A pose de retrato do dado parado, projetada. Ver `DadoEstatico`. */
+function desenhoParado(tipo: TipoDado, tamanho: number) {
   const rotulos = rotulosDoDado(tipo.faces);
 
   /**
@@ -527,14 +543,31 @@ export function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: numbe
     raio,
   });
 
-  return (
-    <svg
-      width={tamanho}
-      height={tamanho}
-      viewBox={`0 0 ${tamanho} ${tamanho}`}
-      aria-hidden
-    >
-      <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} />
-    </svg>
-  );
+  return { desenho, raio };
+}
+
+const imagensDoDado = new Map<string, string>();
+
+/**
+ * O `DadoEstatico` numa `<img>`: o mesmo desenho, em um nó só.
+ *
+ * Para onde o mesmo dado parado se repete muitas vezes -- a ficha, com um por
+ * perícia rolável e até cinco por termo. Em SVG vivo eram vinte nós por d20 e,
+ * medido na webview, cem perícias com três dados levavam 210 ms para abrir o
+ * grupo, metade deles nos dados. A imagem sai uma vez por tipo e tamanho, e o
+ * motor reaproveita o raster entre as cópias. Ver `svgDasFacetas`.
+ */
+export function DadoEmImagem({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+  const chave = `${tipo.faces}:${tipo.hex}:${tipo.tinta}:${tamanho}`;
+  let endereco = imagensDoDado.get(chave);
+
+  if (!endereco) {
+    const { desenho, raio } = desenhoParado(tipo, tamanho);
+    endereco = `data:image/svg+xml,${encodeURIComponent(svgDasFacetas(tipo, desenho, raio, tamanho))}`;
+    imagensDoDado.set(chave, endereco);
+  }
+
+  // Um `data:` gerado aqui: não há o que o `next/image` otimizar.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={endereco} alt="" width={tamanho} height={tamanho} draggable={false} aria-hidden className="shrink-0" />;
 }

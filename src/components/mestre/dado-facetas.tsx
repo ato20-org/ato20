@@ -83,3 +83,35 @@ export function DadoFacetas({
     </>
   );
 }
+
+/**
+ * O mesmo dado do `DadoFacetas`, PARADO, em texto de SVG -- para uma `<img>`.
+ *
+ * Existe para a ficha, que desenha um dado por perícia rolável, até cinco por
+ * termo: em SVG vivo cada d20 é uma vintena de nós, e cem perícias com três
+ * dados passavam de oito mil nós na janela. Na `<img>` é um nó, e o motor
+ * rasteriza a imagem uma vez para todas as cópias. Ver `DadoEmImagem`.
+ *
+ * Os atributos são os do componente acima, um a um: mudar um lá é mudar aqui.
+ * A fonte é a genérica porque a imagem não enxerga as da página; no tamanho
+ * da ficha o número é um risco de dois pixels, e nenhuma fonte se lê ali.
+ */
+export function svgDasFacetas(tipo: TipoDado, desenho: FaceDesenhada[], raio: number, lado: number): string {
+  const faces = desenho
+    .map(
+      (face) =>
+        `<polygon points="${face.pontos}" fill="${corDaFace(tipo.hex, face.luz)}" stroke="${corDaFace(tipo.hex, face.luz * 0.35)}" stroke-width="${raio * 0.018}" stroke-linejoin="round"/>`,
+    )
+    .join("");
+
+  const numeros = desenho
+    .flatMap((face) =>
+      face.numeros.map(
+        (numero) =>
+          `<text transform="matrix(${numero.matriz.join(" ")})" font-size="1" fill="${corDaTinta(tipo.tinta, face.luz)}" text-anchor="middle" dominant-baseline="central" font-weight="700"${numero.sublinhado ? ' text-decoration="underline"' : ""}>${numero.texto}</text>`,
+      ),
+    )
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${lado}" height="${lado}" viewBox="0 0 ${lado} ${lado}" font-family="sans-serif">${faces}<g>${numeros}</g></svg>`;
+}

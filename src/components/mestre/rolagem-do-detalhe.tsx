@@ -1,10 +1,10 @@
 "use client";
 
 import { Check, Pencil } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 import { IconeD20 } from "@/components/mestre/icone-d20";
-import { DadoEstatico } from "@/components/mestre/saquinho-dados";
+import { DadoEmImagem } from "@/components/mestre/saquinho-dados";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { t } from "@/lib/i18n/personagens";
@@ -59,7 +59,12 @@ export function RolagemDoDetalhe({
   const [editandoAqui, setEditandoAqui] = useState(false);
   const editando = editandoDeFora ?? editandoAqui;
   const setEditando = onEditando ?? setEditandoAqui;
-  const leitura = detalhe.rolagem ? lerExpressaoDeRolagem(detalhe.rolagem) : null;
+  // Pela string, e não a cada render: a expressão lida é o que o `memo` dos
+  // dados compara, e um objeto novo por render o fazia falhar sempre.
+  const leitura = useMemo(
+    () => (detalhe.rolagem ? lerExpressaoDeRolagem(detalhe.rolagem) : null),
+    [detalhe.rolagem],
+  );
 
   if (editando) {
     return (
@@ -161,7 +166,7 @@ const DadosDaExpressao = memo(function DadosDaExpressao({ expressao }: { express
       {expressao.dados.map(({ quantidade, faces }, termo) => (
         <span key={termo} className="flex items-center">
           {Array.from({ length: Math.min(quantidade, DADOS_A_VISTA) }, (_, i) => (
-            <DadoEstatico key={i} tipo={tipoDado(faces)} tamanho={LADO_DO_DADO} />
+            <DadoEmImagem key={i} tipo={tipoDado(faces)} tamanho={LADO_DO_DADO} />
           ))}
           {quantidade > DADOS_A_VISTA ? (
             <span className="text-muted-foreground text-[10px] tabular-nums">×{quantidade}</span>
