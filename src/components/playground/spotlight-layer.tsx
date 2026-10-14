@@ -79,6 +79,9 @@ export function SpotlightLayer({
     // veria, por baixo de um retângulo preto, justamente a imagem que o mestre
     // acabou de mandar olhar.
     <div
+      // A evidência não é mapa: na TV ela mora dentro da moldura que recebe o
+      // gesto do zoom, e arrastá-la não pode andar com o mapa escondido atrás.
+      data-sem-zoom
       className={cn(
         "fixed inset-0 z-60 flex flex-col items-center justify-center gap-3 bg-black/92 p-4 backdrop-blur-sm",
         // `key` na transmissão faz a entrada em fade repetir a cada imagem

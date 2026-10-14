@@ -222,6 +222,15 @@ const pt = {
     aguardando: "Aguardando o Mestre…",
   },
 
+  /** O zoom de quem assiste, no canto do mapa. Ver `ControlesDeZoom`. */
+  zoom: {
+    rotulo: "Zoom do mapa",
+    aproximar: "Aproximar",
+    afastar: "Afastar",
+    porcento: (porcento: number) => `${porcento}%`,
+    voltar: (porcento: number) => `${porcento}%. Voltar ao enquadramento do mestre`,
+  },
+
   barreira: {
     falhou: (nome: string) => `${nome} falhou ao desenhar.`,
   },
@@ -508,6 +517,14 @@ const en: typeof pt = {
     nadaNoAr: "The GM hasn't put anything on air.",
     semResposta: "No answer. The GM screen needs to be open.",
     aguardando: "Waiting for the GM…",
+  },
+
+  zoom: {
+    rotulo: "Map zoom",
+    aproximar: "Zoom in",
+    afastar: "Zoom out",
+    porcento: (porcento) => `${porcento}%`,
+    voltar: (porcento) => `${porcento}%. Back to the GM's framing`,
   },
 
   barreira: {

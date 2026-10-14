@@ -32,6 +32,7 @@ import {
   type Subscription,
 } from "@/hooks/use-scene-broadcast";
 import { useFioDoJogador } from "@/hooks/use-fio-do-jogador";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 import { t } from "@/lib/i18n/jogador";
 import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
@@ -76,6 +77,27 @@ export function JogadorShell({
   nomeDaMesa: string;
 }) {
   const tabbed = useTabbedLayout();
+
+  /**
+   * A tela cheia do mapa, aqui e não no `JogadorStage`.
+   *
+   * Girar o celular troca o layout (`useTabbedLayout`), e cada layout tem o
+   * seu `JogadorStage`: com o estado lá dentro, a tela cheia -- que trava a
+   * tela deitada -- desmontava o palco que a pediu e voltava ao normal.
+   *
+   * E o pedido nativo é da PÁGINA, e não da moldura do mapa. Com a moldura em
+   * tela cheia o navegador só desenha ela e os filhos, e a imagem que o mestre
+   * põe em evidência (`SpotlightLayer`, irmã das abas) sumia: o jogador em
+   * tela cheia não via nada do que era transmitido. Quem estica a moldura
+   * sobre a tela é o CSS (`fixed inset-0 z-50`), como no iPhone, onde a API
+   * nativa não existe; a nativa só tira a barra do navegador, e a evidência,
+   * em `z-60`, fica por cima dos dois jeitos.
+   */
+  const telaCheia = useFullscreen();
+  const telaCheiaDaMesa = {
+    expandida: telaCheia.expanded,
+    onTelaCheia: () => telaCheia.toggle(document.documentElement),
+  };
 
   /**
    * Procura a credencial guardada assim que a tela abre.
@@ -177,9 +199,9 @@ export function JogadorShell({
       {dentro ? (
         <DeclarativoProvider valor={declarativo}>
           {tabbed ? (
-            <LandscapeLayout codigo={codigo} live={live} emCena={emCena} />
+            <LandscapeLayout codigo={codigo} live={live} emCena={emCena} {...telaCheiaDaMesa} />
           ) : (
-            <StackedLayout codigo={codigo} live={live} emCena={emCena} />
+            <StackedLayout codigo={codigo} live={live} emCena={emCena} {...telaCheiaDaMesa} />
           )}
         </DeclarativoProvider>
       ) : (
@@ -234,6 +256,9 @@ type LayoutProps = {
   live: Subscription;
   /** Ver `emCena`, no `JogadorShell`. */
   emCena: Set<string>;
+  /** A tela cheia do mapa. Ver `telaCheia`, no `JogadorShell`. */
+  expandida: boolean;
+  onTelaCheia: () => void;
 };
 
 /**
@@ -246,7 +271,7 @@ type LayoutProps = {
  * arrasta para onde não atrapalha. Ver `BarraLateralDoJogador` e
  * `SaquinhoFlutuante`.
  */
-function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
+function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutProps) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="relative min-h-0 min-w-0 flex-1 p-1.5">
@@ -261,6 +286,8 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}
+          expandida={expandida}
+          onTelaCheia={onTelaCheia}
         />
       </div>
 
@@ -279,7 +306,7 @@ function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
  * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
  */
-function StackedLayout({ codigo, live, emCena }: LayoutProps) {
+function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
 
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
@@ -299,6 +326,8 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}
+          expandida={expandida}
+          onTelaCheia={onTelaCheia}
         />
       </div>
 
