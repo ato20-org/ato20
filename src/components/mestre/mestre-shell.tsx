@@ -6,6 +6,7 @@ import Image from "next/image";
 import logo from "@/assets/logo-white.png";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
+import { AlternarColuna } from "@/components/mestre/dock/alternar-coluna";
 import { BotaoDeEsguelha } from "@/components/mestre/botao-de-esguelha";
 import { ConfiguracoesDoMapa } from "@/components/mestre/configuracoes-do-mapa";
 import { MestreDeEsguelha } from "@/components/mestre/mestre-de-esguelha";
@@ -383,21 +384,36 @@ export function MestreShell() {
           janela estreita é honesto; controle inalcançável não é. */}
       {/* O que sobrou aqui é o que pertence à SESSÃO: o que está no ar, o som,
           e quem alcança a mesa. Saíram os controles de gesto — ferramentas e
-          zoom foram para o canto do palco, onde a mão já está —, os dois
-          toggles de painel, que agora moram nos próprios painéis, e desfazer e
+          zoom foram para o canto do palco, onde a mão já está —, e desfazer e
           refazer, que são Ctrl+Z e Ctrl+Y e não precisavam de alvo na tela.
           Jogadores saiu junto: virou pílula com contador no canto do palco.
-          A campanha subiu para a barra da janela. */}
+          A campanha subiu para a barra da janela. Os dois toggles de painel
+          saíram e VOLTARAM: dentro das colunas o de abrir precisava de um
+          caminho próprio para quando elas sumiam, e a onda da borda era um
+          botão que ninguém achava. */}
       <header className="flex flex-wrap items-center gap-2 gap-y-1 border-b px-3 py-2 select-none">
+        {/* As colunas do dock, cada uma na ponta do lado dela: o botão fica em
+            cima da coluna que ele mexe, e não há o que adivinhar. Ver
+            `AlternarColuna`. */}
+        <AlternarColuna lado="esquerda" />
+        <span className="bg-border h-5 w-px" />
+
         <OnAirControl editing={editingScene} />
 
         {/* As duas juntas, na mesma ponta: são a mesma pergunta — como as
             outras telas entram na mesa. Uma dá o QR para o celular e para a TV
             de outro aparelho; a outra abre a TV aqui. Quem JÁ entrou é outra
-            coisa, e mora no canto do palco — ver `PlayersChip`. */}
+            coisa, e mora no canto do palco — ver `PlayersChip`.
+
+            O toggle da direita entra neste grupo, e não solto no cabeçalho:
+            quando a barra quebra em duas linhas, ele desce junto e continua
+            na ponta direita. */}
         <div className="ml-auto flex items-center gap-2">
           <TableInvite />
           <AbrirEspectador />
+
+          <span className="bg-border h-5 w-px" />
+          <AlternarColuna lado="direita" />
         </div>
       </header>
 
@@ -429,9 +445,9 @@ export function MestreShell() {
                   fora do `StageBoundary`: uma mesa cheia continua cheia sem
                   cena nenhuma selecionada.
 
-                  O caminho de volta das colunas recolhidas morava aqui, e foi
-                  para as bordas da janela: o palco deixou de encostar nelas.
-                  Ver `AlcaDeGaveta`. */}
+                  O caminho de volta das colunas recolhidas morava aqui, e hoje
+                  está no cabeçalho: o palco deixou de encostar nelas. Ver
+                  `AlternarColuna`. */}
               {lendoNota ? null : (
                 <div className="absolute top-2 left-2 z-10 flex items-center">
                   <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">

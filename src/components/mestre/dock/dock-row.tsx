@@ -2,7 +2,6 @@
 
 import { useRef, useState, type ReactNode } from "react";
 
-import { AlcaDeGaveta } from "@/components/mestre/dock/alca-de-gaveta";
 import { DockColumn } from "@/components/mestre/dock/dock-column";
 import { Splitter } from "@/components/mestre/dock/splitter";
 import {
@@ -31,8 +30,8 @@ import { usePanelsStore } from "@/lib/store/use-panels-store";
  *
  * `left`/`right` do `usePanelsStore` continuam sendo "esta coluna está
  * recolhida". Isso não virou parte do layout porque são coisas diferentes:
- * recolher é gesto do momento, com caminho de volta no canto do palco, e o
- * layout é onde cada janela mora.
+ * recolher é gesto do momento, com os dois botões no cabeçalho do Mestre, e o
+ * layout é onde cada janela mora. Ver `AlternarColuna`.
  */
 export function DockRow({ children }: { children: ReactNode }) {
   /**
@@ -46,7 +45,6 @@ export function DockRow({ children }: { children: ReactNode }) {
 
   const esquerdaAberta = usePanelsStore((state) => state.left);
   const direitaAberta = usePanelsStore((state) => state.right);
-  const mostrar = usePanelsStore((state) => state.show);
 
   // Coluna recolhida OU sem região nenhuma não desenha nada, divisor incluído:
   // um divisor sem os dois lados seria uma alça de 4 pixels encostada no palco,
@@ -61,15 +59,6 @@ export function DockRow({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {/* O caminho de volta da coluna recolhida, na borda da janela onde ela
-          sai. Ver `AlcaDeGaveta`. */}
-      {!esquerdaAberta && esquerda ? (
-        <AlcaDeGaveta lado="esquerda" aoAbrir={() => mostrar("left")} />
-      ) : null}
-      {!direitaAberta && direita ? (
-        <AlcaDeGaveta lado="direita" aoAbrir={() => mostrar("right")} />
-      ) : null}
-
       {esquerdaAberta && esquerda ? (
         <>
           <DockColumn
