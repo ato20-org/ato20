@@ -22,6 +22,7 @@ import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
 import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { itensMudaram } from "@/lib/store/use-itens-store";
 import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { usePacoteStore } from "@/lib/store/use-pacote-store";
@@ -126,6 +127,9 @@ function Corpo({
       void useEfeitosDaCampanhaStore.getState().carregar();
       if (importado.personagens > 0) useCharactersStore.getState().recarregar();
       if (importado.condicoes > 0) useCondicoesStore.getState().recarregar();
+      // Os itens que as cenas e os personagens do pacote citam entraram no
+      // catálogo, com id novo. Ver `vault::pacote`.
+      itensMudaram();
 
       // O que é da tela: a campanha só ganha o que não tem; a máquina troca.
       const chaves = mesclarConfiguracoes("campanha", importado.configuracoes, false);
@@ -144,6 +148,7 @@ function Corpo({
       const partes = [
         novas.length > 0 ? t.pacote.partes.cenas(novas.length) : null,
         importado.personagens > 0 ? t.pacote.partes.personagens(importado.personagens) : null,
+        importado.itens > 0 ? t.pacote.partes.itens(importado.itens) : null,
         importado.efeitos > 0 ? t.pacote.partes.efeitos(importado.efeitos) : null,
         importado.condicoes > 0 ? t.pacote.partes.condicoes(importado.condicoes) : null,
         importado.medidores > 0 ? t.pacote.partes.medidores(importado.medidores) : null,

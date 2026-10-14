@@ -20,6 +20,14 @@ import type { AnexoPersonagem } from "@/types/character";
 export type ConteudoJanela =
   | { tipo: "personagens" }
   | { tipo: "personagem"; personagemId: string }
+  // Os itens da campanha. Sem campo, como a lista de personagens: o catálogo é
+  // um só, e cada item abre num diálogo, não numa janela. Ver `ItensBody`.
+  | { tipo: "itens" }
+  // Um item, para LER: a imagem, os atributos, os medidores, a descrição. A
+  // edição é o diálogo -- ver `abrirEditorDoItem`. `personagemId` diz de que
+  // mochila ele foi aberto: os medidores e a quantidade de lá. Sem ele, o item
+  // como a campanha o define.
+  | { tipo: "item"; itemId: string; personagemId?: string }
   | { tipo: "anexo"; personagemId: string; anexo: AnexoPersonagem }
   | { tipo: "asset"; assetId: string; nome: string }
   // Os cinco painéis de sempre, agora janelas como as outras. Eram markup fixo
@@ -94,6 +102,12 @@ export function chaveDe(conteudo: ConteudoJanela): string {
   switch (conteudo.tipo) {
     case "personagens":
       return "personagens";
+    case "itens":
+      return "itens";
+    // O mesmo item aberto de duas mochilas são duas janelas: a espada do Edgar
+    // em 7/10 e a da Mira em 10/10 são o mesmo item em estados diferentes.
+    case "item":
+      return `item:${conteudo.itemId}${conteudo.personagemId ? `@${conteudo.personagemId}` : ""}`;
     case "personagem":
       return `personagem:${conteudo.personagemId}`;
     case "anexo":

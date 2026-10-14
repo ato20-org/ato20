@@ -207,6 +207,14 @@ function EvidenciaEmMiniatura({ spotlight }: { spotlight: Spotlight | null }) {
           draggable={false}
         />
       ) : null}
+      {/* O cartão do item, em miniatura: só o nome. A descrição numa janela de
+          320 pixels seria uma linha cortada, e quem transmitiu sabe o que
+          escreveu. */}
+      {spotlight.item ? (
+        <span className="max-w-full truncate px-2 text-xs font-medium text-white">
+          {spotlight.item.nome}
+        </span>
+      ) : null}
       <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/90">
         <Eye className="size-3" aria-hidden />
         {t.miniplayer.emEvidencia}

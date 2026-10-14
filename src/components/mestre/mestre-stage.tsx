@@ -34,6 +34,9 @@ import {
   FormaLayer,
 } from "@/components/mestre/forma-layer";
 import { TextoLayer } from "@/components/mestre/texto-layer";
+import { abrirItem } from "@/components/mestre/acoes-do-item";
+import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
+import { useItemDaCampanha, useItensStore } from "@/lib/store/use-itens-store";
 import { ehDuploClique, type Toque } from "@/lib/mestre/duplo-clique";
 import { ancorada, caixaDoTexto, pontaEm } from "@/lib/mestre/ligacoes";
 import {
@@ -785,6 +788,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       ? single.personagemId
       : undefined;
 
+  /**
+   * O item da campanha que a peça selecionada é, quando é um.
+   *
+   * Só sem `personagemId`: token vence, ver `CanvasItem.itemId`. E só se o item
+   * ainda existe -- a peça de um item apagado pelo celular continua no mapa
+   * como imagem, e o gizmo dela é o de imagem.
+   */
+  const itemDaPeca = useItemDaCampanha(
+    single && !single.personagemId ? single.itemId : undefined,
+  );
+  const transmissaoDaPeca = useTransmissaoDoItem(itemDaPeca);
+
   /** O toque anterior num item, para contar o duplo clique. Ver `ehDuploClique`. */
   const ultimoToque = useRef<Toque | null>(null);
 
@@ -1196,6 +1211,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         event.stopPropagation();
         event.preventDefault();
         abrirJanela({ tipo: "personagem", personagemId: item.personagemId });
+        return;
+      }
+
+      // A peça de item abre o item, como o token abre a ficha.
+      const doCatalogo = item.itemId
+        ? useItensStore.getState().itens?.find((atual) => atual.id === item.itemId)
+        : undefined;
+
+      if (doCatalogo) {
+        event.stopPropagation();
+        event.preventDefault();
+        abrirItem(doCatalogo);
         return;
       }
     }
@@ -3555,7 +3582,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           // Azul quando é token: numa cena com mobília, mapa e quatro tokens,
           // saber que a caixa em volta é de uma PESSOA muda o que o mestre vai
           // fazer com ela.
-          tom={personagemDoItem ? "personagem" : "default"}
+          // Âmbar quando é item da campanha, pela mesma razão: o baú do
+          // catálogo não é a mobília em volta dele.
+          tom={personagemDoItem ? "personagem" : itemDaPeca ? "item" : "default"}
           onChange={(patch) => moverNoGesto(scene.id, [{ id: single.id, patch }])}
           onGestureEnd={() =>
             terminarGesto(scene.id, useGestoStore.getState().patches ?? [])
@@ -3592,6 +3621,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                     tipo: "personagem",
                     personagemId: personagemDoItem,
                   })
+              : undefined
+          }
+          // A peça de item ganha o nome dele, que abre o item, e o botão de
+          // mostrá-lo na mesa. Ver `TransformHandles.item`.
+          item={
+            itemDaPeca
+              ? {
+                  nome: itemDaPeca.nome,
+                  noAr: transmissaoDaPeca.noAr,
+                  onAbrir: () => abrirItem(itemDaPeca),
+                  onTransmitir: transmissaoDaPeca.alternar,
+                }
               : undefined
           }
           trava={{ travada: single.locked, onToggle: toggleSelectionLock }}

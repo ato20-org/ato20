@@ -1,12 +1,6 @@
 "use client";
 
-import { open } from "@tauri-apps/plugin-dialog";
-
-import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { call } from "@/lib/vault/bridge";
-import { shareCharacterAttachment } from "@/lib/vault/evidence";
-import { t } from "@/lib/i18n/personagens";
-import type { AssetMeta } from "@/types/scene";
 import type { ItemInventario, NovoItem, PatchItem } from "@/types/inventory";
 
 /**
@@ -18,16 +12,50 @@ import type { ItemInventario, NovoItem, PatchItem } from "@/types/inventory";
  *
  * A lista vem INTEIRA, com os escondidos: o escondido existe para o mestre ver
  * o que o jogador não vê. Quem filtra é o daemon, do outro lado.
+ *
+ * O inventário guarda só referências ao catálogo — ver `@/types/inventory`. O
+ * que volta daqui já vem achatado: o item do catálogo com a quantidade e o
+ * escondido DESTE inventário.
  */
 
 export function listInventory(id: string): Promise<ItemInventario[]> {
   return call<ItemInventario[]>("inventory_list", { id });
 }
 
+/**
+ * Cria um item no catálogo e já o põe neste inventário.
+ *
+ * É o `+` da ficha: o gesto é "este personagem tem uma coisa nova", e obrigar o
+ * mestre a criar no catálogo para depois arrastar seriam dois passos para um.
+ */
 export function addItem(id: string, novo: NovoItem): Promise<ItemInventario> {
   return call<ItemInventario>("inventory_add", { id, novo });
 }
 
+/**
+ * Dá um item do catálogo a este personagem.
+ *
+ * Se ele já tem o item, soma à quantidade em vez de criar uma segunda linha:
+ * duas poções iguais na mesma mochila são "2 poções", e não duas coisas.
+ */
+export function darItem(
+  id: string,
+  itemId: string,
+  quantidade?: number,
+): Promise<ItemInventario> {
+  return call<ItemInventario>("inventory_give", {
+    id,
+    itemId,
+    quantidade: quantidade ?? null,
+  });
+}
+
+/**
+ * Edita o item visto deste inventário.
+ *
+ * `nome`, `descricao` e `imagem` vão para o CATÁLOGO e mudam o item em todo
+ * inventário que o tem; `quantidade` e `escondido` ficam neste. Ver `PatchItem`.
+ */
 export function updateItem(
   id: string,
   itemId: string,
@@ -36,6 +64,11 @@ export function updateItem(
   return call<ItemInventario>("inventory_update", { id, itemId, patch });
 }
 
+/**
+ * Tira o item DESTE inventário. O item continua na campanha: item é item, e o
+ * que sai daqui ainda pode estar com outro personagem, num ponto do mapa ou no
+ * catálogo esperando dono. Apagar de vez é `removerItem`.
+ */
 export function removeItem(id: string, itemId: string): Promise<void> {
   return call("inventory_remove", { id, itemId });
 }
@@ -44,9 +77,7 @@ export function removeItem(id: string, itemId: string): Promise<void> {
  * Passa um item de um personagem para outro.
  *
  * Só existe aqui: é gesto de mestre, e o jogador não tem os dois lados da
- * transferência para pedi-la. O ARQUIVO da imagem vai junto quando ela é anexo
- * — o Rust move, porque um anexo apontado de fora da pasta do personagem é
- * recusado na leitura e a grade mostraria um quadro vazio.
+ * transferência para pedi-la. Quem já tem o item recebe a quantidade somada.
  */
 export function moveItem(
   de: string,
@@ -54,111 +85,4 @@ export function moveItem(
   itemId: string,
 ): Promise<ItemInventario> {
   return call<ItemInventario>("inventory_move", { de, para, itemId });
-}
-
-/**
- * Pede uma imagem e a prende ao item.
- *
- * Vira ASSET do acervo, e não anexo, porque a imagem do item do mestre precisa
- * alcançar a TV — e o Espectador não tem token nem IPC, só `/asset/{id}`. É a
- * mesma assimetria do retrato e da miniatura, e pelo mesmo motivo.
- *
- * Com escopo `personagem`, para a biblioteca de imagens não listá-la entre as
- * que se arrastam para o mapa.
- *
- * `null` = o mestre fechou o seletor, que não é erro.
- */
-export async function escolherImagemDoDisco(
-  id: string,
-  itemId: string,
-): Promise<ItemInventario | null> {
-  const escolhido = await open({
-    multiple: false,
-    title: t.arquivos.escolhaAImagemDoItem,
-    filters: [
-      {
-        name: t.arquivos.filtroDeImagem,
-        extensions: ["png", "apng", "jpg", "jpeg", "webp", "gif", "avif"],
-      },
-    ],
-  });
-
-  if (!escolhido) return null;
-
-  const item = await call<ItemInventario>("inventory_set_imagem", {
-    id,
-    itemId,
-    path: escolhido,
-  });
-
-  invalidarAcervo("image");
-
-  return item;
-}
-
-/**
- * Leva a imagem do item para o ACERVO, e devolve o asset.
- *
- * Existe para o item poder ir ao MAPA, e é chamada no `drop` do palco — não no
- * `dragstart`, que é síncrono e não pode esperar o disco.
- *
- * Aqui a cópia está certa, ao contrário de `transmitirItem`: o objeto de cena
- * guarda um `assetId` e é GRAVADO na cena, então ele tem de continuar
- * resolvendo depois de fechar e reabrir o aplicativo. O endereço sorteado da
- * evidência morre quando sai do ar e não dá lastro para isso. E é uma cópia por
- * item que vira peça de mapa, num gesto explícito — não uma por transmissão.
- *
- * Idempotente: item cuja imagem já é asset devolve o que ele já tem. O mesmo
- * item vai ao mapa mais de uma vez, e sem isso seriam cinco cópias do mesmo
- * arquivo no acervo.
- */
-export async function promoverImagemDoItem(
-  personagemId: string,
-  itemId: string,
-): Promise<AssetMeta> {
-  const asset = await call<AssetMeta>("inventory_promote_imagem", {
-    id: personagemId,
-    itemId,
-  });
-
-  // Pode ter nascido um arquivo agora -- e por ser idempotente, pode não ter.
-  // Reler nos dois casos é uma chamada, e adivinhar qual foi custaria comparar
-  // com a lista de antes.
-  invalidarAcervo("image");
-
-  return asset;
-}
-
-/**
- * Põe a imagem do item na frente de tudo, na mesa.
- *
- * Dois caminhos, porque a imagem tem dois lugares possíveis — e é aqui que a
- * união marcada paga o que custou:
- *
- * `asset` já é alcançável pela TV por `/asset/{id}`, e basta apontar.
- *
- * `anexo` está atrás do token de quem o mandou, e o Espectador não tem token. O
- * daemon então o publica num endereço SORTEADO que morre quando sai do ar —
- * mesmo desenho da ficha. Copiar para o acervo seria o caminho fácil e deixaria
- * um duplicado por transmissão na biblioteca de imagens.
- *
- * Devolve o que a tela precisa guardar para saber se ESTE item é o que está no
- * ar: o id do acervo, ou o sorteado.
- */
-export async function transmitirItem(
-  personagemId: string,
-  item: ItemInventario,
-): Promise<{ assetId?: string; sharedId?: string }> {
-  if (!item.imagem)
-    throw new Error(t.arquivos.itemSemImagem);
-
-  if (item.imagem.tipo === "asset") return { assetId: item.imagem.id };
-
-  const sharedId = await shareCharacterAttachment(
-    personagemId,
-    item.imagem.autor,
-    item.imagem.arquivo,
-  );
-
-  return { sharedId };
 }

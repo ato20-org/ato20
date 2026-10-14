@@ -86,6 +86,13 @@ campaign file: a card on a board only points to it, so the same note shows up on
 without becoming two copies. Putting a board on air shows the whole sheet on the spectator
 window and on the phones.
 
+**Items** belong to the campaign, not to whoever carries them: the Items window keeps the
+catalog in folders, with search, and from there the sword goes into a character's backpack,
+onto the map, onto a pin's card or into the handout. Each item has an image, a Markdown
+description, free-form attributes ("Damage: 1d8+2 slashing", with the dice one click away)
+and meters whose value belongs to each backpack: Edgar's wand with 3 charges, Mira's with 5.
+Showing an item at the table puts its card on the TV and the phones, minus whatever is hidden.
+
 ![A note pinned to the map, then Board 1 opened from the Files tab: the Iron Front, with Bruno, the Enemy, the grenade, arrows and a sticky note](docs/midia/arquivos.gif)
 
 ## What already works

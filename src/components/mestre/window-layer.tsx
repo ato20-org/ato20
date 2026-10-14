@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react";
 import { DockGhost } from "@/components/mestre/dock/dock-ghost";
 import { DockOverlay } from "@/components/mestre/dock/dock-overlay";
 import {
+  AcoesDaJanela,
+  FundoDaJanela,
   JanelaCorpo,
   alturaPadrao,
   larguraPadrao,
@@ -113,6 +115,8 @@ function Conteudo({ janela, ordem }: { janela: Janela; ordem: number }) {
       subtitulo={subtitulo}
       largura={larguraPadrao(janela.conteudo)}
       altura={alturaPadrao(janela.conteudo)}
+      acoes={<AcoesDaJanela conteudo={janela.conteudo} />}
+      fundo={<FundoDaJanela conteudo={janela.conteudo} />}
     >
       <JanelaCorpo conteudo={janela.conteudo} />
     </InnerWindow>

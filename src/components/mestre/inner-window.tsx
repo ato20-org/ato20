@@ -47,6 +47,8 @@ export function InnerWindow({
   subtitulo,
   largura,
   altura,
+  acoes,
+  fundo,
   children,
 }: {
   janela: Janela;
@@ -54,6 +56,17 @@ export function InnerWindow({
   ordem: number;
   titulo: string;
   subtitulo?: string;
+  /**
+   * Botões da própria tela, antes do recolher e do fechar: o "mostrar na mesa"
+   * e o apagar do item. Ver `AcoesDaJanela`.
+   */
+  acoes?: ReactNode;
+  /**
+   * Um fundo da própria tela ATRÁS do cabeçalho: a imagem do item, desfocada.
+   * É o que identifica a janela recolhida, quando só o cabeçalho sobra na tela.
+   * Ver `FundoDaJanela`.
+   */
+  fundo?: ReactNode;
   /** Largura padrão, em pixels, até o mestre mexer na alça. */
   largura: number;
   /** Altura padrão, em pixels. Ausente = cresce com o conteúdo. */
@@ -174,7 +187,12 @@ export function InnerWindow({
       }}
     >
       <header
-        className="flex shrink-0 cursor-grab items-center gap-2 border-b px-2 py-1.5 select-none active:cursor-grabbing"
+        className={cn(
+          "flex shrink-0 cursor-grab items-center gap-2 border-b px-2 py-1.5 select-none active:cursor-grabbing",
+          // `isolate` cria a camada em que o fundo fica atrás com `-z-10`, sem
+          // descer para trás da própria janela.
+          fundo && "relative isolate overflow-hidden",
+        )}
         onPointerDown={(event) => {
           // Só o cabeçalho arrasta, e dentro dele nada que seja alvo de clique:
           // pegar a janela pelo X a moveria em vez de fechá-la.
@@ -220,6 +238,12 @@ export function InnerWindow({
           alternarRecolhida(janela.chave);
         }}
       >
+        {fundo ? (
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+            {fundo}
+          </div>
+        ) : null}
+
         <GripHorizontal
           className="text-muted-foreground size-3.5 shrink-0"
           aria-hidden
@@ -235,6 +259,8 @@ export function InnerWindow({
             </span>
           ) : null}
         </span>
+
+        {acoes}
 
         <Button
           variant="ghost"

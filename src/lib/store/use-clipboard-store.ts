@@ -175,7 +175,10 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           opacity,
           semSombra,
           sombra,
+          itemId,
         }) => ({
+          // O item da campanha vem junto, pela razão de `offsetDraft`.
+          ...(itemId ? { itemId } : {}),
           assetId,
           x,
           y,

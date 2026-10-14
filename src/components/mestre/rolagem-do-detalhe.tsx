@@ -154,8 +154,15 @@ export function RolagemDoDetalhe({
   );
 }
 
-/** Os dados da expressão, desenhados como os da mesa, na ordem em que foram escritos. */
-const DadosDaExpressao = memo(function DadosDaExpressao({ expressao }: { expressao: ExpressaoDeRolagem }) {
+/**
+ * Os dados da expressão, desenhados como os da mesa, na ordem em que foram
+ * escritos.
+ *
+ * Exportado para o atributo do ITEM, que rola como o detalhe: "1d8+2" é um d8
+ * desenhado nos dois lugares, e não um d20 genérico num e o dado de verdade no
+ * outro.
+ */
+export const DadosDaExpressao = memo(function DadosDaExpressao({ expressao }: { expressao: ExpressaoDeRolagem }) {
   return (
     <span className="flex items-center">
       {expressao.dados.map(({ quantidade, faces }, termo) => (

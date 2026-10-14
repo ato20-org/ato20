@@ -6,6 +6,13 @@ import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
+import {
+  ApagarItemNoTopo,
+  FundoDoItem,
+  ItemBody,
+  TransmitirItemNoTopo,
+} from "@/components/mestre/item-window";
+import { ItensBody } from "@/components/mestre/itens-window";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
@@ -16,6 +23,7 @@ import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { t } from "@/lib/i18n/mestre";
+import { useItensStore } from "@/lib/store/use-itens-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useMemo } from "react";
 
@@ -62,6 +70,9 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "camadas" }, titulo: t.janelas.camadas },
   { conteudo: { tipo: "sons" }, titulo: t.janelas.sons },
   { conteudo: { tipo: "personagens" }, titulo: t.janelas.personagens },
+  // Logo depois de Personagens: é para eles que os itens são arrastados, e
+  // quem abre um costuma querer o outro ao lado.
+  { conteudo: { tipo: "itens" }, titulo: t.janelas.itens },
   { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
   { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
   { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
@@ -113,6 +124,11 @@ export function useTelas(): Array<{
 export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
   const { personagens } = useCharacters();
   const extensoes = useExtensoesStore((state) => state.extensoes);
+  const nomeDoItem = useItensStore((state) =>
+    conteudo.tipo === "item"
+      ? state.itens?.find((item) => item.id === conteudo.itemId)?.nome
+      : undefined,
+  );
 
   switch (conteudo.tipo) {
     case "personagens":
@@ -120,6 +136,20 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
         titulo: t.janelas.personagens,
         subtitulo: t.janelas.personagensSub,
       };
+    case "itens":
+      return { titulo: t.janelas.itens, subtitulo: t.janelas.itensSub };
+    case "item": {
+      const dono = conteudo.personagemId
+        ? personagens?.find((atual) => atual.id === conteudo.personagemId)?.nome
+        : undefined;
+
+      // "Item" enquanto o catálogo não chegou, pela razão da ficha: título que
+      // aparece depois faz a aba pular.
+      return {
+        titulo: nomeDoItem ?? t.janelas.item,
+        subtitulo: dono ? t.janelas.itemNaMochila(dono) : t.janelas.itemSub,
+      };
+    }
     case "personagem": {
       const nome = personagens?.find(
         (atual) => atual.id === conteudo.personagemId,
@@ -191,6 +221,46 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
 }
 
 /**
+ * Os botões que a tela põe no TOPO da moldura, ao lado do fechar.
+ *
+ * Na moldura, e não dentro do corpo, porque são ações sobre a tela inteira e
+ * que se procuram onde se procura o fechar. Hoje é só o item: o "mostrar na
+ * mesa" e o apagar, que saíram do pé do card -- e com eles o pé inteiro.
+ *
+ * A janela flutuante os põe no cabeçalho dela; o grupo atracado, na tira de
+ * abas, ao lado do `+`, para a aba ativa.
+ */
+export function AcoesDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
+  switch (conteudo.tipo) {
+    case "item":
+      return (
+        <>
+          <TransmitirItemNoTopo itemId={conteudo.itemId} personagemId={conteudo.personagemId} />
+          <ApagarItemNoTopo itemId={conteudo.itemId} personagemId={conteudo.personagemId} />
+        </>
+      );
+    default:
+      return null;
+  }
+}
+
+/**
+ * O fundo que a tela põe ATRÁS do cabeçalho da moldura flutuante.
+ *
+ * Hoje é só o item: a imagem dele desfocada, a mesma do alto do card, para a
+ * janela ter a cor do item também no cabeçalho -- e, recolhida, ser
+ * reconhecida por ela, quando o cabeçalho é tudo o que sobra.
+ */
+export function FundoDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
+  switch (conteudo.tipo) {
+    case "item":
+      return <FundoDoItem itemId={conteudo.itemId} />;
+    default:
+      return null;
+  }
+}
+
+/**
  * A altura que a janela tem ao flutuar, até o mestre mexer na alça.
  * `undefined` = cresce com o conteúdo até o teto do palco, que é o padrão de
  * quase todas — ver `InnerWindow`.
@@ -208,6 +278,10 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     // cresceria com a lista ao lado -- o quadro ficaria do tamanho do elenco.
     case "retratos":
       return 440;
+    // O catálogo cresce como o chat: uma campanha longa junta centenas de
+    // itens, e crescer com eles cobriria o palco na primeira abertura.
+    case "itens":
+      return 480;
     default:
       return undefined;
   }
@@ -223,7 +297,12 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
 export function larguraPadrao(conteudo: ConteudoJanela): number {
   switch (conteudo.tipo) {
     case "personagens":
+    case "itens":
       return 256;
+    // Larga o bastante para a imagem do item ser vista, e não um ícone, e
+    // estreita o bastante para caber ao lado da ficha de quem o carrega.
+    case "item":
+      return 400;
     // Larga o bastante para as duas colunas da aba Ficha: as linhas de medidor
     // e de condição guardam lugar para o olho e a lixeira mesmo escondidos, e
     // abaixo disto o nome de cada uma virava duas letras.
@@ -328,6 +407,10 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
   switch (conteudo.tipo) {
     case "personagens":
       return <CharactersBody />;
+    case "itens":
+      return <ItensBody />;
+    case "item":
+      return <ItemBody itemId={conteudo.itemId} personagemId={conteudo.personagemId} />;
     case "personagem":
       return <CharacterBody personagemId={conteudo.personagemId} />;
     case "anexo":

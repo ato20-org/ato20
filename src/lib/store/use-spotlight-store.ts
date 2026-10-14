@@ -17,6 +17,16 @@ type SpotlightStore = {
    * atravessa para a TV.
    */
   origem: string | null;
+  /**
+   * O item da campanha que está no ar, quando é um.
+   *
+   * Local, como `origem`, e pela mesma razão: a mesa recebe o CARTÃO, e o id do
+   * catálogo não diz nada a ela. Aqui ele responde a pergunta que quatro telas
+   * fazem — a janela de Itens, a ficha, o ponto e o handout —: "é ESTE item que
+   * está no ar?". Antes cada uma guardava a própria resposta, e o botão de uma
+   * mentia sobre o que a outra tinha transmitido.
+   */
+  itemId: string | null;
 
   /**
    * Manda uma imagem do acervo para a frente de tudo, na TV e nos celulares.
@@ -34,6 +44,19 @@ type SpotlightStore = {
    * mestre, não evidência vazia na TV.
    */
   transmitShared: (sharedId: string, origem: string) => void;
+  /**
+   * Manda um item da campanha: o cartão com nome e descrição, e a imagem dele
+   * quando há uma. Ver `Spotlight.item`.
+   *
+   * A imagem chega resolvida, como em `transmitShared`: a do jogador precisa
+   * do endereço sorteado, e pedi-lo é IPC que pode falhar antes de algo ir ao
+   * ar. Ver `transmitirItem`.
+   */
+  transmitItem: (
+    itemId: string,
+    cartao: NonNullable<Spotlight["item"]>,
+    imagem: { assetId?: string; sharedId?: string },
+  ) => void;
   /** Tira da evidência. A mesa volta a ver só a cena. */
   clear: () => void;
 };
@@ -54,6 +77,7 @@ type SpotlightStore = {
 export const useSpotlightStore = create<SpotlightStore>((set) => ({
   spotlight: null,
   origem: null,
+  itemId: null,
 
   transmit(assetId) {
     // Fecha o endereço do anexo anterior: a mesa passou a olhar outra coisa, e
@@ -61,16 +85,32 @@ export const useSpotlightStore = create<SpotlightStore>((set) => ({
     // de sair do ar.
     void unshareAttachment();
 
-    set({ spotlight: { assetId, since: Date.now() }, origem: null });
+    set({
+      spotlight: { assetId, since: Date.now() },
+      origem: null,
+      itemId: null,
+    });
   },
 
   transmitShared(sharedId, origem) {
-    set({ spotlight: { sharedId, since: Date.now() }, origem });
+    set({ spotlight: { sharedId, since: Date.now() }, origem, itemId: null });
+  },
+
+  transmitItem(itemId, cartao, { assetId, sharedId }) {
+    // O endereço do anexo anterior fecha, como em `transmit` -- menos quando é
+    // justamente ele que este item vai usar.
+    if (!sharedId) void unshareAttachment();
+
+    set({
+      spotlight: { assetId, sharedId, item: cartao, since: Date.now() },
+      origem: cartao.nome,
+      itemId,
+    });
   },
 
   clear() {
     void unshareAttachment();
 
-    set({ spotlight: null, origem: null });
+    set({ spotlight: null, origem: null, itemId: null });
   },
 }));

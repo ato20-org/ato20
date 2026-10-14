@@ -104,7 +104,8 @@ export type Pulado = {
     | "condicaoJaExiste"
     | "condicoesNoMaximo"
     | "medidorJaExiste"
-    | "medidoresNoMaximo";
+    | "medidoresNoMaximo"
+    | "itensNoMaximo";
   nome: string;
 };
 
@@ -116,6 +117,11 @@ export type ImportadoDoPacote = {
   ambientes: Record<string, Ambiente[]>;
   /** Quantos personagens entraram. Já estão no disco; a tela só relê. */
   personagens: number;
+  /**
+   * Quantos itens da campanha entraram: os que as cenas e os inventários do
+   * pacote citam, com id novo. Ver `vault::pacote`.
+   */
+  itens: number;
   efeitos: number;
   condicoes: number;
   medidores: number;

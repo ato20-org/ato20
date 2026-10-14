@@ -137,6 +137,22 @@ export type CanvasItem = {
    */
   personagemId?: string;
   /**
+   * O item da campanha que esta peça É, quando ela é um.
+   *
+   * Mesmo desenho do `personagemId`, e pela mesma razão: sem ele a peça é uma
+   * imagem como outra qualquer, e o mapa não sabe que aquele baú É o "Baú do
+   * capitão" do catálogo. Com ele, o gizmo ganha a cor e os botões do item —
+   * abrir, transmitir —, e a lista de camadas o chama pelo nome.
+   *
+   * Exclusivo com `personagemId`: uma peça é token OU item, e é o token que
+   * vence quando alguém escrevesse os dois.
+   *
+   * O `assetId` continua sendo a imagem desenhada, e é a que a mesa vê: a TV
+   * não tem o catálogo, só a cena. Trocar a imagem do item no catálogo troca a
+   * das peças dele — ver `trocarImagemDoItem` no store.
+   */
+  itemId?: string;
+  /**
    * O grupo em que o item está na lista de camadas. Ausente = solto na raiz.
    *
    * Só organização: não muda o `z`, não muda o desenho. A mesa nunca vê grupo.
@@ -768,6 +784,19 @@ export type MapPin = {
    * "transmitir" usa para a imagem aparecer na TV.
    */
   attachments: string[];
+  /**
+   * Itens da campanha presos a este ponto, por id. Ausente = nenhum.
+   *
+   * O baú que o grupo ainda não abriu, a carta em cima da mesa: coisas que
+   * MORAM num lugar do mapa antes de ter dono. Lista própria, e não ids
+   * misturados em `attachments`: aquela é de arquivos do acervo, e quem a lê —
+   * o pacote, a contagem de uso de uma imagem — trataria o id de um item como
+   * uma imagem que sumiu.
+   *
+   * Opcional, ao contrário de `attachments`, para o ponto gravado antes dos
+   * itens abrir igual.
+   */
+  itens?: string[];
 };
 
 /** O que o chamador informa ao cravar um ponto; o resto é do store. */
@@ -1400,7 +1429,34 @@ export type Spotlight = {
    * o resto deste arquivo existe justamente para isso não sair da tela dele.
    *
    * A imagem se explica sozinha; quem a mandou está na mesa e pode falar.
+   *
+   * O ITEM é a exceção, e é deliberada: ver `item`.
    */
+  /**
+   * O item da campanha que está no ar, quando é um: o cartão dele.
+   *
+   * A volta da legenda, e o argumento que a tirou não vale aqui. O título do
+   * ponto era anotação do mestre sobre o MAPA; o nome e a descrição de um item
+   * são o próprio item, o mesmo texto que o jogador lê no inventário do
+   * celular quando o recebe. Transmitir a imagem da espada sem dizer que ela é
+   * a "Lâmina de Orvalho" obrigaria o mestre a ler em voz alta o que ele acabou
+   * de escrever — e item sem imagem nem teria o que mostrar.
+   *
+   * Cópia do texto, e não o id: a TV não tem o catálogo, e um id sozinho não
+   * diria nada a ela. A imagem continua em `assetId` ou `sharedId`, pelos
+   * caminhos de sempre.
+   *
+   * Os atributos e os medidores vão SEM os escondidos -- quem tira é quem
+   * transmite, antes de publicar, como o resto do que a mesa não vê. Os
+   * medidores com o valor da mochila de onde o item foi mostrado, ou cheios,
+   * quando foi mostrado do catálogo.
+   */
+  item?: {
+    nome: string;
+    descricao: string;
+    atributos?: Array<{ nome: string; valor: string }>;
+    medidores?: Medidor[];
+  };
   /**
    * Quando entrou no ar.
    *
@@ -2421,7 +2477,8 @@ export type UniaoDeRetratos = {
 export type NewCanvasItem = Pick<
   CanvasItem,
   "assetId" | "x" | "y" | "width" | "height" | "personagemId"
->;
+> &
+  Partial<Pick<CanvasItem, "itemId">>;
 
 /**
  * Item novo que pode trazer rotação e travamento próprios — é o que o
@@ -2567,9 +2624,10 @@ export type TipoDeCena = "quadro" | "fundo";
  *
  * Mapas e Fundos têm árvores separadas porque são abas separadas, e uma pasta
  * que aparecesse nas duas mostraria metade vazia em cada uma. Players e NPCs,
- * pela mesma razão: são as duas seções da lista de personagens.
+ * pela mesma razão: são as duas seções da lista de personagens. Itens têm a
+ * árvore deles, na janela de Itens.
  */
-export type ListaDePastas = "mapas" | "fundos" | "players" | "npcs";
+export type ListaDePastas = "mapas" | "fundos" | "players" | "npcs" | "itens";
 
 /**
  * Uma pasta de um dos painéis: quadros e notas no Arquivos, mapas, fundos e
@@ -2589,7 +2647,9 @@ export type Pasta = {
   /** Ausente = Arquivos, o que faz a pasta gravada antes das outras listas abrir no lugar. */
   lista?: ListaDePastas;
   /**
-   * Os personagens dentro dela, por id. Só nas listas `players` e `npcs`.
+   * Os personagens dentro dela, por id. Só nas listas `players`, `npcs` e
+   * `itens` -- nesta, os itens do catálogo, pela mesma razão: o item também
+   * vive num índice do vault servido ao celular.
    *
    * Aqui, e não num `pastaId` do personagem como o da cena: o personagem vive
    * no índice do vault, tipado em Rust e servido ao celular do jogador, e a
@@ -2675,6 +2735,15 @@ export type Scene = {
    * este campo antes de publicar.
    */
   handout?: string[];
+  /**
+   * Os itens da campanha no handout da cena, por id. Ausente = nenhum.
+   *
+   * Ao lado de `handout`, e não dentro dele, pela razão do `MapPin.itens`:
+   * aquela lista é de arquivos do acervo, e quem a lê espera achar imagens.
+   *
+   * NUNCA chega à mesa, como o `handout`: `sceneForTable` remove os dois.
+   */
+  handoutItens?: string[];
   /**
    * Nome, dados e medidores acima da cabeça de cada token. Ausente = desligado.
    *
@@ -3129,6 +3198,9 @@ export function cloneScene(source: Scene, name: string): Scene {
     // Mesma regra dos anexos: são ids do acervo, e a cópia aponta para os
     // mesmos arquivos.
     handout: source.handout ? [...source.handout] : undefined,
+    // Os itens também são do catálogo, e não da cena: a cópia aponta para os
+    // mesmos. Duplicar a taverna não duplica o baú.
+    handoutItens: source.handoutItens ? [...source.handoutItens] : undefined,
     textos: source.textos?.map(renovar),
     // A forma não referencia nada: id novo e pronto.
     formas: source.formas?.map(renovar),

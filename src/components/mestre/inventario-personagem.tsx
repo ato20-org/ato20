@@ -4,69 +4,47 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Eye,
   EyeOff,
-  ImagePlus,
   Minus,
   MoreHorizontal,
-  Package,
+  PackageMinus,
+  PackageOpen,
   Plus,
   Radio,
   RadioTower,
-  Trash2,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
+import { ImagemDoItem, imagemDesenhada } from "@/components/mestre/imagem-do-item";
+import { abrirItem } from "@/components/mestre/acoes-do-item";
+import { AdicionarAoInventario } from "@/components/mestre/adicionar-ao-inventario";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { comum } from "@/lib/i18n/comum";
+import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
 import { t } from "@/lib/i18n/personagens";
-import { MINIATURA } from "@/lib/miniatura";
 import { fitInitialSize } from "@/lib/geometry/transform";
-import {
-  useInventarioStore,
-  useVersaoInventario,
-} from "@/lib/store/use-inventario-store";
-import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
+import { useVersaoInventario } from "@/lib/store/use-inventario-store";
+import { itensMudaram } from "@/lib/store/use-itens-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
-import { characterAttachmentUrl } from "@/lib/vault/characters";
-import { assetUrl } from "@/lib/vault/assets";
+import { entregarItem } from "@/lib/mestre/entregar-item";
 import {
-  addItem,
-  escolherImagemDoDisco,
   listInventory,
-  moveItem,
   removeItem,
-  transmitirItem,
   updateItem,
 } from "@/lib/vault/inventory";
 import { cn } from "@/lib/utils";
 import type { Personagem } from "@/types/character";
-import type { ImagemItem, ItemInventario } from "@/types/inventory";
-import { chaveDaImagem } from "@/types/inventory";
+import { medidoresDoItem, type ItemInventario } from "@/types/inventory";
 
 import { SecaoFicha } from "./secao-ficha";
 
@@ -82,7 +60,6 @@ import { SecaoFicha } from "./secao-ficha";
 export type InventarioDaFicha = {
   /** `null` enquanto lê. */
   itens: ItemInventario[] | null;
-  recarregar: () => void;
   /** O inventário mudou, e com ele o que a lista de arquivos deve esconder. */
   mudou: () => void;
 };
@@ -92,16 +69,14 @@ export function useInventarioDaFicha(
   /**
    * A lista de ARQUIVOS do personagem precisa reler.
    *
-   * A imagem de item do jogador é um anexo, e a aba de arquivos subtrai
-   * justamente os que o inventário usa — ver `character_attachments`. Sem este
-   * aviso, apagar um item devolvia a imagem dele à lista de arquivos só depois
-   * de fechar e reabrir a ficha.
+   * A foto que o jogador sobe para um item é um anexo, e a aba de arquivos
+   * subtrai justamente os que algum item usa — ver `character_attachments`.
+   * Sem este aviso, apagar um item devolvia a imagem dele à lista de arquivos só
+   * depois de fechar e reabrir a ficha.
    */
   onChangedAnexos: () => void,
 ): InventarioDaFicha {
   const [itens, setItens] = useState<ItemInventario[] | null>(null);
-
-  const invalidar = useInventarioStore((state) => state.invalidar);
 
   const recarregar = useCallback(() => {
     listInventory(personagem.id).then(setItens, (cause: unknown) => {
@@ -112,37 +87,18 @@ export function useInventarioDaFicha(
     });
   }, [personagem.id]);
 
-  const mudou = useCallback(() => {
-    recarregar();
-    onChangedAnexos();
-  }, [recarregar, onChangedAnexos]);
-
-  // Releitura pedida de FORA: a ficha de outro personagem recebeu um item que
-  // saiu daqui, e quem executou o movimento foi ela. Sem este sinal, esta
-  // janela seguiria mostrando um item que já não está mais na pasta.
+  // Releitura pedida de FORA, e é o mesmo caminho da de dentro: a ficha de
+  // outro personagem recebeu um item que saiu daqui, a janela de Itens deu um
+  // item a este, ou o catálogo trocou o nome de um que está aqui. Quem mudou
+  // chama `itensMudaram`, e o número desta ficha sobe.
   const versao = useVersaoInventario(personagem.id);
 
   useEffect(recarregar, [recarregar, versao]);
 
-  const receber = useCallback(
-    async (de: string, itemId: string) => {
-      try {
-        const item = await moveItem(de, personagem.id, itemId);
-
-        // Os DOIS: aqui ganhou um item, e a ficha de onde ele saiu perdeu um --
-        // e ela é outra janela, que não fica sabendo de nada sozinha.
-        mudou();
-        invalidar(de);
-
-        toast.success(t.inventario.chegou(item.nome, personagem.nome));
-      } catch (cause) {
-        toast.error(
-          cause instanceof Error ? cause.message : t.inventario.falhaAoMover,
-        );
-      }
-    },
-    [mudou, invalidar, personagem.id, personagem.nome],
-  );
+  const mudou = useCallback(() => {
+    itensMudaram([personagem.id]);
+    onChangedAnexos();
+  }, [personagem.id, onChangedAnexos]);
 
   /**
    * Este inventário como destino do gesto.
@@ -167,16 +123,23 @@ export function useInventarioDaFicha(
             return;
           }
 
-          void receber(arrasto.fonte.personagemId, arrasto.fonte.itemId);
+          // Vindo de outra ficha muda de mão; de onde não é de ninguém, é dado.
+          // Ver `entregarItem`.
+          void entregarItem(
+            arrasto.fonte.itemId,
+            personagem,
+            arrasto.fonte.personagemId,
+          );
         }),
-    [personagem.id, receber],
+    [personagem],
   );
 
-  return { itens, recarregar, mudou };
+  return { itens, mudou };
 }
 
 /**
- * Um item de outra ficha está pairando sobre este inventário.
+ * Um item está pairando sobre este inventário — de outra ficha, ou de onde não
+ * é de ninguém.
  *
  * Booleano tirado do arrasto, e não estado próprio alimentado por
  * `dragenter`/`dragleave`: o gesto já sabe sobre que alvo o ponteiro está, e
@@ -196,7 +159,7 @@ export function useRecebendoItem(personagemId: string): boolean {
  * O inventário do personagem, na janela do mestre.
  *
  * A grade é de LISTA, não de slots fixos: os itens ocupam as posições em ordem
- * de criação, e um quadro vazio no fim é onde se clica para somar outro. Slot
+ * de chegada, e um quadro vazio no fim é onde se clica para somar outro. Slot
  * fixo pediria uma capacidade para o mestre configurar — uma pergunta que a mesa
  * não faz — e deixaria buraco no meio quando um item saísse.
  *
@@ -204,9 +167,8 @@ export function useRecebendoItem(personagemId: string): boolean {
  * mestre ver o que o jogador não vê, e o daemon o corta antes de responder ao
  * celular.
  *
- * É também ALVO de arrasto: um item largado aqui vindo da ficha de outro
- * personagem muda de dono — e, desde que o "Mover" saiu do diálogo, é o único
- * caminho para essa transferência.
+ * É também ALVO de arrasto: o item vindo da ficha de outro personagem muda de
+ * mão, e o vindo da janela de Itens é dado a este.
  */
 export function InventarioPersonagem({
   personagem,
@@ -215,37 +177,23 @@ export function InventarioPersonagem({
   personagem: Personagem;
   inventario: InventarioDaFicha;
 }) {
-  const { itens, recarregar, mudou } = inventario;
-  const [aberto, setAberto] = useState<ItemInventario | "novo" | null>(null);
+  const { itens, mudou } = inventario;
   const recebendo = useRecebendoItem(personagem.id);
-
-  async function criar() {
-    try {
-      const item = await addItem(personagem.id, { nome: t.inventario.semNome });
-      recarregar();
-
-      // Abre já no item criado: o gesto do mestre é "adicionar um item", e
-      // parar num quadro sem nome para ele clicar de novo seria meio gesto.
-      setAberto(item);
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : t.inventario.falhaAoCriar,
-      );
-    }
-  }
 
   // O botao de adicionar fica no cabecalho da secao, e nao aqui dentro: com a
   // secao fechada ele continua a mao, e por um item novo nao valer abrir a
-  // grade antes.
+  // grade antes. Ele abre o painel de criar ou escolher -- ver
+  // `AdicionarAoInventario`.
   const adicionar = (
-    <Button
-      variant="ghost"
-      size="icon-xs"
-      aria-label={t.inventario.adicionar}
-      onClick={() => void criar()}
-    >
-      <Plus />
-    </Button>
+    <AdicionarAoInventario
+      personagem={personagem}
+      naMochila={itens ?? []}
+      gatilho={
+        <Button variant="ghost" size="icon-xs" aria-label={t.inventario.adicionar}>
+          <Plus />
+        </Button>
+      }
+    />
   );
 
   if (itens === null) {
@@ -269,7 +217,6 @@ export function InventarioPersonagem({
             key={item.id}
             personagemId={personagem.id}
             item={item}
-            onAbrir={() => setAberto(item)}
             onChanged={mudou}
           />
         ))}
@@ -277,16 +224,22 @@ export function InventarioPersonagem({
         {/* UM vazio, no fim, e não os que completariam a linha: com `auto-fill`
             o número de colunas é decidido pelo navegador a cada largura, e o
             JavaScript não o conhece para contar quantos faltam. O quadro que
-            importa é este — o lugar onde se clica para adicionar. */}
-        <SlotVazio onAdicionar={() => void criar()} />
+            importa é este — o lugar onde se clica para adicionar. Abre o mesmo
+            painel do `+` do cabeçalho. */}
+        <AdicionarAoInventario
+          personagem={personagem}
+          naMochila={itens}
+          gatilho={
+            <button
+              type="button"
+              aria-label={t.inventario.adicionar}
+              className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square items-center justify-center rounded border border-dashed focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <Plus className="size-4" aria-hidden />
+            </button>
+          }
+        />
       </Grade>
-
-      <ItemDialog
-        personagem={personagem}
-        item={aberto === "novo" ? null : aberto}
-        onFechar={() => setAberto(null)}
-        onChanged={mudou}
-      />
     </SecaoFicha>
   );
 }
@@ -310,7 +263,7 @@ export function InventarioPersonagem({
 const PISO_QUADRO_PX = 80;
 
 /** Usado quando a imagem do item não disse a medida dela. */
-const TAMANHO_DE_RESERVA = { x: 480, y: 270 };
+const TAMANHO_DE_RESERVA = { x: 160, y: 160 };
 
 /** As linhas do menu do quadro, menores que o padrão do componente. */
 const ITEM_MENU =
@@ -321,7 +274,7 @@ function Grade({
   personagemId,
   children,
 }: {
-  /** Acende a borda: há um item de outra ficha pairando aqui. */
+  /** Acende a borda: há um item pairando aqui. */
   recebendo: boolean;
   /** De quem é esta grade. O gesto lê daqui para saber quem recebe. */
   personagemId: string;
@@ -338,7 +291,7 @@ function Grade({
         "grid gap-1.5 rounded-md border border-transparent transition-colors motion-reduce:transition-none",
         // A borda é do CONTÊINER e não de um quadro: o alvo é o inventário
         // inteiro, e não uma posição dentro dele -- a ordem dos itens é a de
-        // criação, e soltar entre dois não significa nada.
+        // chegada, e soltar entre dois não significa nada.
         recebendo && "border-primary bg-primary/5",
       )}
       // Inline porque o valor é um número, e não classe: uma classe Tailwind por
@@ -361,19 +314,17 @@ function Grade({
  * ruído — mas no hover ela aparece sempre, como stepper, porque é ali que se
  * sobe de 1 para 2.
  *
- * ARRASTÁVEL quando tem imagem: soltar no palco põe a peça no mapa. Só com
- * imagem, porque o que vai para o mapa é ela — um item sem imagem não teria o
- * que desenhar lá.
+ * ARRASTÁVEL sempre: para outra ficha ele muda de mão, para um ponto ou o
+ * handout fica guardado ali, e para o mapa — só com imagem, que é o que a peça
+ * desenha — vira peça.
  */
 function ItemTile({
   personagemId,
   item,
-  onAbrir,
   onChanged,
 }: {
   personagemId: string;
   item: ItemInventario;
-  onAbrir: () => void;
   onChanged: () => void;
 }) {
   const [ocupado, setOcupado] = useState(false);
@@ -387,17 +338,15 @@ function ItemTile({
   const naMao = useTokenDragStore(
     (state) =>
       state.arrasto?.fonte.tipo === "item" &&
+      state.arrasto.fonte.personagemId === personagemId &&
       state.arrasto.fonte.itemId === item.id,
   );
 
-  const { noAr, alternar: alternarTransmissao } = useTransmissaoDoItem(
-    personagemId,
-    item,
-  );
+  const { noAr, alternar: alternarTransmissao } = useTransmissaoDoItem(item);
 
   async function mexer(quanto: number) {
-    // Zero remove, e o Rust eleva para 1 — então a subtração para de descer
-    // aqui. Quem chegou a zero quer o botão da lixeira, que está ao lado.
+    // Zero tiraria do inventário, e o Rust eleva para 1 — então a subtração
+    // para de descer aqui. Quem chegou a zero quer o "Tirar", no menu ao lado.
     const alvo = Math.max(1, item.quantidade + quanto);
     if (alvo === item.quantidade) return;
 
@@ -430,9 +379,14 @@ function ItemTile({
     }
   }
 
-  async function apagar() {
-    if (!(await confirmarItem(item.nome))) return;
-
+  /**
+   * Tira daqui, sem perguntar.
+   *
+   * Perguntava quando tirar era apagar: o item morava só nesta mochila, e ia
+   * embora com a foto. Agora ele continua na campanha — na janela de Itens, e
+   * com quem mais o tiver —, e voltar é arrastá-lo de lá de novo.
+   */
+  async function tirar() {
     try {
       await removeItem(personagemId, item.id);
       onChanged();
@@ -446,12 +400,11 @@ function ItemTile({
   return (
     <div
       className={cn(
-        "group/item bg-card relative aspect-square overflow-hidden rounded border",
+        "group/item bg-card relative aspect-square cursor-grab overflow-hidden rounded border select-none active:cursor-grabbing",
         // Escondido tem marca PERMANENTE, e não só o ícone no canto: o mestre
         // olha a grade inteira de relance para saber o que a mesa já viu, e um
         // ícone de 12px não responde isso à distância.
         item.escondido && "border-dashed",
-        item.imagem && "cursor-grab select-none active:cursor-grabbing",
         naMao && "opacity-40",
       )}
       // O arrasto vai no contêiner e não no botão: o que se arrasta é o item
@@ -462,27 +415,24 @@ function ItemTile({
       // Gesto próprio e não o arrasto do navegador: é o que permite a sombra no
       // mapa e a roda escolhendo o tamanho no ar. Ver `useTokenDrag`.
       onPointerDown={(event) => {
-        if (!item.imagem) return;
-
         // A imagem do quadro é a prévia: ela já está resolvida na tela, e pedir
-        // de novo ao disco travaria o `pointerdown`, que é síncrono. Item sem
-        // imagem carregada não sobe — a sombra não teria o que mostrar.
-        const img = event.currentTarget.querySelector("img");
-        const url = img?.currentSrc || img?.src;
-        if (!img || !url) return;
+        // de novo ao disco travaria o `pointerdown`, que é síncrono. A medida é
+        // a da MINIATURA quando a imagem é do acervo: a proporção é a
+        // verdadeira, e quem decide o tamanho é a roda.
+        const desenhada = imagemDesenhada(event.currentTarget);
 
-        // A medida sai da imagem desenhada, que para asset é a MINIATURA: a
-        // proporção é a verdadeira, o tamanho absoluto é menor que o do
-        // arquivo. Quem decide o tamanho aqui é a roda, e a sombra mostra
-        // exatamente o que vai ser solto -- então o que precisa estar certo é a
-        // proporção.
         const tamanho =
-          img.naturalWidth > 0 && img.naturalHeight > 0
-            ? fitInitialSize(img.naturalWidth, img.naturalHeight)
+          desenhada && desenhada.largura > 0 && desenhada.altura > 0
+            ? fitInitialSize(desenhada.largura, desenhada.altura)
             : TAMANHO_DE_RESERVA;
 
         arrastar(event, {
-          fonte: { tipo: "item", personagemId, itemId: item.id, url },
+          fonte: {
+            tipo: "item",
+            itemId: item.id,
+            personagemId,
+            url: desenhada?.url,
+          },
           largura: tamanho.x,
           altura: tamanho.y,
         });
@@ -493,9 +443,9 @@ function ItemTile({
           é HTML inválido, e o clique no `+` subiria para abrir o diálogo. */}
       <button
         type="button"
-        onClick={onAbrir}
+        onClick={() => abrirItem(item, personagemId)}
         aria-label={item.escondido ? t.inventario.escondido(item.nome) : item.nome}
-        title={item.imagem ? t.inventario.arrasteParaAMesa(item.nome) : item.nome}
+        title={t.inventario.arrasteParaAMesa(item.nome)}
         className={cn(
           "focus-visible:ring-ring absolute inset-0 flex flex-col items-center justify-end gap-0.5 p-1 text-center focus-visible:ring-2 focus-visible:outline-none",
           // A opacidade é do CONTEÚDO, e não do quadro inteiro: no quadro ela
@@ -506,14 +456,15 @@ function ItemTile({
         )}
       >
         <ImagemDoItem
-          key={chaveDaImagem(item.imagem)}
-          personagemId={personagemId}
           imagem={item.imagem}
+          className="absolute inset-0 size-full object-cover opacity-90 group-hover:opacity-100"
         />
 
         <span className="relative line-clamp-2 text-[10px] leading-tight font-medium wrap-break-word">
           {item.nome}
         </span>
+
+        <BarraDoPrimeiroMedidor item={item} />
       </button>
 
       {/* A quantidade: badge parado, stepper no hover. O badge já morava neste
@@ -590,11 +541,10 @@ function ItemTile({
         </Tooltip>
       </div>
 
-      {/* Transmitir e remover atrás dos três pontinhos, e não como botões
+      {/* Abrir, transmitir e tirar atrás dos três pontos, e não como botões
           soltos: com a tira cheia eram quatro alvos disputando um quadro de 80
-          pixels, e os dois que sobraram aqui não são gestos de repetição --
-          transmite-se um item uma vez, e remove-se uma vez só. O que ficou à
-          vista é o que se repete: o olho e a quantidade. */}
+          pixels, e nenhum destes é gesto de repetição. O que ficou à vista é o
+          que se repete: o olho e a quantidade. */}
       <div
         className={cn(
           "absolute right-1 bottom-1 z-10",
@@ -622,32 +572,58 @@ function ItemTile({
             }
           />
 
-          {/* `text-xs` e rótulos de uma palavra: o menu nasce de um quadro de
-              80 pixels, e um popup mais largo que o próprio item era o que
+          {/* `text-xs` e rótulos curtos: o menu nasce de um quadro de 80
+              pixels, e um popup mais largo que o próprio item era o que
               "Mostrar na mesa" em `text-sm` produzia. O ícone diz o resto. */}
           <DropdownMenuContent align="end">
-            {item.imagem ? (
-              <DropdownMenuItem
-                className={ITEM_MENU}
-                onClick={alternarTransmissao}
-              >
-                {noAr ? <RadioTower /> : <Radio />}
-                {noAr ? t.inventario.tirar : t.inventario.mostrar}
-              </DropdownMenuItem>
-            ) : null}
-
             <DropdownMenuItem
               className={ITEM_MENU}
-              variant="destructive"
-              onClick={() => void apagar()}
+              onClick={() => abrirItem(item, personagemId)}
             >
-              <Trash2 />
+              <PackageOpen />
+              {t.inventario.abrir}
+            </DropdownMenuItem>
+
+            <DropdownMenuItem className={ITEM_MENU} onClick={alternarTransmissao}>
+              {noAr ? <RadioTower /> : <Radio />}
+              {noAr ? t.inventario.tirar : t.inventario.mostrar}
+            </DropdownMenuItem>
+
+            <DropdownMenuItem className={ITEM_MENU} onClick={() => void tirar()}>
+              <PackageMinus />
               {t.inventario.remover}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
     </div>
+  );
+}
+
+/**
+ * O primeiro medidor do item NESTA mochila, numa barra da largura do quadro.
+ *
+ * Só o primeiro, e só a proporção: o quadro tem 80 pixels, e o que ele precisa
+ * dizer de relance é "a varinha está quase sem carga". O número e os outros
+ * medidores estão na janela do item, a um clique.
+ */
+function BarraDoPrimeiroMedidor({ item }: { item: ItemInventario }) {
+  const [medidor] = medidoresDoItem(item, item.atuais);
+  if (!medidor) return null;
+
+  return (
+    <span
+      className="relative h-1 w-full overflow-hidden rounded-full bg-black/40"
+      title={`${medidor.nome} ${medidor.atual}/${medidor.maximo}`}
+    >
+      <span
+        className="absolute inset-y-0 left-0 rounded-full"
+        style={{
+          width: `${(medidor.atual / medidor.maximo) * 100}%`,
+          backgroundColor: medidor.cor,
+        }}
+      />
+    </span>
   );
 }
 
@@ -676,479 +652,3 @@ function Passo({
   );
 }
 
-function SlotVazio({ onAdicionar }: { onAdicionar: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onAdicionar}
-      aria-label={t.inventario.adicionar}
-      className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square items-center justify-center rounded border border-dashed focus-visible:ring-2 focus-visible:outline-none"
-    >
-      <Plus className="size-4" aria-hidden />
-    </button>
-  );
-}
-
-/**
- * A imagem do item, venha ela de onde vier.
- *
- * Os dois braços da união têm transportes diferentes, e esconder isso aqui é o
- * que deixa o resto da tela tratar item como item: `asset` é o acervo, que a
- * janela alcança pelo endereço do daemon; `anexo` está atrás do token de quem o
- * mandou, e o mestre chega a ele pelo IPC, como blob — mesma razão de
- * `AnexoThumb` em `character-window`.
- */
-function ImagemDoItem({
-  personagemId,
-  imagem,
-}: {
-  personagemId: string;
-  imagem: ImagemItem | undefined;
-}) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [falhou, setFalhou] = useState(false);
-
-  useEffect(() => {
-    if (!imagem) return;
-
-    let ativo = true;
-    let criada: string | null = null;
-
-    const pedido =
-      imagem.tipo === "asset"
-        ? assetUrl(imagem.id, "mini")
-        : characterAttachmentUrl(personagemId, {
-            autor: imagem.autor,
-            arquivo: imagem.arquivo,
-            mimeType: mimeDaImagem(imagem.arquivo),
-            tamanho: 0,
-          });
-
-    void pedido.then(
-      (endereco) => {
-        if (!ativo) {
-          // Trocou a imagem enquanto os bytes vinham. A blob nova não serve
-          // mais a ninguém, e guardá-la seria vazamento. O endereço do acervo
-          // não é blob e não precisa disso.
-          if (endereco.startsWith("blob:")) URL.revokeObjectURL(endereco);
-          return;
-        }
-
-        if (endereco.startsWith("blob:")) criada = endereco;
-        setUrl(endereco);
-      },
-      () => {
-        if (ativo) setFalhou(true);
-      },
-    );
-
-    return () => {
-      ativo = false;
-      if (criada) URL.revokeObjectURL(criada);
-    };
-  }, [personagemId, imagem]);
-
-  if (!imagem || falhou || !url) {
-    return (
-      <Package
-        className="text-muted-foreground/40 size-6 shrink-0"
-        aria-hidden
-      />
-    );
-  }
-
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt=""
-      draggable={false}
-      className="absolute inset-0 size-full object-cover opacity-90 group-hover:opacity-100"
-      onError={() => setFalhou(true)}
-      {...MINIATURA}
-    />
-  );
-}
-
-/**
- * O tipo do arquivo, pela extensão.
- *
- * A blob precisa de um tipo declarado para o `<img>` a desenhar, e o item guarda
- * só o NOME do anexo — o tamanho e o mime que `AnexoPersonagem` carrega vêm da
- * listagem de arquivos, que aqui não foi feita. Imagem é o único caso que chega
- * como imagem de item, e `image/png` é o palpite que o navegador corrige
- * sozinho quando erra o subtipo.
- */
-function mimeDaImagem(arquivo: string): string {
-  const extensao = arquivo.toLowerCase().split(".").pop() ?? "";
-
-  const conhecidos: Record<string, string> = {
-    png: "image/png",
-    jpg: "image/jpeg",
-    jpeg: "image/jpeg",
-    webp: "image/webp",
-    gif: "image/gif",
-    avif: "image/avif",
-    svg: "image/svg+xml",
-  };
-
-  return conhecidos[extensao] ?? "image/png";
-}
-
-/**
- * O item aberto: nome, descrição, quantidade, imagem — e o que só o mestre faz.
- *
- * Grava no `blur` de cada campo, e não num botão "salvar": é IPC para um arquivo
- * no disco da própria máquina, e o mestre que fecha a janela depois de digitar
- * não deveria perder o que escreveu. Mesma decisão da nota do jogador nesta
- * mesma janela.
- */
-function ItemDialog({
-  personagem,
-  item,
-  onFechar,
-  onChanged,
-}: {
-  personagem: Personagem;
-  item: ItemInventario | null;
-  onFechar: () => void;
-  onChanged: () => void;
-}) {
-  return (
-    <Dialog open={Boolean(item)} onOpenChange={(open) => !open && onFechar()}>
-      {/* Sem o X do canto: ele é absoluto no topo do diálogo, e aqui a primeira
-          coisa do diálogo é o campo de nome -- o botão caía POR CIMA do fim do
-          campo, e mirar no fechar apagava uma letra. O fechar desta janela mora
-          na própria linha do nome, onde tem lugar seu. */}
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
-        {item ? (
-          <ItemForm
-            key={item.id}
-            personagem={personagem}
-            item={item}
-            onFechar={onFechar}
-            onChanged={onChanged}
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * O quadro da imagem — que É o botão de escolhê-la.
- *
- * A tira de "Do disco / Do acervo" saiu daqui: eram dois botões para dizer o
- * que o próprio quadro já diz, e clicar na imagem é o gesto que todo mundo
- * tenta primeiro. Agora é o único, e o acervo entra pelo mesmo arrasto que já
- * serve para tudo o mais na mesa.
- *
- * Vazio, NÃO usa o ícone de caixa de `ImagemDoItem`: caixa é o desenho de
- * "item", e num quadro clicável ela dizia apenas que ali falta imagem — não que
- * o clique a põe. O "+" sobre a foto e a palavra embaixo dizem o gesto. Cheio, a
- * mesma frase volta no hover, por cima da imagem, porque aí o quadro já está
- * ocupado dizendo outra coisa.
- */
-function QuadroDaImagem({
-  personagemId,
-  item,
-  onTrocada,
-}: {
-  personagemId: string;
-  item: ItemInventario;
-  onTrocada: (item: ItemInventario) => void;
-}) {
-  const [escolhendo, setEscolhendo] = useState(false);
-
-  async function escolher() {
-    setEscolhendo(true);
-
-    try {
-      const novo = await escolherImagemDoDisco(personagemId, item.id);
-      if (novo) onTrocada(novo);
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : t.inventario.falhaAoImportar);
-    } finally {
-      setEscolhendo(false);
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void escolher()}
-      disabled={escolhendo}
-      aria-label={
-        item.imagem ? t.inventario.trocarImagemDoItem : t.inventario.escolherImagemDoItem
-      }
-      title={item.imagem ? t.inventario.trocarImagem : t.inventario.escolherDoDisco}
-      className={cn(
-        "group hover:border-ring focus-visible:ring-ring relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded border focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60",
-        !item.imagem &&
-          "text-muted-foreground hover:text-foreground border-dashed",
-      )}
-    >
-      {item.imagem ? (
-        <>
-          <ImagemDoItem
-            key={chaveDaImagem(item.imagem)}
-            personagemId={personagemId}
-            imagem={item.imagem}
-          />
-
-          <span className="bg-background/80 absolute inset-0 hidden flex-col items-center justify-center gap-0.5 group-hover:flex group-focus-visible:flex">
-            <ImagePlus className="size-4" aria-hidden />
-            <span className="text-[10px] leading-none font-medium">{t.inventario.trocar}</span>
-          </span>
-        </>
-      ) : (
-        <span className="flex flex-col items-center gap-1">
-          <ImagePlus className="size-5" aria-hidden />
-          <span className="text-[10px] leading-none font-medium">
-            {t.inventario.porImagem}
-          </span>
-        </span>
-      )}
-    </button>
-  );
-}
-
-function ItemForm({
-  personagem,
-  item,
-  onFechar,
-  onChanged,
-}: {
-  personagem: Personagem;
-  item: ItemInventario;
-  onFechar: () => void;
-  onChanged: () => void;
-}) {
-  const [atual, setAtual] = useState(item);
-
-  async function salvar(patch: Parameters<typeof updateItem>[2]) {
-    try {
-      setAtual(await updateItem(personagem.id, item.id, patch));
-      onChanged();
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : t.inventario.falhaAoSalvar,
-      );
-    }
-  }
-
-  async function apagar() {
-    if (!(await confirmarItem(item.nome))) return;
-
-    try {
-      await removeItem(personagem.id, item.id);
-      onChanged();
-      onFechar();
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : t.inventario.falhaAoRemover,
-      );
-    }
-  }
-
-  return (
-    <>
-      <DialogTitle className="sr-only">{atual.nome}</DialogTitle>
-      <DialogDescription className="sr-only">
-        {t.inventario.sobreODialogo}
-      </DialogDescription>
-
-      <div className="flex gap-3">
-        <QuadroDaImagem
-          personagemId={personagem.id}
-          item={atual}
-          onTrocada={(novo) => {
-            setAtual(novo);
-            onChanged();
-          }}
-        />
-
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex items-center gap-1">
-            <Input
-              defaultValue={atual.nome}
-              aria-label={t.inventario.nome}
-              className="flex-1"
-              onBlur={(event) => void salvar({ nome: event.target.value })}
-            />
-
-            <DialogClose
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={comum.fechar}
-                  className="shrink-0"
-                />
-              }
-            >
-              <X />
-            </DialogClose>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor={`qtd-${item.id}`} className="text-xs">
-              {t.inventario.quantidade}
-            </Label>
-            <Input
-              id={`qtd-${item.id}`}
-              type="number"
-              min={1}
-              className="w-20"
-              defaultValue={atual.quantidade}
-              onBlur={(event) =>
-                void salvar({ quantidade: Number(event.target.value) || 1 })
-              }
-            />
-          </div>
-        </div>
-      </div>
-
-      <Textarea
-        defaultValue={atual.descricao}
-        placeholder={t.inventario.descricaoExemplo}
-        aria-label={t.inventario.descricao}
-        className="min-h-20 text-sm"
-        onBlur={(event) => void salvar({ descricao: event.target.value })}
-      />
-
-      {/* Sobrou UM botão nesta tira. "Do disco" e "Do acervo" viraram o clique
-          no próprio quadro da imagem, e "Mover" saiu: o gesto é arrastar o item
-          para a outra ficha. Transmitir fica, porque não é sobre a imagem deste
-          diálogo, e sim sobre a TV. */}
-      {atual.imagem ? (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <TransmitirItem personagemId={personagem.id} item={atual} />
-        </div>
-      ) : null}
-
-      <DialogFooter className="sm:justify-between">
-        <label className="flex items-center gap-2 text-xs">
-          <Switch
-            checked={atual.escondido}
-            onCheckedChange={(escondido) => void salvar({ escondido })}
-          />
-          {atual.escondido ? (
-            <EyeOff className="size-3.5" />
-          ) : (
-            <Eye className="size-3.5" />
-          )}
-          {atual.escondido ? t.inventario.escondidoDoJogador : t.inventario.oJogadorVe}
-        </label>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive"
-          onClick={() => void apagar()}
-        >
-          <Trash2 /> {t.inventario.remover}
-        </Button>
-      </DialogFooter>
-    </>
-  );
-}
-
-/**
- * Põe a imagem do item na frente de tudo, na mesa.
- *
- * Existe aqui, e não só na ficha, porque é o que dá sentido a esconder um item:
- * esconder só vale a pena se revelar for um ato. O mestre tira o anel do
- * escondido e o põe na TV no mesmo diálogo.
- *
- * Os dois braços da imagem viram evidência por caminhos diferentes, e quem os
- * resolve é `transmitirItem`. O que fica aqui é só saber se ESTE item é o que
- * está no ar — para o botão poder tirá-lo.
- */
-/**
- * Pôr a imagem do item na frente de tudo, na mesa — e saber se é ela que está lá.
- *
- * Hook e não componente porque os dois lugares que transmitem desenham coisas
- * diferentes: o diálogo tem um botão com rótulo, e o quadro tem uma linha de
- * menu. O que eles compartilham é o rastreio de "o que está no ar é MEU", que
- * precisa de estado — e duplicá-lo faria o botão de um deles mentir sobre o
- * outro.
- */
-function useTransmissaoDoItem(personagemId: string, item: ItemInventario) {
-  const spotlight = useSpotlightStore((state) => state.spotlight);
-  const transmit = useSpotlightStore((state) => state.transmit);
-  const transmitShared = useSpotlightStore((state) => state.transmitShared);
-  const clear = useSpotlightStore((state) => state.clear);
-
-  const [meu, setMeu] = useState<string | null>(null);
-  const noAr =
-    Boolean(meu) && (spotlight?.assetId === meu || spotlight?.sharedId === meu);
-
-  async function transmitir() {
-    try {
-      // O endereço sai antes de a evidência subir: pedi-lo pode falhar, e
-      // falhar tem de virar aviso na tela do mestre, não evidência vazia na TV.
-      const { assetId, sharedId } = await transmitirItem(personagemId, item);
-
-      if (assetId) {
-        setMeu(assetId);
-        transmit(assetId);
-        return;
-      }
-
-      if (sharedId) {
-        setMeu(sharedId);
-        transmitShared(sharedId, item.nome);
-      }
-    } catch (cause) {
-      toast.error(
-        cause instanceof Error ? cause.message : t.geral.falhas.transmitir,
-      );
-    }
-  }
-
-  return { noAr, alternar: () => (noAr ? clear() : void transmitir()) };
-}
-
-function TransmitirItem({
-  personagemId,
-  item,
-}: {
-  personagemId: string;
-  item: ItemInventario;
-}) {
-  const { noAr, alternar } = useTransmissaoDoItem(personagemId, item);
-
-  if (!item.imagem) return null;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant={noAr ? "default" : "outline"}
-            size="sm"
-            aria-pressed={noAr}
-            onClick={alternar}
-          >
-            {noAr ? <RadioTower /> : <Radio />}
-            {noAr ? t.inventario.noAr : t.inventario.mostrar}
-          </Button>
-        }
-      />
-      <TooltipContent>
-        <p className="max-w-48">
-          {noAr ? t.geral.noArAgora : t.inventario.poeAImagem}
-        </p>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** As duas lixeiras do item, a da linha e a do editor, perguntam igual. */
-function confirmarItem(nome: string): Promise<boolean> {
-  return confirmarApagar({
-    titulo: t.inventario.apagarTitulo(nome),
-    itens: t.inventario.apagarItens(nome),
-  });
-}

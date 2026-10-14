@@ -21,17 +21,19 @@ import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/jogador";
 import { normaliza } from "@/lib/search";
 import { MINIATURA } from "@/lib/miniatura";
-import { characterFileThumbUrl } from "@/lib/player/characters";
 import {
   addItem,
+  itemImageUrl,
   myInventory,
   removeItem,
   updateItem,
   uploadItemImage,
 } from "@/lib/player/inventory";
 import { cn } from "@/lib/utils";
-import type { ImagemItem, ItemInventario, NovoItem } from "@/types/inventory";
-import { chaveDaImagem, meuItem } from "@/types/inventory";
+import type { ItemInventario, NovoItem } from "@/types/inventory";
+import { chaveDaImagem, medidoresDoItem, meuItem } from "@/types/inventory";
+import { DescricaoDoItem } from "@/components/playground/descricao-do-item";
+import { MedidoresDoItem } from "@/components/playground/medidores-do-item";
 
 /** Os itens de um personagem, e como reler. `null` = ainda lendo. */
 export function useItensDoPersonagem(codigo: string, personagemId: string) {
@@ -382,7 +384,7 @@ export function ItemTile({
         // O que é do mestre tem borda cheia; o que é do jogador, não. É a
         // mesma diferença que a lista de arquivos já faz entre "o que a mesa me
         // deu" e "o que eu juntei" — e aqui ela também diz onde há lixeira.
-        !meuItem(item) && "border-primary/40",
+        !meuItem(item, personagemId) && "border-primary/40",
         selecionado && "ring-primary ring-2",
       )}
     >
@@ -390,8 +392,7 @@ export function ItemTile({
         key={chaveDaImagem(item.imagem)}
         codigo={codigo}
         personagemId={personagemId}
-        imagem={item.imagem}
-        alt={item.nome}
+        item={item}
       />
 
       <span className="relative line-clamp-2 text-[10px] leading-tight font-medium wrap-break-word">
@@ -414,23 +415,25 @@ export function ItemTile({
  * celular a alcança sem credencial própria — mesma coisa que o retrato e a
  * miniatura já fazem neste cartão.
  *
- * `anexo` está atrás do token, e `<img src>` não manda cabeçalho. Vai pela
- * variante `mini` da rota do anexo, que devolve alguns KB em vez dos megabytes
- * do original — um print de 6 MB atravessando o 4G para virar um quadrado de
- * 80px é exatamente o que ela evita, e são N celulares na mesa.
+ * `anexo` — a foto que um jogador subiu — está atrás do token, e `<img src>`
+ * não manda cabeçalho. Vai pela rota do ITEM, e não pela do anexo: a foto mora
+ * na pasta do personagem por onde o item foi criado, e quem o carrega hoje pode
+ * ser outro, a quem o mestre o deu. A rota do item confere que ele está NESTE
+ * inventário e devolve a foto de onde ela estiver. A variante `mini` devolve
+ * alguns KB em vez dos megabytes do original — um print de 6 MB atravessando o
+ * 4G para virar um quadrado de 80px é exatamente o que ela evita, e são N
+ * celulares na mesa.
  */
 function ImagemDoItem({
   codigo,
   personagemId,
-  imagem,
-  alt,
+  item,
   variante = "mini",
   className = "absolute inset-0 size-full object-cover opacity-90",
 }: {
   codigo: string;
   personagemId: string;
-  imagem: ImagemItem | undefined;
-  alt: string;
+  item: ItemInventario;
   /** `tela` na foto grande do item aberto: a `mini` de 80px borraria ali. */
   variante?: "mini" | "tela";
   className?: string;
@@ -438,6 +441,7 @@ function ImagemDoItem({
   // O asset sai no próprio render: a rota é pública e o endereço é o id, sem
   // nada a buscar. Só o anexo precisa de efeito, porque a blob dele vem de uma
   // requisição com cabeçalho.
+  const imagem = item.imagem;
   const doAcervo = imagem?.tipo === "asset" ? `/asset/${imagem.id}/${variante}` : null;
 
   const [doAnexo, setDoAnexo] = useState<string | null>(null);
@@ -447,13 +451,7 @@ function ImagemDoItem({
 
     let ativo = true;
 
-    void characterFileThumbUrl(
-      codigo,
-      personagemId,
-      imagem.autor,
-      imagem.arquivo,
-      variante,
-    ).then(
+    void itemImageUrl(codigo, personagemId, item.id, imagem, variante).then(
       (endereco) => {
         if (ativo) setDoAnexo(endereco);
       },
@@ -466,7 +464,7 @@ function ImagemDoItem({
     return () => {
       ativo = false;
     };
-  }, [codigo, personagemId, imagem, variante]);
+  }, [codigo, personagemId, item.id, imagem, variante]);
 
   const url = doAcervo ?? doAnexo;
 
@@ -482,7 +480,7 @@ function ImagemDoItem({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={url}
-      alt={alt}
+      alt={item.nome}
       draggable={false}
       className={className}
       {...MINIATURA}
@@ -530,7 +528,7 @@ export function ItemForm({
   const [editando, setEditando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
 
-  const meu = meuItem(atual);
+  const meu = meuItem(atual, personagemId);
 
   async function salvar(patch: Parameters<typeof updateItem>[3]) {
     try {
@@ -594,8 +592,7 @@ export function ItemForm({
               key={chaveDaImagem(atual.imagem)}
               codigo={codigo}
               personagemId={personagemId}
-              imagem={atual.imagem}
-              alt={atual.nome}
+              item={atual}
               variante="tela"
               className={
                 painel
@@ -635,10 +632,34 @@ export function ItemForm({
           )}
         </div>
 
+        {/* Os atributos em quadros e os medidores DESTA mochila, como o
+            mestre os vê na janela do item -- menos os escondidos, que o daemon
+            cortou antes de responder. */}
+        {atual.atributos?.length ? (
+          <dl className="grid grid-cols-2 gap-1.5">
+            {atual.atributos.map((atributo) => (
+              <div
+                key={atributo.id}
+                className={cn(
+                  "bg-muted/30 min-w-0 rounded-lg border px-2.5 py-1.5",
+                  atributo.valor.length > 22 && "col-span-2",
+                )}
+              >
+                <dt className="text-muted-foreground truncate text-[10px] font-medium tracking-wide uppercase">
+                  {atributo.nome}
+                </dt>
+                <dd className="text-sm font-medium wrap-break-word">{atributo.valor || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
+        {atual.medidores?.length ? (
+          <MedidoresDoItem medidores={medidoresDoItem(atual, atual.atuais)} corpo={12} />
+        ) : null}
+
         {atual.descricao ? (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {atual.descricao}
-          </p>
+          <DescricaoDoItem texto={atual.descricao} className="text-sm" />
         ) : (
           <p className="text-muted-foreground text-sm">
             {t.inventario.semDescricao}
@@ -717,8 +738,7 @@ export function ItemForm({
                   key={chaveDaImagem(atual.imagem)}
                   codigo={codigo}
                   personagemId={personagemId}
-                  imagem={atual.imagem}
-                  alt={atual.nome}
+                  item={atual}
                 />
 
                 {/* Sempre visível, e não no hover: o dedo não paira. É uma
@@ -750,8 +770,7 @@ export function ItemForm({
               key={chaveDaImagem(atual.imagem)}
               codigo={codigo}
               personagemId={personagemId}
-              imagem={atual.imagem}
-              alt={atual.nome}
+              item={atual}
             />
           </div>
         ) : null}

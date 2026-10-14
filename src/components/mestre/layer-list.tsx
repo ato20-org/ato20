@@ -57,6 +57,7 @@ import {
   selecionarGrupo,
 } from "@/lib/mestre/item-actions";
 import { t } from "@/lib/i18n/ferramentas";
+import { useItens } from "@/lib/store/use-itens-store";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -108,8 +109,17 @@ export function LayerList({ scene }: { scene: Scene }) {
     [personagens],
   );
 
+  // A peça de item se chama pelo nome do item, como o token pelo do
+  // personagem: "Baú do capitão", e não o nome do arquivo da imagem.
+  const itens = useItens();
+  const porItem = useMemo(
+    () => new Map((itens ?? []).map((item) => [item.id, item.nome])),
+    [itens],
+  );
+
   const nomeDe = (item: CanvasItem) =>
     (item.personagemId ? porPersonagem.get(item.personagemId) : undefined) ??
+    (item.itemId ? porItem.get(item.itemId) : undefined) ??
     names.get(item.assetId);
 
   // Frente primeiro. É o inverso de como o palco desenha, de propósito: numa

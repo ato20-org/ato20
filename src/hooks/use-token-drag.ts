@@ -309,6 +309,16 @@ function ler(sob: Element): DestinoDoArrasto | null {
       pastaId: personagens?.dataset.pastaId || undefined,
     };
 
+  // A janela de Itens também fica sobre o mapa.
+  const itens = sob.closest<HTMLElement>("[data-pasta-itens]");
+  if (itens) return { tipo: "pasta-itens", pastaId: itens.dataset.pastaId || undefined };
+
+  // A linha de um personagem na lista: o item largado nela vai para ele.
+  const linha = sob.closest<HTMLElement>("[data-personagem-alvo]");
+  if (linha?.dataset.personagemAlvo) {
+    return { tipo: "personagem", personagemId: linha.dataset.personagemAlvo };
+  }
+
   const inventario = sob.closest<HTMLElement>("[data-inventario]");
   if (inventario?.dataset.personagemId) {
     return {

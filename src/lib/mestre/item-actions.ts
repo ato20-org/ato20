@@ -331,6 +331,10 @@ function offsetDraft(item: CanvasItem): ItemDraft {
     // com a linha do chão posta continua pisando no mesmo lugar.
     semSombra: item.semSombra,
     sombra: item.sombra,
+    // A cópia do baú do catálogo é outra peça do MESMO item, como soltá-lo duas
+    // vezes da janela de Itens: item é item, e pode estar em mais de um lugar.
+    // O token não vem junto -- um Edgar copiado não é um segundo Edgar.
+    ...(item.itemId ? { itemId: item.itemId } : {}),
   };
 }
 

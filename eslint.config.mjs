@@ -139,6 +139,8 @@ const eslintConfig = defineConfig([
       "src/components/playground/**/*.tsx",
       "src/components/mestre/pin-layer.tsx",
       "src/components/mestre/pin-note.tsx",
+      // A celula do item preso ao ponto mora no cartao dele.
+      "src/components/mestre/item-anexado.tsx",
       "src/components/mestre/postit-layer.tsx",
       "src/components/mestre/postit-texto-view.tsx",
       "src/components/mestre/dado-layer.tsx",
