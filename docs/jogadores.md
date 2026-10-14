@@ -26,11 +26,12 @@ GET    /eu/personagens/{id}/anexos/{autor}/{arquivo}[/{variante}]
 DELETE /eu/personagens/{id}/anexos/{autor}/{arquivo}
 GET    /eu/personagens/{id}/nota
 PUT    /eu/personagens/{id}/nota
-GET    /eu/personagens/{id}/inventario
-POST   /eu/personagens/{id}/inventario
-PATCH  /eu/personagens/{id}/inventario/{itemId}
+GET    /eu/personagens/{id}/inventario                 so o visivel, cada item com quantidade
+POST   /eu/personagens/{id}/inventario                 {nome, descricao?, quantidade?} -> 201
+PATCH  /eu/personagens/{id}/inventario/{itemId}        so o que o jogador escreveu por este personagem
 DELETE /eu/personagens/{id}/inventario/{itemId}
-PUT    /eu/personagens/{id}/inventario/{itemId}/imagem
+PUT    /eu/personagens/{id}/inventario/{itemId}/imagem multipart
+GET    /eu/personagens/{id}/inventario/{itemId}/imagem[/{variante}]
 GET    /eu/notas
 POST   /eu/notas           {titulo?, texto?, tags?} -> nota
 PATCH  /eu/notas/{id}      {titulo?, texto?, tags?}
@@ -55,6 +56,23 @@ jogador recebe só o retrato e a miniatura que estão no ar. Medidor escondido e
 do inventário saem pelo mesmo caminho, filtrados no daemon e não na tela. Mover o token
 passa por duas barreiras: o daemon confere o vínculo, e a janela do Mestre, que tem o board,
 confere que o item está na cena no ar, é deste personagem e não está travado.
+
+**O inventário é uma janela para o catálogo da campanha.** O item é da campanha, e o
+celular só vê o que está na mochila de um personagem dele, sem o escondido — nunca o
+catálogo inteiro (ver [campanha.md](campanha.md)). O jogador cria item pela mochila, e só
+edita, apaga ou fotografa o que ele mesmo escreveu por **aquele** personagem: o item que o
+mestre deu, ou que outro jogador escreveu e o mestre entregou também a este, é leitura —
+editar e apagar respondem 409, a foto responde 403. A imagem não vem no corpo do `POST` nem
+do `PATCH` (lá só `imagem: null`, para tirá-la): a foto entra pelo `PUT` multipart, e quem
+escreve onde ela mora é o daemon. Apagar o que escreveu tira o item da campanha se ninguém
+mais o carrega; se o mestre o deu a outro, ele sai só desta mochila.
+
+**A foto do item tem rota própria.** Ela mora na pasta do personagem por onde foi enviada,
+e o item pode estar hoje na mochila de outro, cujo jogador não alcança aquela pasta. O
+`GET .../inventario/{itemId}/imagem` serve a foto — inteira, ou na redução `mini` ou `tela`,
+com o mesmo cache de `/anexos` — se o item está, visível, no inventário do personagem
+pedido. Nada além da foto de um item visível atravessa, e a imagem que é do acervo responde
+404 aqui: ela vem pela rota pública `/asset/{id}`.
 
 **O ping é de quem está na mesa, e não de quem tem personagem.** Segurar o dedo no mapa
 abre a roda de pings — olhe aqui, cuidado, perigo, atacar, vou para lá, o que é isso? —, e o

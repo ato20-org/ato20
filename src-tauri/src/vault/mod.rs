@@ -11,6 +11,7 @@ pub mod detalhes;
 pub mod documentos;
 pub mod fio;
 pub mod inventory;
+pub mod itens;
 pub mod migrar;
 pub mod mime;
 pub mod modelos;
@@ -38,7 +39,11 @@ use atomic::{read_json, write_json};
 ///
 /// 2: o acervo entrou na arvore de Arquivos, e as pastas dele com ele. Ver
 /// `migrar::acervo_na_arvore`.
-pub const VAULT_VERSION: u32 = 2;
+///
+/// 3: o item passou a ser da campanha, num `itens.json` na raiz, e o
+/// inventario de cada personagem a guardar so referencias a ele. Ver
+/// `migrar::itens_da_campanha`.
+pub const VAULT_VERSION: u32 = 3;
 
 /// Identidade da campanha, no `config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

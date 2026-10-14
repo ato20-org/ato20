@@ -18,10 +18,11 @@ minha-campanha/
   documentos/
     rumores.md         os cartões de Markdown dos quadros
   personagens.json     o elenco, com medidores e condições de cada um
+  itens.json           o catálogo de itens da campanha
   personagens/
     c4d5.../
       _notas.json      a nota do personagem
-      _inventario.json
+      _inventario.json referências ao catálogo, com quantidade e "escondido" de cada uma
       _detalhes.json   Identidade, perícias, poderes: os detalhes da ficha
       _extensoes.json  os dados de cada plugin nesta ficha
       anexos/
@@ -146,6 +147,75 @@ cada pasta do acervo com o mesmo id, e põe nela o que estava solto. O `pastas.j
 guardado como `pastas.antigo.json`. A lista de campanhas recentes, que abre cada campanha
 para ler a capa, não migra nada. Ver `vault/migrar.rs`.
 
+## Os itens da campanha
+
+Desde a versão 3 do formato, **item é item**: ele é da campanha, e não de quem o carrega.
+O catálogo mora em `itens.json`, na raiz, e o `_inventario.json` de cada personagem guarda
+só referências a ele — `{itemId, quantidade, escondido, adicionadoEm, medidores?}`. A mesma poção pode
+estar na mochila de três personagens, e corrigir o nome dela no catálogo corrige nos três.
+Ver `vault/itens.rs` e `vault/inventory.rs`.
+
+Antes o item morava dentro do inventário, e isso respondia mal a duas coisas que a mesa
+pede: dar a mesma coisa a mais de um personagem (eram cópias, que divergiam na primeira
+correção de digitação) e ter itens que ainda não são de ninguém — o baú que o grupo não
+abriu, o anel pregado num ponto do mapa.
+
+**Quantidade e "escondido" são do inventário, não do item.** Um personagem tem três poções
+e outro uma; o mestre esconde o anel amaldiçoado na mochila de um e o mostra na de outro.
+Nome, descrição e imagem são do item, e mudam em todo inventário que o tem. Para o mestre e
+para o celular, o inventário volta achatado — o item com `quantidade` e `escondido` ao lado
+—, que é a mesma forma de antes com `criadoPor` a mais; uma entrada que aponta para um item
+que não existe mais é pulada em silêncio.
+
+**Atributos e medidores do item.** Os atributos são pares de nome e valor livres ("Dano:
+1d8+2 cortante", "Peso: 2 kg") e são do item: iguais em toda mochila. Os medidores
+(durabilidade, cargas, munição) são *definidos* no item, com a mesma forma de um modelo de
+medidor da campanha, mas o valor atual é de cada mochila: a espada do Edgar em 7/10 e a da
+Mira em 10/10 são o mesmo item. A entrada guarda só os valores que alguém mexeu
+(`medidores`, pelo id do medidor); medidor sem valor guardado está cheio, e o item fora de
+qualquer mochila — na janela de Itens — aparece cheio também. A leitura prende o valor
+guardado ao máximo de hoje e ignora o de um medidor que saiu do item, então encolher o
+máximo ou apagar um medidor não reescreve mochila nenhuma. O inventário achatado e a lista
+de portadores trazem esses valores já resolvidos em `atuais`. Atributo e medidor podem ser
+escondidos, e o daemon os corta — com o valor — antes de qualquer resposta ao celular, como
+faz com o item escondido. O celular nunca os escreve: a definição muda só por
+`item_update`, e o valor só pelo `inventory_update` do mestre.
+
+**Quem mexe em quê.** O mestre mexe em tudo, pelo IPC. O jogador mexe só no item que ele
+mesmo escreveu, e só pelo personagem por onde escreveu — é o `criadoPor` do item. A carta
+que o jogador do Edgar escreveu e o mestre deu também à Mira aparece no celular da Mira, e
+ela não a reescreve. Tirar da mochila, para o mestre, tira só a entrada: o item continua na
+campanha. Para o jogador, se ninguém mais carrega o que ele escreveu, o item sai do catálogo
+também — é a nota que o autor jogou fora. O teto de 40 itens por inventário conta só o que
+jogador escreveu, porque é isso que chega pela rede; o catálogo inteiro tem teto de 5 mil.
+
+**A foto do jogador fica onde chegou.** O jogador sobe a foto do item pelo celular, e ela
+vira anexo na pasta do personagem por onde chegou (`personagens/{id}/anexos/jogador/`), e
+não asset: o acervo é do mestre, e um celular na rede não o faz crescer. Por isso a imagem
+de um item é `{tipo: "asset", id}` ou `{tipo: "anexo", personagem, autor, arquivo}` — o
+`personagem` diz em que pasta a foto mora, e o campo não se chama `personagemId` porque o
+pacote trata essa chave como "leve este personagem junto". Quando o item passa a outra
+mochila, a foto não se copia: quem o carrega por outro personagem a vê por
+`/eu/personagens/{id}/inventario/{itemId}/imagem`, que confere que o item está, visível, no
+inventário *dele*. Remover um personagem leva antes para o acervo a foto de cada item que
+mora na pasta dele, porque o item sobrevive ao personagem.
+
+**Uma trava para o catálogo e os inventários.** Com um `itens.json` que o mestre grava pelo
+IPC e vários celulares gravam pelo daemon, cada um numa thread, ler, mudar e gravar sem
+trava perdia atualização: dois jogadores criando item no mesmo instante, e o segundo
+`save` apagava o do primeiro. Toda leitura-e-escrita dos dois arquivos passa por uma trava
+só, do processo — uma por arquivo, pedidas em ordens diferentes por dois caminhos, seriam um
+deadlock esperando acontecer. Ler não trava: a escrita é atômica.
+
+**A migração da versão 2.** Ao abrir uma campanha da versão 2, cada item de cada inventário
+vira um item do catálogo com o **mesmo id** — a cena que o citava continua citando — e uma
+entrada com a quantidade e o escondido que ele tinha. A foto continua no arquivo onde
+estava; nenhum arquivo se move. Só os personagens do índice entram, e um inventário
+ilegível fica como está, com aviso no log. O passo é repetível: o catálogo é gravado antes
+dos inventários, e rodar de novo não duplica nada. Um mesmo id em dois personagens (o
+personagem importado de pacote na mesma campanha copiava os ids) vira um item só se as
+cópias forem iguais, e dois se divergiram.
+
 ## Pastas dos painéis
 
 Arquivos, Mapas, Fundos e as duas seções de Personagens (Players e NPCs) têm pastas
@@ -231,9 +301,19 @@ viaja sem o pacote saber dele. Um mapa leva a imagem, o céu, os tokens, os anex
 pins, o handout, os sons de ambiente e os efeitos da campanha que usa; um personagem leva
 a ficha, a pasta dele e os retratos, menos as notas dos jogadores e o vínculo com jogador.
 
+**Os itens da campanha viajam do mesmo jeito.** Todo texto igual ao id de um item do
+catálogo — a peça de mapa, o ponto, o handout, a entrada do inventário — leva o item para o
+`itens.json` do pacote, com a imagem do acervo que ele usa. A foto de jogador só viaja se o
+personagem em cuja pasta ela mora viaja; senão o item vai sem imagem. Na importação cada
+item ganha **id novo**, e a cena e o inventário que o citam são reescritos para ele; o
+`criadoPor` e a foto passam ao personagem novo, ou caem se ele não entrou. Um pacote de
+antes da versão 3, com o item inteiro dentro do inventário, passa pela mesma conversão da
+migração ao ser lido.
+
 **Importar nunca sobrescreve.**
 
-- Asset, cena e personagem entram com id novo; nome repetido ganha "(2)".
+- Asset, cena, personagem e item entram com id novo; nome repetido de cena e personagem
+  ganha "(2)". Acima do teto de itens da campanha, o resto fica de fora, com aviso.
 - Efeito, condição e modelo de medidor com o mesmo nome de um da campanha ficam de fora,
   e o que apontava para eles passa a apontar para o da campanha. O import avisa, e
   respeita os tetos (32 efeitos, 16 condições, 6 modelos).
@@ -244,7 +324,7 @@ a ficha, a pasta dele e os retratos, menos as notas dos jogadores e o vínculo c
 
 **A cena importada entra pelo store da tela**, e não por escrita em `cenas/`: o autosave
 grava a lista do store como a verdade e apagaria o arquivo que chegasse por fora. O Rust
-grava o que é dele (acervo, efeitos, condições, modelos, personagens) e devolve as cenas,
+grava o que é dele (acervo, efeitos, condições, modelos, itens, personagens) e devolve as cenas,
 os ambientes e as chaves do registro para a tela pôr no lugar.
 
 **Plugins que faltam.** O diálogo de importar lista os plugins que o conteúdo marcado cita
