@@ -953,10 +953,8 @@ const QuadroRow = memo(function QuadroRow({
           <Columns2 />
           {t.geral.abrirAoLado}
         </Item>
-        <Item disabled={noAr} onClick={() => store().setLiveSceneId(scene.id)}>
-          <Radio />
-          {t.arquivosList.colocarNoAr}
-        </Item>
+        {/* Sem "Colocar no ar": a mesa de trabalho do mestre só vai à TV
+            de propósito, pela paleta. Ver `OnAirControl`. */}
         <Separator />
         <Item onClick={renomear.pedir}>
           <TextCursorInput />

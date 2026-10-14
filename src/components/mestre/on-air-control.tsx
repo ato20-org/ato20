@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { t } from "@/lib/i18n/cenas";
 import { selectCapa, selectLiveScene, useSceneStore } from "@/lib/store/use-scene-store";
-import type { Scene } from "@/types/scene";
+import { ehQuadro, type Scene } from "@/types/scene";
 
 /**
  * O que está no ar e como trocar.
@@ -81,7 +81,12 @@ export function OnAirControl({ editing }: { editing: Scene | null }) {
         </TooltipContent>
       </Tooltip>
 
-      {editing && !editingIsLive ? (
+      {/* Não com um quadro no palco. O quadro é a mesa de trabalho do mestre,
+          e este botão fica à vista o tempo todo enquanto ele trabalha nela: um
+          clique distraído punha as anotações dele na TV. O menu do quadro no
+          Arquivos perdeu o "Colocar no ar" pelo mesmo motivo: pôr um quadro no
+          ar continua possível, de propósito, só pela paleta. */}
+      {editing && !editingIsLive && !ehQuadro(editing) ? (
         <Button
           variant="secondary"
           size="sm"
