@@ -575,6 +575,9 @@ const pt = {
     quadroSumiu: "Este quadro não existe mais.",
     editarNoPalco: "Editar no palco",
     editarNoPalcoDica: "Abrir este quadro no palco para editar",
+    dividirAEsquerda: "Dividir à esquerda",
+    dividirADireita: "Dividir à direita",
+    abrirComoAba: "Abrir como aba",
   },
 
   /** O menu Abas, na barra da janela. */
@@ -1472,6 +1475,9 @@ const en: typeof pt = {
     quadroSumiu: "This board no longer exists.",
     editarNoPalco: "Edit on the stage",
     editarNoPalcoDica: "Open this board on the stage to edit it",
+    dividirAEsquerda: "Split left",
+    dividirADireita: "Split right",
+    abrirComoAba: "Open as a tab",
   },
 
   abas: {
