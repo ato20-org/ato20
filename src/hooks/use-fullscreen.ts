@@ -67,12 +67,19 @@ export function useFullscreen(): {
 
     setExpanded(true);
 
-    // Tudo daqui para baixo é melhor-esforço.
-    void element
-      ?.requestFullscreen?.()
-      .then(() => {
-        concedido.current = element;
+    // A página já está em tela cheia (ver `useTelaCheiaDaPagina`) e é ela que
+    // se pede: não há o que pedir, só deitar a tela. E sem `concedido`, sair
+    // do mapa deixa a página na tela cheia que já era dela.
+    const pedido =
+      element !== null && document.fullscreenElement === element
+        ? Promise.resolve()
+        : element?.requestFullscreen?.().then(() => {
+            concedido.current = element;
+          });
 
+    // Tudo daqui para baixo é melhor-esforço.
+    void pedido
+      ?.then(() => {
         // Cena é 16:9. Num celular em retrato ela sobra tela dos dois lados, e
         // deitar a tela é o que torna a leitura de mapa possível. Só existe em
         // parte dos navegadores e só dentro de tela cheia.
@@ -91,7 +98,9 @@ export function useFullscreen(): {
     if (concedido.current && document.fullscreenElement === concedido.current) {
       void document.exitFullscreen().catch(() => {});
     }
-    if (concedido.current) destravarOrientacao();
+    // Sempre: com a página já em tela cheia não houve `concedido`, mas a tela
+    // foi deitada do mesmo jeito.
+    destravarOrientacao();
     concedido.current = null;
   }
 

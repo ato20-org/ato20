@@ -96,11 +96,15 @@ export function JogadorShell({
    * sobre a tela é o CSS (`fixed inset-0 z-50`), como no iPhone, onde a API
    * nativa não existe; a nativa só tira a barra do navegador, e a evidência,
    * em `z-60`, fica por cima dos dois jeitos.
+   *
+   * Não é a `telaCheia` lá embaixo: aquela é a da página inteira
+   * (`useTelaCheiaDaPagina`), que deixa a ficha e o chat onde estão; esta
+   * estica o mapa sobre eles.
    */
-  const telaCheia = useFullscreen();
+  const telaCheiaDoMapa = useFullscreen();
   const telaCheiaDaMesa = {
-    expandida: telaCheia.expanded,
-    onTelaCheia: () => telaCheia.toggle(document.documentElement),
+    expandida: telaCheiaDoMapa.expanded,
+    onTelaCheia: () => telaCheiaDoMapa.toggle(document.documentElement),
   };
 
   /**
