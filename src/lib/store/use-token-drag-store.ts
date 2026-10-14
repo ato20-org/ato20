@@ -57,14 +57,21 @@ export type FonteDoArrasto =
    */
   | { tipo: "ponto"; pinId: string; assetId: string }
   /**
-   * Um item de inventário.
+   * Um item da campanha.
+   *
+   * `personagemId` diz de que INVENTÁRIO ele saiu, quando saiu de um: largado
+   * na ficha de outro personagem ele MUDA de mão. Sem ele o item veio de onde
+   * não é de ninguém — a janela de Itens, um ponto, o handout — e largado num
+   * personagem é DADO, e continua onde estava. Item é item: dar não tira do
+   * catálogo.
    *
    * Carrega a URL já resolvida, e não um `assetId`, porque a imagem do item
-   * pode ser um anexo do personagem, que não tem id de acervo. Ele só vira
-   * asset quando é solto no mapa — ver `promoverImagemDoItem`, que é ida ao
-   * disco e não cabe num `pointerdown`, que é síncrono.
+   * pode ser a foto do jogador, que não tem id de acervo. Ela só vira asset
+   * quando o item é solto no mapa — ver `promoverImagemDoItem`, que é ida ao
+   * disco e não cabe num `pointerdown`, que é síncrono. Sem URL o item não vai
+   * ao mapa, que é onde só a imagem diz alguma coisa; vai a todo o resto.
    */
-  | { tipo: "item"; personagemId: string; itemId: string; url: string }
+  | { tipo: "item"; itemId: string; personagemId?: string; url?: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -82,6 +89,13 @@ export type DestinoDoArrasto =
   | { tipo: "palco" }
   /** A grade de inventário de outro personagem. */
   | { tipo: "inventario"; personagemId: string }
+  /**
+   * A linha de um personagem na lista de Personagens: o item largado nela vai
+   * para o inventário dele, com a ficha aberta ou não.
+   */
+  | { tipo: "personagem"; personagemId: string }
+  // Uma pasta da janela de Itens. `undefined` é a raiz.
+  | { tipo: "pasta-itens"; pastaId: string | undefined }
   /** A bolinha do handout da cena em edição. */
   | { tipo: "handout" }
   /**
@@ -141,6 +155,13 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return "palco";
     case "inventario":
       return `inventario:${destino.personagemId}`;
+    // Uma chave só para todas as linhas: quem recebe é a lista, que sabe dar o
+    // item a qualquer personagem -- ao contrário do inventário, que existe uma
+    // vez por ficha aberta.
+    case "personagem":
+      return "linha-personagem";
+    case "pasta-itens":
+      return "itens";
     case "handout":
       return "handout";
     case "ponto":
@@ -172,7 +193,9 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
  *   "guarde isto aqui", e item de inventário e miniatura de personagem não são
  *   arquivos que se guardem — a casa deles é a ficha;
  * - inventário só recebe item, e nunca o do próprio dono: mover um item para
- *   onde ele já está é um gesto sem efeito, e o Rust o recusa.
+ *   onde ele já está é um gesto sem efeito, e o Rust o recusa;
+ * - o mapa só recebe item com imagem: a peça É a imagem, e um item sem ela
+ *   não teria o que desenhar lá.
  */
 export function aceita(
   fonte: FonteDoArrasto,
@@ -183,7 +206,9 @@ export function aceita(
       // Mapa não cai no palco: ele É um palco. Só vira menção. E personagem sem
       // miniatura não tem peça para pôr ali.
       return (
-        fonte.tipo !== "cena" && !(fonte.tipo === "personagem" && !fonte.assetId)
+        fonte.tipo !== "cena" &&
+        !(fonte.tipo === "personagem" && !fonte.assetId) &&
+        !(fonte.tipo === "item" && !fonte.url)
       );
     case "nota":
       // O que tem nome para ser mencionado: `/arquivo`, `@personagem`, `>mapa`.
@@ -210,17 +235,22 @@ export function aceita(
       // Player largado numa pasta de NPCs continuaria aparecendo em Players.
       return fonte.tipo === "personagem" && fonte.secao === destino.lista;
     case "inventario":
+    case "personagem":
       return (
         fonte.tipo === "item" && fonte.personagemId !== destino.personagemId
       );
+    case "pasta-itens":
+      // Só o item que veio do catálogo: o de uma ficha largado numa pasta
+      // pareceria sair da mochila e não sairia.
+      return fonte.tipo === "item" && fonte.personagemId === undefined;
     case "handout":
-      // Só do acervo: o handout guarda ids de acervo, e retrato de personagem
-      // e imagem de item já têm dono. Ver `Scene.handout`.
-      return fonte.tipo === "acervo";
+      // Do acervo, e o item da campanha. Retrato de personagem já tem dono, e
+      // a imagem que o handout guarda é id de acervo. Ver `Scene.handout` e
+      // `Scene.handoutItens`.
+      return fonte.tipo === "acervo" || fonte.tipo === "item";
     case "ponto":
-      // Pela mesma razão do handout: o anexo do ponto é id de acervo. Ver
-      // `MapPin.attachments`.
-      return fonte.tipo === "acervo";
+      // Pela mesma razão do handout. Ver `MapPin.attachments` e `MapPin.itens`.
+      return fonte.tipo === "acervo" || fonte.tipo === "item";
   }
 }
 

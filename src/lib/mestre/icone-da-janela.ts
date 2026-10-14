@@ -9,6 +9,8 @@ import {
   MessagesSquare,
   MonitorPlay,
   Music,
+  Package,
+  PackageOpen,
   Paperclip,
   Puzzle,
   ScrollText,
@@ -60,6 +62,13 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Music;
     case "personagens":
       return Users;
+    // A caixa, e não a mochila: o catálogo é o que a campanha TEM, e não o que
+    // alguém carrega. É o mesmo desenho do item sem imagem nas grades.
+    case "itens":
+      return Package;
+    // A caixa aberta: é o item que se abriu para ler.
+    case "item":
+      return PackageOpen;
     case "personagem":
       // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
       // ícone na mesma tira não distinguem nada.

@@ -83,6 +83,13 @@ arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma not
 dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na janela do
 espectador e no celular.
 
+Os **itens** são da campanha, e não de quem os carrega: a janela Itens guarda o catálogo em
+pastas, com busca, e de lá a espada vai para a mochila de um personagem, para o mapa, para o
+cartão de um ponto ou para o handout. Cada item tem imagem, descrição em Markdown, atributos
+livres ("Dano: 1d8+2 cortante", com o dado a um clique) e medidores, cujo valor é de cada
+mochila — a varinha do Edgar com 3 cargas, a da Mira com 5. Mostrar um item na mesa põe o
+cartão dele na TV e nos celulares, sem o que está escondido.
+
 ![A nota fixada no mapa, depois o Quadro 1 aberto pela aba Arquivos: a Frente de Ferro, com Bruno, o Inimigo, a granada, setas e post-it](docs/midia/arquivos.gif)
 
 ## O que já funciona

@@ -231,6 +231,12 @@ type SceneStore = {
     lista: "players" | "npcs",
     pastaId: string | undefined,
   ) => void;
+  /**
+   * Leva um item do catálogo para uma pasta da janela de Itens. `undefined` é
+   * a raiz. Mesmo desenho do personagem: o item vive num índice do vault, e a
+   * pasta guarda os ids dele em `membros`.
+   */
+  moverItemParaPasta: (itemId: string, pastaId: string | undefined) => void;
 
   /**
    * As notas `.md`. O arquivo já existe quando a nota entra -- quem o cria é
@@ -524,6 +530,28 @@ type SceneStore = {
   guardarNoHandout: (sceneId: string, assetIds: string[]) => void;
   tirarDoHandout: (sceneId: string, assetId: string) => void;
 
+  /** Prende itens da campanha ao ponto, sem repetir. Ver `MapPin.itens`. */
+  prenderItensNoPonto: (sceneId: string, pinId: string, itemIds: string[]) => void;
+  soltarItemDoPonto: (sceneId: string, pinId: string, itemId: string) => void;
+  /** Guarda itens da campanha no handout, sem repetir. Ver `Scene.handoutItens`. */
+  guardarItensNoHandout: (sceneId: string, itemIds: string[]) => void;
+  tirarItemDoHandout: (sceneId: string, itemId: string) => void;
+  /**
+   * A imagem do item mudou no catálogo: as peças dele no mapa, em todas as
+   * cenas, passam a desenhar a nova. Ver `CanvasItem.itemId`.
+   */
+  trocarImagemDoItem: (itemId: string, assetId: string) => void;
+  /**
+   * O item foi apagado do catálogo: some dos pontos, dos handouts e das
+   * pastas, e as peças dele no mapa voltam a ser só imagem.
+   *
+   * Só imagem, e não apagadas: a peça é desenho que o mestre pôs no mapa, e
+   * apagar o catálogo não é o gesto de mexer no mapa — o baú continua lá,
+   * agora sem nome. Num passo só, e com desfazer, como o resto do board; o
+   * catálogo é do Rust e não volta pelo Ctrl+Z.
+   */
+  esquecerItem: (itemId: string) => void;
+
   /** Cola um postit. Devolve o id, para já abrir o texto dele para digitar. */
   addPostit: (sceneId: string, postit: NewPostit) => string;
   updatePostit: (
@@ -723,6 +751,33 @@ export function comAsAparenciasAtivas(
 }
 
 /**
+ * O ponto sem este item. O mesmo objeto quando ele não estava lá, para quem
+ * mapeia todos os pontos não trocar a identidade dos que não mudaram.
+ */
+function semItemNoPonto(pin: MapPin, itemId: string): MapPin {
+  if (!pin.itens?.includes(itemId)) return pin;
+
+  // `itens` vazio sai do objeto, pela mesma razão de `membros` abaixo.
+  const solto: MapPin = { ...pin, itens: pin.itens.filter((id) => id !== itemId) };
+  if (solto.itens?.length === 0) delete solto.itens;
+  return solto;
+}
+
+/**
+ * A pasta sem este membro. `membros` vazio sai do objeto, como `grupos` na
+ * cena: a pasta que nunca teve ninguém e a que esvaziou gravam igual.
+ */
+function semMembro(pasta: Pasta, membroId: string): Pasta {
+  if (!pasta.membros?.includes(membroId)) return pasta;
+
+  const membros = pasta.membros.filter((id) => id !== membroId);
+  const resto = { ...pasta };
+  if (membros.length > 0) resto.membros = membros;
+  else delete resto.membros;
+  return resto;
+}
+
+/**
  * `comAsAparenciasAtivas` com os personagens que o store já leu.
  *
  * Lista ainda não lida (`null`) devolve o board como está: o Mestre acabou de
@@ -740,6 +795,41 @@ export const useSceneStore = create<SceneStore>((set, get) => {
    * o histórico. Navegação — qual cena está aberta, qual está no ar — usa
    * `set` direto: desfazer deve voltar edições, não passos de navegação.
    */
+  /**
+   * Leva um membro -- personagem ou item -- para uma pasta da lista dele.
+   *
+   * Uma conta só para os dois, porque são o mesmo gesto: os dois vivem num
+   * índice do vault, e a pasta guarda os ids deles em `membros`. Só mexe nas
+   * pastas DESTA lista: o NPC que vira Player continua na pasta de NPCs.
+   */
+  function moverMembro(
+    membroId: string,
+    lista: "players" | "npcs" | "itens",
+    pastaId: string | undefined,
+  ) {
+    const { board } = get();
+    if (!board) return;
+    const pastas = board.pastas ?? [];
+
+    if (pastaId && !pastas.some((pasta) => pasta.id === pastaId && pasta.lista === lista))
+      return;
+
+    const atual = pastaDoMembro(pastasDaLista(pastas, lista), membroId);
+    if (atual === pastaId) return;
+
+    commit({
+      ...board,
+      pastas: pastas.map((pasta) => {
+        if (pasta.id === atual) return semMembro(pasta, membroId);
+
+        if (pasta.id === pastaId)
+          return { ...pasta, membros: [...(pasta.membros ?? []), membroId] };
+
+        return pasta;
+      }),
+    });
+  }
+
   function commit(next: Board) {
     const { board, history, lastCommitAt } = get();
     const now = Date.now();
@@ -1124,33 +1214,11 @@ export const useSceneStore = create<SceneStore>((set, get) => {
     },
 
     moverPersonagemParaPasta(personagemId, lista, pastaId) {
-      const { board } = get();
-      if (!board) return;
-      const pastas = board.pastas ?? [];
+      moverMembro(personagemId, lista, pastaId);
+    },
 
-      if (pastaId && !pastas.some((pasta) => pasta.id === pastaId && pasta.lista === lista))
-        return;
-
-      const atual = pastaDoMembro(pastasDaLista(pastas, lista), personagemId);
-      if (atual === pastaId) return;
-
-      commit({
-        ...board,
-        pastas: pastas.map((pasta) => {
-          if (pasta.id === atual) {
-            const membros = (pasta.membros ?? []).filter((id) => id !== personagemId);
-            const resto = { ...pasta };
-            if (membros.length > 0) resto.membros = membros;
-            else delete resto.membros;
-            return resto;
-          }
-
-          if (pasta.id === pastaId)
-            return { ...pasta, membros: [...(pasta.membros ?? []), personagemId] };
-
-          return pasta;
-        }),
-      });
+    moverItemParaPasta(itemId, pastaId) {
+      moverMembro(itemId, "itens", pastaId);
     },
 
     addNota(nota) {
@@ -2045,6 +2113,134 @@ export const useSceneStore = create<SceneStore>((set, get) => {
         ...scene,
         handout: [...(scene.handout ?? []), ...novos],
       }));
+    },
+
+    prenderItensNoPonto(sceneId, pinId, itemIds) {
+      const atual = get()
+        .board?.scenes.find((scene) => scene.id === sceneId)
+        ?.pins?.find((pin) => pin.id === pinId);
+      if (!atual) return;
+
+      // Sem repetir e sem passo vazio no histórico, como `attachToPin`.
+      const presos = new Set(atual.itens ?? []);
+      const novos = [...new Set(itemIds)].filter((id) => !presos.has(id));
+      if (novos.length === 0) return;
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: (scene.pins ?? []).map((pin) =>
+          pin.id === pinId
+            ? { ...pin, itens: [...(pin.itens ?? []), ...novos] }
+            : pin,
+        ),
+      }));
+    },
+
+    soltarItemDoPonto(sceneId, pinId, itemId) {
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        pins: (scene.pins ?? []).map((pin) => {
+          if (pin.id !== pinId) return pin;
+
+          // Só solta: o item continua no catálogo, e talvez com alguém.
+          return semItemNoPonto(pin, itemId);
+        }),
+      }));
+    },
+
+    guardarItensNoHandout(sceneId, itemIds) {
+      const atual = get().board?.scenes.find((scene) => scene.id === sceneId);
+      if (!atual) return;
+
+      const guardados = new Set(atual.handoutItens ?? []);
+      const novos = [...new Set(itemIds)].filter((id) => !guardados.has(id));
+      if (novos.length === 0) return;
+
+      get().updateScene(sceneId, (scene) => ({
+        ...scene,
+        handoutItens: [...(scene.handoutItens ?? []), ...novos],
+      }));
+    },
+
+    tirarItemDoHandout(sceneId, itemId) {
+      get().updateScene(sceneId, (scene) => {
+        const restantes = (scene.handoutItens ?? []).filter((id) => id !== itemId);
+
+        // `undefined` quando esvazia, como o `handout`: `sceneForTable` decide
+        // por ausência do campo.
+        return {
+          ...scene,
+          handoutItens: restantes.length > 0 ? restantes : undefined,
+        };
+      });
+    },
+
+    trocarImagemDoItem(itemId, assetId) {
+      const { board } = get();
+      if (!board) return;
+
+      const usa = (scene: Scene) =>
+        scene.items.some((item) => item.itemId === itemId && item.assetId !== assetId);
+
+      // Nenhuma peça desenhando a imagem velha, nenhum passo no histórico.
+      if (!board.scenes.some(usa)) return;
+
+      commit({
+        ...board,
+        scenes: board.scenes.map((scene) =>
+          usa(scene)
+            ? {
+                ...scene,
+                items: scene.items.map((item) =>
+                  item.itemId === itemId ? { ...item, assetId } : item,
+                ),
+                updatedAt: Date.now(),
+              }
+            : scene,
+        ),
+      });
+    },
+
+    esquecerItem(itemId) {
+      const { board } = get();
+      if (!board) return;
+
+      const cita = (scene: Scene) =>
+        scene.items.some((item) => item.itemId === itemId) ||
+        Boolean(scene.handoutItens?.includes(itemId)) ||
+        Boolean(scene.pins?.some((pin) => pin.itens?.includes(itemId)));
+
+      const naPasta = board.pastas?.some(
+        (pasta) => pasta.lista === "itens" && pasta.membros?.includes(itemId),
+      );
+
+      if (!naPasta && !board.scenes.some(cita)) return;
+
+      commit({
+        ...board,
+        pastas: board.pastas?.map((pasta) =>
+          pasta.lista === "itens" ? semMembro(pasta, itemId) : pasta,
+        ),
+        scenes: board.scenes.map((scene) => {
+          if (!cita(scene)) return scene;
+
+          const handoutItens = scene.handoutItens?.filter((id) => id !== itemId);
+
+          return {
+            ...scene,
+            items: scene.items.map((item) => {
+              if (item.itemId !== itemId) return item;
+
+              const imagem = { ...item };
+              delete imagem.itemId;
+              return imagem;
+            }),
+            pins: scene.pins?.map((pin) => semItemNoPonto(pin, itemId)),
+            handoutItens: handoutItens?.length ? handoutItens : undefined,
+            updatedAt: Date.now(),
+          };
+        }),
+      });
     },
 
     tirarDoHandout(sceneId, assetId) {

@@ -1,8 +1,8 @@
 //! Pacote: um pedaco da campanha num zip, para levar a outra.
 //!
 //! O pacote tem o MESMO desenho da pasta de campanha (`ordem.json`, `cenas/`,
-//! `assets/`, `assets.json`, `efeitos.json`, `trilha.json`), so com o que foi
-//! escolhido, mais um `pacote.json` que diz o que tem dentro e que plugins o
+//! `assets/`, `assets.json`, `efeitos.json`, `trilha.json`, `itens.json`), so
+//! com o que foi escolhido, mais um `pacote.json` que diz o que tem dentro e que plugins o
 //! conteudo cita. Com o mesmo desenho, abrir um pacote e abrir uma campanha
 //! exportada inteira sao a mesma leitura: da para puxar um mapa de uma
 //! campanha antiga sem abri-la.
@@ -13,8 +13,11 @@
 //! plugin. Assim um campo novo da cena (ou de um ramo que ainda nao chegou a
 //! `main`) viaja sem este arquivo saber dele.
 //!
-//! A importacao NUNCA sobrescreve: asset entra com id novo, efeito de mesmo
-//! nome fica o da campanha. As cenas voltam para a TELA, que lhes da id novo e
+//! O item da campanha viaja do mesmo jeito: vai o que uma cena escolhida ou o
+//! inventario de um personagem escolhido cita, achado pelo id.
+//!
+//! A importacao NUNCA sobrescreve: asset e item entram com id novo, efeito de
+//! mesmo nome fica o da campanha. As cenas voltam para a TELA, que lhes da id novo e
 //! as poe no board pelo store -- escrita direta em `cenas/` seria apagada pelo
 //! proximo autosave, que trata a lista do store como a verdade.
 
@@ -31,7 +34,8 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 use super::assets::{self, AssetMeta};
 use super::atomic::{read_json, write_json};
 use super::board::{Order, SceneEntry};
-use super::{characters, condicoes, efeitos, modelos, Vault};
+use super::itens::{self, Imagem, Item};
+use super::{characters, condicoes, efeitos, migrar, modelos, Vault};
 use crate::error::{AppError, AppResult};
 
 /// Versao do `pacote.json`. Um pacote de formato mais novo e recusado.
@@ -225,6 +229,9 @@ pub struct Importado {
     pub ambientes: BTreeMap<String, Value>,
     /// Quantos personagens entraram. Eles ja estao no disco; a tela so rele.
     pub personagens: usize,
+    /// Quantos itens da campanha entraram, ja no catalogo. As cenas que os
+    /// citam voltam com o id novo.
+    pub itens: usize,
     /// Efeitos, condicoes e modelos de medidor que entraram.
     pub efeitos: usize,
     pub condicoes: usize,
@@ -247,7 +254,7 @@ pub struct Importado {
 pub struct Pulado {
     /// `efeitoJaExiste`, `efeitosNoMaximo`, `arquivoFaltando`,
     /// `personagemIlegivel`, `condicaoJaExiste`, `condicoesNoMaximo`,
-    /// `medidorJaExiste` ou `medidoresNoMaximo`.
+    /// `medidorJaExiste`, `medidoresNoMaximo` ou `itensNoMaximo`.
     pub motivo: String,
     pub nome: String,
 }
@@ -296,6 +303,16 @@ fn assets_citados(valor: &Value, conhecidos: &HashSet<&str>, achados: &mut BTree
             achados.insert(texto.to_string());
         }
     });
+}
+
+/// Os itens da campanha que o valor cita, entre os do catalogo `conhecidos`.
+///
+/// Por varredura, como o asset: a peca de mapa (`itemId`), o ponto (`itens`),
+/// o handout da cena e a entrada do inventario guardam o id em campos
+/// diferentes, e um campo novo que cite item viaja sem este arquivo saber dele.
+/// O id e um uuid: um texto qualquer da cena nao o repete por acaso.
+fn itens_citados(valor: &Value, conhecidos: &HashSet<&str>, achados: &mut BTreeSet<String>) {
+    assets_citados(valor, conhecidos, achados);
 }
 
 /// Os efeitos da campanha que o valor cita (`campanha/…`).
@@ -456,6 +473,10 @@ struct Fonte {
     efeitos: Vec<Value>,
     trilha: Option<Value>,
     personagens: Vec<Value>,
+    /// O catalogo de itens. Ver `vault::itens`.
+    itens: Vec<Item>,
+    /// O inventario de cada personagem, ja na forma da versao 3 -- ver `ler`.
+    inventarios: HashMap<String, Value>,
     medidores: Vec<Value>,
     condicoes: Vec<Value>,
     configuracoes: Map<String, Value>,
@@ -517,6 +538,48 @@ impl Fonte {
             }
         }
 
+        let personagens: Vec<Value> = read_json::<Vec<Value>>(&raiz.join("personagens.json"))?
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|personagem| {
+                personagem
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(nome_simples)
+            })
+            .collect();
+
+        // O catalogo, item a item: um item ilegivel fica de fora sem levar os
+        // outros junto.
+        let mut itens: Vec<Item> = read_json::<Vec<Value>>(&raiz.join(itens::ARQUIVO))?
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| serde_json::from_value(item).ok())
+            .collect();
+
+        // O inventario de cada personagem, levado a forma de agora. Um pacote
+        // exportado por um ATO20 de antes da versao 3, ou uma campanha antiga
+        // aberta como pacote, traz o item INTEIRO dentro do inventario: a
+        // mesma conversao da migracao o poe no catalogo lido aqui, e o resto
+        // deste arquivo so conhece a forma nova. Ver
+        // `migrar::converter_inventario`.
+        let mut inventarios = HashMap::new();
+        for personagem in &personagens {
+            let id = personagem
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let caminho = raiz.join("personagens").join(id).join(INVENTARIO);
+            let Some(inventario) = read_json::<Value>(&caminho)? else {
+                continue;
+            };
+            let inventario = match migrar::converter_inventario(id, &inventario, &mut itens) {
+                Some(entradas) => serde_json::to_value(entradas).unwrap_or(Value::Null),
+                None => inventario,
+            };
+            inventarios.insert(id.to_string(), inventario);
+        }
+
         let nome = match &manifesto {
             Some(manifesto) => manifesto.campanha.clone(),
             None => read_json::<Value>(&raiz.join("config.json"))?
@@ -544,16 +607,9 @@ impl Fonte {
                 .collect(),
             efeitos: read_json(&raiz.join("efeitos.json"))?.unwrap_or_default(),
             trilha: read_json(&raiz.join("trilha.json"))?,
-            personagens: read_json::<Vec<Value>>(&raiz.join("personagens.json"))?
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|personagem| {
-                    personagem
-                        .get("id")
-                        .and_then(Value::as_str)
-                        .is_some_and(nome_simples)
-                })
-                .collect(),
+            personagens,
+            itens,
+            inventarios,
             medidores: read_json(&raiz.join("medidores.json"))?.unwrap_or_default(),
             condicoes: read_json(&raiz.join("condicoes.json"))?.unwrap_or_default(),
             configuracoes: read_json(&raiz.join("configuracoes.json"))?.unwrap_or_default(),
@@ -601,9 +657,13 @@ impl Fonte {
     fn extras_do_personagem(&self, id: &str) -> AppResult<(Option<Value>, Option<Value>)> {
         let pasta = self.pasta_do_personagem(id);
         Ok((
-            read_json(&pasta.join(INVENTARIO))?,
+            self.inventarios.get(id).cloned(),
             read_json(&pasta.join(DADOS_DE_PLUGIN))?,
         ))
+    }
+
+    fn ids_dos_itens(&self) -> HashSet<&str> {
+        self.itens.iter().map(|item| item.id.as_str()).collect()
     }
 
     /// Os plugins de um personagem: os da ficha, as chaves dos dados de plugin
@@ -947,6 +1007,35 @@ pub fn exportar(
         .iter()
         .filter_map(|id| fonte.efeito(id).cloned())
         .collect();
+
+    // Os itens da campanha que as cenas e os inventarios citam. A foto de
+    // jogador mora na pasta de um personagem, e so viaja se ele viaja: sem a
+    // pasta, a imagem apontaria para um arquivo que o pacote nao tem.
+    let conhecidos_itens = fonte.ids_dos_itens();
+    let mut citados_itens = BTreeSet::new();
+    for valor in cenas.iter().map(|(_, cena)| cena).chain(
+        personagens
+            .iter()
+            .flat_map(|(_, ficha, extras)| std::iter::once(ficha).chain(extras)),
+    ) {
+        itens_citados(valor, &conhecidos_itens, &mut citados_itens);
+    }
+    let levados: HashSet<&str> = personagens.iter().map(|(id, _, _)| id.as_str()).collect();
+    let itens: Vec<Value> = fonte
+        .itens
+        .iter()
+        .filter(|item| citados_itens.contains(&item.id))
+        .map(|item| {
+            let mut copia = item.clone();
+            if let Some(Imagem::Anexo { personagem, .. }) = &copia.imagem {
+                if !levados.contains(personagem.as_str()) {
+                    copia.imagem = None;
+                }
+            }
+            serde_json::to_value(copia).unwrap_or(Value::Null)
+        })
+        .collect();
+
     let trilha = (!ambientes.is_empty()).then(|| {
         let mut trilha = Map::new();
         trilha.insert("ambientesPorCena".into(), Value::Object(ambientes));
@@ -967,6 +1056,7 @@ pub fn exportar(
         )
         .chain(medidores.iter())
         .chain(condicoes.iter())
+        .chain(itens.iter())
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
         plugins_citados(valor, &mut citados_plugins);
@@ -1056,13 +1146,18 @@ pub fn exportar(
         let fichas: Vec<&Value> = personagens.iter().map(|(_, ficha, _)| ficha).collect();
         gravar_json(&mut zip, opcoes, "personagens.json", &fichas)?;
     }
+    if !itens.is_empty() {
+        gravar_json(&mut zip, opcoes, itens::ARQUIVO, &itens)?;
+    }
     // A pasta de cada um vai como esta (anexos, inventario, dados de plugin),
-    // menos as notas dos jogadores, que sao deles e nao da ficha.
+    // menos as notas dos jogadores, que sao deles e nao da ficha -- e o
+    // inventario de antes da versao 3, que so serve de copia de seguranca na
+    // campanha de onde veio. Ver `migrar::INVENTARIO_ANTIGO`.
     for (id, _, _) in &personagens {
         cada_arquivo(
             &vault.root,
             &fonte.pasta_do_personagem(id),
-            &[NOTAS_DO_PERSONAGEM],
+            &[NOTAS_DO_PERSONAGEM, migrar::INVENTARIO_ANTIGO],
             &mut |relativo, caminho| {
                 zip.start_file(relativo.to_string_lossy().replace('\\', "/"), opcoes)
                     .map_err(erro_de_zip)?;
@@ -1456,6 +1551,41 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         tirar_plugins(valor, &removidos, &efeitos_fora);
     }
 
+    // Os itens da campanha que as cenas e os inventarios citam, cada um com id
+    // novo: o pacote pode voltar a mesma campanha de onde saiu, e o id de
+    // origem ali e de um item que ja existe -- e que pode ter mudado depois.
+    // Acima do teto da campanha, o resto fica de fora; o que o citava fica
+    // apontando para nada, como a cena que cita um item apagado.
+    let conhecidos_itens = fonte.ids_dos_itens();
+    let mut citados_itens = BTreeSet::new();
+    for valor in cenas
+        .iter()
+        .map(|(_, cena)| cena)
+        .chain(personagens.iter().flat_map(PersonagemImportado::valores))
+    {
+        itens_citados(valor, &conhecidos_itens, &mut citados_itens);
+    }
+    let mut vagas_de_item = itens::MAX_ITENS_NA_CAMPANHA.saturating_sub(itens::load(vault)?.len());
+    let mut destino_do_item: HashMap<String, String> = HashMap::new();
+    let mut novos_itens: Vec<Item> = Vec::new();
+    for item in fonte
+        .itens
+        .iter()
+        .filter(|item| citados_itens.contains(&item.id))
+    {
+        if vagas_de_item == 0 {
+            pulados.push(pulado("itensNoMaximo", &item.nome));
+            continue;
+        }
+        vagas_de_item -= 1;
+        destino_do_item.insert(item.id.clone(), uuid::Uuid::new_v4().to_string());
+        novos_itens.push(item.clone());
+    }
+    let itens_como_valor: Vec<Value> = novos_itens
+        .iter()
+        .filter_map(|item| serde_json::to_value(item).ok())
+        .collect();
+
     // Os assets que tudo isso cita, adotados com id novo.
     let conhecidos: HashSet<&str> = fonte.assets.iter().map(|meta| meta.id.as_str()).collect();
     let mut citados_assets = BTreeSet::new();
@@ -1467,6 +1597,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .chain(personagens.iter().flat_map(PersonagemImportado::valores))
         .chain(condicoes_novas.iter())
         .chain(medidores_novos.iter())
+        .chain(itens_como_valor.iter())
     {
         assets_citados(valor, &conhecidos, &mut citados_assets);
     }
@@ -1496,6 +1627,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
             .get(texto)
             .or_else(|| destino_do_efeito.get(texto))
             .or_else(|| destino_do_personagem.get(texto))
+            .or_else(|| destino_do_item.get(texto))
             .cloned()
     };
     for (_, cena) in &mut cenas {
@@ -1626,6 +1758,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         .into_iter()
         .map(|personagem| personagem.nome)
         .collect();
+    let ids_novos_itens: HashSet<&str> = destino_do_item.values().map(String::as_str).collect();
     let mut fichas = Vec::new();
     for personagem in personagens {
         let nome_de_origem = personagem
@@ -1650,11 +1783,27 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         copiar_pasta(
             &fonte.pasta_do_personagem(&personagem.origem),
             &destino,
-            &[NOTAS_DO_PERSONAGEM, INVENTARIO, DADOS_DE_PLUGIN],
+            &[
+                NOTAS_DO_PERSONAGEM,
+                INVENTARIO,
+                DADOS_DE_PLUGIN,
+                migrar::INVENTARIO_ANTIGO,
+            ],
         )?;
         if let Some(inventario) = &personagem.inventario {
+            // So as entradas de itens que entraram: a de um item que o pacote
+            // nao trazia, ou que ficou fora no teto, apontaria para nada.
+            let mut inventario = inventario.clone();
+            if let Value::Array(entradas) = &mut inventario {
+                entradas.retain(|entrada| {
+                    entrada
+                        .get("itemId")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| ids_novos_itens.contains(id))
+                });
+            }
             std::fs::create_dir_all(&destino)?;
-            write_json(&destino.join(INVENTARIO), inventario)?;
+            write_json(&destino.join(INVENTARIO), &inventario)?;
         }
         if let Some(dados) = &personagem.dados {
             std::fs::create_dir_all(&destino)?;
@@ -1663,6 +1812,63 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
 
         fichas.push(ficha);
     }
+    // Os itens, antes do indice de personagens: os inventarios ja estao nas
+    // pastas, mas so passam a ser lidos quando o personagem entra no indice, e
+    // nesse instante o catalogo ja tem o que eles citam.
+    //
+    // Com id novo, e o personagem de cada um trocado pelo novo. A foto e o
+    // "criado por" de um personagem que nao entrou caem: a foto mora numa pasta
+    // que nao veio, e o personagem por onde o item nasceu nao existe aqui. A
+    // imagem do acervo que nao entrou -- arquivo faltando no pacote -- cai
+    // tambem, em vez de apontar para um id de outra campanha.
+    let entraram: HashSet<&str> = fichas.iter().map(|ficha| ficha.id.as_str()).collect();
+    let do_destino = |personagem: &str| -> Option<String> {
+        destino_do_personagem
+            .get(personagem)
+            .filter(|novo| entraram.contains(novo.as_str()))
+            .cloned()
+    };
+    let novos_itens: Vec<Item> = novos_itens
+        .into_iter()
+        .filter_map(|mut item| {
+            item.id = destino_do_item.get(&item.id)?.clone();
+            item.criado_por = item.criado_por.as_deref().and_then(&do_destino);
+            item.imagem = match item.imagem.take() {
+                Some(Imagem::Asset { id }) => destino_do_asset
+                    .get(&id)
+                    .map(|novo| Imagem::Asset { id: novo.clone() }),
+                Some(Imagem::Anexo {
+                    personagem,
+                    autor,
+                    arquivo,
+                }) => do_destino(&personagem).map(|novo| Imagem::Anexo {
+                    personagem: novo,
+                    autor,
+                    arquivo,
+                }),
+                None => None,
+            };
+            // O medidor do item volta ao estilo de fabrica se o plugin dele
+            // ficou de fora, como o da ficha em `tirar_plugins`. Os ids dos
+            // medidores e atributos ficam os mesmos: sao locais ao item, e o
+            // valor guardado em cada mochila e chaveado por eles -- `trocar_textos`
+            // so troca VALORES de texto, e as chaves do mapa na entrada passam
+            // intactas.
+            for medidor in &mut item.medidores {
+                if medidor
+                    .estilo_extensao
+                    .as_deref()
+                    .and_then(plugin_do_id)
+                    .is_some_and(|plugin| removidos.contains(plugin))
+                {
+                    medidor.estilo_extensao = None;
+                }
+            }
+            Some(item)
+        })
+        .collect();
+    let quantos_itens = itens::adotar(vault, novos_itens)?;
+
     let quantos_personagens = fichas.len();
     characters::adotar(vault, fichas)?;
 
@@ -1680,6 +1886,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         pastas,
         ambientes,
         personagens: quantos_personagens,
+        itens: quantos_itens,
         efeitos: quantos_efeitos,
         condicoes: quantas_condicoes,
         medidores: quantos_medidores,
@@ -2003,6 +2210,301 @@ mod tests {
             importado.cenas[0]["items"][0]["personagemId"],
             json!(copia.id)
         );
+    }
+
+    /// O Corvo com dois itens: a espada que o jogador dele escreveu, com a
+    /// foto anexada, e o elmo do mestre com imagem do acervo. A cena da igreja
+    /// tem o token do Corvo, uma peca de mapa e um handout com o elmo, e um
+    /// ponto com a espada. Um terceiro item ninguem cita.
+    fn com_itens(vault: &Vault) -> (String, String, String) {
+        use crate::vault::characters::Autor;
+        use crate::vault::inventory;
+
+        let corvo = characters::create(vault, "Corvo").expect("personagem").id;
+        let espada = inventory::add(
+            vault,
+            &corvo,
+            Autor::Jogador,
+            inventory::Novo {
+                nome: "Espada".into(),
+                ..inventory::Novo::default()
+            },
+        )
+        .expect("espada")
+        .item
+        .id;
+        let foto = characters::write_anexo(vault, &corvo, "espada.png", b"png").expect("foto");
+        inventory::set_imagem_anexo(vault, &corvo, &espada, &foto.arquivo, Autor::Jogador)
+            .expect("imagem");
+
+        let elmo = itens::criar(
+            vault,
+            Autor::Mestre,
+            None,
+            itens::Novo {
+                nome: "Elmo".into(),
+                imagem: Some(Imagem::Asset { id: "a9".into() }),
+                ..itens::Novo::default()
+            },
+        )
+        .expect("elmo")
+        .id;
+        inventory::dar(vault, &corvo, &elmo, None).expect("dar");
+        itens::criar(
+            vault,
+            Autor::Mestre,
+            None,
+            itens::Novo {
+                nome: "Ninguem cita".into(),
+                ..itens::Novo::default()
+            },
+        )
+        .expect("solto");
+
+        let mut cena: Value = read_json(&vault.scenes_dir().join("igreja.json"))
+            .expect("ler")
+            .expect("cena");
+        cena["items"][0]["personagemId"] = json!(corvo);
+        cena["items"]
+            .as_array_mut()
+            .expect("items")
+            .push(json!({ "id": "i2", "itemId": elmo }));
+        cena["pins"] = json!([{ "id": "p1", "itens": [espada] }]);
+        cena["handoutItens"] = json!([elmo]);
+        write_json(&vault.scenes_dir().join("igreja.json"), &cena).expect("gravar");
+
+        (corvo, espada, elmo)
+    }
+
+    #[test]
+    fn o_item_vai_com_a_cena_e_o_personagem_e_ganha_id_novo() {
+        use crate::vault::characters::Autor;
+        use crate::vault::inventory;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+        let (corvo, espada, elmo) = com_itens(&vault);
+
+        let zip = dir.path().join("com-itens.ato20.zip");
+        let escolha = EscolhaDeExportacao {
+            cenas: vec!["s1".into()],
+            levar_personagens: true,
+            ..Default::default()
+        };
+        exportar(&vault, &dir.path().join("extensoes"), &zip, &escolha).expect("exportar");
+        let extraido = dir.path().join("extraido");
+        abrir(&zip, &extraido, &dir.path().join("extensoes")).expect("abrir");
+
+        // Vai o que a cena e o inventario citam, e a imagem do elmo com eles.
+        let no_pacote: Vec<Item> = read_json(&extraido.join(itens::ARQUIVO))
+            .expect("ler")
+            .expect("itens");
+        let mut nomes: Vec<&str> = no_pacote.iter().map(|item| item.nome.as_str()).collect();
+        nomes.sort();
+        assert_eq!(nomes, ["Elmo", "Espada"]);
+        assert!(extraido.join("assets/a9.webp").exists());
+
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        let escolha = EscolhaDeImportacao {
+            cenas: vec!["s1".into()],
+            personagens: vec![corvo.clone()],
+            ..Default::default()
+        };
+        let importado = importar(&destino, &extraido, &escolha).expect("importar");
+        assert_eq!(importado.itens, 2);
+
+        let catalogo = itens::load(&destino).expect("catalogo");
+        let nova_espada = catalogo
+            .iter()
+            .find(|i| i.nome == "Espada")
+            .expect("espada");
+        let novo_elmo = catalogo.iter().find(|i| i.nome == "Elmo").expect("elmo");
+        assert_ne!(nova_espada.id, espada);
+        assert_ne!(novo_elmo.id, elmo);
+
+        // A cena volta apontando para os ids novos, em todo campo que cita.
+        let cena = &importado.cenas[0];
+        assert_eq!(cena["items"][1]["itemId"], json!(novo_elmo.id));
+        assert_eq!(cena["pins"][0]["itens"][0], json!(nova_espada.id));
+        assert_eq!(cena["handoutItens"][0], json!(novo_elmo.id));
+
+        // O personagem novo carrega os dois, e a espada e dele: a foto mora na
+        // pasta nova, e e por ele que o jogador volta a edita-la.
+        let novo_corvo = characters::load(&destino).expect("lista")[0].id.clone();
+        let mochila: Vec<String> = inventory::listar(&destino, &novo_corvo)
+            .expect("inventario")
+            .into_iter()
+            .map(|no| no.item.id)
+            .collect();
+        assert_eq!(mochila, [nova_espada.id.clone(), novo_elmo.id.clone()]);
+        assert_eq!(nova_espada.criado_por.as_deref(), Some(novo_corvo.as_str()));
+        assert_eq!(
+            nova_espada.imagem,
+            Some(Imagem::Anexo {
+                personagem: novo_corvo.clone(),
+                autor: Autor::Jogador,
+                arquivo: "espada.png".into(),
+            })
+        );
+        assert!(
+            characters::anexo_caminho(&destino, &novo_corvo, Autor::Jogador, "espada.png")
+                .is_file()
+        );
+
+        // E o elmo, com a imagem no acervo de ca.
+        let Some(Imagem::Asset { id }) = &novo_elmo.imagem else {
+            panic!("o elmo perdeu a imagem: {:?}", novo_elmo.imagem);
+        };
+        assert_ne!(id, "a9");
+        assert!(assets::find(&destino, id).expect("find").is_some());
+    }
+
+    #[test]
+    fn atributos_e_medidores_viajam_dentro_do_item_com_o_valor_da_mochila() {
+        use crate::vault::characters::Autor;
+        use crate::vault::inventory;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+        let (corvo, _, elmo) = com_itens(&vault);
+
+        let ficha: itens::Patch = serde_json::from_value(json!({
+            "atributos": [{ "id": "defesa", "nome": "Defesa", "valor": "+2" }],
+            "medidores": [
+                { "id": "dur", "nome": "Durabilidade", "cor": "#a3a3a3", "maximo": 10 },
+                { "id": "runas", "nome": "Runas", "cor": "#7c3aed", "maximo": 3 }
+            ]
+        }))
+        .expect("ficha");
+        itens::editar(&vault, &elmo, ficha).expect("editar");
+        let valores: inventory::Patch =
+            serde_json::from_value(json!({ "atuais": { "dur": 7 } })).expect("valores");
+        inventory::update(&vault, &corvo, &elmo, valores, Autor::Mestre).expect("valor");
+
+        let zip = dir.path().join("elmo.ato20.zip");
+        let escolha = EscolhaDeExportacao {
+            cenas: vec!["s1".into()],
+            levar_personagens: true,
+            ..Default::default()
+        };
+        exportar(&vault, &dir.path().join("extensoes"), &zip, &escolha).expect("exportar");
+        let extraido = dir.path().join("extraido");
+        abrir(&zip, &extraido, &dir.path().join("extensoes")).expect("abrir");
+
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        let escolha = EscolhaDeImportacao {
+            cenas: vec!["s1".into()],
+            personagens: vec![corvo],
+            ..Default::default()
+        };
+        importar(&destino, &extraido, &escolha).expect("importar");
+
+        // O item chega com id novo, e a ficha dele inteira, com os mesmos ids
+        // de linha: sao locais ao item, e e por eles que a mochila guarda.
+        let original = itens::load(&vault)
+            .expect("catalogo")
+            .into_iter()
+            .find(|item| item.id == elmo)
+            .expect("elmo");
+        let novo = itens::load(&destino)
+            .expect("catalogo")
+            .into_iter()
+            .find(|item| item.nome == "Elmo")
+            .expect("elmo");
+        assert_ne!(novo.id, elmo);
+        assert_eq!(novo.atributos, original.atributos);
+        assert_eq!(novo.medidores, original.medidores);
+
+        // A chave do mapa na entrada passou intacta pela troca de ids: o elmo
+        // do Corvo novo continua em 7/10, e as runas, sem valor, cheias.
+        let novo_corvo = characters::load(&destino).expect("lista")[0].id.clone();
+        let entrada = inventory::load(&destino, &novo_corvo)
+            .expect("entradas")
+            .into_iter()
+            .find(|entrada| entrada.item_id == novo.id)
+            .expect("entrada");
+        assert_eq!(entrada.medidores.get("dur"), Some(&7));
+        let no = inventory::listar(&destino, &novo_corvo)
+            .expect("inventario")
+            .into_iter()
+            .find(|no| no.item.id == novo.id)
+            .expect("na mochila");
+        assert_eq!(no.atuais.get("dur"), Some(&7));
+        assert_eq!(no.atuais.get("runas"), Some(&3));
+    }
+
+    #[test]
+    fn a_foto_de_quem_nao_viaja_fica_para_tras() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+        let (_, espada, _) = com_itens(&vault);
+
+        // So a cena: o Corvo fica, e a foto da espada mora na pasta dele.
+        let zip = dir.path().join("so-a-cena.ato20.zip");
+        let escolha = EscolhaDeExportacao {
+            cenas: vec!["s1".into()],
+            ..Default::default()
+        };
+        exportar(&vault, &dir.path().join("extensoes"), &zip, &escolha).expect("exportar");
+        let extraido = dir.path().join("extraido");
+        abrir(&zip, &extraido, &dir.path().join("extensoes")).expect("abrir");
+
+        let no_pacote: Vec<Item> = read_json(&extraido.join(itens::ARQUIVO))
+            .expect("ler")
+            .expect("itens");
+        let copia = no_pacote.iter().find(|i| i.id == espada).expect("espada");
+        assert!(copia.imagem.is_none());
+
+        // Importado, o item existe, sem foto e sem personagem de origem.
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        let escolha = EscolhaDeImportacao {
+            cenas: vec!["s1".into()],
+            ..Default::default()
+        };
+        let importado = importar(&destino, &extraido, &escolha).expect("importar");
+        let catalogo = itens::load(&destino).expect("catalogo");
+        let nova = catalogo
+            .iter()
+            .find(|i| i.nome == "Espada")
+            .expect("espada");
+        assert!(nova.imagem.is_none());
+        assert!(nova.criado_por.is_none());
+        assert_eq!(importado.cenas[0]["pins"][0]["itens"][0], json!(nova.id));
+    }
+
+    #[test]
+    fn inventario_de_pacote_antigo_entra_no_catalogo() {
+        use crate::vault::inventory;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+
+        // Um pacote de antes da versao 3: o item inteiro dentro do inventario.
+        let corvo = characters::create(&vault, "Corvo").expect("personagem").id;
+        std::fs::create_dir_all(characters::dir(&vault, &corvo)).expect("pasta");
+        std::fs::write(
+            characters::dir(&vault, &corvo).join(INVENTARIO),
+            r#"[{"id":"i-velho","nome":"Lanterna","imagem":{"tipo":"asset","id":"a9"},
+                 "quantidade":2,"autor":"mestre","escondido":true,"criadoEm":5}]"#,
+        )
+        .expect("inventario");
+
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        let escolha = EscolhaDeImportacao {
+            personagens: vec![corvo],
+            ..Default::default()
+        };
+        let importado = importar(&destino, &vault.root, &escolha).expect("importar");
+        assert_eq!(importado.itens, 1);
+
+        let novo_corvo = characters::load(&destino).expect("lista")[0].id.clone();
+        let mochila = inventory::listar(&destino, &novo_corvo).expect("inventario");
+        assert_eq!(mochila.len(), 1);
+        assert_eq!(mochila[0].item.nome, "Lanterna");
+        assert_ne!(mochila[0].item.id, "i-velho");
+        assert_eq!(mochila[0].quantidade, 2);
+        assert!(mochila[0].escondido);
+        assert!(matches!(&mochila[0].item.imagem, Some(Imagem::Asset { id }) if id != "a9"));
     }
 
     #[test]

@@ -8,10 +8,17 @@ import {
   FlipHorizontal,
   Lock,
   LockOpen,
+  Package,
   PersonStanding,
+  Radio,
+  RadioTower,
   Trash2,
 } from "lucide-react";
 
+import { abrirItem } from "@/components/mestre/acoes-do-item";
+import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
+import { t as textoDosItens } from "@/lib/i18n/itens";
+import { useItemDaCampanha } from "@/lib/store/use-itens-store";
 import {
   Tooltip,
   TooltipContent,
@@ -148,6 +155,11 @@ export function SelecaoDeEsguelha({
 
   const itens = scene.items.filter((item) => selectedIds.includes(item.id));
   const unico = itens.length === 1 ? itens[0]! : null;
+  // A peça de item, como no gizmo do 2D: ver `itemDaPeca` em `MestreStage`.
+  const itemDaPeca = useItemDaCampanha(
+    unico && !unico.personagemId ? unico.itemId : undefined,
+  );
+  const transmissaoDaPeca = useTransmissaoDoItem(itemDaPeca);
 
   const svg = useRef<SVGSVGElement>(null);
   const contornos = useRef(new Map<string, SVGPolygonElement>());
@@ -268,10 +280,13 @@ export function SelecaoDeEsguelha({
   const espelhamPeloOlhar =
     emPe.length > 0 && emPe.every((item) => item.espelharPeloOlhar);
   const personagemId = unico?.personagemId;
-  // Azul quando é gente, como o gizmo do 2D: ver `tom` em `TransformHandles`.
+  // Azul quando é gente, âmbar quando é item da campanha, como o gizmo do 2D:
+  // ver `tom` em `TransformHandles`.
   const cor = personagemId
     ? { traco: "var(--color-sky-400)", botao: "bg-sky-500 text-white" }
-    : { traco: "var(--primary)", botao: "bg-primary text-primary-foreground" };
+    : itemDaPeca
+      ? { traco: "var(--color-amber-400)", botao: "bg-amber-500 text-amber-950" }
+      : { traco: "var(--primary)", botao: "bg-primary text-primary-foreground" };
 
   /** Onde o ponteiro está, nas coordenadas da área (as da câmera). */
   function naArea(evento: { clientX: number; clientY: number }): Vec {
@@ -550,6 +565,32 @@ export function SelecaoDeEsguelha({
           >
             <Drama className="size-3" />
           </Botao>
+        ) : null}
+        {itemDaPeca ? (
+          <>
+            <Botao
+              rotulo={textoDosItens.peca.abrirItem}
+              classe={cor.botao}
+              aoApertar={() => abrirItem(itemDaPeca)}
+            >
+              <Package className="size-3" />
+            </Botao>
+            <Botao
+              rotulo={
+                transmissaoDaPeca.noAr
+                  ? textoDosItens.peca.tirar
+                  : textoDosItens.peca.transmitir
+              }
+              classe={cn(cor.botao, transmissaoDaPeca.noAr && "ring-2 ring-white")}
+              aoApertar={transmissaoDaPeca.alternar}
+            >
+              {transmissaoDaPeca.noAr ? (
+                <RadioTower className="size-3" />
+              ) : (
+                <Radio className="size-3" />
+              )}
+            </Botao>
+          </>
         ) : null}
         <Botao
           rotulo={travada ? t.esguelha.destravar : t.esguelha.travar}

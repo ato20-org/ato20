@@ -15,7 +15,7 @@ use axum::http::{HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, patch, post, put};
+use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
@@ -32,7 +32,8 @@ use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes;
 use crate::vault::{
-    animacao, assets, characters, detalhes, documentos, fio, inventory, players, variantes, Vault,
+    animacao, assets, characters, detalhes, documentos, fio, inventory, itens, players, variantes,
+    Vault,
 };
 use page::ErrorPage;
 
@@ -725,8 +726,15 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/inventario/{itemId}/imagem",
             // Desligado pelo mesmo motivo de `/anexos`: quem conta os bytes e o
             // handler, e o padrao de 2 MB do axum cortava o stream antes do
-            // teto, entregando ao cliente um "load failed" sem causa.
-            put(set_inventory_image).layer(DefaultBodyLimit::disable()),
+            // teto, entregando ao cliente um "load failed" sem causa. No `GET`
+            // ele nao muda nada -- nao ha corpo.
+            get(read_inventory_image)
+                .put(set_inventory_image)
+                .layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/personagens/{id}/inventario/{itemId}/imagem/{variante}",
+            get(read_inventory_image_variante),
         )
         .layer(middleware::from_fn_with_state(state, require_player))
 }
@@ -2491,8 +2499,26 @@ async fn read_character_file_variante(
         return fail(StatusCode::NOT_FOUND, "variante desconhecida");
     };
 
-    let origem = characters::anexo_caminho(&vault, &id, autor, &arquivo);
-    let chave = characters::anexo_chave(&id, autor, &arquivo);
+    anexo_na_variante(&state, &vault, &id, autor, arquivo, variante, request).await
+}
+
+/// A reducao de um anexo de personagem, ou o original quando ela nao sai.
+///
+/// O corpo de `read_character_file_variante`, separado quando a foto do item
+/// passou a ser servida tambem pela rota do inventario -- ver
+/// `read_inventory_image_variante`. Quem chama ja conferiu que o pedido pode
+/// ver este arquivo; aqui so se reduz e se entrega.
+async fn anexo_na_variante(
+    state: &Arc<Daemon>,
+    vault: &Vault,
+    id: &str,
+    autor: characters::Autor,
+    arquivo: String,
+    variante: variantes::Variante,
+    request: Request<Body>,
+) -> Response {
+    let origem = characters::anexo_caminho(vault, id, autor, &arquivo);
+    let chave = characters::anexo_chave(id, autor, &arquivo);
 
     // Pelo tipo declarado, e antes de tentar: mandar um PDF ao decodificador de
     // imagem uma vez por requisicao gastaria disco e um `spawn_blocking` para
@@ -2501,9 +2527,9 @@ async fn read_character_file_variante(
 
     let recusa = sem_variante_chave(variante, &chave, &origem);
 
-    let caminho = if !reduzivel || ja_recusada(&state, &recusa) {
+    let caminho = if !reduzivel || ja_recusada(state, &recusa) {
         None
-    } else if let Some(pronta) = variantes::pronta(&vault, variante, &chave, &origem) {
+    } else if let Some(pronta) = variantes::pronta(vault, variante, &chave, &origem) {
         // Caminho quente, e sem tomar o semaforo: depois da primeira vez isto e
         // um `stat` e um `ServeFile` de alguns KB.
         Some(pronta)
@@ -2522,7 +2548,7 @@ async fn read_character_file_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                recusou(&state, recusa, &arquivo, variante, cause);
+                recusou(state, recusa, &arquivo, variante, cause);
                 None
             }
             Err(cause) => {
@@ -2533,7 +2559,7 @@ async fn read_character_file_variante(
     };
 
     let Some(caminho) = caminho else {
-        return anexo_original(&vault, &id, autor, &arquivo);
+        return anexo_original(vault, id, autor, &arquivo);
     };
 
     // O tipo sai da VARIANTE e nao do anexo: a miniatura e sempre PNG e a de
@@ -2548,7 +2574,7 @@ async fn read_character_file_variante(
         Ok(response) => response.into_response(),
         Err(cause) => {
             log::error!("{} de {arquivo} em {}: {cause}", variante.nome(), caminho.display());
-            anexo_original(&vault, &id, autor, &arquivo)
+            anexo_original(vault, id, autor, &arquivo)
         }
     }
 }
@@ -2871,7 +2897,12 @@ fn recusa(cause: crate::error::AppError, o_que: &str) -> Response {
 ///
 /// Filtrado AQUI, e nao na tela: o item escondido que chega ao celular e some
 /// no React ja vazou -- esta no JSON que o navegador guardou, e a aba de rede
-/// do celular o mostra. Ver `inventory::visiveis`.
+/// do celular o mostra. O mesmo vale para o atributo e o medidor escondidos
+/// dos itens que passam. Ver `inventory::visiveis`.
+///
+/// So o inventario deste personagem, cada entrada com o item dela. O catalogo
+/// inteiro da campanha nunca sai por aqui: o que o celular sabe de um item e
+/// estar na mochila de um personagem dele.
 async fn character_inventory(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2882,7 +2913,7 @@ async fn character_inventory(
         Err(response) => return response,
     };
 
-    match inventory::load(&vault, &id) {
+    match inventory::listar(&vault, &id) {
         Ok(itens) => {
             axum::Json(inventory::visiveis(itens, characters::Autor::Jogador)).into_response()
         }
@@ -2897,8 +2928,13 @@ async fn character_inventory(
 ///
 /// Entra sempre como `Autor::Jogador`, e isso nao e campo do corpo: o autor sai
 /// de QUEM esta chamando. Aceita-lo faria o celular criar item que o mestre nao
-/// distinguiria dos dele. O `escondido` do corpo e ignorado pelo mesmo motivo,
-/// dentro de `inventory::add`.
+/// distinguiria dos dele. O `escondido` e a `imagem` do corpo sao ignorados
+/// pelo mesmo motivo, dentro de `inventory::add`: a foto entra pelo multipart.
+/// `atributos` e `medidores` tambem: a ficha do item e do mestre.
+///
+/// O item nasce no catalogo da campanha guardando este personagem como o
+/// caminho por onde foi criado -- e por ele, e so por ele, que o jogador volta a
+/// edita-lo. Ver `inventory::pode_mexer`.
 async fn add_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2919,16 +2955,22 @@ async fn add_inventory_item(
     }
 
     match inventory::add(&vault, &id, characters::Autor::Jogador, novo) {
-        Ok(item) => (StatusCode::CREATED, axum::Json(item)).into_response(),
+        Ok(item) => {
+            (StatusCode::CREATED, axum::Json(inventory::sem_ocultos(item))).into_response()
+        }
         Err(cause) => recusa(cause, &format!("item novo em {id}")),
     }
 }
 
 /// `PATCH /eu/personagens/{id}/inventario/{itemId}`
 ///
-/// So o que o proprio jogador criou -- `inventory::update` recusa o resto, e a
-/// recusa vira 409. A tela nao deveria nem oferecer o botao nesse caso, e a
-/// checagem existe porque a tela nao e onde uma permissao se decide.
+/// So o que o proprio jogador criou, por ESTE personagem -- `inventory::update`
+/// recusa o resto, e a recusa vira 409. A tela nao deveria nem oferecer o botao
+/// nesse caso, e a checagem existe porque a tela nao e onde uma permissao se
+/// decide. `atuais` (o valor dos medidores) e ignorado -- e do mestre --, e as
+/// listas do catalogo nem sao campo do patch; a resposta sai sem o que e
+/// escondido, como a lista: o item do proprio jogador pode ter ganho do mestre
+/// um atributo que ele nao ve.
 async fn update_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2941,12 +2983,15 @@ async fn update_inventory_item(
     };
 
     match inventory::update(&vault, &id, &item_id, patch, characters::Autor::Jogador) {
-        Ok(item) => axum::Json(item).into_response(),
+        Ok(item) => axum::Json(inventory::sem_ocultos(item)).into_response(),
         Err(cause) => recusa(cause, &format!("item {item_id} de {id}")),
     }
 }
 
 /// `DELETE /eu/personagens/{id}/inventario/{itemId}`
+///
+/// Tira o item da mochila, e da campanha se ninguem mais o carrega. Ver
+/// `inventory::remove`.
 async fn remove_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2971,6 +3016,10 @@ async fn remove_inventory_item(
 /// o nome saneado, o teto de 64 MB e a rota `/mini` que ja existem -- e chega a
 /// mesa, quando o mestre quiser, por `character_attachment_share`.
 ///
+/// Fica na pasta DESTE personagem, e o item passa a dizer isso. Quando o mestre
+/// da o item a outro, a foto nao se copia: quem carrega o item por outro
+/// personagem a ve por `read_inventory_image`.
+///
 /// O item e conferido ANTES do upload, e a razao e nao gravar 60 MB para
 /// descobrir depois que o item e do mestre: `set_imagem_anexo` recusaria, e o
 /// arquivo ja estaria no disco.
@@ -2987,10 +3036,10 @@ async fn set_inventory_image(
 
     let autor = characters::Autor::Jogador;
 
-    match inventory::load(&vault, &id) {
-        Ok(itens) => match itens.iter().find(|item| item.id == item_id) {
-            Some(item) if item.autor == autor => {}
-            Some(_) => return fail(StatusCode::FORBIDDEN, "este item e do mestre"),
+    match inventory::listar(&vault, &id) {
+        Ok(itens) => match itens.iter().find(|no| no.item.id == item_id) {
+            Some(no) if inventory::pode_mexer(&no.item, &id, autor) => {}
+            Some(_) => return fail(StatusCode::FORBIDDEN, "este item nao e seu"),
             None => return fail(StatusCode::NOT_FOUND, "item nao encontrado"),
         },
         Err(cause) => {
@@ -3016,9 +3065,101 @@ async fn set_inventory_image(
         Err(cause) => return recusa(cause, &format!("imagem do item {item_id}")),
     };
 
-    match inventory::set_imagem_anexo(&vault, &id, &item_id, autor, &anexo.arquivo, autor) {
-        Ok(item) => axum::Json(item).into_response(),
+    match inventory::set_imagem_anexo(&vault, &id, &item_id, &anexo.arquivo, autor) {
+        Ok(item) => axum::Json(inventory::sem_ocultos(item)).into_response(),
         Err(cause) => recusa(cause, &format!("imagem do item {item_id}")),
+    }
+}
+
+/// Onde mora a foto de um item que este personagem carrega e o jogador ve.
+///
+/// `None` -- e 404 -- para tudo que nao e isso: item que nao esta nesta
+/// mochila, item escondido nela, item sem imagem, e imagem do acervo, que o
+/// celular busca pela rota publica `/asset/{id}` e nao precisa de token.
+///
+/// A conferencia e pelo inventario DESTE personagem, e e o que permite servir
+/// um arquivo de outra pasta: o jogador da Mira nao alcanca os anexos do Edgar,
+/// mas a carta que o Edgar escreveu e o mestre deu a Mira esta na mochila dela,
+/// e a foto e parte do item. Nada alem da foto de um item visivel atravessa.
+///
+/// O personagem da imagem vira caminho no disco, e por isso e conferido como
+/// nome simples mesmo vindo do catalogo: quem escreve `Imagem::Anexo` e o
+/// proprio daemon ou o mestre, mas a rota esta na rede, e a conferencia custa
+/// uma comparacao.
+fn foto_do_item(
+    vault: &Vault,
+    personagem: &str,
+    item_id: &str,
+) -> Result<(String, characters::Autor, String), Response> {
+    let itens = match inventory::listar(vault, personagem) {
+        Ok(itens) => inventory::visiveis(itens, characters::Autor::Jogador),
+        Err(cause) => {
+            log::error!("inventario de {personagem}: {cause}");
+            return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o inventario"));
+        }
+    };
+
+    match itens.into_iter().find(|no| no.item.id == item_id).and_then(|no| no.item.imagem) {
+        Some(itens::Imagem::Anexo {
+            personagem: dono,
+            autor,
+            arquivo,
+        }) if nome_simples(&dono) => Ok((dono, autor, arquivo)),
+        _ => Err(fail(StatusCode::NOT_FOUND, "imagem nao encontrada")),
+    }
+}
+
+/// Um nome que pode ser um componente de caminho: sem barra, sem `..`.
+fn nome_simples(nome: &str) -> bool {
+    !nome.is_empty() && nome != "." && nome != ".." && !nome.contains(['/', '\\', '\0'])
+}
+
+/// `GET /eu/personagens/{id}/inventario/{itemId}/imagem`
+///
+/// A foto de um item da mochila deste personagem, inteira. Ver `foto_do_item`
+/// para o que passa e por que um arquivo de outra pasta pode passar.
+async fn read_inventory_image(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match foto_do_item(&vault, &id, &item_id) {
+        Ok((dono, autor, arquivo)) => anexo_original(&vault, &dono, autor, &arquivo),
+        Err(response) => response,
+    }
+}
+
+/// `GET /eu/personagens/{id}/inventario/{itemId}/imagem/{variante}` -- `mini`
+/// ou `tela`.
+///
+/// A mesma reducao de `/anexos/{autor}/{arquivo}/{variante}`, e com a MESMA
+/// chave de cache: a chave e do arquivo no disco, e a miniatura feita para o
+/// Edgar serve a Mira.
+async fn read_inventory_image_variante(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id, variante)): AxumPath<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let Some(variante) = variantes::Variante::de_nome(&variante) else {
+        return fail(StatusCode::NOT_FOUND, "variante desconhecida");
+    };
+
+    match foto_do_item(&vault, &id, &item_id) {
+        Ok((dono, autor, arquivo)) => {
+            anexo_na_variante(&state, &vault, &dono, autor, arquivo, variante, request).await
+        }
+        Err(response) => response,
     }
 }
 
@@ -5507,22 +5648,61 @@ mod tests {
 
     // --- inventario ---------------------------------------------------------
 
+    /// Roda algo com a campanha do daemon, como o mestre faria pelo IPC.
+    fn no_vault<T>(state: &Arc<Daemon>, rodar: impl FnOnce(&Vault) -> T) -> T {
+        let guard = state.vault.read().expect("vault");
+        rodar(guard.as_ref().expect("campanha"))
+    }
+
+    /// `com_personagem`, mais o Lobo vinculado a Mira -- o segundo jogador.
+    /// Devolve os dois tokens, o Corvo (do Edgar) e o Lobo (da Mira).
+    async fn com_dois_personagens(
+        state: Arc<Daemon>,
+        codigo: &str,
+    ) -> (String, String, String, String) {
+        let (token_a, token_b, corvo) = com_personagem(Arc::clone(&state), codigo).await;
+
+        let lobo = no_vault(&state, |vault| {
+            let lobo = characters::create(vault, "Lobo").expect("personagem");
+            let jogadores = players::list(vault).expect("jogadores");
+            let mira = jogadores.iter().find(|j| j.nome == "Mira").expect("mira");
+            players::link(vault, &mira.id, &lobo.id).expect("vinculo");
+            lobo.id
+        });
+
+        (token_a, token_b, corvo, lobo)
+    }
+
+    fn do_mestre(nome: &str) -> inventory::Novo {
+        inventory::Novo {
+            nome: nome.into(),
+            ..inventory::Novo::default()
+        }
+    }
+
+    /// Um PUT multipart da foto de um item, campo `file`.
+    fn foto(token: &str, uri: &str, nome: &str, bytes: &str) -> HttpRequest<Body> {
+        let corpo = format!(
+            "--X\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{nome}\"\r\nContent-Type: image/png\r\n\r\n{bytes}\r\n--X--\r\n"
+        );
+
+        let mut envio = como(token, "PUT", uri, None);
+        *envio.body_mut() = Body::from(corpo);
+        envio.headers_mut().insert(
+            "content-type",
+            "multipart/form-data; boundary=X".parse().expect("header"),
+        );
+        envio
+    }
+
     #[tokio::test]
     async fn item_escondido_nao_chega_ao_celular() {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
-            inventory::add(
-                vault,
-                &personagem,
-                characters::Autor::Mestre,
-                inventory::Novo { nome: "Tocha".into(), ..inventory::Novo::default() },
-            )
-            .expect("item");
+        no_vault(&state, |vault| {
+            inventory::add(vault, &personagem, characters::Autor::Mestre, do_mestre("Tocha"))
+                .expect("item");
 
             inventory::add(
                 vault,
@@ -5535,7 +5715,7 @@ mod tests {
                 },
             )
             .expect("item");
-        }
+        });
 
         let lista = router(Arc::clone(&state))
             .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
@@ -5552,23 +5732,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn celular_ve_o_item_que_o_mestre_deu() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        no_vault(&state, |vault| {
+            let bau = itens::criar(
+                vault,
+                characters::Autor::Mestre,
+                None,
+                itens::Novo {
+                    nome: "Chave do bau".into(),
+                    ..itens::Novo::default()
+                },
+            )
+            .expect("item");
+            // Um item da campanha que nao e de ninguem nao aparece...
+            itens::criar(
+                vault,
+                characters::Autor::Mestre,
+                None,
+                itens::Novo {
+                    nome: "Ainda no bau".into(),
+                    ..itens::Novo::default()
+                },
+            )
+            .expect("item");
+            // ...e o que o mestre deu, sim.
+            inventory::dar(vault, &personagem, &bau.id, Some(2)).expect("dar");
+        });
+
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
+            .await
+            .expect("resposta");
+        assert_eq!(lista.status(), StatusCode::OK);
+
+        let json: serde_json::Value = serde_json::from_str(&corpo(lista).await).expect("json");
+        let lista = json.as_array().expect("lista");
+        assert_eq!(lista.len(), 1, "{json}");
+        assert_eq!(lista[0]["nome"], "Chave do bau");
+        assert_eq!(lista[0]["quantidade"], 2);
+        assert_eq!(lista[0]["autor"], "mestre");
+        assert_eq!(lista[0]["escondido"], false);
+    }
+
+    #[tokio::test]
     async fn jogador_nao_mexe_no_item_do_mestre() {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        let item = {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
+        let item = no_vault(&state, |vault| {
             inventory::add(
                 vault,
                 &personagem,
                 characters::Autor::Mestre,
-                inventory::Novo { nome: "Espada do mestre".into(), ..inventory::Novo::default() },
+                do_mestre("Espada do mestre"),
             )
             .expect("item")
+            .item
             .id
-        };
+        });
 
         let base = format!("/eu/personagens/{personagem}/inventario/{item}");
 
@@ -5584,12 +5808,67 @@ mod tests {
             .expect("resposta");
         assert_eq!(apagar.status(), StatusCode::CONFLICT);
 
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(&token, &format!("{base}/imagem"), "minha.png", "png"))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::FORBIDDEN);
+
         // E o item continua o que era.
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        let itens = inventory::load(vault, &personagem).expect("itens");
+        let itens = no_vault(&state, |vault| inventory::listar(vault, &personagem).expect("itens"));
         assert_eq!(itens.len(), 1);
-        assert_eq!(itens[0].nome, "Espada do mestre");
+        assert_eq!(itens[0].item.nome, "Espada do mestre");
+        assert!(itens[0].item.imagem.is_none());
+    }
+
+    #[tokio::test]
+    async fn jogador_nao_mexe_no_item_de_outro_jogador_nem_na_propria_mochila() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, corvo, lobo) = com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        // A jogadora do Lobo escreveu a carta; o mestre deu uma ao Corvo.
+        let carta = no_vault(&state, |vault| {
+            let carta = inventory::add(
+                vault,
+                &lobo,
+                characters::Autor::Jogador,
+                do_mestre("Carta da Mira"),
+            )
+            .expect("item")
+            .item
+            .id;
+            inventory::dar(vault, &corvo, &carta, None).expect("dar");
+            carta
+        });
+
+        let base = format!("/eu/personagens/{corvo}/inventario/{carta}");
+
+        // Esta na mochila do Corvo, e foi um jogador que escreveu -- mas nao por
+        // este personagem.
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "PATCH", &base, Some(r#"{"nome":"Carta do Edgar"}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::CONFLICT);
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "DELETE", &base, None))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::CONFLICT);
+
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(&token_a, &format!("{base}/imagem"), "outra.png", "png"))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::FORBIDDEN);
+
+        no_vault(&state, |vault| {
+            let do_corvo = inventory::listar(vault, &corvo).expect("itens");
+            assert_eq!(do_corvo.len(), 1);
+            assert_eq!(do_corvo[0].item.nome, "Carta da Mira");
+            assert_eq!(itens::load(vault).expect("catalogo").len(), 1);
+        });
     }
 
     #[tokio::test]
@@ -5610,16 +5889,149 @@ mod tests {
             .expect("resposta");
 
         assert_eq!(criado.status(), StatusCode::CREATED);
+        let json: serde_json::Value = serde_json::from_str(&corpo(criado).await).expect("json");
+        assert_eq!(json["criadoPor"], personagem.as_str());
+        assert_eq!(json["quantidade"], 2);
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        let itens = inventory::load(vault, &personagem).expect("itens");
+        let itens = no_vault(&state, |vault| inventory::listar(vault, &personagem).expect("itens"));
 
         assert_eq!(itens.len(), 1);
-        assert_eq!(itens[0].nome, "Corda");
+        assert_eq!(itens[0].item.nome, "Corda");
         assert_eq!(itens[0].quantidade, 2);
-        assert_eq!(itens[0].autor, characters::Autor::Jogador);
+        assert_eq!(itens[0].item.autor, characters::Autor::Jogador);
+        assert_eq!(itens[0].item.criado_por.as_deref(), Some(personagem.as_str()));
         assert!(!itens[0].escondido, "o corpo escondeu um item do jogador");
+    }
+
+    /// O mestre poe no item a ficha com uma linha visivel e uma escondida de
+    /// cada: atributos "Comprimento" e "Segredo", medidores "fios" e
+    /// "maldicao", e o valor de cada um na mochila deste personagem.
+    fn ficha_com_segredo(state: &Arc<Daemon>, personagem: &str, item: &str) {
+        no_vault(state, |vault| {
+            let patch: itens::Patch = serde_json::from_value(serde_json::json!({
+                "atributos": [
+                    { "id": "comprimento", "nome": "Comprimento", "valor": "15 m" },
+                    { "id": "segredo", "nome": "Segredo", "valor": "corda de enforcado", "escondido": true }
+                ],
+                "medidores": [
+                    { "id": "fios", "nome": "Fios", "cor": "#a3a3a3", "maximo": 3 },
+                    { "id": "maldicao", "nome": "Maldicao", "cor": "#7f1d1d", "maximo": 5, "escondido": true }
+                ]
+            }))
+            .expect("patch");
+            itens::editar(vault, item, patch).expect("ficha");
+
+            let valores: inventory::Patch =
+                serde_json::from_value(serde_json::json!({ "atuais": { "fios": 2, "maldicao": 4 } }))
+                    .expect("valores");
+            inventory::update(vault, personagem, item, valores, characters::Autor::Mestre)
+                .expect("valores");
+        });
+    }
+
+    /// O que o celular recebeu nao tem nada do que e escondido.
+    fn sem_segredo(json: &serde_json::Value) {
+        let texto = json.to_string();
+        assert!(!texto.contains("corda de enforcado"), "vazou: {texto}");
+        assert!(!texto.contains("Maldicao") && !texto.contains("maldicao"), "vazou: {texto}");
+        assert_eq!(json["atributos"][0]["valor"], "15 m", "{texto}");
+        assert_eq!(json["medidores"][0]["id"], "fios", "{texto}");
+        assert_eq!(json["atuais"], serde_json::json!({ "fios": 2 }), "{texto}");
+    }
+
+    #[tokio::test]
+    async fn atributo_e_medidor_escondidos_nao_chegam_ao_celular() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        // Do proprio jogador, de proposito: o autor do item nao e dono do
+        // segredo que o mestre pos nele, e e o unico caso em que o PATCH passa.
+        let corda = no_vault(&state, |vault| {
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Jogador,
+                do_mestre("Corda"),
+            )
+            .expect("item")
+            .item
+            .id
+        });
+        ficha_com_segredo(&state, &personagem, &corda);
+
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
+            .await
+            .expect("resposta");
+        assert_eq!(lista.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(lista).await).expect("json");
+        sem_segredo(&json[0]);
+
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                &format!("/eu/personagens/{personagem}/inventario/{corda}"),
+                Some(r#"{"nome":"Corda velha"}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(editar).await).expect("json");
+        assert_eq!(json["nome"], "Corda velha");
+        sem_segredo(&json);
+    }
+
+    #[tokio::test]
+    async fn celular_nao_escreve_atributo_nem_medidor() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        // Criando, com a ficha no corpo: o item nasce sem ela.
+        let criado = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/inventario"),
+                Some(
+                    r##"{"nome":"Corda","atributos":[{"nome":"Dano","valor":"1d4"}],
+                        "medidores":[{"id":"fios","nome":"Fios","cor":"#fff","maximo":3}]}"##,
+                ),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(criado.status(), StatusCode::CREATED);
+        let json: serde_json::Value = serde_json::from_str(&corpo(criado).await).expect("json");
+        assert!(json.get("atributos").is_none(), "{json}");
+        assert!(json.get("medidores").is_none(), "{json}");
+        let corda = json["id"].as_str().expect("id").to_string();
+
+        no_vault(&state, |vault| {
+            let catalogo = itens::load(vault).expect("catalogo");
+            assert!(catalogo[0].atributos.is_empty() && catalogo[0].medidores.is_empty());
+        });
+
+        // Editando: nem o valor do medidor, nem as listas do catalogo.
+        ficha_com_segredo(&state, &personagem, &corda);
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                &format!("/eu/personagens/{personagem}/inventario/{corda}"),
+                Some(r#"{"atuais":{"fios":0,"maldicao":0},"atributos":[],"medidores":[]}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::OK);
+
+        no_vault(&state, |vault| {
+            let entrada = &inventory::load(vault, &personagem).expect("entradas")[0];
+            assert_eq!(entrada.medidores.get("fios"), Some(&2));
+            assert_eq!(entrada.medidores.get("maldicao"), Some(&4));
+            let catalogo = itens::load(vault).expect("catalogo");
+            assert_eq!(catalogo[0].atributos.len(), 2);
+            assert_eq!(catalogo[0].medidores.len(), 2);
+        });
     }
 
     #[tokio::test]
@@ -5640,15 +6052,23 @@ mod tests {
             assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{corpo_json}");
         }
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &personagem).expect("itens").is_empty());
+            assert!(itens::load(vault).expect("catalogo").is_empty());
+        });
     }
 
     #[tokio::test]
     async fn inventario_de_personagem_de_outro_responde_404() {
         let (_dir, state, codigo) = daemon();
         let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            inventory::add(vault, &personagem, characters::Autor::Mestre, do_mestre("Tocha"))
+                .expect("item")
+                .item
+                .id
+        });
 
         // Token valido, personagem que nao e dele: 404, e nao 403 -- dizer
         // "existe mas nao e seu" confirmaria a existencia a quem chutou o id.
@@ -5659,6 +6079,16 @@ mod tests {
                 format!("/eu/personagens/{personagem}/inventario"),
                 Some(r#"{"nome":"Gazua"}"#),
             ),
+            (
+                "GET",
+                format!("/eu/personagens/{personagem}/inventario/{item}/imagem"),
+                None,
+            ),
+            (
+                "GET",
+                format!("/eu/personagens/{personagem}/inventario/{item}/imagem/mini"),
+                None,
+            ),
         ] {
             let response = router(Arc::clone(&state))
                 .oneshot(como(&token_b, metodo, &uri, corpo_json))
@@ -5668,9 +6098,9 @@ mod tests {
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{metodo} {uri}");
         }
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+        no_vault(&state, |vault| {
+            assert_eq!(inventory::listar(vault, &personagem).expect("itens").len(), 1);
+        });
     }
 
     #[tokio::test]
@@ -5678,12 +6108,7 @@ mod tests {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        let item = {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
-            item_do_jogador(vault, &personagem)
-        };
+        let item = no_vault(&state, |vault| item_do_jogador(vault, &personagem));
 
         let base = format!("/eu/personagens/{personagem}/inventario/{item}");
 
@@ -5693,11 +6118,9 @@ mod tests {
             .expect("resposta");
         assert_eq!(editar.status(), StatusCode::OK);
 
-        {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-            assert_eq!(inventory::load(vault, &personagem).expect("itens")[0].quantidade, 5);
-        }
+        no_vault(&state, |vault| {
+            assert_eq!(inventory::listar(vault, &personagem).expect("itens")[0].quantidade, 5);
+        });
 
         let apagar = router(Arc::clone(&state))
             .oneshot(como(&token, "DELETE", &base, None))
@@ -5705,9 +6128,164 @@ mod tests {
             .expect("resposta");
         assert_eq!(apagar.status(), StatusCode::NO_CONTENT);
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+        // Ninguem mais carregava: sai da campanha tambem.
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &personagem).expect("itens").is_empty());
+            assert!(itens::load(vault).expect("catalogo").is_empty());
+        });
+    }
+
+    #[tokio::test]
+    async fn apagar_o_proprio_item_que_outro_carrega_so_tira_da_mochila() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, corvo, lobo) = com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            let item = item_do_jogador(vault, &corvo);
+            inventory::dar(vault, &lobo, &item, None).expect("dar");
+            item
+        });
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{corvo}/inventario/{item}"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::NO_CONTENT);
+
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &corvo).expect("itens").is_empty());
+            assert_eq!(inventory::listar(vault, &lobo).expect("itens")[0].item.id, item);
+            assert_eq!(itens::load(vault).expect("catalogo").len(), 1);
+        });
+    }
+
+    #[tokio::test]
+    async fn a_foto_do_item_chega_a_quem_o_carrega_por_outro_personagem() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, corvo, lobo) =
+            com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| item_do_jogador(vault, &corvo));
+
+        // O Edgar sobe a foto pelo Corvo.
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(
+                &token_a,
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                "corda.png",
+                "bytes da corda",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(subir).await).expect("json");
+        assert_eq!(json["imagem"]["tipo"], "anexo");
+        assert_eq!(json["imagem"]["personagem"], corvo.as_str());
+
+        // O mestre da a corda tambem ao Lobo, da Mira.
+        no_vault(&state, |vault| {
+            inventory::dar(vault, &lobo, &item, None).expect("dar");
+        });
+
+        let da_mira = format!("/eu/personagens/{lobo}/inventario/{item}/imagem");
+
+        // A Mira ve a foto pela mochila do Lobo, apesar de ela morar na pasta
+        // do Corvo -- e a miniatura cai no original, que nao e PNG de verdade.
+        for uri in [da_mira.clone(), format!("{da_mira}/mini")] {
+            let lida = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+            assert_eq!(lida.status(), StatusCode::OK, "{uri}");
+            assert_eq!(corpo(lida).await, "bytes da corda", "{uri}");
+        }
+
+        // Pelo Corvo, que nao e dela, nao.
+        let pelo_corvo = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_b,
+                "GET",
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(pelo_corvo.status(), StatusCode::NOT_FOUND);
+
+        // Escondida na mochila do Lobo, a foto some com o item.
+        no_vault(&state, |vault| {
+            inventory::update(
+                vault,
+                &lobo,
+                &item,
+                inventory::Patch {
+                    escondido: Some(true),
+                    ..inventory::Patch::default()
+                },
+                characters::Autor::Mestre,
+            )
+            .expect("esconder");
+        });
+
+        for uri in [da_mira.clone(), format!("{da_mira}/mini")] {
+            let escondida = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+            assert_eq!(escondida.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+
+        // E o dono continua vendo pela mochila dele.
+        let do_edgar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "GET",
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(do_edgar.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn imagem_do_acervo_nao_sai_pela_rota_do_inventario() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Mestre,
+                inventory::Novo {
+                    nome: "Elmo".into(),
+                    imagem: Some(itens::Imagem::Asset { id: "asset-1".into() }),
+                    ..inventory::Novo::default()
+                },
+            )
+            .expect("item")
+            .item
+            .id
+        });
+
+        // O celular busca o acervo por `/asset/{id}`, que e publico; esta rota e
+        // so para a foto atras do token.
+        let lida = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "GET",
+                &format!("/eu/personagens/{personagem}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(lida.status(), StatusCode::NOT_FOUND);
     }
 
     fn item_do_jogador(vault: &Vault, personagem: &str) -> String {
@@ -5718,6 +6296,7 @@ mod tests {
             inventory::Novo { nome: "Corda".into(), ..inventory::Novo::default() },
         )
         .expect("item")
+        .item
         .id
     }
 

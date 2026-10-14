@@ -98,7 +98,9 @@ import {
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { entregarItem } from "@/lib/mestre/entregar-item";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import {
   createCharacter,
@@ -330,6 +332,34 @@ export function CharactersBody() {
           .moverPersonagemParaPasta(solto.fonte.personagemId, destino.lista, destino.pastaId);
       }),
     [],
+  );
+
+  /**
+   * Soltar um ITEM na linha de um personagem o entrega a ele, com a ficha
+   * aberta ou não. A lista é onde o mestre já olha para achar quem é quem, e
+   * abrir a ficha só para ter onde largar a espada seria um passo a mais. Ver
+   * `entregarItem`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore.getState().registrarAlvo("linha-personagem", (solto, destino) => {
+        if (solto.fonte.tipo !== "item" || destino.tipo !== "personagem") return;
+
+        const para = useCharactersStore
+          .getState()
+          .personagens?.find((personagem) => personagem.id === destino.personagemId);
+        if (!para) return;
+
+        void entregarItem(solto.fonte.itemId, para, solto.fonte.personagemId);
+      }),
+    [],
+  );
+
+  /** Quem está debaixo do item arrastado, para a linha dele acender. */
+  const recebendoItem = useTokenDragStore((state) =>
+    state.arrasto?.destino?.tipo === "personagem"
+      ? state.arrasto.destino.personagemId
+      : null,
   );
 
   /**
@@ -643,7 +673,11 @@ export function CharactersBody() {
                 // com ou sem ela entra numa pasta e vira menção na nota.
                 "cursor-grab select-none active:cursor-grabbing",
                 noAr === personagem.id && "opacity-40",
+                // Um item está pairando aqui, e soltar o entrega a ele.
+                recebendoItem === personagem.id && "ring-primary bg-primary/10 ring-1",
               )}
+              // A linha é ALVO do item arrastado. Ver `entregarItem`.
+              data-personagem-alvo={personagem.id}
               style={
                 lugar.depth > 0
                   ? { paddingLeft: lugar.depth * RECUO_PX }

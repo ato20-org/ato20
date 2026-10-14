@@ -1,6 +1,6 @@
 "use client";
 
-import { RadioTower, X } from "lucide-react";
+import { Package, RadioTower, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAssetList } from "@/hooks/use-asset-list";
@@ -69,7 +69,7 @@ export function SpotlightChip({
       {/* A miniatura responde "qual imagem?" sem obrigar a abrir o ponto de
           onde ela saiu — que é a pergunta de quem transmitiu três coisas na
           última meia hora. */}
-      <span className="bg-muted h-6 w-9 shrink-0 overflow-hidden rounded">
+      <span className="bg-muted grid h-6 w-9 shrink-0 place-items-center overflow-hidden rounded">
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -79,6 +79,10 @@ export function SpotlightChip({
             className="size-full object-cover"
             {...MINIATURA}
           />
+        ) : spotlight.item ? (
+          // O item sem imagem vai ao ar como cartão só de texto, e a caixa diz
+          // que é um item, e não uma imagem que não carregou.
+          <Package className="text-muted-foreground size-3.5" aria-hidden />
         ) : null}
       </span>
 

@@ -18,7 +18,8 @@ use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
 use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
 use crate::vault::players::{Attachment, Player};
-use crate::vault::inventory::{self, Item};
+use crate::vault::inventory::{self, NoInventario};
+use crate::vault::itens::{self, Item, Portador};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
@@ -1057,10 +1058,38 @@ pub fn character_rename(state: State<'_, AppState>, id: String, nome: String) ->
 /// Jogador ignora, e nao arquivo orfao que ninguem mais lista.
 #[tauri::command]
 pub fn character_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
-    state.with_vault(|vault| {
-        characters::remove(vault, &id)?;
-        players::forget_character(vault, &id)
-    })
+    state.with_vault(|vault| remover_personagem(vault, &id))
+}
+
+/// O corpo de `character_remove`, sem o `State` do Tauri -- para o teste.
+///
+/// Antes de a pasta sair, a foto de cada item que mora NELA vai para o acervo.
+/// O item e da campanha e sobrevive ao personagem -- pode estar na mochila de
+/// outro, ou no chao do mapa --, e a foto dele e um anexo na pasta de quem a
+/// subiu: sem isto, apagar o personagem deixaria esses itens sem imagem e sem
+/// volta. E a mesma promocao do arrasto para o mapa (`promover`), e mora aqui
+/// pelo mesmo motivo: o vault de personagens nao conhece o acervo.
+///
+/// Uma promocao que falha nao segura a remocao: vai para o log e o item fica
+/// sem imagem. Recusar apagar o personagem por causa de uma foto que nao copiou
+/// deixaria o mestre sem saida, e a foto e o menor dos dois.
+fn remover_personagem(vault: &Vault, id: &str) -> AppResult<()> {
+    let com_foto_aqui: Vec<String> = itens::load(vault)?
+        .into_iter()
+        .filter(|item| {
+            matches!(&item.imagem, Some(itens::Imagem::Anexo { personagem, .. }) if personagem == id)
+        })
+        .map(|item| item.id)
+        .collect();
+
+    for item in com_foto_aqui {
+        if let Err(cause) = promover(vault, &item) {
+            log::warn!("a foto do item {item} saiu com o personagem {id}: {cause}");
+        }
+    }
+
+    characters::remove(vault, id)?;
+    players::forget_character(vault, id)
 }
 
 /// Preenche ou limpa um dos tres campos nomeados: ficha, retrato, miniatura.
@@ -1870,7 +1899,7 @@ pub fn condicoes_modelos_reordenar(
 #[tauri::command]
 pub fn character_attachments(state: State<'_, AppState>, id: String) -> AppResult<Vec<Anexo>> {
     state.with_vault(|vault| {
-        let usados = inventory::anexos_usados(vault, &id)?;
+        let usados = itens::anexos_usados(vault, &id)?;
 
         Ok(characters::list_anexos(vault, &id)?
             .into_iter()
@@ -2030,63 +2059,45 @@ pub fn character_players(state: State<'_, AppState>, id: String) -> AppResult<Ve
     state.with_vault(|vault| players::players_of(vault, &id))
 }
 
-// --- inventario -------------------------------------------------------------
+// --- itens da campanha --------------------------------------------------------
 
-/// O inventario de um personagem, INTEIRO.
+/// O catalogo de itens da campanha, inteiro, na ordem em que nasceram.
 ///
-/// Sem filtro de escondido: quem chama e a janela do mestre, e o escondido
-/// existe para ele ver o que o jogador nao ve. A filtragem acontece do outro
-/// lado, no daemon -- ver `character_inventory` em `serve`.
+/// Por IPC, e nao por rota do daemon: o celular nunca ve o catalogo -- so o
+/// que esta na mochila do personagem dele, sem o escondido. Ver `vault::itens`.
 #[tauri::command]
-pub fn inventory_list(state: State<'_, AppState>, id: String) -> AppResult<Vec<Item>> {
-    state.with_vault(|vault| inventory::load(vault, &id))
+pub fn itens_list(state: State<'_, AppState>) -> AppResult<Vec<Item>> {
+    state.with_vault(itens::listar)
 }
 
-/// Poe um item no inventario, como MESTRE.
+/// Cria um item que ainda nao e de ninguem: o bau fechado, o anel pregado num
+/// ponto do mapa. Como MESTRE, pela mesma razao de `inventory_add`.
+#[tauri::command]
+pub fn item_create(state: State<'_, AppState>, novo: itens::Novo) -> AppResult<Item> {
+    state.with_vault(|vault| itens::criar(vault, Autor::Mestre, None, novo))
+}
+
+/// Troca nome, descricao, imagem, atributos ou a definicao dos medidores. Muda
+/// o item em todo inventario que o tem. As listas, presentes, trocam inteiras.
+/// Ver `itens::Patch`.
+#[tauri::command]
+pub fn item_update(state: State<'_, AppState>, id: String, patch: itens::Patch) -> AppResult<Item> {
+    state.with_vault(|vault| itens::editar(vault, &id, patch))
+}
+
+/// Apaga o item da campanha e cada entrada dele nos inventarios.
 ///
-/// O autor nao e parametro aqui pela mesma razao que nao e no anexo: quem fala
-/// por IPC e o aplicativo, e o aplicativo e o mestre.
+/// O que o BOARD cita -- peca de mapa, ponto, handout -- e da tela, que e a
+/// dona do board. Ver `itens::remover`.
 #[tauri::command]
-pub fn inventory_add(
-    state: State<'_, AppState>,
-    id: String,
-    novo: inventory::Novo,
-) -> AppResult<Item> {
-    state.with_vault(|vault| inventory::add(vault, &id, Autor::Mestre, novo))
+pub fn item_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| itens::remover(vault, &id))
 }
 
+/// Quem carrega o que: uma linha por item em cada inventario.
 #[tauri::command]
-pub fn inventory_update(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] itemId: String,
-    patch: inventory::Patch,
-) -> AppResult<Item> {
-    state.with_vault(|vault| inventory::update(vault, &id, &itemId, patch, Autor::Mestre))
-}
-
-/// Tira o item. O mestre alcanca os dele e os do jogador.
-#[tauri::command]
-pub fn inventory_remove(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] itemId: String,
-) -> AppResult<()> {
-    state.with_vault(|vault| inventory::remove(vault, &id, &itemId, Autor::Mestre))
-}
-
-/// Passa um item de um personagem para outro.
-///
-/// So existe por IPC: e gesto de mestre, e o jogador nao tem os dois lados da
-/// transferencia para pedi-la.
-#[tauri::command]
-pub fn inventory_move(
-    state: State<'_, AppState>,
-    de: String,
-    para: String,
-    #[allow(non_snake_case)] itemId: String,
-) -> AppResult<Item> {
-    state.with_vault(|vault| inventory::mover(vault, &de, &para, &itemId))
+pub fn itens_portadores(state: State<'_, AppState>) -> AppResult<Vec<Portador>> {
+    state.with_vault(itens::portadores)
 }
 
 /// Poe a imagem de um item no acervo e a prende ao item.
@@ -2096,12 +2107,7 @@ pub fn inventory_move(
 /// `/asset/{id}`. Com escopo `personagem`, para a biblioteca de imagens nao a
 /// listar entre as que se arrastam para o mapa.
 #[tauri::command]
-pub fn inventory_set_imagem(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] itemId: String,
-    path: String,
-) -> AppResult<Item> {
+pub fn item_set_imagem(state: State<'_, AppState>, id: String, path: String) -> AppResult<Item> {
     state.with_vault(|vault| {
         let (aceitos, recusados) =
             assets::import(vault, &[PathBuf::from(&path)], Some("personagem"))?;
@@ -2109,19 +2115,20 @@ pub fn inventory_set_imagem(
         let Some(asset) = aceitos.into_iter().next() else {
             return Err(AppError::Malformed {
                 file: path.clone(),
-                cause: recusados.into_iter().next().unwrap_or_else(|| "nada importado".into()),
+                cause: recusados
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| "nada importado".into()),
             });
         };
 
-        inventory::update(
+        itens::editar(
             vault,
             &id,
-            &itemId,
-            inventory::Patch {
-                imagem: Some(Some(inventory::Imagem::Asset { id: asset.id })),
-                ..inventory::Patch::default()
+            itens::Patch {
+                imagem: Some(Some(itens::Imagem::Asset { id: asset.id })),
+                ..itens::Patch::default()
             },
-            Autor::Mestre,
         )
     })
 }
@@ -2141,93 +2148,176 @@ pub fn inventory_set_imagem(
 /// Idempotente: item cuja imagem ja e asset devolve o asset que ele ja tem, sem
 /// copiar nada. Quem chama e o palco, a cada arrasto solto.
 ///
-/// Mora em `commands` e nao em `vault::inventory` de proposito: o inventario
-/// nao conhece o indice de assets, pela mesma razao que `characters` nao
-/// conhece -- ver `characters::set_campo`. Este modulo ja conhece os dois.
+/// Mora em `commands` e nao em `vault::itens` de proposito: o catalogo nao
+/// conhece o indice de assets, pela mesma razao que `characters` nao conhece
+/// -- ver `characters::set_campo`. Este modulo ja conhece os dois.
 #[tauri::command]
-pub fn inventory_promote_imagem(
-    state: State<'_, AppState>,
-    id: String,
-    #[allow(non_snake_case)] itemId: String,
-) -> AppResult<AssetMeta> {
-    state.with_vault(|vault| promover(vault, &id, &itemId))
+pub fn item_promote_imagem(state: State<'_, AppState>, id: String) -> AppResult<AssetMeta> {
+    state.with_vault(|vault| promover(vault, &id))
 }
 
-/// O corpo de `inventory_promote_imagem`, sem o `State` do Tauri.
+/// O corpo de `item_promote_imagem`, sem o `State` do Tauri.
 ///
-/// Separado so para o teste alcanca-lo: o comando precisa de um `AppState`
+/// Separado para o teste alcanca-lo -- o comando precisa de um `AppState`
 /// inteiro, e montar um em teste seria montar o daemon para exercitar uma copia
-/// de arquivo.
-fn promover(vault: &Vault, id: &str, item_id: &str) -> AppResult<AssetMeta> {
-    {
-        let item = inventory::load(vault, id)?
-            .into_iter()
-            .find(|item| item.id == item_id)
-            .ok_or_else(|| AppError::Malformed {
-                file: "inventario".into(),
-                cause: format!("o item {item_id} nao existe"),
-            })?;
+/// de arquivo -- e para `remover_personagem` reusa-lo.
+fn promover(vault: &Vault, item_id: &str) -> AppResult<AssetMeta> {
+    let item = itens::load(vault)?
+        .into_iter()
+        .find(|item| item.id == item_id)
+        .ok_or_else(|| AppError::Malformed {
+            file: itens::ARQUIVO.into(),
+            cause: format!("o item {item_id} nao existe"),
+        })?;
 
-        let (autor, arquivo) = match item.imagem {
-            // Ja e do acervo: devolve o que esta la. Um asset que sumiu do
-            // indice e erro, e nao silencio -- a cena o desenharia como um
-            // retangulo vazio que ninguem sabe de onde veio.
-            Some(inventory::Imagem::Asset { id: asset }) => {
-                return assets::find(vault, &asset)?.ok_or_else(|| AppError::Malformed {
-                    file: "acervo".into(),
-                    cause: format!("a imagem {asset} nao esta mais no acervo"),
-                });
-            }
-            Some(inventory::Imagem::Anexo { autor, arquivo }) => (autor, arquivo),
-            None => {
-                return Err(AppError::Malformed {
-                    file: "inventario".into(),
-                    cause: format!("{} nao tem imagem", item.nome),
-                })
-            }
-        };
+    let (personagem, autor, arquivo) = match item.imagem {
+        // Ja e do acervo: devolve o que esta la. Um asset que sumiu do indice e
+        // erro, e nao silencio -- a cena o desenharia como um retangulo vazio
+        // que ninguem sabe de onde veio.
+        Some(itens::Imagem::Asset { id: asset }) => {
+            return assets::find(vault, &asset)?.ok_or_else(|| AppError::Malformed {
+                file: "acervo".into(),
+                cause: format!("a imagem {asset} nao esta mais no acervo"),
+            });
+        }
+        Some(itens::Imagem::Anexo {
+            personagem,
+            autor,
+            arquivo,
+        }) => (personagem, autor, arquivo),
+        None => {
+            return Err(AppError::Malformed {
+                file: itens::ARQUIVO.into(),
+                cause: format!("{} nao tem imagem", item.nome),
+            })
+        }
+    };
 
-        let origem = characters::anexo_existente(vault, id, autor, &arquivo).ok_or_else(|| {
+    // A pasta e a do personagem por onde a foto chegou, que nao e
+    // necessariamente quem carrega o item hoje. Ver `itens::Imagem`.
+    let origem =
+        characters::anexo_existente(vault, &personagem, autor, &arquivo).ok_or_else(|| {
             AppError::Malformed {
                 file: arquivo.clone(),
                 cause: "a imagem do item nao esta mais no disco".into(),
             }
         })?;
 
-        // Escopo `personagem`, como o retrato e a miniatura: a biblioteca de
-        // imagens esconde o que tem dono, e sem isso cada item promovido viraria
-        // mais uma linha no que o mestre arrasta para o mapa.
-        let (aceitos, recusados) = assets::import(vault, &[origem], Some("personagem"))?;
+    // Escopo `personagem`, como o retrato e a miniatura: a biblioteca de
+    // imagens esconde o que tem dono, e sem isso cada item promovido viraria
+    // mais uma linha no que o mestre arrasta para o mapa.
+    let (aceitos, recusados) = assets::import(vault, &[origem], Some("personagem"))?;
 
-        let asset = aceitos.into_iter().next().ok_or_else(|| AppError::Malformed {
+    let asset = aceitos
+        .into_iter()
+        .next()
+        .ok_or_else(|| AppError::Malformed {
             file: arquivo.clone(),
-            cause: recusados.into_iter().next().unwrap_or_else(|| "nada importado".into()),
+            cause: recusados
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| "nada importado".into()),
         })?;
 
-        inventory::update(
-            vault,
-            id,
-            item_id,
-            inventory::Patch {
-                imagem: Some(Some(inventory::Imagem::Asset { id: asset.id.clone() })),
-                ..inventory::Patch::default()
-            },
-            Autor::Mestre,
-        )?;
+    itens::editar(
+        vault,
+        item_id,
+        itens::Patch {
+            imagem: Some(Some(itens::Imagem::Asset {
+                id: asset.id.clone(),
+            })),
+            ..itens::Patch::default()
+        },
+    )?;
 
-        // O anexo sai: o acervo agora tem os mesmos bytes, e deixa-lo para tras
-        // dobraria o arquivo no disco. Pior, ele voltaria a aparecer na aba de
-        // Arquivos -- `anexos_usados` deixou de aponta-lo no mesmo instante em
-        // que o campo virou asset.
-        //
-        // Depois da gravacao, e nao antes: se o indice nao gravar, o arquivo
-        // continua onde estava e o item segue mostrando a imagem dele.
-        if let Err(cause) = characters::remove_anexo(vault, id, autor, &arquivo) {
+    // O anexo sai: o acervo agora tem os mesmos bytes, e deixa-lo para tras
+    // dobraria o arquivo no disco. Pior, ele voltaria a aparecer na aba de
+    // Arquivos -- `anexos_usados` deixou de aponta-lo no mesmo instante em que
+    // o campo virou asset. Fica so se outro item ainda o usa como imagem.
+    //
+    // Depois da gravacao, e nao antes: se o catalogo nao gravar, o arquivo
+    // continua onde estava e o item segue mostrando a imagem dele.
+    if !itens::anexo_em_uso(vault, &personagem, autor, &arquivo)? {
+        if let Err(cause) = characters::remove_anexo(vault, &personagem, autor, &arquivo) {
             log::warn!("item {item_id} promovido mas {arquivo} ficou: {cause}");
         }
-
-        Ok(asset)
     }
+
+    Ok(asset)
+}
+
+// --- inventario -------------------------------------------------------------
+
+/// O inventario de um personagem, INTEIRO: cada entrada com o item dela.
+///
+/// Sem filtro de escondido: quem chama e a janela do mestre, e o escondido
+/// existe para ele ver o que o jogador nao ve. A filtragem acontece do outro
+/// lado, no daemon -- ver `character_inventory` em `serve`.
+#[tauri::command]
+pub fn inventory_list(state: State<'_, AppState>, id: String) -> AppResult<Vec<NoInventario>> {
+    state.with_vault(|vault| inventory::listar(vault, &id))
+}
+
+/// Cria um item e o poe no inventario, como MESTRE: o "+" da ficha.
+///
+/// O autor nao e parametro aqui pela mesma razao que nao e no anexo: quem fala
+/// por IPC e o aplicativo, e o aplicativo e o mestre.
+#[tauri::command]
+pub fn inventory_add(
+    state: State<'_, AppState>,
+    id: String,
+    novo: inventory::Novo,
+) -> AppResult<NoInventario> {
+    state.with_vault(|vault| inventory::add(vault, &id, Autor::Mestre, novo))
+}
+
+/// Da um item do catalogo ao personagem. Quem ja tem soma a quantidade.
+#[tauri::command]
+pub fn inventory_give(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] itemId: String,
+    quantidade: Option<u32>,
+) -> AppResult<NoInventario> {
+    state.with_vault(|vault| inventory::dar(vault, &id, &itemId, quantidade))
+}
+
+/// Nome, descricao e imagem vao para o catalogo; quantidade, escondido e o
+/// valor dos medidores (`atuais`) ficam neste inventario. Atributos e a
+/// definicao dos medidores so por `item_update`. Ver `inventory::Patch`.
+#[tauri::command]
+pub fn inventory_update(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] itemId: String,
+    patch: inventory::Patch,
+) -> AppResult<NoInventario> {
+    state.with_vault(|vault| inventory::update(vault, &id, &itemId, patch, Autor::Mestre))
+}
+
+/// Tira o item DESTE inventario. O item continua na campanha: apagar de vez e
+/// `item_remove`.
+#[tauri::command]
+pub fn inventory_remove(
+    state: State<'_, AppState>,
+    id: String,
+    #[allow(non_snake_case)] itemId: String,
+) -> AppResult<()> {
+    state.with_vault(|vault| inventory::remove(vault, &id, &itemId, Autor::Mestre))
+}
+
+/// Passa um item de um personagem para outro.
+///
+/// So existe por IPC: e gesto de mestre, e o jogador nao tem os dois lados da
+/// transferencia para pedi-la.
+#[tauri::command]
+pub fn inventory_move(
+    state: State<'_, AppState>,
+    de: String,
+    para: String,
+    #[allow(non_snake_case)] itemId: String,
+) -> AppResult<NoInventario> {
+    state.with_vault(|vault| inventory::mover(vault, &de, &para, &itemId))
 }
 
 // --- estante ----------------------------------------------------------------
@@ -2650,24 +2740,36 @@ mod tests {
         0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
     ];
 
+    /// Um item do jogador com a foto subida pelo celular, como anexo na pasta
+    /// do personagem. Devolve o id do item.
     fn com_imagem_de_anexo(vault: &Vault, personagem: &str) -> String {
         let anexo = characters::write_anexo(vault, personagem, "espada.png", PNG).unwrap();
 
-        inventory::add(
+        let item = inventory::add(
             vault,
             personagem,
             Autor::Jogador,
             inventory::Novo {
                 nome: "Espada".into(),
-                imagem: Some(inventory::Imagem::Anexo {
-                    autor: Autor::Jogador,
-                    arquivo: anexo.arquivo,
-                }),
                 ..inventory::Novo::default()
             },
         )
         .unwrap()
-        .id
+        .item
+        .id;
+
+        inventory::set_imagem_anexo(vault, personagem, &item, &anexo.arquivo, Autor::Jogador)
+            .unwrap();
+
+        item
+    }
+
+    fn imagem_de(vault: &Vault, item: &str) -> Option<itens::Imagem> {
+        itens::load(vault)
+            .unwrap()
+            .into_iter()
+            .find(|i| i.id == item)
+            .and_then(|i| i.imagem)
     }
 
     #[test]
@@ -2675,7 +2777,7 @@ mod tests {
         let (_tmp, vault, p) = vault();
         let item = com_imagem_de_anexo(&vault, &p);
 
-        let asset = promover(&vault, &p, &item).unwrap();
+        let asset = promover(&vault, &item).unwrap();
 
         assert_eq!(asset.kind, "image");
         // A medida sai do cabecalho, e e o que da proporcao ao objeto na cena.
@@ -2685,8 +2787,12 @@ mod tests {
         assert_eq!(asset.escopo.as_deref(), Some("personagem"));
 
         // O item passou a apontar para o acervo.
-        let lido = inventory::load(&vault, &p).unwrap();
-        assert_eq!(lido[0].imagem, Some(inventory::Imagem::Asset { id: asset.id.clone() }));
+        assert_eq!(
+            imagem_de(&vault, &item),
+            Some(itens::Imagem::Asset {
+                id: asset.id.clone()
+            })
+        );
 
         // E o anexo saiu: os mesmos bytes em dois lugares dobrariam o arquivo, e
         // ele voltaria a aparecer na aba de Arquivos.
@@ -2695,14 +2801,31 @@ mod tests {
     }
 
     #[test]
+    fn promover_acha_a_foto_na_pasta_de_quem_a_subiu() {
+        let (_tmp, vault, edgar) = vault();
+        let mira = characters::create(&vault, "Mira").unwrap().id;
+        let item = com_imagem_de_anexo(&vault, &edgar);
+
+        // O item mudou de mochila; a foto ficou na pasta do Edgar.
+        inventory::mover(&vault, &edgar, &mira, &item).unwrap();
+
+        let asset = promover(&vault, &item).unwrap();
+        assert_eq!(
+            imagem_de(&vault, &item),
+            Some(itens::Imagem::Asset { id: asset.id })
+        );
+        assert!(characters::list_anexos(&vault, &edgar).unwrap().is_empty());
+    }
+
+    #[test]
     fn promover_duas_vezes_nao_copia_de_novo() {
         let (_tmp, vault, p) = vault();
         let item = com_imagem_de_anexo(&vault, &p);
 
-        let primeiro = promover(&vault, &p, &item).unwrap();
+        let primeiro = promover(&vault, &item).unwrap();
         // O palco chama a cada arrasto solto, e o mesmo item vai ao mapa mais de
         // uma vez: sem idempotencia, cinco copias do mesmo arquivo no acervo.
-        let segundo = promover(&vault, &p, &item).unwrap();
+        let segundo = promover(&vault, &item).unwrap();
 
         assert_eq!(primeiro.id, segundo.id);
         assert_eq!(assets::list(&vault, Some("image")).unwrap().len(), 1);
@@ -2710,26 +2833,29 @@ mod tests {
 
     #[test]
     fn item_sem_imagem_nao_promove() {
-        let (_tmp, vault, p) = vault();
+        let (_tmp, vault, _) = vault();
 
-        let item = inventory::add(
+        let item = itens::criar(
             &vault,
-            &p,
             Autor::Mestre,
-            inventory::Novo { nome: "Corda".into(), ..inventory::Novo::default() },
+            None,
+            itens::Novo {
+                nome: "Corda".into(),
+                ..itens::Novo::default()
+            },
         )
         .unwrap()
         .id;
 
-        assert!(promover(&vault, &p, &item).is_err());
+        assert!(promover(&vault, &item).is_err());
         assert!(assets::list(&vault, Some("image")).unwrap().is_empty());
     }
 
     #[test]
     fn item_inventado_nao_promove() {
-        let (_tmp, vault, p) = vault();
+        let (_tmp, vault, _) = vault();
 
-        assert!(promover(&vault, &p, "nao-existe").is_err());
+        assert!(promover(&vault, "nao-existe").is_err());
     }
 
     #[test]
@@ -2739,12 +2865,33 @@ mod tests {
 
         characters::remove_anexo(&vault, &p, Autor::Jogador, "espada.png").unwrap();
 
-        assert!(promover(&vault, &p, &item).is_err());
+        assert!(promover(&vault, &item).is_err());
 
         // O item continua apontando para o anexo: trocar o campo por um asset
         // que nao existe deixaria a grade com um quadro vazio e sem volta.
-        let lido = inventory::load(&vault, &p).unwrap();
-        assert!(matches!(lido[0].imagem, Some(inventory::Imagem::Anexo { .. })));
+        assert!(matches!(
+            imagem_de(&vault, &item),
+            Some(itens::Imagem::Anexo { .. })
+        ));
+    }
+
+    #[test]
+    fn remover_o_personagem_leva_a_foto_do_item_para_o_acervo() {
+        let (_tmp, vault, edgar) = vault();
+        let mira = characters::create(&vault, "Mira").unwrap().id;
+        let item = com_imagem_de_anexo(&vault, &edgar);
+        inventory::dar(&vault, &mira, &item, None).unwrap();
+
+        remover_personagem(&vault, &edgar).unwrap();
+
+        // O Edgar e a pasta dele sairam; a espada continua na campanha e na
+        // mochila da Mira, agora com a imagem no acervo.
+        assert!(!characters::dir(&vault, &edgar).exists());
+        let da_mira = inventory::listar(&vault, &mira).unwrap();
+        let Some(itens::Imagem::Asset { id }) = &da_mira[0].item.imagem else {
+            panic!("a foto nao virou asset: {:?}", da_mira[0].item.imagem);
+        };
+        assert!(assets::find(&vault, id).unwrap().is_some());
     }
 
     /// A cerca do `abrir_no_navegador`: so o daemon desta maquina.

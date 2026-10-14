@@ -27,9 +27,12 @@ import {
   Italic,
   Lock,
   LockOpen,
+  Package,
   MoveVertical,
   Palette,
   PanelTop,
+  Radio,
+  RadioTower,
   PanelTopDashed,
   Trash2,
   Underline,
@@ -57,6 +60,7 @@ import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
 import { t } from "@/lib/i18n/palco";
+import { t as textoDosItens } from "@/lib/i18n/itens";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -191,6 +195,17 @@ const TOM = {
   personagem: {
     traco: "var(--color-sky-400)",
     botao: "bg-sky-500 text-white",
+  },
+  /**
+   * A peça que É um item da campanha. Âmbar, pela razão do azul do token: o
+   * baú selecionado tem de se distinguir da mobília em volta dele, porque o que
+   * o mestre faz com um item — abrir, mostrar à mesa — não se faz com um
+   * desenho de chão. E âmbar é a cor do alfinete, a outra coisa do mapa que
+   * guarda algo para o grupo achar.
+   */
+  item: {
+    traco: "var(--color-amber-400)",
+    botao: "bg-amber-500 text-amber-950",
   },
 } as const;
 
@@ -467,6 +482,21 @@ type TransformHandlesProps = {
    */
   onOpenSheet?: () => void;
   /**
+   * Presente = a peça é um ITEM da campanha, e a fileira ganha o que é dele: o
+   * nome, que abre o item, e o botão de mostrá-lo na mesa.
+   *
+   * O nome na fileira, e não só um ícone, é o que faz deste o gizmo de outra
+   * coisa: uma peça de mapa é reconhecida pela cara, mas a mesma imagem de baú
+   * pode ser três baús diferentes no catálogo, e o mestre só sabe QUAL está
+   * selecionado lendo.
+   */
+  item?: {
+    nome: string;
+    noAr: boolean;
+    onAbrir: () => void;
+    onTransmitir: () => void;
+  };
+  /**
    * Avisado no pointerdown de redimensionar ou girar.
    *
    * Existe para quem transforma um conjunto: o gizmo já congela a própria
@@ -497,6 +527,7 @@ export function TransformHandles({
   onDelete,
   onFlip,
   onOpenSheet,
+  item: doItem,
   onGestureStart,
   onGestureEnd,
   onChange,
@@ -686,6 +717,7 @@ export function TransformHandles({
           redimensionamento, e ficariam competindo com as alças nas bordas. */}
       {onFlip ||
       onOpenSheet ||
+      doItem ||
       opacidade ||
       sombra ||
       estilo ||
@@ -801,6 +833,88 @@ export function TransformHandles({
               />
               <TooltipContent>{t.transformHandles.espelhar}</TooltipContent>
             </Tooltip>
+          ) : null}
+
+          {/* O item primeiro, e o nome dele à esquerda de tudo: é o que diz o
+              que está selecionado, e o resto da fileira é sobre ele. */}
+          {doItem ? (
+            <>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={textoDosItens.peca.abrirItem}
+                      className={cn(
+                        "pointer-events-auto flex shrink-0 touch-none items-center rounded-full font-medium whitespace-nowrap",
+                        cor.botao,
+                      )}
+                      style={{
+                        height: HANDLE_PX * 2,
+                        gap: HANDLE_PX * 0.4,
+                        paddingInline: HANDLE_PX * 0.7,
+                        fontSize: HANDLE_PX * 1.1,
+                        maxWidth: HANDLE_PX * 18,
+                      }}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        doItem.onAbrir();
+                      }}
+                    >
+                      <Package
+                        className="shrink-0"
+                        style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                      />
+                      <span className="truncate">{doItem.nome}</span>
+                    </button>
+                  }
+                />
+                <TooltipContent>{textoDosItens.peca.abrirItem}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={
+                        doItem.noAr
+                          ? textoDosItens.peca.tirar
+                          : textoDosItens.peca.transmitir
+                      }
+                      aria-pressed={doItem.noAr}
+                      className={cn(
+                        "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                        cor.botao,
+                        doItem.noAr && "ring-2 ring-white/70",
+                      )}
+                      style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        doItem.onTransmitir();
+                      }}
+                    >
+                      {doItem.noAr ? (
+                        <RadioTower
+                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                        />
+                      ) : (
+                        <Radio
+                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                        />
+                      )}
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  {doItem.noAr
+                    ? textoDosItens.peca.tirar
+                    : textoDosItens.peca.transmitir}
+                </TooltipContent>
+              </Tooltip>
+            </>
           ) : null}
 
           {/* Antes do excluir, de propósito: o destrutivo fica na ponta da

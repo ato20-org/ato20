@@ -9,8 +9,8 @@ import {
   ChevronsUp,
   ClipboardPaste,
   Copy,
-  Crosshair,
   CopyPlus,
+  Crosshair,
   Eye,
   EyeOff,
   FlipHorizontal,
@@ -24,8 +24,10 @@ import {
   LockOpen,
   Maximize,
   MousePointerSquareDashed,
+  PackageOpen,
   Plus,
   Radio,
+  RadioTower,
   RectangleHorizontal,
   ScanSearch,
   Scissors,
@@ -33,6 +35,10 @@ import {
   Ungroup,
 } from "lucide-react";
 
+import { abrirItem } from "@/components/mestre/acoes-do-item";
+import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
+import { t as textoDosItens } from "@/lib/i18n/itens";
+import { useItemDaCampanha } from "@/lib/store/use-itens-store";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -401,6 +407,14 @@ export function StageContextMenu({
             {/* Antes de copiar porque é a ação do token COMO personagem, e as
                 de baixo o tratam como imagem. Some quando o token não é de
                 ninguém, que é a maioria deles. */}
+            {/* A peça de item abre o item e o mostra na mesa, como no gizmo. Um
+                só, pela razão das aparências: "mostrar estes cinco" seria
+                cinco cartões disputando a mesma TV. */}
+            {selectedItems.length === 1 &&
+            selectedItems[0]?.itemId &&
+            !selectedItems[0].personagemId ? (
+              <BlocoDaPecaDeItem itemId={selectedItems[0].itemId} />
+            ) : null}
             {doToken ? (
               <SubmenuDeAparencias
                 kit={KIT_CONTEXTO}
@@ -790,6 +804,35 @@ function BlocoDaCamera({
         <Trash2 />
         {t.stageContextMenu.removerCamera}
       </ContextMenuItem>
+    </>
+  );
+}
+
+/**
+ * As duas linhas da peça de item: abrir, e mostrar na mesa.
+ *
+ * Componente, e não linhas soltas no menu, porque as duas precisam de hook -- o
+ * item do catálogo e o estado da transmissão --, e o menu é um só para tudo o
+ * que o palco seleciona. A peça de um item apagado não ganha nada aqui: ela
+ * voltou a ser só imagem.
+ */
+function BlocoDaPecaDeItem({ itemId }: { itemId: string }) {
+  const item = useItemDaCampanha(itemId);
+  const { noAr, alternar } = useTransmissaoDoItem(item);
+
+  if (!item) return null;
+
+  return (
+    <>
+      <ContextMenuItem onClick={() => abrirItem(item)}>
+        <PackageOpen />
+        {textoDosItens.peca.abrirItem}
+      </ContextMenuItem>
+      <ContextMenuItem onClick={alternar}>
+        {noAr ? <RadioTower /> : <Radio />}
+        {noAr ? textoDosItens.peca.tirar : textoDosItens.peca.transmitir}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
     </>
   );
 }

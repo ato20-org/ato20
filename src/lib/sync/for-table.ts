@@ -84,6 +84,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
     !scene.pins &&
     !scene.postits &&
     !scene.handout &&
+    !scene.handoutItens &&
     !scene.extensoes &&
     !scene.cameras &&
     !scene.tripes &&
@@ -103,6 +104,7 @@ export function sceneForTable(scene: Scene | null): Scene | null {
   delete paraMesa.pins;
   delete paraMesa.postits;
   delete paraMesa.handout;
+  delete paraMesa.handoutItens;
   delete paraMesa.extensoes;
   // `cameraNoArId` FICA: é um id só, e é o que deixa a TV distinguir a mesma
   // câmera andando (interpola) de uma câmera trocada (corta). Ver

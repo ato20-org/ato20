@@ -5,6 +5,7 @@ import { Plus, X, type LucideIcon } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
 import {
+  AcoesDaJanela,
   JanelaCorpo,
   larguraMinima,
   useTelas,
@@ -89,6 +90,10 @@ export function DockGroup({ lado, grupo }: { lado: Lado; grupo: Grupo }) {
             />
           ))}
         </div>
+
+        {/* As ações da aba ATIVA, como no cabeçalho da janela flutuante: aqui
+            não há um cabeçalho por tela, e a tira é o topo do grupo. */}
+        <AcoesDaJanela conteudo={ativa} />
 
         <Adicionar lado={lado} grupoId={grupo.id} />
       </div>

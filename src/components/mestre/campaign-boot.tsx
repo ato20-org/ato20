@@ -14,6 +14,7 @@ import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import { esquecerItens } from "@/lib/store/use-itens-store";
 import { esquecerMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import {
   esquecerEfeitosDaCampanha,
@@ -83,6 +84,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // módulo e sobrevivem à troca, então só recarregar a janela consertava.
       esquecerAcervo();
       esquecerPersonagens();
+      // O catálogo de itens, pela mesma razão do elenco: o ponto desta mesa que
+      // citasse um id igual mostraria a espada da outra.
+      esquecerItens();
       esquecerCondicoes();
       esquecerMoldeDeDetalhes();
       // Os efeitos que a outra campanha criou: a condição desta que apontasse
