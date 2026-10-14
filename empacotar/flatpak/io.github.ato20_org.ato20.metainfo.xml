@@ -100,6 +100,86 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.6.0" date="2026-10-14">
+      <description>
+        <p>
+          ATO20 1.6 makes items part of the campaign, each with its own card, on
+          the map and at the table, adds zoom to the map on phones and the TV,
+          puts the player's phone in full screen and lets GM windows stretch
+          from every edge. Fixes for what the GM shows on a phone in full
+          screen, the TV's sound button and the phone's dice bag close the list.
+        </p>
+        <ul>
+          <li>
+            Items belong to the campaign, each with its own card. The Items
+            window keeps the catalog in folders, with search. An item's card is
+            edited in place: image, name, description, attributes and meters,
+            and an attribute like 1d8+2 slashing rolls on click. The same sword
+            can be with more than one character, and each backpack keeps its own
+            quantity and meters. Items that were already on sheets move to the
+            catalog. A campaign opened in this version no longer opens in
+            earlier ones.
+          </li>
+          <li>
+            Items on the map, on pins and at the table. Drag an item from the
+            Items window onto a character, the map, a map pin or the handout. On
+            the map, the piece shows the item's name and the button to put it on
+            air. Show at the table sends the item's card to the TV and the
+            phones, without what's hidden, and the backpack on the phone shows
+            attributes and meters.
+          </li>
+          <li>
+            Zoom on the map on phones and the TV. Pinch, Ctrl with the wheel,
+            Ctrl with + − 0 or the buttons in the corner of the map, up to 400%.
+            Zoom only closes in on what the GM framed, never shows beyond it,
+            and every camera change goes back to the GM's framing.
+          </li>
+          <li>
+            The player's phone in full screen. The page goes full screen on the
+            first tap inside the table, and the browser bar disappears, with the
+            sheet, the chat and the dice bag in place. A button at the top turns
+            it on and off, and the phone remembers the choice. On iPhone the
+            browser doesn't allow it.
+          </li>
+          <li>
+            GM windows stretch from every edge and corner. Before, only from the
+            bottom right corner. To widen a sheet to the left, you had to drag
+            the window, stretch it and drag it back.
+          </li>
+          <li>
+            GM columns open and close from the header. A button at each end of
+            the header, showing whether the column is open. And when dragging a
+            note or a board beside the map, the screen shows where it will open
+            before you let go: Split left, Split right or Open as a tab.
+          </li>
+          <li>
+            Boards only go on air from the palette. Put on air left the header
+            and the board's menu: one absent-minded click put your notes on the
+            TV. In the palette (Ctrl+K), putting it on air by the board's name
+            still works.
+          </li>
+          <li>
+            Sheets with many skills and dice got lighter. With a hundred skills,
+            editing one got five times faster, and searching the sidebar ten
+            times. Switching groups got lighter too.
+          </li>
+          <li>
+            Fixed: on a phone with the map in full screen, what the GM shows now
+            appears. Players with the map in full screen didn't see the item,
+            card or portrait the GM put in the spotlight.
+          </li>
+          <li>
+            Fixed: the TV's sound button shows again. When there was room above
+            and below the map, it was invisible but still clickable.
+          </li>
+          <li>
+            Fixed: in the phone's dice bag, scrolling the list no longer throws
+            a die. The dice stay put, and only the recent rolls scroll. With the
+            phone sideways, the dice fit in two rows.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.5.1" date="2026-10-13">
       <description>
         <p>

@@ -71,6 +71,133 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.6.0",
+    data: "2026-10-14",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Os itens são da campanha, cada um com o seu card",
+          en: "Items belong to the campaign, each with its own card",
+        },
+        detalhe: {
+          pt: "A janela Itens guarda o catálogo em pastas, com busca. O card do item se edita no lugar: imagem, nome, descrição, atributos e medidores, e um atributo como 1d8+2 cortante rola no clique. A mesma espada pode estar com mais de um personagem, e cada mochila guarda a sua quantidade e os seus medidores. Os itens que já estavam nas fichas passam para o catálogo. Campanha aberta nesta versão não abre mais nas anteriores.",
+          en: "The Items window keeps the catalog in folders, with search. An item's card is edited in place: image, name, description, attributes and meters, and an attribute like 1d8+2 slashing rolls on click. The same sword can be with more than one character, and each backpack keeps its own quantity and meters. Items that were already on sheets move to the catalog. A campaign opened in this version no longer opens in earlier ones.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O item no mapa, nos pontos e na mesa",
+          en: "Items on the map, on pins and at the table",
+        },
+        detalhe: {
+          pt: "Arraste um item da janela Itens para um personagem, para o mapa, para um ponto de anotação ou para o handout. No mapa, a peça mostra o nome do item e o botão de transmitir. Mostrar na mesa leva o cartão do item para a TV e os celulares, sem o que está escondido, e a mochila do celular mostra atributos e medidores.",
+          en: "Drag an item from the Items window onto a character, the map, a map pin or the handout. On the map, the piece shows the item's name and the button to put it on air. Show at the table sends the item's card to the TV and the phones, without what's hidden, and the backpack on the phone shows attributes and meters.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Zoom no mapa do celular e da TV",
+          en: "Zoom on the map on phones and the TV",
+        },
+        detalhe: {
+          pt: "Pinça, Ctrl com a roda, Ctrl com + − 0 ou os botões no canto do mapa, até 400%. O zoom só aproxima dentro do que o mestre enquadrou, nunca mostra além, e cada troca de câmera volta ao enquadramento dele.",
+          en: "Pinch, Ctrl with the wheel, Ctrl with + − 0 or the buttons in the corner of the map, up to 400%. Zoom only closes in on what the GM framed, never shows beyond it, and every camera change goes back to the GM's framing.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O celular do jogador em tela cheia",
+          en: "The player's phone in full screen",
+        },
+        detalhe: {
+          pt: "A página entra em tela cheia no primeiro toque dentro da mesa, e a barra do navegador some, com a ficha, o chat e o saquinho no lugar. Um botão no alto liga e desliga, e o celular lembra a escolha. No iPhone o navegador não permite.",
+          en: "The page goes full screen on the first tap inside the table, and the browser bar disappears, with the sheet, the chat and the dice bag in place. A button at the top turns it on and off, and the phone remembers the choice. On iPhone the browser doesn't allow it.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas do Mestre esticam por todas as bordas e cantos",
+          en: "GM windows stretch from every edge and corner",
+        },
+        detalhe: {
+          pt: "Antes, só pelo canto de baixo à direita. Para alargar uma ficha para a esquerda, era preciso arrastar a janela, esticar e arrastar de volta.",
+          en: "Before, only from the bottom right corner. To widen a sheet to the left, you had to drag the window, stretch it and drag it back.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As colunas do Mestre abrem e fecham pelo cabeçalho",
+          en: "GM columns open and close from the header",
+        },
+        detalhe: {
+          pt: "Um botão em cada ponta do cabeçalho, que mostra se a coluna está aberta. E ao arrastar uma nota ou um quadro para o lado do mapa, a tela mostra onde ele vai abrir antes de soltar: Dividir à esquerda, Dividir à direita ou Abrir como aba.",
+          en: "A button at each end of the header, showing whether the column is open. And when dragging a note or a board beside the map, the screen shows where it will open before you let go: Split left, Split right or Open as a tab.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O quadro só vai ao ar pela paleta",
+          en: "Boards only go on air from the palette",
+        },
+        detalhe: {
+          pt: "O Colocar no ar saiu do cabeçalho e do menu do quadro: um clique distraído punha as anotações na TV. Na paleta (Ctrl+K), transmitir pelo nome do quadro continua funcionando.",
+          en: "Put on air left the header and the board's menu: one absent-minded click put your notes on the TV. In the palette (Ctrl+K), putting it on air by the board's name still works.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Fichas com muitas perícias e dados ficaram mais leves",
+          en: "Sheets with many skills and dice got lighter",
+        },
+        detalhe: {
+          pt: "Com cem perícias, editar uma ficou cinco vezes mais rápido, e buscar na barra lateral, dez. Trocar de grupo também ficou mais leve.",
+          en: "With a hundred skills, editing one got five times faster, and searching the sidebar ten times. Switching groups got lighter too.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No celular com o mapa em tela cheia, o que o mestre mostra aparece",
+          en: "On a phone with the map in full screen, what the GM shows now appears",
+        },
+        detalhe: {
+          pt: "O jogador com o mapa em tela cheia não via o item, a carta ou o retrato que o mestre punha em evidência.",
+          en: "Players with the map in full screen didn't see the item, card or portrait the GM put in the spotlight.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O botão de som da TV aparece de novo",
+          en: "The TV's sound button shows again",
+        },
+        detalhe: {
+          pt: "Quando sobrava tela em cima e embaixo do mapa, ele ficava invisível, mas continuava clicável.",
+          en: "When there was room above and below the map, it was invisible but still clickable.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No saquinho do celular, rolar a lista não arremessa mais um dado",
+          en: "In the phone's dice bag, scrolling the list no longer throws a die",
+        },
+        detalhe: {
+          pt: "Os dados ficam parados, e só as últimas rolagens rolam. Com o celular deitado, os dados cabem em duas fileiras.",
+          en: "The dice stay put, and only the recent rolls scroll. With the phone sideways, the dice fit in two rows.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.5.1",
     data: "2026-10-13",
     mudancas: [
