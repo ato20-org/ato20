@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
   FolderOpen,
+  Maximize,
   MessagesSquare,
+  Minimize,
   NotebookPen,
   User,
 } from "lucide-react";
@@ -27,6 +29,7 @@ import { PlayerEntrada } from "@/components/jogador/player-entrada";
 import { PlayerMenu } from "@/components/jogador/player-menu";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
+import { Button } from "@/components/ui/button";
 import {
   useSubscription,
   type Subscription,
@@ -39,6 +42,7 @@ import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
+import { useTelaCheiaDaPagina } from "@/hooks/use-tela-cheia-da-pagina";
 import {
   DeclarativoProvider,
   useDeclarativoDaMesa,
@@ -92,11 +96,15 @@ export function JogadorShell({
    * sobre a tela é o CSS (`fixed inset-0 z-50`), como no iPhone, onde a API
    * nativa não existe; a nativa só tira a barra do navegador, e a evidência,
    * em `z-60`, fica por cima dos dois jeitos.
+   *
+   * Não é a `telaCheia` lá embaixo: aquela é a da página inteira
+   * (`useTelaCheiaDaPagina`), que deixa a ficha e o chat onde estão; esta
+   * estica o mapa sobre eles.
    */
-  const telaCheia = useFullscreen();
+  const telaCheiaDoMapa = useFullscreen();
   const telaCheiaDaMesa = {
-    expandida: telaCheia.expanded,
-    onTelaCheia: () => telaCheia.toggle(document.documentElement),
+    expandida: telaCheiaDoMapa.expanded,
+    onTelaCheia: () => telaCheiaDoMapa.toggle(document.documentElement),
   };
 
   /**
@@ -114,6 +122,9 @@ export function JogadorShell({
   /** Sem nome não há mesa: a tela inteira vira a porta de entrada. */
   const status = usePlayerStore((state) => state.status);
   const dentro = status === "dentro";
+
+  // A página inteira em tela cheia, a partir do primeiro toque dentro da mesa.
+  const telaCheia = useTelaCheiaDaPagina(dentro);
 
   // O fio da campanha, assinado aqui pelo mesmo motivo da cena logo abaixo: a
   // aba do chat desmontada não pode perder a conversa. Só com ficha — o fio é
@@ -190,6 +201,21 @@ export function JogadorShell({
         >
           {nomeDaMesa}
         </span>
+
+        {/* A página inteira em tela cheia. Na faixa, e não no menu da conta:
+            é um toque só, e quem saiu sem querer pelo gesto do sistema acha o
+            caminho de volta sem abrir nada. Sem a API (iPhone), nada. */}
+        {telaCheia.suportada ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={cn("shrink-0 opacity-70", tabbed && "size-6")}
+            aria-label={telaCheia.ativa ? t.telaCheia.sair : t.telaCheia.entrar}
+            onClick={telaCheia.alternar}
+          >
+            {telaCheia.ativa ? <Minimize /> : <Maximize />}
+          </Button>
+        ) : null}
 
         {/* Quem joga, no canto da faixa — e o menu de trocar de nome ou sair.
             Some sozinho enquanto não há jogador. */}
