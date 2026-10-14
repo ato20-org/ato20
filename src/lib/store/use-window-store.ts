@@ -210,6 +210,12 @@ const MIN_LARGURA_PX = 224;
 const MIN_ALTURA_PX = 140;
 const MAX_PX = 1_600;
 
+/**
+ * O que o `max-w`/`max-h` da moldura tira do retângulo da camada. É `1rem` no
+ * `InnerWindow`, e as duas coisas mudam juntas.
+ */
+const FOLGA_CSS_PX = 16;
+
 /** Largura da janela recolhida. Ver `alternarRecolhida`. */
 export const TAB_PX = 240;
 
@@ -243,6 +249,80 @@ export function encaixar(x: number, y: number, limites: { largura: number; altur
     x: Math.round(Math.min(Math.max(x, 0), Math.max(0, limites.largura - MARGEM_PX))),
     y: Math.round(Math.min(Math.max(y, 0), Math.max(0, limites.altura - MARGEM_PX))),
   };
+}
+
+/** De onde a janela está sendo esticada: uma das quatro bordas ou um canto. */
+export type Borda = "n" | "s" | "l" | "o" | "nl" | "no" | "sl" | "so";
+
+/** A geometria de uma janela no meio de um redimensionamento. */
+export type Geometria = { x: number; y: number; largura?: number; altura?: number };
+
+/**
+ * Para onde a janela vai quando é esticada por `borda`.
+ *
+ * O lado OPOSTO à borda fica parado: pegar a borda esquerda e puxar move o
+ * canto e alarga na mesma conta, e é o que faz a borda direita não andar. Por
+ * isso o mínimo e o máximo são aplicados AQUI, antes de calcular o canto — se
+ * só o store limitasse, a largura parava no mínimo enquanto o `x` continuava
+ * seguindo o ponteiro, e a janela inteira escorregava.
+ *
+ * O máximo é o que a tela mostra, e não só o `MAX_PX`: o `max-w`/`max-h` da
+ * moldura corta o que passar da camada, e um canto calculado contra uma largura
+ * que o CSS não deixa existir faria a borda oposta andar do mesmo jeito. Borda
+ * de cima e da esquerda também param no zero, pela mesma razão do `encaixar`.
+ *
+ * O eixo que a borda não toca sai como entrou, inclusive ausente: esticar uma
+ * janela de altura automática pela lateral não pode cravar a altura dela.
+ */
+export function esticar(
+  inicio: Required<Geometria>,
+  delta: { x: number; y: number },
+  borda: Borda,
+  limites: { largura: number; altura: number },
+  atual: Pick<Geometria, "largura" | "altura">,
+): Geometria {
+  const teto = (limite: number) =>
+    limite > 0 ? Math.min(MAX_PX, limite - FOLGA_CSS_PX) : MAX_PX;
+  const limitar = (valor: number, minimo: number, maximo: number) =>
+    Math.max(minimo, Math.min(valor, maximo));
+
+  const geometria: Geometria = { x: inicio.x, y: inicio.y, ...atual };
+
+  if (borda.includes("l")) {
+    geometria.largura = limitar(
+      inicio.largura + delta.x,
+      MIN_LARGURA_PX,
+      teto(limites.largura),
+    );
+  } else if (borda.includes("o")) {
+    const direita = inicio.x + inicio.largura;
+
+    geometria.largura = limitar(
+      inicio.largura - delta.x,
+      MIN_LARGURA_PX,
+      Math.min(teto(limites.largura), direita),
+    );
+    geometria.x = direita - geometria.largura;
+  }
+
+  if (borda.includes("s")) {
+    geometria.altura = limitar(
+      inicio.altura + delta.y,
+      MIN_ALTURA_PX,
+      teto(limites.altura),
+    );
+  } else if (borda.includes("n")) {
+    const baixo = inicio.y + inicio.altura;
+
+    geometria.altura = limitar(
+      inicio.altura - delta.y,
+      MIN_ALTURA_PX,
+      Math.min(teto(limites.altura), baixo),
+    );
+    geometria.y = baixo - geometria.altura;
+  }
+
+  return geometria;
 }
 
 function eNumeroOuAusente(valor: unknown): boolean {
@@ -353,12 +433,13 @@ type WindowStore = {
    */
   guardar: (chave: string) => void;
   /**
-   * Redimensiona durante o arrasto da alça. Não grava: quem grava é `guardar`.
+   * Aplica o fim de um redimensionamento. Não grava: quem grava é `guardar`.
    *
-   * A largura e a altura andam juntas porque a alça é uma, no canto: separar em
-   * duas ações daria dois updates de store por quadro do mesmo gesto.
+   * Posição e tamanho andam juntos porque esticar pela borda de cima ou da
+   * esquerda move o canto: separar em duas ações daria dois updates de store
+   * para o mesmo gesto. O eixo ausente fica como está. Ver `esticar`.
    */
-  redimensionar: (chave: string, largura: number, altura: number) => void;
+  redimensionar: (chave: string, geometria: Geometria) => void;
   /**
    * Recolhe ou devolve a janela.
    *
@@ -472,15 +553,19 @@ export const useWindowStore = create<WindowStore>((set, get) => ({
     gravar(posicoes);
   },
 
-  redimensionar(chave, largura, altura) {
-    const limitar = (valor: number, minimo: number) =>
-      Math.round(Math.min(Math.max(valor, minimo), MAX_PX));
+  redimensionar(chave, { x, y, largura, altura }) {
+    const limitar = (valor: number | undefined, minimo: number) =>
+      valor === undefined
+        ? undefined
+        : Math.round(Math.min(Math.max(valor, minimo), MAX_PX));
+    const encaixada = encaixar(x, y, get().limites);
 
     set((state) => ({
       janelas: state.janelas.map((janela) =>
         janela.chave === chave
           ? {
               ...janela,
+              ...encaixada,
               largura: limitar(largura, MIN_LARGURA_PX),
               altura: limitar(altura, MIN_ALTURA_PX),
             }
