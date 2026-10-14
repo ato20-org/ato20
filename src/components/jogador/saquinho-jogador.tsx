@@ -171,7 +171,10 @@ export function SaquinhoJogador() {
         align="center"
         sideOffset={12}
         className={cn(
-          "w-60 transition-opacity",
+          // Até onde a tela deixa: sem teto, num celular baixo o painel
+          // passava da borda de cima e não havia como alcançar o que sobrou.
+          // Quem rola dentro dele é o histórico. Ver `ConteudoDoSaquinho`.
+          "flex max-h-(--available-height) w-60 flex-col overflow-y-auto overscroll-contain transition-opacity",
           // Sai da frente enquanto o dado está NA MÃO, e só então: o painel fica
           // justo entre a bolinha e o lugar onde se quer mirar.
           //
@@ -265,7 +268,8 @@ export function SaquinhoFlutuante({
       fecharAoTocarFora={false}
       classeDoPainel={cn("transition-opacity", naMao && "opacity-15")}
       painel={() => (
-        <div className="overflow-y-auto p-4">
+        // Coluna, para o histórico ser o que rola. Ver `ConteudoDoSaquinho`.
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4">
           <ConteudoDoSaquinho boca={boca} />
         </div>
       )}
@@ -357,24 +361,42 @@ export function ConteudoDoSaquinho({
       ? [...lances.values()][0]?.rotulo
       : undefined;
 
+  /*
+   * Os dados ficam PARADOS no alto, e só o histórico rola.
+   *
+   * O painel inteiro rolava, com os dados dentro, e no celular isso armava a
+   * própria armadilha: os dados são os alvos grandes do painel, o dedo que ia
+   * rolar quase sempre começava sobre um deles, e quatro pixels de arrasto num
+   * dado já são o gesto de PEGAR -- o jogador rolava a lista e jogava um d20.
+   * Agora quem rola é a lista das últimas rolagens, que não pega nada.
+   *
+   * O painel de fora continua rolável, só como reserva: num celular deitado
+   * com a bolinha no meio da altura, os dados sozinhos podem não caber.
+   */
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="shrink-0 space-y-1">
         {semTitulo ? null : <p className="text-sm font-medium">{t.saquinho.titulo}</p>}
-        <p className="text-muted-foreground text-xs">{t.saquinho.ajuda}</p>
+        {/* Em tela baixa (celular deitado) a ajuda sai: a altura é dos dados. */}
+        <p className="text-muted-foreground text-xs [@media(max-height:520px)]:hidden">
+          {t.saquinho.ajuda}
+        </p>
       </div>
 
-      {/* Três por linha: os seis são SÓLIDOS diferentes, e distinguir um
+      {/* Três por linha: os sólidos são diferentes, e distinguir um
           dodecaedro de um icosaedro num alvo pequeno é pedir demais da vista.
-          Alvos de 56px, e não os 44 do mestre: aqui quem mira é o polegar. */}
-      <div className="grid grid-cols-3 gap-1">
+          Alvos de 56px, e não os 44 do mestre: aqui quem mira é o polegar.
+          Em tela baixa (celular deitado) são quatro por linha, com o desenho
+          em 40px: os oito em três fileiras não cabiam acima do histórico, e o
+          painel voltava a rolar com os dados dentro. */}
+      <div className="grid shrink-0 grid-cols-3 gap-1 [@media(max-height:520px)]:grid-cols-4">
         {TIPOS_DADO.map((tipo) => (
           <button
             key={tipo.faces}
             type="button"
             onPointerDown={(event) => pegar(event, tipo)}
             aria-label={tipo.nome}
-            className="hover:bg-accent grid touch-none place-items-center gap-0.5 rounded-md py-1 transition-transform active:scale-105"
+            className="hover:bg-accent grid touch-none place-items-center gap-0.5 rounded-md py-1 transition-transform active:scale-105 [@media(max-height:520px)]:[&_svg]:size-10"
           >
             {/* O maior número de cada dado: identifica o sólido sem rótulo --
                 `20` só existe no d20 -- e é o que a mesa quer ver. */}
@@ -393,7 +415,7 @@ export function ConteudoDoSaquinho({
       {/* A soma a partir de dois dados, ou de um com modificador: somar um
           dado sozinho é repetir o número que já está na tela. */}
       {valores.length >= 2 || (valores.length >= 1 && modificadores.length > 0) ? (
-        <div className="flex items-baseline gap-2 border-t pt-2.5">
+        <div className="flex shrink-0 items-baseline gap-2 border-t pt-2.5">
           <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-medium">
             {doLance ?? t.saquinho.naTela}
           </span>
@@ -416,19 +438,14 @@ export function ConteudoDoSaquinho({
         </div>
       ) : null}
 
-      <HistoricoDeDados
-        historico={historico}
-        noAr={noAr}
-        titulo={t.saquinho.ultimas}
-      />
-
       {/* Recolhe o que está NESTE aparelho. Não tira da mesa: o que a mesa viu,
-          viu -- e quem tira de lá é o mestre. */}
+          viu -- e quem tira de lá é o mestre. Acima do histórico, e não no
+          fim dele: com a lista rolando, o fim dela é o que fica fora da vista. */}
       {dados.length > 0 ? (
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start"
+          className="w-full shrink-0 justify-start"
           onClick={(event) =>
             recolher(boca?.() ?? centroDe(event.currentTarget))
           }
@@ -437,6 +454,16 @@ export function ConteudoDoSaquinho({
           {t.saquinho.recolher(dados.length)}
         </Button>
       ) : null}
+
+      {/* A única parte que rola. `min-h-12` para o título e uma linha
+          continuarem à vista quando o resto aperta; vazia, nem ocupa o vão. */}
+      <div className="-mx-1 min-h-12 overflow-y-auto overscroll-contain px-1 empty:hidden">
+        <HistoricoDeDados
+          historico={historico}
+          noAr={noAr}
+          titulo={t.saquinho.ultimas}
+        />
+      </div>
     </div>
   );
 }
