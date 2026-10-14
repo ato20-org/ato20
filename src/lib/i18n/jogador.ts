@@ -86,6 +86,12 @@ const pt = {
     idioma: "Idioma · Language",
   },
 
+  /** O botão da faixa de cima que põe a página inteira em tela cheia. */
+  telaCheia: {
+    entrar: "Tela cheia",
+    sair: "Sair da tela cheia",
+  },
+
   /** As ferramentas das docas da tela deitada e as abas da tela em pé. */
   ferramentas: {
     personagem: "Personagem",
@@ -338,6 +344,11 @@ const en: typeof pt = {
     teuNome: "Your name",
     salvar: "Save",
     idioma: "Language · Idioma",
+  },
+
+  telaCheia: {
+    entrar: "Full screen",
+    sair: "Exit full screen",
   },
 
   ferramentas: {

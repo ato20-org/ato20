@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Tela cheia com duas camadas.
@@ -20,12 +20,23 @@ export function useFullscreen(): {
   exit: () => void;
 } {
   const [expanded, setExpanded] = useState(false);
+  /** O elemento a que a API nativa CONCEDEU tela cheia. `null` = só CSS. */
+  const concedido = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     // Sair pelo Esc ou pelo gesto do sistema avisa por aqui. Se a API nativa
-    // nunca foi concedida, o evento não dispara e nada é colapsado à revelia.
+    // nunca foi concedida, nada é colapsado à revelia.
+    //
+    // Pelo elemento, e não por `fullscreenElement` vazio: com a página inteira
+    // em tela cheia por baixo (ver `useTelaCheiaDaPagina`), sair da do mapa
+    // devolve a tela cheia à página -- o elemento não fica `null`, e o mapa
+    // continuaria esticado por CSS sobre ela.
     function handleChange() {
-      if (!document.fullscreenElement) setExpanded(false);
+      if (!concedido.current) return;
+      if (document.fullscreenElement === concedido.current) return;
+      concedido.current = null;
+      destravarOrientacao();
+      setExpanded(false);
     }
 
     document.addEventListener("fullscreenchange", handleChange);
@@ -50,8 +61,7 @@ export function useFullscreen(): {
 
   function toggle(element: HTMLElement | null) {
     if (expanded) {
-      setExpanded(false);
-      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      exit();
       return;
     }
 
@@ -61,6 +71,8 @@ export function useFullscreen(): {
     void element
       ?.requestFullscreen?.()
       .then(() => {
+        concedido.current = element;
+
         // Cena é 16:9. Num celular em retrato ela sobra tela dos dois lados, e
         // deitar a tela é o que torna a leitura de mapa possível. Só existe em
         // parte dos navegadores e só dentro de tela cheia.
@@ -75,8 +87,32 @@ export function useFullscreen(): {
 
   function exit() {
     setExpanded(false);
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    // Só a tela cheia DESTE elemento: a da página, se estiver por baixo, fica.
+    if (concedido.current && document.fullscreenElement === concedido.current) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    if (concedido.current) destravarOrientacao();
+    concedido.current = null;
   }
 
   return { expanded, toggle, exit };
+}
+
+/**
+ * Solta a orientação que a tela cheia do mapa travou em paisagem.
+ *
+ * Sair de toda tela cheia já a solta sozinho; mas com a página inteira em tela
+ * cheia por baixo, sair da do mapa não sai de toda -- e o celular ficaria
+ * deitado à força na ficha e no chat.
+ */
+function destravarOrientacao() {
+  const orientation = screen.orientation as ScreenOrientation & {
+    unlock?: () => void;
+  };
+
+  try {
+    orientation.unlock?.();
+  } catch {
+    // Sem trava, nada a soltar.
+  }
 }
