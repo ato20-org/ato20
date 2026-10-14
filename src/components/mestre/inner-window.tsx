@@ -1,6 +1,10 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import {
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { ChevronDown, ChevronUp, GripHorizontal, X } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
@@ -9,11 +13,36 @@ import { useScreenDrag } from "@/hooks/use-screen-drag";
 import { t } from "@/lib/i18n/mestre";
 import {
   encaixar,
+  esticar,
   TAB_PX,
   useWindowStore,
+  type Borda,
+  type Geometria,
   type Janela,
 } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
+
+/**
+ * As faixas invisíveis de esticar, nas bordas e nos cantos.
+ *
+ * Finas e por cima do conteúdo, pela mesma razão da alça do canto: uma moldura
+ * própria roubaria espaço de todas as janelas. As bordas param antes dos cantos
+ * para cada canto ser um alvo inteiro, e os de cima são menores que a alça de
+ * baixo para não encostar no X do cabeçalho.
+ *
+ * O canto de baixo e à direita não está aqui: é a alça visível, com o desenho
+ * do triângulo, e vem por último na marcação para ganhar das bordas que a
+ * encostam.
+ */
+const FAIXAS: { borda: Borda; className: string }[] = [
+  { borda: "n", className: "inset-x-2.5 top-0 h-1 cursor-n-resize" },
+  { borda: "s", className: "right-4 bottom-0 left-2.5 h-1 cursor-s-resize" },
+  { borda: "o", className: "inset-y-2.5 left-0 w-1 cursor-w-resize" },
+  { borda: "l", className: "top-2.5 right-0 bottom-4 w-1 cursor-e-resize" },
+  { borda: "no", className: "top-0 left-0 size-2.5 cursor-nw-resize" },
+  { borda: "nl", className: "top-0 right-0 size-2.5 cursor-ne-resize" },
+  { borda: "so", className: "bottom-0 left-0 size-2.5 cursor-sw-resize" },
+];
 
 /**
  * A moldura de uma janela interna.
@@ -79,12 +108,12 @@ export function InnerWindow({
    * O `delta` do arrasto é acumulado desde o pointerdown, então precisa ser
    * aplicado sobre um retrato de onde a janela estava — somar incrementos
    * quadro a quadro acumula erro de arredondamento. Serve aos dois gestos: o
-   * cabeçalho move, a alça redimensiona.
+   * cabeçalho move, as bordas redimensionam.
    */
-  const inicio = useRef({ x: 0, y: 0, largura: 0, altura: 0 });
+  const inicio = useRef<Required<Geometria>>({ x: 0, y: 0, largura: 0, altura: 0 });
 
   /** Onde o gesto chegou. Ver `confirmar`. */
-  const fim = useRef({ x: 0, y: 0, largura: 0, altura: 0 });
+  const fim = useRef<Geometria>({ x: 0, y: 0 });
 
   /** A moldura, para medir e para mover durante o gesto. */
   const caixa = useRef<HTMLElement | null>(null);
@@ -109,6 +138,9 @@ export function InnerWindow({
     if (!alvo) return;
 
     for (const [chave, valor] of Object.entries(estilo)) {
+      // Ausente é o eixo que o gesto não toca. Ver `esticar`.
+      if (valor === undefined) continue;
+
       alvo.style.setProperty(chave, `${valor}px`);
     }
   }
@@ -121,6 +153,43 @@ export function InnerWindow({
 
   const recolhida = Boolean(janela.recolhida);
   const larguraAtual = janela.largura ?? largura;
+
+  /** Começa a esticar a janela por uma borda ou um canto. */
+  function esticarPor(event: ReactPointerEvent, borda: Borda) {
+    // O retrato sai do que a janela MEDE agora, e não do store: a altura pode
+    // nunca ter sido definida, e o primeiro arrasto a faria saltar do tamanho
+    // do conteúdo para zero mais o delta; e a largura guardada pode ser maior
+    // que a que o `max-w` deixa aparecer, o que tiraria do lugar a borda que
+    // devia ficar parada.
+    const medida = caixa.current;
+    inicio.current = {
+      x: janela.x,
+      y: janela.y,
+      largura: medida?.offsetWidth ?? larguraAtual,
+      altura: medida?.offsetHeight ?? janela.altura ?? 0,
+    };
+    fim.current = { x: janela.x, y: janela.y };
+
+    startDrag(event, {
+      onMove: (delta) => {
+        fim.current = esticar(inicio.current, delta, borda, limites, {
+          largura: janela.largura,
+          altura: janela.altura,
+        });
+
+        aplicar({
+          left: fim.current.x,
+          top: fim.current.y,
+          width: fim.current.largura,
+          height: fim.current.altura,
+        });
+      },
+      onEnd: () => {
+        redimensionar(janela.chave, fim.current);
+        guardar(janela.chave);
+      },
+    });
+  }
 
   return (
     <section
@@ -267,6 +336,18 @@ export function InnerWindow({
         <>
           {children}
 
+          {/* Sem papel na árvore de acessibilidade: são o mesmo gesto da
+              alça do canto, que já se anuncia, e sete separadores a mais por
+              janela seriam ruído. `touch-none` pela mesma razão da alça. */}
+          {FAIXAS.map(({ borda, className }) => (
+            <span
+              key={borda}
+              aria-hidden
+              className={cn("absolute z-10 touch-none", className)}
+              onPointerDown={(event) => esticarPor(event, borda)}
+            />
+          ))}
+
           {/* A alça é o canto, e sobreposta ao conteúdo: uma faixa própria
               roubaria altura de todas as janelas por causa de um gesto que a
               maioria delas nunca recebe. `touch-none` porque sem isso o
@@ -277,43 +358,7 @@ export function InnerWindow({
             aria-label={t.janela.redimensionar(titulo)}
             aria-orientation="vertical"
             className="hover:bg-accent absolute right-0 bottom-0 z-10 size-4 cursor-se-resize touch-none rounded-tl-sm"
-            onPointerDown={(event) => {
-              inicio.current = {
-                ...inicio.current,
-                largura: larguraAtual,
-                // A altura pode nunca ter sido definida: o retrato sai do que a
-                // janela MEDE agora, senão o primeiro arrasto a faria saltar do
-                // tamanho do conteúdo para zero mais o delta.
-                altura:
-                  janela.altura ??
-                  caixa.current?.getBoundingClientRect().height ??
-                  0,
-              };
-              fim.current = { ...fim.current, ...inicio.current };
-
-              startDrag(event, {
-                onMove: (delta) => {
-                  fim.current = {
-                    ...fim.current,
-                    largura: inicio.current.largura + delta.x,
-                    altura: inicio.current.altura + delta.y,
-                  };
-
-                  aplicar({
-                    width: fim.current.largura,
-                    height: fim.current.altura,
-                  });
-                },
-                onEnd: () => {
-                  redimensionar(
-                    janela.chave,
-                    fim.current.largura,
-                    fim.current.altura,
-                  );
-                  guardar(janela.chave);
-                },
-              });
-            }}
+            onPointerDown={(event) => esticarPor(event, "sl")}
           >
             {/* O triângulo do canto, em duas listras. Decoração: quem carrega o
                 gesto é o `span` inteiro, que é maior que o desenho. */}
