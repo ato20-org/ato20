@@ -12,7 +12,6 @@ import {
 } from "@/components/mestre/dock/window-content";
 import { t } from "@/lib/i18n/mestre";
 import { iconeDaJanela } from "@/lib/mestre/icone-da-janela";
-import { PanelCollapse } from "@/components/mestre/panel-collapse";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,16 +47,7 @@ import { cn } from "@/lib/utils";
  * no store daria o mesmo com uma peça móvel a mais — e refs que precisariam ser
  * limpas quando um grupo desaparece.
  */
-export function DockGroup({
-  lado,
-  grupo,
-  /** O botão de recolher a coluna entra no primeiro grupo dela. */
-  comRecolher,
-}: {
-  lado: Lado;
-  grupo: Grupo;
-  comRecolher: boolean;
-}) {
+export function DockGroup({ lado, grupo }: { lado: Lado; grupo: Grupo }) {
   const ativarAba = useLayoutStore((state) => state.ativarAba);
 
   const ativa =
@@ -77,13 +67,9 @@ export function DockGroup({
           é o que permite a aba ativa cobri-la e virar uma coisa só com o corpo.
           Com `p-1.5` nos quatro lados havia um vão embaixo, e aba separada do
           que ela abre é botão, não aba. */}
+      {/* O botão de recolher a coluna morava nesta tira, no primeiro grupo.
+          Subiu para o cabeçalho do Mestre -- ver `AlternarColuna`. */}
       <div className="flex items-end gap-1 px-1.5 pt-1.5">
-        {/* À esquerda o botão fica depois das abas, à direita antes: ele encosta
-            na borda que a coluna dela toca. Era assim nos dois painéis. */}
-        {comRecolher && lado === "direita" ? (
-          <PanelCollapse side="right" label={t.dock.estePainel} />
-        ) : null}
-
         {/* A tira ROLA, e as abas não encolhem: com cinco abas numa coluna de
             288 pixels, encolher deixava "Ce…", "Retr…", "Ár…" — rótulo de duas
             letras não identifica nada, e as cinco juntas ainda não caberiam. A
@@ -105,10 +91,6 @@ export function DockGroup({
         </div>
 
         <Adicionar lado={lado} grupoId={grupo.id} />
-
-        {comRecolher && lado === "esquerda" ? (
-          <PanelCollapse side="left" label={t.dock.estePainel} />
-        ) : null}
       </div>
 
       <Separator />

@@ -543,8 +543,6 @@ const pt = {
 
   /** O dock: regiões, abas, divisórias e o painel de um plugin. */
   dock: {
-    esconder: (alvo: string) => `Esconder ${alvo}`,
-    estePainel: "este painel",
     regiao: (id: string) => `Região ${id}`,
     abasDe: (id: string) => `Abas de ${id}`,
     trazerPainel: "Trazer um painel para esta região",
@@ -554,6 +552,8 @@ const pt = {
     larguraDoPainelDireito: "Largura do painel direito",
     mostrarPainelEsquerdo: "Mostrar o painel esquerdo",
     mostrarPainelDireito: "Mostrar o painel direito",
+    esconderPainelEsquerdo: "Esconder o painel esquerdo",
+    esconderPainelDireito: "Esconder o painel direito",
     pluginNaoInstalado: "Este plugin não está mais instalado.",
     pluginDesligado: (nome: string) =>
       `${nome} está desligado. Ligue em Configurações → Plugins.`,
@@ -1443,8 +1443,6 @@ const en: typeof pt = {
   },
 
   dock: {
-    esconder: (alvo) => `Hide ${alvo}`,
-    estePainel: "this panel",
     regiao: (id) => `Region ${id}`,
     abasDe: (id) => `Tabs of ${id}`,
     trazerPainel: "Bring a panel to this region",
@@ -1454,6 +1452,8 @@ const en: typeof pt = {
     larguraDoPainelDireito: "Right panel width",
     mostrarPainelEsquerdo: "Show the left panel",
     mostrarPainelDireito: "Show the right panel",
+    esconderPainelEsquerdo: "Hide the left panel",
+    esconderPainelDireito: "Hide the right panel",
     pluginNaoInstalado: "This plugin is no longer installed.",
     pluginDesligado: (nome) => `${nome} is turned off. Turn it on in Settings → Plugins.`,
     pluginFalhou: (nome) => `${nome} failed to load.`,
