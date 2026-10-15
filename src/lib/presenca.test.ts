@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { dicionarios } from "@/lib/i18n/desktop";
-import { presencaDe, SITE_DO_ATO20, type EntradaDaPresenca } from "@/lib/presenca";
+import { presencaDe, type EntradaDaPresenca } from "@/lib/presenca";
+import { SITE_DO_ATO20 } from "@/lib/projeto";
 
 const textos = dicionarios["pt-BR"].presenca;
 

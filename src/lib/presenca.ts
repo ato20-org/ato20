@@ -1,4 +1,5 @@
 import type { dicionarios } from "@/lib/i18n/desktop";
+import { SITE_DO_ATO20 } from "@/lib/projeto";
 
 /**
  * O que o Mestre está fazendo, dito para fora: o título da janela -- o que a
@@ -8,9 +9,6 @@ import type { dicionarios } from "@/lib/i18n/desktop";
  * para errar, e é ela que o teste cobre. Quem lê os stores e entrega o
  * resultado ao Rust é `PresencaDoMestre`.
  */
-
-/** O site, para o botão do cartão. */
-export const SITE_DO_ATO20 = "https://ato20.valbmig.com.br";
 
 /** A cena em edição, pelo que o mestre faz nela. `null` sem cena nenhuma. */
 export type CenaDaPresenca = "mapa" | "quadro" | "fundo" | null;
