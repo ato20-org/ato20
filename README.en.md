@@ -16,7 +16,7 @@ one place.
 
 </div>
 
-Made for in-person play: the GM builds the next scene on the laptop while the table keeps
+Made for RPG over LAN, with VPN support: the GM builds the next scene on the laptop while the table keeps
 watching the current one on the spectator window, and every player follows along on their
 own phone.
 

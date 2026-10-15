@@ -16,7 +16,7 @@ organizada no mesmo lugar.
 
 </div>
 
-Feito para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
+Feito para RPG em LAN, com suporte a VPN: o mestre monta a próxima cena no notebook enquanto a mesa
 continua vendo a atual na janela do espectador, e cada jogador acompanha pelo próprio
 celular.
 
