@@ -7,6 +7,7 @@ import {
   Keyboard,
   Minus,
   History,
+  Info,
   Moon,
   Palette,
   Plus,
@@ -41,6 +42,7 @@ import { atalhosPorGrupo, rotuloDoGrupo } from "@/lib/mestre/atalhos";
 import { t } from "@/lib/i18n/desktop";
 import { rico } from "@/lib/i18n/rico";
 import { SecaoIdioma } from "@/components/desktop/secao-idioma";
+import { Sobre } from "@/components/desktop/sobre";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
@@ -52,8 +54,10 @@ import {
 /**
  * As seções, na ordem da barra lateral.
  *
- * Plugins por último de propósito: é a única que ainda não faz nada, e primeira
- * na lista ela seria a primeira impressão da tela.
+ * Plugins perto do fim de propósito: é a única que ainda não faz nada, e primeira
+ * na lista ela seria a primeira impressão da tela. Sobre no fim, que é onde todo
+ * aplicativo a guarda: ninguém abre as Configurações por ela, e quem a procura
+ * olha lá embaixo.
  */
 const SECOES = [
   { chave: "geral", titulo: t.configuracoes.secoes.geral, icone: SlidersHorizontal },
@@ -61,6 +65,7 @@ const SECOES = [
   { chave: "versao", titulo: t.configuracoes.secoes.versao, icone: History },
   { chave: "teclado", titulo: t.configuracoes.secoes.teclado, icone: Keyboard },
   { chave: "plugins", titulo: t.configuracoes.secoes.plugins, icone: Puzzle },
+  { chave: "sobre", titulo: t.configuracoes.secoes.sobre, icone: Info },
 ] as const;
 
 type Chave = (typeof SECOES)[number]["chave"];
@@ -156,6 +161,7 @@ export function ConfiguracoesDialog() {
               {secao === "versao" ? <PainelVersao /> : null}
               {secao === "teclado" ? <PainelTeclado /> : null}
               {secao === "plugins" ? <PainelPlugins /> : null}
+              {secao === "sobre" ? <PainelSobre /> : null}
             </div>
           </ScrollArea>
         </div>
@@ -369,6 +375,15 @@ function PainelVersao() {
 
       <TituloSecao>{t.configuracoes.versao.historico}</TituloSecao>
       <HistoricoDeVersoes />
+    </>
+  );
+}
+
+function PainelSobre() {
+  return (
+    <>
+      <TituloSecao>{t.configuracoes.secoes.sobre}</TituloSecao>
+      <Sobre />
     </>
   );
 }

@@ -25,6 +25,7 @@ const pt = {
       versao: "Versão",
       teclado: "Teclado",
       plugins: "Plugins",
+      sobre: "Sobre",
     },
     ajustesAjuda:
       "O que o ATO20 e os plugins deixam ajustar, por máquina e por campanha. A campanha vence.",
@@ -115,6 +116,22 @@ const pt = {
           "Este plugin executa código, com o alcance da janela do Mestre: lê e muda a campanha aberta. Instale só se você confia em quem o escreveu.",
       },
     },
+    sobre: {
+      saudacao:
+        "Oi! O ATO20 é um projeto pessoal, gratuito e feito no Brasil. Obrigado por levá-lo para a sua mesa. Se quiser contar como foi, mandar uma ideia ou avisar de um problema, é só chamar.",
+      projeto: "O projeto",
+      contato: "Contato",
+      apoiar: "Apoiar",
+      site: "Site",
+      codigo: "Código",
+      email: "E-mail",
+      x: "X",
+      instagram: "Instagram",
+      kofi: "Ko-fi",
+      copiarEmail: "Copiar o e-mail",
+      emailCopiado: "E-mail copiado",
+      semNavegador: "Não foi possível abrir o navegador.",
+    },
   },
 
   ajustes: {
@@ -184,6 +201,7 @@ const pt = {
     contarNovidades: (n: number) => (n === 1 ? "1 novidade" : `${n} novidades`),
     contarCorrecoes: (n: number) => (n === 1 ? "1 correção" : `${n} correções`),
     releasesNoGithub: "Releases no GitHub",
+    apoiar: "Apoie no Ko-fi",
     semNavegador: "Não foi possível abrir o navegador.",
   },
 
@@ -222,6 +240,7 @@ const en: typeof pt = {
       versao: "Version",
       teclado: "Keyboard",
       plugins: "Plugins",
+      sobre: "About",
     },
     ajustesAjuda:
       "Everything ATO20 and its plugins let you adjust, per machine and per campaign. The campaign wins.",
@@ -312,6 +331,22 @@ const en: typeof pt = {
           "This plugin runs code, with the same access as the GM window: it reads and changes the open campaign. Only install it if you trust whoever wrote it.",
       },
     },
+    sobre: {
+      saudacao:
+        "Hi! ATO20 is a personal project, free and made in Brazil. Thanks for bringing it to your table. If you'd like to tell me how it went, share an idea or report a problem, just reach out.",
+      projeto: "The project",
+      contato: "Contact",
+      apoiar: "Support",
+      site: "Website",
+      codigo: "Code",
+      email: "Email",
+      x: "X",
+      instagram: "Instagram",
+      kofi: "Ko-fi",
+      copiarEmail: "Copy the email",
+      emailCopiado: "Email copied",
+      semNavegador: "Could not open the browser.",
+    },
   },
 
   ajustes: {
@@ -374,6 +409,7 @@ const en: typeof pt = {
     contarNovidades: (n) => (n === 1 ? "1 new feature" : `${n} new features`),
     contarCorrecoes: (n) => (n === 1 ? "1 fix" : `${n} fixes`),
     releasesNoGithub: "Releases on GitHub",
+    apoiar: "Support on Ko-fi",
     semNavegador: "Could not open the browser.",
   },
 
