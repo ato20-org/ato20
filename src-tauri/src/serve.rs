@@ -595,15 +595,20 @@ fn bind() -> AppResult<TcpListener> {
 
 /// O IP desta maquina na rede local.
 ///
-/// Sem crate de enumeracao de interfaces: abrir um socket UDP e "conectar" a um
-/// endereco roteavel nao envia pacote nenhum, e faz o sistema escolher a
-/// interface de saida pela propria tabela de rotas. E isso que se quer -- a
-/// interface por onde os celulares da casa chegam -- e nao a primeira da lista,
-/// que costuma ser docker ou uma VPN.
+/// A rota primeiro: abrir um socket UDP e "conectar" a um endereco roteavel nao
+/// envia pacote nenhum, e faz o sistema escolher a interface de saida pela
+/// propria tabela de rotas. E isso que se quer -- a interface por onde os
+/// celulares da casa chegam -- e nao a primeira da lista, que costuma ser
+/// docker ou uma VPN.
+///
+/// A lista so quando nao ha rota nenhuma. Ver `ip_da_rede_sem_rota`.
 fn lan_ip() -> Option<IpAddr> {
     // Dois alvos: um publico, e um privado para o caso de a casa nao ter saida
     // para a internet. Nenhum dos dois recebe nada.
-    ALVOS_DA_REDE_LOCAL.into_iter().find_map(ip_de_saida)
+    ALVOS_DA_REDE_LOCAL
+        .into_iter()
+        .find_map(ip_de_saida)
+        .or_else(|| ip_da_rede_sem_rota(&placas()))
 }
 
 const ALVOS_DA_REDE_LOCAL: [&str; 2] = ["1.1.1.1:80", "192.168.0.1:80"];
@@ -620,6 +625,100 @@ fn ip_de_saida(alvo: &str) -> Option<IpAddr> {
     (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
 }
 
+/// Uma placa de rede ligada, com o que o convite pergunta a ela.
+#[derive(Debug, Clone)]
+struct Placa {
+    nome: String,
+    ip: IpAddr,
+    /// tun, WireGuard, PPP. A VPN do trabalho e assim, e o celular da mesa
+    /// nunca esta do outro lado dela.
+    ponto_a_ponto: bool,
+}
+
+/// As placas ligadas desta maquina, so com IPv4.
+///
+/// So IPv4 porque o endereco vira `http://{ip}:{porta}` no QR, e IPv6 ali
+/// pediria colchetes. Sem o 169.254 que o sistema inventa quando o DHCP nao
+/// responde: ninguem alcanca aquilo.
+fn placas() -> Vec<Placa> {
+    let Ok(lista) = if_addrs::get_if_addrs() else {
+        return Vec::new();
+    };
+
+    lista
+        .into_iter()
+        .filter(|placa| placa.is_oper_up() && !placa.is_loopback() && !placa.is_link_local())
+        .filter(|placa| placa.ip().is_ipv4())
+        .map(|placa| Placa {
+            ip: placa.ip(),
+            ponto_a_ponto: placa.is_p2p(),
+            nome: placa.name,
+        })
+        .collect()
+}
+
+/// A placa e do ZeroTier.
+///
+/// O ZeroTier nao tem faixa de IP propria: cada rede escolhe a sua, quase
+/// sempre uma privada como a do Wi-Fi de casa, e a faixa nao diz nada. O nome
+/// diz. Ele chama a placa de `zt` mais o id da rede no Linux (`ztr2qsmswx`), de
+/// `feth` no macOS, e o Windows mostra o nome amigavel do adaptador
+/// (`ZeroTier One [8056c2e21c000001]`).
+fn e_zerotier(nome: &str) -> bool {
+    let nome = nome.to_ascii_lowercase();
+
+    nome.starts_with("zt") || nome.starts_with("feth") || nome.contains("zerotier")
+}
+
+fn ip_do_zerotier(placas: &[Placa]) -> Option<IpAddr> {
+    placas
+        .iter()
+        .find(|placa| e_zerotier(&placa.nome))
+        .map(|placa| placa.ip)
+}
+
+/// Pedacos do nome das placas de maquina virtual e de conteiner. Elas tem IP
+/// privado como o do Wi-Fi, e nenhum celular esta do outro lado. Os nomes do
+/// Linux (`docker0`, `virbr0`, `vboxnet0`) e os do Windows (`vEthernet (WSL)`,
+/// `VirtualBox Host-Only Network`, `VMware Network Adapter VMnet8`).
+const PLACAS_VIRTUAIS: [&str; 12] = [
+    "docker",
+    "br-",
+    "veth",
+    "virbr",
+    "vboxnet",
+    "virtualbox",
+    "vmnet",
+    "vmware",
+    "lxc",
+    "lxd",
+    "podman",
+    "vethernet",
+];
+
+/// A rede local de uma maquina sem rota para lugar nenhum.
+///
+/// A LAN party sem gateway -- IP fixo, ou um roteador que nao anuncia saida --
+/// nao tem por onde a sonda sair, e os celulares estao nela do mesmo jeito.
+/// Sobra a lista: a primeira placa com IP privado que nao seja o ZeroTier, um
+/// tunel ponto a ponto ou uma maquina virtual.
+fn ip_da_rede_sem_rota(placas: &[Placa]) -> Option<IpAddr> {
+    placas
+        .iter()
+        .find(|placa| {
+            let IpAddr::V4(ip) = placa.ip else {
+                return false;
+            };
+            let nome = placa.nome.to_ascii_lowercase();
+
+            ip.is_private()
+                && !placa.ponto_a_ponto
+                && !e_zerotier(&placa.nome)
+                && !PLACAS_VIRTUAIS.iter().any(|virtual_| nome.contains(virtual_))
+        })
+        .map(|placa| placa.ip)
+}
+
 /// Uma rede por onde a mesa alcanca esta maquina.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -628,6 +727,7 @@ pub enum Rede {
     Tailscale,
     Hamachi,
     Radmin,
+    Zerotier,
 }
 
 /// O daemon numa dessas redes.
@@ -642,7 +742,7 @@ pub struct Endereco {
 /// As VPNs de jogo se reconhecem pela faixa que cada uma toma para si: o
 /// Tailscale usa o 100.64.0.0/10 (o espaco de CGNAT), o Hamachi o 25.0.0.0/8 e
 /// o Radmin o 26.0.0.0/8. O ZeroTier nao entra: cada rede dele escolhe a
-/// propria faixa, e o mestre digita o endereco no convite.
+/// propria faixa, e ele se reconhece pelo nome da placa -- ver `e_zerotier`.
 ///
 /// O resto e rede local. Uma maquina ligada direto num CGNAT de operadora (um
 /// modem USB, raro) seria lida como Tailscale -- o endereco ainda funcionaria,
@@ -668,8 +768,12 @@ fn classificar(ip: IpAddr) -> Rede {
 ///
 /// Um alvo por rede: a rota ate ele diz por que interface se sai, e a faixa do
 /// IP dela diz se e a rede procurada. Sem a VPN, a rota ate 25.0.0.1 cai no
-/// gateway da casa, o IP volta como rede local, e o Hamachi fica de fora.
+/// gateway da casa, o IP volta como rede local, e o Hamachi fica de fora. O
+/// ZeroTier, sem faixa, vem pelo nome da placa.
 pub fn enderecos(porta: u16) -> Vec<Endereco> {
+    let placas = placas();
+    let zerotier = ip_do_zerotier(&placas);
+
     let sondas: [(Rede, &[&str]); 4] = [
         (Rede::Local, &ALVOS_DA_REDE_LOCAL),
         // O endereco de servico do proprio Tailscale: so tem rota pela
@@ -679,17 +783,26 @@ pub fn enderecos(porta: u16) -> Vec<Endereco> {
         (Rede::Radmin, &["26.0.0.1:80"]),
     ];
 
-    sondas
-        .into_iter()
-        .filter_map(|(rede, alvos)| {
-            alvos
-                .iter()
-                .filter_map(|alvo| ip_de_saida(alvo))
-                .find(|ip| classificar(*ip) == rede)
-                .map(|ip| Endereco {
-                    rede,
-                    url: format!("http://{ip}:{porta}"),
-                })
+    let achados = sondas.into_iter().filter_map(|(rede, alvos)| {
+        alvos
+            .iter()
+            .filter_map(|alvo| ip_de_saida(alvo))
+            // A rede do ZeroTier pode ser justo a 192.168.0.0/24, e ai a rota
+            // ate o alvo privado sai por ela: o IP e privado, mas nao e a casa.
+            .find(|ip| classificar(*ip) == rede && Some(*ip) != zerotier)
+            .or_else(|| {
+                (rede == Rede::Local)
+                    .then(|| ip_da_rede_sem_rota(&placas))
+                    .flatten()
+            })
+            .map(|ip| (rede, ip))
+    });
+
+    achados
+        .chain(zerotier.map(|ip| (Rede::Zerotier, ip)))
+        .map(|(rede, ip)| Endereco {
+            rede,
+            url: format!("http://{ip}:{porta}"),
         })
         .collect()
 }
@@ -4581,6 +4694,56 @@ mod tests {
         assert!(!tentativas.bloqueado(cliente, depois));
     }
 
+    fn placa(nome: &str, ip: &str) -> Placa {
+        Placa {
+            nome: nome.into(),
+            ip: ip.parse().expect("ip"),
+            ponto_a_ponto: false,
+        }
+    }
+
+    #[test]
+    fn o_zerotier_se_reconhece_pelo_nome_em_cada_sistema() {
+        assert!(e_zerotier("ztr2qsmswx"));
+        assert!(e_zerotier("feth2318"));
+        assert!(e_zerotier("ZeroTier One [8056c2e21c000001]"));
+
+        assert!(!e_zerotier("wlan0"));
+        assert!(!e_zerotier("Wi-Fi"));
+        assert!(!e_zerotier("tailscale0"));
+        assert!(!e_zerotier("Ethernet"));
+
+        let lista = [placa("wlan0", "192.168.0.12"), placa("ztr2qsmswx", "10.147.17.5")];
+        assert_eq!(ip_do_zerotier(&lista), Some("10.147.17.5".parse().unwrap()));
+        assert_eq!(ip_do_zerotier(&lista[..1]), None);
+    }
+
+    #[test]
+    fn sem_rota_a_rede_local_e_a_placa_que_sobra() {
+        let mut tunel = placa("wg0", "10.8.0.2");
+        tunel.ponto_a_ponto = true;
+
+        // Na ordem em que o sistema costuma listar: as virtuais primeiro.
+        let lista = [
+            placa("docker0", "172.17.0.1"),
+            placa("vEthernet (WSL)", "172.29.16.1"),
+            placa("VirtualBox Host-Only Network", "192.168.56.1"),
+            placa("ztr2qsmswx", "10.147.17.5"),
+            tunel,
+            placa("tailscale0", "100.72.208.2"),
+            placa("enp3s0", "10.0.0.15"),
+        ];
+        assert_eq!(
+            ip_da_rede_sem_rota(&lista),
+            Some("10.0.0.15".parse().unwrap())
+        );
+
+        // So virtual e VPN: nenhuma casa para chamar.
+        assert_eq!(ip_da_rede_sem_rota(&lista[..6]), None);
+        // IP publico direto na placa nao e rede de casa.
+        assert_eq!(ip_da_rede_sem_rota(&[placa("eth0", "203.0.113.5")]), None);
+    }
+
     #[test]
     fn so_entra_a_rede_que_respondeu_pela_faixa_dela() {
         // A maquina do teste pode ter qualquer rede, ou nenhuma. O que vale
@@ -4597,7 +4760,10 @@ mod tests {
                 .parse()
                 .expect("ip no endereco");
 
-            assert_eq!(classificar(ip), endereco.rede, "{}", endereco.url);
+            // O ZeroTier vem pelo nome da placa, e a faixa dele e qualquer uma.
+            if endereco.rede != Rede::Zerotier {
+                assert_eq!(classificar(ip), endereco.rede, "{}", endereco.url);
+            }
             assert!(
                 !vistas.contains(&endereco.rede),
                 "{:?} repetida",

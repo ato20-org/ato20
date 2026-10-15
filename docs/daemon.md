@@ -46,7 +46,7 @@ casa chegam — e não a primeira da lista, que costuma ser docker ou uma VPN.
 
 Escutar em `0.0.0.0` já põe o daemon em qualquer VPN que a máquina tenha ligada. A mesa
 pela internet é isso, e nada mais: o mestre e os jogadores entram na mesma rede virtual
-(Tailscale, Hamachi, Radmin, ZeroTier), e para o daemon eles são o celular da sala. Não há
+(Tailscale, ZeroTier, Hamachi, Radmin), e para o daemon eles são o celular da sala. Não há
 servidor do ATO20 no meio, nem túnel aberto pelo aplicativo.
 
 O que o aplicativo faz é **saber o endereço**. Pelo IPC, e não por rota: `enderecos_da_mesa`
@@ -59,13 +59,26 @@ local       1.1.1.1, 192.168.0.1 nenhuma das faixas abaixo
 tailscale   100.100.100.100      100.64.0.0/10
 hamachi     25.0.0.1             25.0.0.0/8
 radmin      26.0.0.1             26.0.0.0/8
+zerotier    (nenhum)             pelo nome da placa: zt* (Linux), feth* (macOS),
+                                 "ZeroTier One [...]" (Windows)
 ```
 
 Sem a VPN, a rota até o alvo dela cai no gateway da casa, o IP volta como rede local, e a
 sondagem fica sem resposta. É calculado a cada pergunta, e não na abertura como o `lanUrl`:
-a VPN se liga com o aplicativo aberto. O ZeroTier não entra porque cada rede dele escolhe a
-própria faixa; ele vai pelo endereço que o mestre digita no convite, como um nome do
-MagicDNS ou do DuckDNS.
+a VPN se liga com o aplicativo aberto.
+
+O ZeroTier não tem faixa: cada rede dele escolhe a sua, quase sempre uma privada como a do
+Wi-Fi. Ele vem da lista de placas (crate `if-addrs`), pelo nome que dá à placa em cada
+sistema. A sonda da rede local descarta o IP dele, porque uma rede ZeroTier em
+`192.168.0.0/24` responderia pelo alvo privado. O que nem a faixa nem o nome reconhecem vai
+pelo endereço que o mestre digita no convite, como um nome do MagicDNS ou do DuckDNS.
+
+**Sem rota nenhuma**, a rede local também vem da lista. A LAN party sem gateway (IP fixo, ou
+um roteador que não anuncia saída) não tem por onde a sonda sair, e os celulares estão nela
+do mesmo jeito. Vale a primeira placa com IP privado que não seja o ZeroTier, um túnel ponto
+a ponto (a VPN do trabalho) ou uma placa de máquina virtual ou contêiner (`docker0`,
+`virbr0`, `vEthernet (WSL)`...). A lista é o último recurso, e não o primeiro, porque é nela
+que essas placas aparecem antes do Wi-Fi.
 
 A escolha fica no `configuracoes.json` da **máquina** (`rede.convite`,
 `rede.enderecoProprio`), e não da campanha: o endereço da tailnet é deste computador.

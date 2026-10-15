@@ -148,6 +148,10 @@ sha2 = "0.10"
 # tela de espectador, e servi-la na mesma janela do Mestre tiraria o mestre da
 # mesa dele.
 tauri-plugin-opener = "2.5.5"
+# As placas de rede, para o que a tabela de rotas nao responde: o ZeroTier,
+# que nao tem faixa propria e so se reconhece pelo nome da placa, e a rede
+# local sem gateway nenhum. Ver `serve::placas`.
+if-addrs = "0.15"
 
 # O aplicativo se atualiza sozinho, e por isso o pacote sai ASSINADO.
 #
