@@ -14,9 +14,11 @@
  * teste cobre.
  */
 
+import type { FacesDado } from "@/types/dado";
+
 /** Um dado de uma rolagem, já com o valor que a mesa soma. */
 export type DadoRolado = {
-  faces: number;
+  faces: FacesDado;
   valor: number;
   /** O d100 de porcentagem e afins não entram na conta. Ver `entraNaSoma`. */
   soma: boolean;

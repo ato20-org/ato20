@@ -10,7 +10,6 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  Dices,
   GripVertical,
   Square,
   Swords,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { Rosto } from "@/components/mestre/characters-window";
+import { DadoEstatico } from "@/components/mestre/saquinho-dados";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +38,7 @@ import { selectCenaParaMesa, useSceneStore } from "@/lib/store/use-scene-store";
 import { duracao } from "@/lib/tempo";
 import { cn } from "@/lib/utils";
 import type { Personagem } from "@/types/character";
+import { tipoDado } from "@/types/dado";
 
 /** Quantos pixels o ponteiro anda antes de o aperto virar arrasto. */
 const LIMIAR_DO_ARRASTO = 4;
@@ -559,9 +560,15 @@ function AbaRodadas({
     <ul className="flex flex-col gap-1 p-2">
       {[...rodadas].reverse().map((rodada) => {
         const estaAberta = rodada.numero === aberta;
+        const corrente = rodada.fim === null;
 
+        // A corrente em amarelo, a cor do selo da rodada no rodapé: é a mesma
+        // rodada, e a cor é o que liga os dois de relance.
         return (
-          <li key={rodada.numero} className="rounded-md border">
+          <li
+            key={rodada.numero}
+            className={cn("rounded-md border", corrente && "border-amber-400/70")}
+          >
             <button
               type="button"
               aria-expanded={estaAberta}
@@ -576,10 +583,14 @@ function AbaRodadas({
                 )}
               />
               <span className="text-sm font-medium">{t.iniciativa.rodada(rodada.numero)}</span>
-              <span className="text-muted-foreground ml-auto shrink-0 text-xs tabular-nums">
-                {rodada.fim === null
-                  ? t.iniciativa.emAndamento
-                  : duracao(rodada.fim - rodada.inicio)}
+              <span className="text-muted-foreground ml-auto flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+                {corrente ? (
+                  <span
+                    aria-hidden
+                    className="size-1.5 rounded-full bg-amber-400 motion-safe:animate-pulse"
+                  />
+                ) : null}
+                {corrente ? t.iniciativa.emAndamento : duracao((rodada.fim ?? 0) - rodada.inicio)}
                 {" · "}
                 {t.iniciativa.contarEventos(rodada.eventos.length)}
               </span>
@@ -646,7 +657,7 @@ function LinhaDeEvento({ evento }: { evento: EventoDaRodada }) {
 
       return (
         <li className="flex items-center gap-2 text-xs">
-          <Dices className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+          <DadoDaRolagem dados={evento.dados} />
           <span className="min-w-0 flex-1 truncate">
             {t.iniciativa.quemRolou(quem, evento.rotulo ?? notacao(evento.dados))}
           </span>
@@ -693,6 +704,26 @@ function LinhaDeEvento({ evento }: { evento: EventoDaRodada }) {
         </li>
       );
   }
+}
+
+/**
+ * O dado da rolagem, o mesmo do saquinho e da mesa, e não um ícone genérico: a
+ * cor e a forma dizem o tipo antes de ler "1d12".
+ *
+ * Um só, o de mais faces: a Luta de dois d20 e um d4 é lida pelo d20, e três
+ * dados de 14 pixels lado a lado viravam uma mancha.
+ */
+function DadoDaRolagem({ dados }: { dados: readonly DadoRolado[] }) {
+  const maior = dados.reduce<DadoRolado | null>(
+    (atual, dado) => (!atual || dado.faces > atual.faces ? dado : atual),
+    null,
+  );
+
+  return (
+    <span className="grid size-4 shrink-0 place-items-center">
+      {maior ? <DadoEstatico tipo={tipoDado(maior.faces)} tamanho={16} /> : null}
+    </span>
+  );
 }
 
 function Bolinha({ cor }: { cor: string }) {
