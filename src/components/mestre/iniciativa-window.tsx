@@ -439,50 +439,74 @@ function Rodape({
   const rodada = iniciativa.rodadas.at(-1)?.numero ?? 1;
   const semNinguem = iniciativa.ordem.length === 0;
 
+  // Duas linhas: a vez em cima, os gestos embaixo. Na mesma linha, três
+  // botões com nome não cabiam ao lado de "Vez de Fulano" com a janela
+  // atracada, e o nome do personagem é o que não pode ser cortado.
   return (
-    <footer className="flex shrink-0 items-center gap-2 border-t px-2 py-1.5">
-      {personagem ? <Rosto personagem={personagem} /> : null}
+    <footer className="flex shrink-0 flex-col gap-1.5 border-t p-2">
+      <div className="flex items-center gap-2">
+        {personagem ? <Rosto personagem={personagem} /> : null}
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
-        </p>
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {t.iniciativa.rodada(rodada)}
-        </p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
+          </p>
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {t.iniciativa.rodada(rodada)}
+          </p>
+        </div>
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={t.iniciativa.anterior}
-        title={t.iniciativa.anterior}
-        disabled={semNinguem}
-        onClick={anterior}
-      >
-        <ChevronLeft />
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        title={t.iniciativa.proximoTurno}
-        disabled={semNinguem}
-        onClick={proximo}
-      >
-        {t.iniciativa.proximo}
-        <ChevronRight />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="text-muted-foreground"
-        aria-label={t.iniciativa.encerrar}
-        title={t.iniciativa.encerrar}
-        onClick={encerrar}
-      >
-        <Square />
-      </Button>
+      {/* Iguais de propósito, os três com nome: no meio do combate o olho
+          procura a palavra, e um ícone sozinho -- o quadrado do encerrar --
+          não dizia o que fazia. */}
+      <div className="grid grid-cols-3 gap-1.5">
+        <BotaoDoTurno
+          rotulo={t.iniciativa.anterior}
+          dica={t.iniciativa.anteriorDica}
+          disabled={semNinguem}
+          onClick={anterior}
+        >
+          <ChevronLeft />
+        </BotaoDoTurno>
+        <BotaoDoTurno
+          rotulo={t.iniciativa.proximo}
+          dica={t.iniciativa.proximoDica}
+          disabled={semNinguem}
+          onClick={proximo}
+        >
+          <ChevronRight />
+        </BotaoDoTurno>
+        <BotaoDoTurno
+          rotulo={t.iniciativa.encerrar}
+          dica={t.iniciativa.encerrarDica}
+          onClick={encerrar}
+        >
+          <Square />
+        </BotaoDoTurno>
+      </div>
     </footer>
+  );
+}
+
+function BotaoDoTurno({
+  rotulo,
+  dica,
+  disabled = false,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  dica: string;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button size="sm" className="min-w-0" title={dica} disabled={disabled} onClick={onClick}>
+      {children}
+      <span className="truncate">{rotulo}</span>
+    </Button>
   );
 }
 
