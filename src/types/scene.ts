@@ -2305,6 +2305,19 @@ export type LayoutDoRetrato = {
    * põe `LAYOUT_PADRAO` por baixo.
    */
   condicoes: boolean;
+  /**
+   * A marca da vez: moldura amarela e o selo "VEZ" na figura do personagem
+   * da vez, com a iniciativa rodando. Fora de combate não desenha nada.
+   *
+   * Por dentro da figura, e sem lugar nem escala próprios: a moldura É a
+   * figura, e um selo que saísse dela cairia fora do plano, que é o que
+   * derruba o palco no WebKitGTK.
+   *
+   * Ligada de fábrica, como os selos: só aparece em combate, e é o que a mesa
+   * procura na fila de retratos. Um layout de uma versão anterior não a traz,
+   * e quem lê põe `LAYOUT_PADRAO` por baixo.
+   */
+  iniciativa: boolean;
   /** Ausente = automático: ao lado, virando quando não cabe. */
   lugarDosMedidores?: LugarDaPeca;
   /** Ausente = automático: embaixo, virando para cima quando não cabe. */
@@ -2397,6 +2410,7 @@ export const LAYOUT_PADRAO: LayoutDoRetrato = {
   medidores: true,
   dados: true,
   condicoes: true,
+  iniciativa: true,
   escalaMedidores: 1,
   escalaDados: 1,
   escalaNome: 1,

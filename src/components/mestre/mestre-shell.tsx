@@ -60,6 +60,7 @@ import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
 import { daVez } from "@/lib/iniciativa/rodadas";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
@@ -282,6 +283,8 @@ export function MestreShell() {
     () => (rodadaDaVez > 0 ? { vezDe, rodada: rodadaDaVez } : null),
     [vezDe, rodadaDaVez],
   );
+  // E para os retratos desta janela: o quadro da Retratos e a Janela Mesa.
+  useDefinirVezDaMesa(vezDe);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale

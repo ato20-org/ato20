@@ -478,6 +478,7 @@ const pt = {
       medidores: "Medidores",
       dados: "Dados",
       condicoes: "Condições",
+      iniciativa: "Iniciativa",
     },
     notas: {
       retrato: "A figura. Desligada, as barras continuam no ar sem o rosto.",
@@ -485,6 +486,7 @@ const pt = {
       medidores: "A coluna de barras ao lado.",
       condicoes: "Os selos das condições, no alto da figura.",
       dados: "Os dados que caem quando este personagem rola.",
+      iniciativa: "Uma moldura amarela e o selo VEZ quando é a vez deste personagem, com a iniciativa rodando.",
     },
     ondeCadaPeca: "Onde cada peça fica",
     arraste: "arraste",
@@ -1028,6 +1030,7 @@ const en: typeof pt = {
       medidores: "Meters",
       dados: "Dice",
       condicoes: "Conditions",
+      iniciativa: "Initiative",
     },
     notas: {
       retrato: "The figure. Turned off, the bars stay on air without the face.",
@@ -1035,6 +1038,7 @@ const en: typeof pt = {
       medidores: "The column of bars beside it.",
       condicoes: "The condition badges, at the top of the figure.",
       dados: "The dice that land when this character rolls.",
+      iniciativa: "A yellow frame and the TURN badge when it's this character's turn, with initiative running.",
     },
     ondeCadaPeca: "Where each piece goes",
     arraste: "drag",

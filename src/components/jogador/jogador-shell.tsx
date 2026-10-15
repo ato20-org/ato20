@@ -41,6 +41,7 @@ import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
 import { usePersonagensDoJogador } from "@/hooks/use-personagens-do-jogador";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 import { useTelaCheiaDaPagina } from "@/hooks/use-tela-cheia-da-pagina";
@@ -142,6 +143,9 @@ export function JogadorShell({
 
   // A versão do elenco vai para um store, e não por prop: a ficha mora seis
   // camadas abaixo, em duas disposições de tela. Ver `useFichasVersaoStore`.
+  // A vez, para a marca nos retratos da cena. Ver `useVezDaMesaStore`.
+  useDefinirVezDaMesa(live.iniciativa?.vezDe ?? null);
+
   const definirFichasVersao = useFichasVersaoStore((state) => state.definir);
   useEffect(() => {
     definirFichasVersao(live.fichasVersao);

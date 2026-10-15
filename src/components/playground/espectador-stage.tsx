@@ -11,6 +11,7 @@ import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
 import { useSubscription } from "@/hooks/use-scene-broadcast";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
 import { useZoomDaMesa } from "@/hooks/use-zoom-da-mesa";
 import {
   DeclarativoProvider,
@@ -46,9 +47,12 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     laser,
     declarativoVersao,
     imagem,
+    iniciativa,
     synced,
     stalled,
   } = useSubscription(codigo);
+  // A vez, para a marca nos retratos. Ver `useVezDaMesaStore`.
+  useDefinirVezDaMesa(iniciativa?.vezDe ?? null);
 
   // Os estilos de medidor dos plugins, buscados quando a versão do quadro muda.
   const declarativo = useDeclarativoDaMesa(codigo, declarativoVersao);
