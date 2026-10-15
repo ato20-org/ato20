@@ -10,6 +10,7 @@ mod importar;
 mod presenca;
 mod serve;
 mod tailscale;
+mod uvtt;
 mod vault;
 mod webkit;
 
@@ -217,6 +218,7 @@ pub fn run() {
             commands::asset_import,
             commands::asset_import_bytes,
             commands::asset_import_cancelar,
+            commands::uvtt_ler,
             commands::asset_set_escopo,
             commands::asset_delete,
             commands::asset_rename,

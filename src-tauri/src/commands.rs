@@ -11,6 +11,7 @@ use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::tailscale;
+use crate::uvtt;
 use crate::extensoes::{self, Extensao};
 use crate::importar;
 use crate::serve::{self, DaemonAddr, Endereco, Evidence, SharedEvidence, SharedVault};
@@ -991,6 +992,63 @@ pub async fn asset_import_bytes(
                 recusados,
                 // Colagem e um arquivo so, e nao ha lote para interromper.
                 cancelado: false,
+            })
+        })
+    })
+    .await
+}
+
+/// O mapa de um arquivo Universal VTT, lido do disco.
+///
+/// O fundo vai para o acervo daqui mesmo, com dono -- `cena`, como o fundo
+/// escolhido pelo menu --, e o resto volta como JSON para a tela converter. Ver
+/// `uvtt`, que diz por que a imagem nao atravessa a ponte.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UvttLido {
+    /// O documento sem a imagem.
+    pub json: String,
+    /// O fundo, quando a imagem entrou no acervo.
+    pub fundo: Option<AssetMeta>,
+    /// Por que a imagem nao entrou, quando ela existia e foi recusada.
+    pub recusados: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn uvtt_ler(state: State<'_, AppState>, caminho: String) -> AppResult<UvttLido> {
+    let shared = state.vault.clone();
+
+    // Fora da thread principal: o arquivo pode ter dezenas de megabytes, e
+    // decodificar e gravar a imagem e disco e CPU.
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            let texto = std::fs::read_to_string(&caminho)?;
+            let separado = uvtt::separar(&texto).map_err(|cause| AppError::Malformed {
+                file: caminho.clone(),
+                cause,
+            })?;
+
+            let (fundo, recusados) = match separado.imagem {
+                Some(imagem) => {
+                    let base = std::path::Path::new(&caminho)
+                        .file_stem()
+                        .and_then(|nome| nome.to_str())
+                        .unwrap_or("mapa");
+                    let (aceitos, recusados) = assets::import_bytes(
+                        vault,
+                        &format!("{base}.{}", imagem.extensao),
+                        &imagem.bytes,
+                        Some("cena"),
+                    )?;
+                    (aceitos.into_iter().next(), recusados)
+                }
+                None => (None, Vec::new()),
+            };
+
+            Ok(UvttLido {
+                json: separado.resto,
+                fundo,
+                recusados,
             })
         })
     })
