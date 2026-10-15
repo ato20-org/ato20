@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, Copy, QrCode, WifiOff } from "lucide-react";
+import { Check, Copy, Globe, Network, QrCode, WifiOff } from "lucide-react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 
@@ -181,6 +181,15 @@ export function TableInvite() {
   );
   const temVpn = enderecos.some((endereco) => endereco.rede !== "local");
 
+  // O botão diz por onde a mesa entra sem abrir o diálogo. O Funnel aberto
+  // vence a escolha: com ele a porta está na rua, mesmo que o convite mostre a
+  // rede local, e o mestre tem de ver isso de longe.
+  const Icone = tailscale?.funil
+    ? Globe
+    : usada && usada.rede !== "local" && usada.rede !== "outro"
+      ? Network
+      : QrCode;
+
   return (
     <Dialog
       onOpenChange={(aberto) => {
@@ -189,8 +198,12 @@ export function TableInvite() {
     >
       <DialogTrigger
         render={
-          <Button variant="ghost" size="sm">
-            <QrCode />
+          <Button
+            variant="ghost"
+            size="sm"
+            title={tailscale?.funil ? t.convite.abertaNaInternet : undefined}
+          >
+            <Icone />
             <span className="hidden lg:inline">{t.convite.entrar}</span>
           </Button>
         }
