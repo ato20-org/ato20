@@ -236,7 +236,7 @@ fn conteudo(appimage: &Path, icone: Option<&Path>) -> String {
          Type=Application\n\
          Name=ATO20\n\
          GenericName=Mesa de RPG\n\
-         Comment=Monta e exibe as cenas da mesa de RPG presencial\n\
+         Comment=Monta e exibe as cenas da mesa de RPG em LAN, com suporte a VPN\n\
          Exec={caminho}\n\
          TryExec={caminho}\n\
          {icone}\
