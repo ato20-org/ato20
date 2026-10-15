@@ -37,6 +37,7 @@ export type FatoDaRodada =
       /** Quem rolou. `null` é o mestre. */
       jogador: string | null;
       /** O personagem por quem o jogador rolou, quando o celular disse. */
+      personagemId: string | null;
       personagem: string | null;
       /** "Dante · Luta", quando a rolagem tem nome. */
       rotulo: string | null;
@@ -297,4 +298,67 @@ export function porVez(
   }
 
   return blocos;
+}
+
+type Rolado = Extract<EventoDaRodada, { tipo: "rolagem" }>;
+
+/** Quem rolou: o mestre, ou um jogador -- por um personagem ou não. */
+export type Autor = Pick<Rolado, "jogador" | "personagemId" | "personagem">;
+
+export type GrupoDaRodada =
+  | { tipo: "rolagens"; autor: Autor; eventos: Rolado[] }
+  | { tipo: "evento"; evento: Exclude<EventoDaRodada, Rolado> };
+
+function mesmoAutor(a: Autor, b: Autor): boolean {
+  return a.jogador === b.jogador && a.personagemId === b.personagemId;
+}
+
+/**
+ * As rolagens SEGUIDAS de um mesmo autor num grupo só, e o resto solto.
+ *
+ * O nome de quem rolou vira o cabeçalho do grupo, e as linhas dizem só o que
+ * foi rolado: "Mestre" escrito em seis linhas seguidas era o que mais se lia na
+ * rodada, e o que menos informava. Medidor e condição não têm autor -- dizem
+ * de QUEM mudou, e o nome já está na linha --, e por isso quebram o grupo.
+ */
+export function emGrupos(eventos: readonly EventoDaRodada[]): GrupoDaRodada[] {
+  const grupos: GrupoDaRodada[] = [];
+
+  for (const evento of eventos) {
+    if (evento.tipo !== "rolagem") {
+      grupos.push({ tipo: "evento", evento });
+      continue;
+    }
+
+    const ultimo = grupos.at(-1);
+    if (ultimo?.tipo === "rolagens" && mesmoAutor(ultimo.autor, evento))
+      ultimo.eventos.push(evento);
+    else
+      grupos.push({
+        tipo: "rolagens",
+        autor: {
+          jogador: evento.jogador,
+          personagemId: evento.personagemId,
+          personagem: evento.personagem,
+        },
+        eventos: [evento],
+      });
+  }
+
+  return grupos;
+}
+
+/**
+ * O rótulo sem o nome do autor na frente.
+ *
+ * A rolagem da ficha já nasce "Old Man · Acrobacia", e embaixo do cabeçalho
+ * "Old Man" a linha repetiria o nome. Só tira quando é EXATAMENTE o autor: o
+ * mestre rolando a Luta do Dante continua "Dante · Luta", porque ali o nome é
+ * a informação.
+ */
+export function semAutorNoRotulo(rotulo: string, autor: string | null): string {
+  if (!autor) return rotulo;
+
+  const prefixo = `${autor} · `;
+  return rotulo.startsWith(prefixo) ? rotulo.slice(prefixo.length) : rotulo;
 }

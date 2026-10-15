@@ -134,6 +134,7 @@ function ouvir() {
       anotar({
         tipo: "rolagem",
         jogador: null,
+        personagemId: null,
         personagem: null,
         rotulo: novo.lance?.rotulo ?? null,
         lanceId: novo.lance?.id ?? null,
@@ -156,6 +157,7 @@ function ouvir() {
     anotar({
       tipo: "rolagem",
       jogador: novo.jogador,
+      personagemId: novo.personagemId ?? null,
       personagem,
       rotulo: novo.lance?.rotulo ?? null,
       lanceId: novo.lance?.id ?? null,

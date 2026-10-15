@@ -1048,7 +1048,6 @@ const pt = {
     nadaNaRodada: "Nada anotado nesta rodada.",
     contarEventos: (n: number) => (n === 1 ? "1 evento" : `${n} eventos`),
     mestre: "Mestre",
-    quemRolou: (quem: string, oQue: string) => `${quem} · ${oQue}`,
     noMedidor: (personagem: string, medidor: string) => `${personagem} · ${medidor}`,
     mudouDe: (antes: number | null, depois: number, maximo: number) =>
       antes === null ? `${depois}/${maximo}` : `${antes} → ${depois}/${maximo}`,
@@ -2057,7 +2056,6 @@ const en: typeof pt = {
     nadaNaRodada: "Nothing logged this round.",
     contarEventos: (n) => (n === 1 ? "1 event" : `${n} events`),
     mestre: "GM",
-    quemRolou: (quem, oQue) => `${quem} · ${oQue}`,
     noMedidor: (personagem, medidor) => `${personagem} · ${medidor}`,
     mudouDe: (antes, depois, maximo) =>
       antes === null ? `${depois}/${maximo}` : `${antes} → ${depois}/${maximo}`,

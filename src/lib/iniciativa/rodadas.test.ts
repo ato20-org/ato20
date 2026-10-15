@@ -4,6 +4,7 @@ import {
   SEM_INICIATIVA,
   anterior,
   daVez,
+  emGrupos,
   encerrar,
   incluir,
   iniciar,
@@ -12,6 +13,7 @@ import {
   proximo,
   registrar,
   retirar,
+  semAutorNoRotulo,
   totalDaRolagem,
   type FatoDaRodada,
 } from "@/lib/iniciativa/rodadas";
@@ -29,9 +31,10 @@ const dado = (
   lanceId: string | null,
   valor: number,
   modificador = 0,
-): FatoDaRodada => ({
+): Extract<FatoDaRodada, { tipo: "rolagem" }> => ({
   tipo: "rolagem",
   jogador: null,
+  personagemId: null,
   personagem: null,
   rotulo: lanceId ? "Dante · Luta" : null,
   lanceId,
@@ -177,5 +180,41 @@ describe("porVez", () => {
       "b",
       "a",
     ]);
+  });
+});
+
+describe("emGrupos", () => {
+  const doJogador = (lanceId: string): FatoDaRodada => ({
+    ...dado(lanceId, 10),
+    jogador: "Mig",
+    personagemId: "old",
+    personagem: "Old Man",
+  });
+
+  it("junta as rolagens seguidas do mesmo autor, e medidor e condição quebram", () => {
+    let ini = iniciar(["a"], 0);
+    ini = registrar(ini, dado(null, 1), 1);
+    ini = registrar(ini, dado(null, 2), 2);
+    ini = registrar(ini, doJogador("l1"), 3);
+    ini = registrar(ini, doJogador("l2"), 4);
+    ini = registrar(ini, condicao("a"), 5);
+    ini = registrar(ini, doJogador("l3"), 6);
+
+    const grupos = emGrupos(ini.rodadas[0]?.eventos ?? []);
+    expect(
+      grupos.map((grupo) =>
+        grupo.tipo === "rolagens"
+          ? `${grupo.autor.personagem ?? "mestre"}:${grupo.eventos.length}`
+          : grupo.evento.tipo,
+      ),
+    ).toEqual(["mestre:2", "Old Man:2", "condicao", "Old Man:1"]);
+  });
+});
+
+describe("semAutorNoRotulo", () => {
+  it("tira o nome do autor só quando é ele na frente", () => {
+    expect(semAutorNoRotulo("Old Man · Acrobacia", "Old Man")).toBe("Acrobacia");
+    expect(semAutorNoRotulo("Dante · Luta", "Old Man")).toBe("Dante · Luta");
+    expect(semAutorNoRotulo("Dante · Luta", null)).toBe("Dante · Luta");
   });
 });

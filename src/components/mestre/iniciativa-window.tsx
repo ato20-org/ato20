@@ -10,6 +10,7 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  Crown,
   GripVertical,
   Square,
   Swords,
@@ -27,10 +28,12 @@ import { useCharacters } from "@/hooks/use-characters";
 import { t } from "@/lib/i18n/mestre";
 import {
   daVez,
+  emGrupos,
   porVez,
+  semAutorNoRotulo,
   totalDaRolagem,
   type DadoRolado,
-  type EventoDaRodada,
+  type GrupoDaRodada,
   type Rodada,
 } from "@/lib/iniciativa/rodadas";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
@@ -630,11 +633,17 @@ function EventosDaRodada({
             <p className="text-muted-foreground text-[10px] font-medium uppercase">
               {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
             </p>
-            <ul className="flex flex-col gap-0.5">
-              {bloco.eventos.map((evento, posicao) => (
-                <LinhaDeEvento key={`${evento.quando}-${posicao}`} evento={evento} />
-              ))}
-            </ul>
+            <div className="flex flex-col gap-1.5">
+              {emGrupos(bloco.eventos).map((grupo, posicao) =>
+                grupo.tipo === "rolagens" ? (
+                  <GrupoDeRolagens key={posicao} grupo={grupo} porId={porId} />
+                ) : (
+                  <ul key={posicao}>
+                    <LinhaDeEvento evento={grupo.evento} />
+                  </ul>
+                ),
+              )}
+            </div>
           </section>
         );
       })}
@@ -650,22 +659,68 @@ function notacao(dados: readonly DadoRolado[]): string {
   return [...porFaces].map(([faces, quantos]) => `${quantos}d${faces}`).join(" + ");
 }
 
-function LinhaDeEvento({ evento }: { evento: EventoDaRodada }) {
-  switch (evento.tipo) {
-    case "rolagem": {
-      const quem = evento.personagem ?? evento.jogador ?? t.iniciativa.mestre;
+/**
+ * As rolagens seguidas de quem rolou: o cabeçalho diz quem, e as linhas
+ * embaixo dizem só o quê.
+ *
+ * As linhas recuadas atrás de um fio, como a resposta de uma conversa: é o fio
+ * que faz o olho ler "isto tudo é do Old Man" sem ler o nome de novo. O mestre
+ * ganha a coroa no lugar do retrato, e é ela que separa de relance a rolagem de
+ * trás do escudo da rolagem da mesa.
+ */
+function GrupoDeRolagens({
+  grupo,
+  porId,
+}: {
+  grupo: Extract<GrupoDaRodada, { tipo: "rolagens" }>;
+  porId: Map<string, Personagem>;
+}) {
+  const { autor } = grupo;
+  const personagem = autor.personagemId ? porId.get(autor.personagemId) : undefined;
+  const nome = autor.personagem ?? autor.jogador ?? t.iniciativa.mestre;
+  const ehMestre = autor.jogador === null;
 
-      return (
-        <li className="flex items-center gap-2 text-xs">
-          <DadoDaRolagem dados={evento.dados} />
-          <span className="min-w-0 flex-1 truncate">
-            {t.iniciativa.quemRolou(quem, evento.rotulo ?? notacao(evento.dados))}
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        {ehMestre ? (
+          <span className="bg-muted text-foreground grid size-5 shrink-0 place-items-center rounded">
+            <Crown className="size-3" aria-hidden />
           </span>
-          <span className="shrink-0 font-medium tabular-nums">{totalDaRolagem(evento)}</span>
-        </li>
-      );
-    }
+        ) : personagem ? (
+          <Rosto personagem={personagem} className="size-5" />
+        ) : (
+          <span className="bg-muted/60 size-5 shrink-0 rounded border" />
+        )}
+        <span className="truncate font-medium">{nome}</span>
+        {autor.personagem && autor.jogador ? (
+          <span className="text-muted-foreground truncate">{autor.jogador}</span>
+        ) : null}
+      </div>
 
+      <ul className="ml-2.5 flex flex-col gap-0.5 border-l pl-2.5">
+        {grupo.eventos.map((evento, posicao) => (
+          <li key={`${evento.quando}-${posicao}`} className="flex items-center gap-2 text-xs">
+            <DadoDaRolagem dados={evento.dados} />
+            <span className="min-w-0 flex-1 truncate">
+              {evento.rotulo
+                ? semAutorNoRotulo(evento.rotulo, autor.personagem)
+                : notacao(evento.dados)}
+            </span>
+            <span className="shrink-0 font-medium tabular-nums">{totalDaRolagem(evento)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LinhaDeEvento({
+  evento,
+}: {
+  evento: Extract<GrupoDaRodada, { tipo: "evento" }>["evento"];
+}) {
+  switch (evento.tipo) {
     case "medidor": {
       const diferenca = evento.antes === null ? null : evento.depois - evento.antes;
 
