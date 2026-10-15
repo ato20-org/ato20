@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Grid3x3, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Compass, Grid3x3, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { aplicarUVTTCena } from "@/lib/importacao/uvtt";
 import { t } from "@/lib/i18n/cenas";
 import { escolherFundoDaCena, useFundoEmVoo } from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -46,6 +47,8 @@ export function NovoMapaDialog({
     sceneId ? state.cenas.includes(sceneId) : false,
   );
 
+  const [importandoUVTT, setImportandoUVTT] = useState(false);
+
   function comImagem() {
     if (!sceneId) return;
     void escolherFundoDaCena(sceneId)
@@ -56,6 +59,36 @@ export function NovoMapaDialog({
       .catch((cause: unknown) =>
         toast.error(cause instanceof Error ? cause.message : t.geral.falhaAoImportar),
       );
+  }
+
+  function comUVTT(evento: React.ChangeEvent<HTMLInputElement>) {
+    const file = evento.target.files?.[0];
+    if (!file || !sceneId) return;
+
+    setImportandoUVTT(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const text = reader.result as string;
+        const res = await aplicarUVTTCena(sceneId, text, file.name);
+        toast.success(
+          `Mapa importado! ${res.paredes} paredes, ${res.portas} portas e ${res.luzes} tochas adicionadas.`,
+        );
+        onFechar();
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Falha ao importar Universal VTT",
+        );
+      } finally {
+        setImportandoUVTT(false);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Erro ao ler o arquivo");
+      setImportandoUVTT(false);
+    };
+    reader.readAsText(file);
+    evento.target.value = "";
   }
 
   function semMapa() {
@@ -71,14 +104,14 @@ export function NovoMapaDialog({
 
   return (
     <Dialog open={sceneId !== null} onOpenChange={(aberto) => !aberto && onFechar()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogTitle>{t.novoMapaDialog.titulo}</DialogTitle>
         <DialogDescription>{t.novoMapaDialog.descricao}</DialogDescription>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <button
             type="button"
-            disabled={importando}
+            disabled={importando || importandoUVTT}
             onClick={comImagem}
             className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg border p-4 text-center disabled:opacity-60"
           >
@@ -92,6 +125,30 @@ export function NovoMapaDialog({
               {t.novoMapaDialog.umaImagemDica}
             </span>
           </button>
+
+          <label
+            className={cn(
+              "hover:bg-accent flex cursor-pointer flex-col items-center gap-2 rounded-lg border p-4 text-center",
+              (importando || importandoUVTT) && "opacity-60 pointer-events-none cursor-not-allowed",
+            )}
+          >
+            <input
+              type="file"
+              accept=".dd2vtt,.uvtt,.json"
+              className="hidden"
+              disabled={importando || importandoUVTT}
+              onChange={comUVTT}
+            />
+            {importandoUVTT ? (
+              <Loader2 className="size-8 animate-spin" />
+            ) : (
+              <Compass className="size-8" />
+            )}
+            <span className="font-medium">Universal VTT</span>
+            <span className="text-muted-foreground text-xs">
+              DungeonDraft (.dd2vtt) com paredes e luzes
+            </span>
+          </label>
 
           <div className="flex flex-col gap-2 rounded-lg border p-4">
             <div className="flex flex-col items-center gap-2 text-center">
