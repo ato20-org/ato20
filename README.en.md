@@ -108,6 +108,11 @@ Showing an item at the table puts its card on the TV and the phones, minus whate
 - **The phone plays.** The player sees the character linked to them (inventory, attachments
   and the meters the GM did not hide), rolls dice on the table and moves their own
   character's token. The daemon rolls the dice, not the device of whoever benefits from them.
+- **Initiative: the turn order.** The GM puts whoever is on the map into the order, from the
+  Initiative window or by right-clicking the tokens, and arranges it by dragging. The portrait
+  on the spectator window marks whose turn it is, the phone says "Your turn" and only lets the
+  character whose turn it is move, and each round keeps the dice, meters and conditions that
+  changed in it. Rolling initiative is left to each system's plugin.
 - **Zip export and import: done.** A campaign fits in one file, and the file opens on any
   other machine, with the table still working.
 - **Flathub: the package builds, and has not been submitted yet.** The manifest is in
@@ -166,7 +171,10 @@ The rest of the documentation is in Portuguese:
 
 ## Contributing
 
-Coming soon.
+Bug, idea, translation, plugin or code: the way in is [Contributing](CONTRIBUTING.en.md), with
+what belongs in the core and what belongs in a plugin, how to run it, what to check before a
+PR and the license of contributions. Everyone who has contributed shows up on the
+[website](https://ato20.valbmig.com.br/#contribuidores).
 
 ## License
 

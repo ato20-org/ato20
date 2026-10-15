@@ -104,6 +104,11 @@ cartão dele na TV e nos celulares, sem o que está escondido.
 - **O celular joga.** O jogador vê o personagem vinculado a ele — inventário, anexos e os
   medidores que o mestre não escondeu —, rola dado na mesa e move o token do próprio
   personagem. Quem sorteia o dado é o daemon, e não o aparelho de quem se beneficia dele.
+- **Iniciativa: a ordem da rodada.** O mestre põe na ordem quem está no mapa, pela janela
+  Iniciativa ou pelo botão direito nos tokens, e arruma arrastando. O retrato na janela do
+  espectador marca de quem é a vez, o celular avisa "Sua vez" e só deixa andar o personagem
+  da vez, e cada rodada guarda os dados, os medidores e as condições que mudaram nela. Rolar
+  a iniciativa fica com o plugin de cada sistema.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
 - **Flathub: o pacote já constrói, e ainda não foi submetido.** O manifesto está em
@@ -156,7 +161,10 @@ repetindo antes de acreditar.
 
 ## Contribuir
 
-Em breve.
+Defeito, ideia, tradução, plugin ou código: o caminho está em [Contribuir](CONTRIBUTING.md),
+com o que é do núcleo e o que é de plugin, como rodar, o que conferir antes do PR e a licença
+das contribuições. Quem já contribuiu aparece no
+[site](https://ato20.valbmig.com.br/#contribuidores).
 
 ## Licença
 
