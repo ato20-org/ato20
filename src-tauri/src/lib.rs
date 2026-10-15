@@ -9,6 +9,7 @@ mod extensoes;
 mod importar;
 mod presenca;
 mod serve;
+mod tailscale;
 mod vault;
 mod webkit;
 
@@ -166,6 +167,13 @@ pub fn run() {
                 started.addr.lan_url
             );
 
+            // Um Funnel que sobrou de um travamento: o `--bg` sobrevive ao
+            // processo, e a mesa nao deveria estar na internet sem o mestre
+            // ter aberto o convite nesta sessao. Numa thread, porque a CLI do
+            // Tailscale nao tem nada que atrasar a primeira janela.
+            let porta = started.addr.porta;
+            std::thread::spawn(move || tailscale::fechar_se_nosso(porta));
+
             app.manage(AppState {
                 vault,
                 db,
@@ -186,6 +194,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
+            commands::enderecos_da_mesa,
+            commands::tailscale_estado,
+            commands::funil_abrir,
+            commands::funil_fechar,
             commands::updater_embutido,
             commands::abrir_no_navegador,
             commands::campaign_recents,
@@ -339,8 +351,17 @@ pub fn run() {
             commands::configuracoes_abrir_arquivo,
             presenca::definir_presenca,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, evento| {
+            // Fecha o Funnel na saida: a mesa aberta para a internet e
+            // escolha de uma sessao, e nao um estado que fica para tras.
+            if let tauri::RunEvent::Exit = evento {
+                if let Some(estado) = app.try_state::<AppState>() {
+                    tailscale::fechar_se_nosso(estado.daemon.porta);
+                }
+            }
+        });
 }
 
 /// A resposta do protocolo para tudo que nao se serve.

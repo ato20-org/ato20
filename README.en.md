@@ -98,9 +98,11 @@ Showing an item at the table puts its card on the TV and the phones, minus whate
 ## What already works
 
 - **GM: complete.** Opens the folder, saves scenes, sends images and sounds.
-- **Spectator and Player: on the local network.** The daemon serves both screens and
-  publishes the scene over SSE, so any device in the house can be the spectator window and
-  every player follows along on their phone.
+- **Spectator and Player: on the local network, over a VPN or over the internet.** The
+  daemon serves both screens and publishes the scene over SSE, so any device in the house can
+  be the spectator window and every player follows along on their phone. Players far away
+  join through a gaming VPN or Tailscale Funnel: see [Jogar a distância](docs/jogar-a-distancia.md)
+  (in Portuguese).
 - **Character sheet: on the Player screen.** Name, notebook and attachments, with one token
   per player in place of the RLS that did this job before.
 - **The phone plays.** The player sees the character linked to them (inventory, attachments
@@ -153,6 +155,7 @@ The rest of the documentation is in Portuguese:
 | | |
 | --- | --- |
 | [Instalar](docs/instalar.md) | Install: PowerShell 7, the command that follows new versions, the other formats |
+| [Jogar a distância](docs/jogar-a-distancia.md) | Playing remotely: the table over the internet with Funnel, through a gaming VPN or your own address |
 | [A campanha](docs/campanha.md) | The campaign: the folder inside, how it saves, library folders, export and import |
 | [Três telas](docs/telas.md) | Three screens: GM, Spectator and Player, and why each runs where it does |
 | [O daemon](docs/daemon.md) | The daemon: routes, the table code, the write token |

@@ -112,9 +112,6 @@ const eslintConfig = defineConfig([
       "src/app/perf/**",
       // O próprio dicionário.
       "src/lib/i18n/**",
-      // O convite da mesa: a mesa online o reescreve num trabalho ainda
-      // aberto, e traduzi-lo agora brigaria com ele no merge.
-      "src/components/mestre/table-invite.tsx",
     ],
     plugins: { ato20: { rules: { "texto-fixo": textoFixo } } },
     rules: { "ato20/texto-fixo": "error" },

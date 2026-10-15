@@ -95,9 +95,10 @@ cartão dele na TV e nos celulares, sem o que está escondido.
 ## O que já funciona
 
 - **Mestre: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
-- **Espectador e Jogador: na rede local.** O daemon serve as duas telas e publica a cena por
-  SSE, então qualquer aparelho da casa serve de janela do espectador e cada jogador
-  acompanha pelo celular.
+- **Espectador e Jogador: na rede local, numa VPN ou pela internet.** O daemon serve as duas
+  telas e publica a cena por SSE, então qualquer aparelho da casa serve de janela do
+  espectador e cada jogador acompanha pelo celular. Quem está longe entra por uma VPN de jogo
+  ou pelo Funnel do Tailscale: ver [Jogar a distância](docs/jogar-a-distancia.md).
 - **Ficha do personagem: no Jogador.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
 - **O celular joga.** O jogador vê o personagem vinculado a ele — inventário, anexos e os
@@ -143,6 +144,7 @@ repetindo antes de acreditar.
 | | |
 | --- | --- |
 | [Instalar](docs/instalar.md) | PowerShell 7, o comando que acompanha a versão nova, os outros formatos |
+| [Jogar a distância](docs/jogar-a-distancia.md) | A mesa pela internet com o Funnel, por uma VPN de jogo ou por um endereço seu |
 | [A campanha](docs/campanha.md) | A pasta por dentro, como ela grava, pastas do acervo, exportar e importar |
 | [Três telas](docs/telas.md) | Mestre, Espectador e Jogador, e por que cada uma roda onde roda |
 | [O daemon](docs/daemon.md) | As rotas, o código da mesa, o token de escrita |

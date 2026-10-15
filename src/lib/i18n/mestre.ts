@@ -454,6 +454,87 @@ const pt = {
     abrir: "Abrir Espectador",
   },
 
+  /** O convite da mesa: o QR, a rede por onde ela entra e a internet pelo Funnel. */
+  convite: {
+    entrar: "Entrar na mesa",
+    abertaNaInternet: "A mesa está aberta na internet",
+    semRede: "Sem rede",
+    semRedeExplicacao:
+      "Esta máquina não está em rede nenhuma, então a TV e os celulares não têm como alcançá-la. Conecte o Wi-Fi, o cabo ou a VPN.",
+    apontarACamera: "Aponte a câmera do celular para o quadrado.",
+    digitarNaTv: "Digite este endereço no navegador da TV.",
+    rede: "Rede",
+    redes: {
+      local: "Rede local",
+      tailscale: "Tailscale",
+      hamachi: "Hamachi",
+      radmin: "Radmin",
+      zerotier: "ZeroTier",
+      internet: "Internet",
+      outro: "Outro endereço",
+    },
+    exemploDeEndereco: "pc.tailnet.ts.net ou 10.147.17.5",
+    enderecoInvalido: "Esse endereço não dá para usar.",
+    abaJogador: "Jogador",
+    abaTv: "TV",
+    /** A rede que não respondeu, como sujeito da frase: o artigo muda com ela. */
+    quemCaiu: {
+      local: "A rede local",
+      tailscale: "O Tailscale",
+      hamachi: "O Hamachi",
+      radmin: "O Radmin",
+      zerotier: "O ZeroTier",
+      internet: "A internet",
+      outro: "O endereço digitado",
+    },
+    /** A rede que ficou no lugar, como objeto da frase. */
+    ondeFicou: {
+      local: "a rede local",
+      tailscale: "o Tailscale",
+      hamachi: "o Hamachi",
+      radmin: "o Radmin",
+      zerotier: "o ZeroTier",
+      internet: "a internet",
+      outro: "o endereço digitado",
+    },
+    caiu: (quem: string, onde: string) =>
+      `${quem} não respondeu nesta máquina, então o convite usa ${onde}.`,
+    letraMiuda: {
+      local:
+        "Vale só na mesma rede. O código evita a entrada por acaso, não alguém decidido no seu Wi-Fi.",
+      ligueUmaVpn:
+        "Para jogar pela internet, ligue o Tailscale, o ZeroTier, o Hamachi ou o Radmin aqui e nos aparelhos da mesa: a rede aparece nesta lista.",
+      outro:
+        "Vale para quem alcança esse endereço. Se ele estiver aberto na internet, o código não segura alguém decidido.",
+      internet:
+        "Vale para qualquer pessoa com o link e o código, de qualquer lugar. O ATO20 fecha a porta quando você sai dele.",
+      vpn: (rede: string) =>
+        `Vale para quem entrou na sua rede do ${rede}. Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.`,
+    },
+    qrPara: (url: string) => `QR code para ${url}`,
+    copiado: "Copiado",
+    copiarEndereco: "Copiar endereço",
+    perguntandoAoTailscale: "Perguntando ao Tailscale…",
+    abertaEm: (endereco: string) => `Aberta em ${endereco}`,
+    fechando: "Fechando…",
+    fechar: "Fechar",
+    oQueAbrirSignifica:
+      "A mesa fica aberta para qualquer pessoa com o link e o código, até você fechar ou sair do ATO20.",
+    abrindo: "Abrindo…",
+    abrirParaAInternet: "Abrir para a internet",
+    semNavegador: "Não foi possível abrir o navegador.",
+    desconectado:
+      "O Tailscale desta máquina está desconectado. Entre nele e abra o convite de novo.",
+    funilNaoLiberado:
+      "Falta liberar o Funnel na sua conta do Tailscale. Libere e clique em abrir de novo.",
+    liberarFunil: "Liberar o Funnel",
+    semOperador:
+      "O Linux só deixa o Tailscale abrir a porta para quem é operador dele. Rode isto uma vez no terminal e clique em abrir de novo:",
+    portaOcupada:
+      "O Funnel desta máquina já serve outra coisa na porta 443. Feche aquilo para abrir a mesa.",
+    naoAbriu: (motivo: string) => `O Tailscale não abriu: ${motivo}`,
+  },
+
   /** A pílula de jogadores no canto do palco. */
   jogadores: {
     titulo: "Jogadores",
@@ -899,6 +980,12 @@ const pt = {
     estiloDosAtributos: "Aparência dos atributos",
     estiloDosAtributosDescricao:
       "O desenho de um plugin, como plugin/estilo. Vazio são os cartões. Quem escolhe é o sistema aplicado.",
+    redeDoConvite: "Rede do convite",
+    redeDoConviteDescricao:
+      "Por onde a mesa entra. As VPNs aparecem no convite quando estão ligadas nesta máquina, e a internet quando o Tailscale está logado.",
+    enderecoProprio: "Outro endereço",
+    enderecoProprioDescricao:
+      "Um nome ou IP que a mesa alcança, como o do MagicDNS do Tailscale ou o de um túnel. Sem porta, vale a do ATO20.",
   },
 
   /** As réguas do ajuste de imagem da janela do espectador. */
@@ -1368,6 +1455,83 @@ const en: typeof pt = {
     abrir: "Open Spectator",
   },
 
+  convite: {
+    entrar: "Join the table",
+    abertaNaInternet: "The table is open on the internet",
+    semRede: "No network",
+    semRedeExplicacao:
+      "This computer is not on any network, so the TV and the phones have no way to reach it. Connect the Wi-Fi, the cable or the VPN.",
+    apontarACamera: "Point the phone camera at the square.",
+    digitarNaTv: "Type this address in the TV browser.",
+    rede: "Network",
+    redes: {
+      local: "Local network",
+      tailscale: "Tailscale",
+      hamachi: "Hamachi",
+      radmin: "Radmin",
+      zerotier: "ZeroTier",
+      internet: "Internet",
+      outro: "Other address",
+    },
+    exemploDeEndereco: "pc.tailnet.ts.net or 10.147.17.5",
+    enderecoInvalido: "That address can't be used.",
+    abaJogador: "Player",
+    abaTv: "TV",
+    quemCaiu: {
+      local: "The local network",
+      tailscale: "Tailscale",
+      hamachi: "Hamachi",
+      radmin: "Radmin",
+      zerotier: "ZeroTier",
+      internet: "The internet",
+      outro: "The typed address",
+    },
+    ondeFicou: {
+      local: "the local network",
+      tailscale: "Tailscale",
+      hamachi: "Hamachi",
+      radmin: "Radmin",
+      zerotier: "ZeroTier",
+      internet: "the internet",
+      outro: "the typed address",
+    },
+    caiu: (quem, onde) => `${quem} did not respond on this computer, so the invite uses ${onde}.`,
+    letraMiuda: {
+      local:
+        "Works only on the same network. The code keeps people from wandering in, not someone determined on your Wi-Fi.",
+      ligueUmaVpn:
+        "To play over the internet, turn on Tailscale, ZeroTier, Hamachi or Radmin here and on the table's devices: the network shows up in this list.",
+      outro:
+        "Works for anyone who can reach that address. If it is open on the internet, the code won't stop someone determined.",
+      internet:
+        "Works for anyone with the link and the code, from anywhere. ATO20 closes the door when you leave it.",
+      vpn: (rede) =>
+        `Works for whoever joined your ${rede} network. If someone can't open it, allow ATO20 in the Windows firewall for public networks too.`,
+    },
+    qrPara: (url) => `QR code for ${url}`,
+    copiado: "Copied",
+    copiarEndereco: "Copy address",
+    perguntandoAoTailscale: "Asking Tailscale…",
+    abertaEm: (endereco) => `Open at ${endereco}`,
+    fechando: "Closing…",
+    fechar: "Close",
+    oQueAbrirSignifica:
+      "The table stays open to anyone with the link and the code, until you close it or leave ATO20.",
+    abrindo: "Opening…",
+    abrirParaAInternet: "Open to the internet",
+    semNavegador: "Could not open the browser.",
+    desconectado:
+      "Tailscale is disconnected on this computer. Sign in to it and open the invite again.",
+    funilNaoLiberado:
+      "Funnel still needs to be enabled on your Tailscale account. Enable it and click open again.",
+    liberarFunil: "Enable Funnel",
+    semOperador:
+      "On Linux, Tailscale only opens the port for its operator. Run this once in the terminal and click open again:",
+    portaOcupada:
+      "Funnel on this computer already serves something else on port 443. Close that to open the table.",
+    naoAbriu: (motivo) => `Tailscale did not open: ${motivo}`,
+  },
+
   jogadores: {
     titulo: "Players",
     rotulo: (n) => `Players (${n})`,
@@ -1786,6 +1950,12 @@ const en: typeof pt = {
     estiloDosAtributos: "Attribute look",
     estiloDosAtributosDescricao:
       "A plugin's drawing, as plugin/style. Empty means the cards. The applied system picks it.",
+    redeDoConvite: "Invite network",
+    redeDoConviteDescricao:
+      "How the table gets in. VPNs show up in the invite when they are on in this computer, and the internet when Tailscale is signed in.",
+    enderecoProprio: "Other address",
+    enderecoProprioDescricao:
+      "A name or IP the table can reach, like a Tailscale MagicDNS name or a tunnel. Without a port, ATO20's port is used.",
   },
 
   imagemDoEspectador: {
