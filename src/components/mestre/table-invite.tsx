@@ -32,12 +32,13 @@ import {
   disponiveis,
   escolherEndereco,
   ESCOLHAS_DE_REDE,
-  NOME_DA_REDE,
   type EnderecoDetectado,
   type EscolhaDeRede,
   type EstadoDoTailscale,
   type ProblemaDoTailscale,
 } from "@/lib/endereco-da-mesa";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/mestre";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import {
   abrirFunil,
@@ -111,19 +112,18 @@ export function TableInvite() {
   const mexerNoFunil = (acao: () => Promise<EstadoDoTailscale>) => {
     setMexendo(true);
     void acao()
-      .then(setTailscale, (causa: unknown) =>
+      .then(setTailscale, (causa: unknown) => {
+        // O `call` já escolheu o idioma da mensagem: ela vai igual nos dois.
+        const mensagem = causa instanceof Error ? causa.message : String(causa);
         setTailscale((anterior) =>
           anterior
             ? {
                 ...anterior,
-                problema: {
-                  tipo: "outro",
-                  mensagem: causa instanceof Error ? causa.message : String(causa),
-                },
+                problema: { tipo: "outro", mensagem, mensagemEn: mensagem },
               }
             : anterior,
-        ),
-      )
+        );
+      })
       .finally(() => setMexendo(false));
   };
 
@@ -148,15 +148,12 @@ export function TableInvite() {
           render={
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
               <WifiOff className="size-3.5" />
-              Sem rede
+              {t.convite.semRede}
             </span>
           }
         />
         <TooltipContent>
-          <p className="max-w-52">
-            Esta máquina não está em rede nenhuma, então a TV e os celulares não
-            têm como alcançá-la. Conecte o Wi-Fi, o cabo ou a VPN.
-          </p>
+          <p className="max-w-52">{t.convite.semRedeExplicacao}</p>
         </TooltipContent>
       </Tooltip>
     );
@@ -194,12 +191,12 @@ export function TableInvite() {
         render={
           <Button variant="ghost" size="sm">
             <QrCode />
-            <span className="hidden lg:inline">Entrar na mesa</span>
+            <span className="hidden lg:inline">{t.convite.entrar}</span>
           </Button>
         }
       />
       <DialogContent className="max-w-sm">
-        <DialogTitle>Entrar na mesa</DialogTitle>
+        <DialogTitle>{t.convite.entrar}</DialogTitle>
         {/* Uma por aba: o celular tem câmera e um quadrado para apontar, a TV
             não tem nem uma nem outro -- lá alguém digita o endereço com um
             controle remoto. Uma frase só serviria a uma das duas e mentiria
@@ -209,15 +206,13 @@ export function TableInvite() {
             código viaja na URL era resposta para uma pergunta que ninguém faz
             com o celular na mão. */}
         <DialogDescription>
-          {aba === "jogador"
-            ? "Aponte a câmera do celular para o quadrado."
-            : "Digite este endereço no navegador da TV."}
+          {aba === "jogador" ? t.convite.apontarACamera : t.convite.digitarNaTv}
         </DialogDescription>
 
         {/* Botões e não um select: com a rede local e o "Outro" sempre ali, a
             VPN ligada aparece como uma opção a mais à vista, e é assim que o
             mestre descobre que a mesa vai pela internet. */}
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Rede">
+        <div className="flex flex-wrap gap-1" role="group" aria-label={t.convite.rede}>
           {opcoes.map((opcao) => (
             <Button
               key={opcao}
@@ -226,7 +221,7 @@ export function TableInvite() {
               aria-pressed={opcao === escolha}
               onClick={() => escolherRede(opcao)}
             >
-              {NOME_DA_REDE[opcao]}
+              {t.convite.redes[opcao]}
             </Button>
           ))}
         </div>
@@ -236,13 +231,13 @@ export function TableInvite() {
             <Input
               value={texto}
               onChange={(evento) => gravarEnderecoProprio(evento.target.value)}
-              placeholder="pc.tailnet.ts.net ou 10.147.17.5"
-              aria-label={NOME_DA_REDE.outro}
+              placeholder={t.convite.exemploDeEndereco}
+              aria-label={t.convite.redes.outro}
               aria-invalid={esperandoEndereco && texto.trim() !== ""}
               className="h-8 text-sm"
             />
             {esperandoEndereco && texto.trim() !== "" && (
-              <p className="text-destructive text-xs">Esse endereço não dá para usar.</p>
+              <p className="text-destructive text-xs">{t.convite.enderecoInvalido}</p>
             )}
           </div>
         )}
@@ -267,8 +262,8 @@ export function TableInvite() {
             className="min-w-0 gap-3"
           >
             <TabsList>
-              <TabsTrigger value="jogador">Jogador</TabsTrigger>
-              <TabsTrigger value="espectador">TV</TabsTrigger>
+              <TabsTrigger value="jogador">{t.convite.abaJogador}</TabsTrigger>
+              <TabsTrigger value="espectador">{t.convite.abaTv}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="jogador" className="min-w-0 space-y-3">
@@ -306,15 +301,7 @@ export function TableInvite() {
 
 /** Por que o convite não mostra a rede que está marcada. */
 function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
-  const quem =
-    escolha === "local"
-      ? "A rede local"
-      : escolha === "internet"
-        ? "A internet"
-        : `O ${NOME_DA_REDE[escolha]}`;
-  const onde = usada === "local" ? "a rede local" : `o ${NOME_DA_REDE[usada]}`;
-
-  return `${quem} não respondeu nesta máquina, então o convite usa ${onde}.`;
+  return t.convite.caiu(t.convite.quemCaiu[escolha], t.convite.ondeFicou[usada]);
 }
 
 /**
@@ -325,20 +312,17 @@ function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
  * abertura do ATO20 vale só para a privada.
  */
 function letraMiuda(rede: EscolhaDeRede, temVpn: boolean): string {
+  const letra = t.convite.letraMiuda;
+
   switch (rede) {
     case "local":
-      return (
-        "Vale só na mesma rede. O código evita a entrada por acaso, não alguém decidido no seu Wi-Fi." +
-        (temVpn
-          ? ""
-          : " Para jogar pela internet, ligue o Tailscale, o Hamachi ou o Radmin aqui e nos aparelhos da mesa: a rede aparece nesta lista.")
-      );
+      return temVpn ? letra.local : `${letra.local} ${letra.ligueUmaVpn}`;
     case "outro":
-      return "Vale para quem alcança esse endereço. Se ele estiver aberto na internet, o código não segura alguém decidido.";
+      return letra.outro;
     case "internet":
-      return "Vale para qualquer pessoa com o link e o código, de qualquer lugar. O ATO20 fecha a porta quando você sai dele.";
+      return letra.internet;
     default:
-      return `Vale para quem entrou na sua rede do ${NOME_DA_REDE[rede]}. Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.`;
+      return letra.vpn(t.convite.redes[rede]);
   }
 }
 
@@ -383,7 +367,7 @@ function Alvo({ url }: { url: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={dataUrl}
-          alt={`QR code para ${url}`}
+          alt={t.convite.qrPara(url)}
           className="size-48 rounded-md bg-white p-2"
         />
       ) : (
@@ -444,7 +428,7 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
         }}
       >
         {copiado ? <Check /> : <Copy />}
-        {copiado ? "Copiado" : "Copiar endereço"}
+        {copiado ? t.convite.copiado : t.convite.copiarEndereco}
       </Button>
     </div>
   );
@@ -472,17 +456,17 @@ function PainelDoFunil({
   onFechar: () => void;
 }) {
   if (!tailscale) {
-    return <p className="text-muted-foreground text-xs">Perguntando ao Tailscale…</p>;
+    return <p className="text-muted-foreground text-xs">{t.convite.perguntandoAoTailscale}</p>;
   }
 
   if (tailscale.funil) {
     return (
       <div className="flex items-center justify-between gap-2">
         <p className="text-muted-foreground min-w-0 truncate text-xs">
-          Aberta em {tailscale.funil.replace("https://", "")}
+          {t.convite.abertaEm(tailscale.funil.replace("https://", ""))}
         </p>
         <Button size="xs" variant="ghost" disabled={mexendo} onClick={onFechar}>
-          {mexendo ? "Fechando…" : "Fechar"}
+          {mexendo ? t.convite.fechando : t.convite.fechar}
         </Button>
       </div>
     );
@@ -493,14 +477,11 @@ function PainelDoFunil({
       {tailscale.problema ? (
         <ProblemaDoFunil problema={tailscale.problema} />
       ) : (
-        <p className="text-muted-foreground text-xs">
-          A mesa fica aberta para qualquer pessoa com o link e o código, até você fechar ou
-          sair do ATO20.
-        </p>
+        <p className="text-muted-foreground text-xs">{t.convite.oQueAbrirSignifica}</p>
       )}
       {tailscale.online && (
         <Button size="sm" variant="secondary" disabled={mexendo} onClick={onAbrir}>
-          {mexendo ? "Abrindo…" : "Abrir para a internet"}
+          {mexendo ? t.convite.abrindo : t.convite.abrirParaAInternet}
         </Button>
       )}
     </div>
@@ -515,7 +496,7 @@ function PainelDoFunil({
 function abrirLink(url: string): void {
   void openUrl(url).catch(() =>
     call<string>("abrir_no_navegador", { url }).catch(() =>
-      toast.error("Não foi possível abrir o navegador.", { description: url }),
+      toast.error(t.convite.semNavegador, { description: url }),
     ),
   );
 }
@@ -524,29 +505,21 @@ function ProblemaDoFunil({ problema }: { problema: ProblemaDoTailscale }) {
   switch (problema.tipo) {
     case "desconectado":
       return (
-        <p className="text-muted-foreground text-xs">
-          O Tailscale desta máquina está desconectado. Entre nele e abra o convite de novo.
-        </p>
+        <p className="text-muted-foreground text-xs">{t.convite.desconectado}</p>
       );
     case "funilNaoLiberado":
       return (
         <div className="space-y-1">
-          <p className="text-muted-foreground text-xs">
-            Falta liberar o Funnel na sua conta do Tailscale. Libere e clique em abrir de
-            novo.
-          </p>
+          <p className="text-muted-foreground text-xs">{t.convite.funilNaoLiberado}</p>
           <Button size="xs" variant="ghost" onClick={() => abrirLink(problema.link)}>
-            Liberar o Funnel
+            {t.convite.liberarFunil}
           </Button>
         </div>
       );
     case "semOperador":
       return (
         <div className="space-y-1">
-          <p className="text-muted-foreground text-xs">
-            O Linux só deixa o Tailscale abrir a porta para quem é operador dele. Rode isto
-            uma vez no terminal e clique em abrir de novo:
-          </p>
+          <p className="text-muted-foreground text-xs">{t.convite.semOperador}</p>
           <code className="bg-muted block rounded-md px-2 py-1 text-xs select-all">
             {problema.comando}
           </code>
@@ -554,14 +527,13 @@ function ProblemaDoFunil({ problema }: { problema: ProblemaDoTailscale }) {
       );
     case "portaOcupada":
       return (
-        <p className="text-muted-foreground text-xs">
-          O Funnel desta máquina já serve outra coisa na porta 443. Feche aquilo para abrir
-          a mesa.
-        </p>
+        <p className="text-muted-foreground text-xs">{t.convite.portaOcupada}</p>
       );
     case "outro":
       return (
-        <p className="text-destructive text-xs">O Tailscale não abriu: {problema.mensagem}</p>
+        <p className="text-destructive text-xs">
+          {t.convite.naoAbriu(idioma === "en" ? problema.mensagemEn : problema.mensagem)}
+        </p>
       );
   }
 }

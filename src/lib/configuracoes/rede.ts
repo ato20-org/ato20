@@ -12,6 +12,7 @@ import {
   type EnderecoDaMesa,
   type EscolhaDeRede,
 } from "@/lib/endereco-da-mesa";
+import { t } from "@/lib/i18n/mestre";
 import { daemonAddr, enderecosDetectados, tailscaleEstado } from "@/lib/vault/bridge";
 
 /**
@@ -32,20 +33,19 @@ export const CHAVE_DA_REDE = {
 const DEFINICOES_DA_REDE: Definicao[] = [
   {
     chave: CHAVE_DA_REDE.escolha,
-    titulo: "Rede do convite",
-    descricao:
-      "Por onde a mesa entra. As VPNs aparecem no convite quando estão ligadas nesta máquina, e a internet quando o Tailscale está logado.",
+    titulo: t.definicoes.redeDoConvite,
+    descricao: t.definicoes.redeDoConviteDescricao,
     tipo: "escolha",
     opcoes: ESCOLHAS_DE_REDE,
+    rotulos: t.convite.redes,
     padrao: "local",
     escopo: "maquina",
     dono: "ato20",
   },
   {
     chave: CHAVE_DA_REDE.endereco,
-    titulo: "Outro endereço",
-    descricao:
-      "Um nome ou IP que a mesa alcança, como o do MagicDNS do Tailscale ou do ZeroTier. Sem porta, vale a do ATO20.",
+    titulo: t.definicoes.enderecoProprio,
+    descricao: t.definicoes.enderecoProprioDescricao,
     tipo: "texto",
     padrao: "",
     escopo: "maquina",

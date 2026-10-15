@@ -21,6 +21,9 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::error::Texto;
+use crate::texto;
+
 /// O que o convite precisa saber do Tailscale desta maquina.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,8 +53,22 @@ pub enum Problema {
     SemOperador { comando: String },
     /// A 443 desta maquina ja serve outra coisa, e o ATO20 nao a toma.
     PortaOcupada,
-    /// O resto, com a ultima linha que a CLI disse.
-    Outro { mensagem: String },
+    /// O resto, com a ultima linha que a CLI disse. Ela fala ingles, e vai
+    /// igual nos dois idiomas; o que o proprio ATO20 diz vai traduzido.
+    Outro {
+        mensagem: String,
+        #[serde(rename = "mensagemEn")]
+        mensagem_en: String,
+    },
+}
+
+impl Problema {
+    fn outro(texto: Texto) -> Self {
+        Self::Outro {
+            mensagem: texto.pt,
+            mensagem_en: texto.en,
+        }
+    }
 }
 
 /// Quanto se espera pela CLI. Ela fala com o `tailscaled` local, e qualquer
@@ -121,7 +138,7 @@ pub fn abrir(porta: u16) -> Estado {
     let problema = match rodar(&["funnel", "--bg", "--yes", &alvo], LIMITE_DE_ABERTURA) {
         Ok(saida) if saida.sucesso => None,
         Ok(saida) => Some(problema_de(&saida.texto)),
-        Err(causa) => Some(Problema::Outro { mensagem: causa }),
+        Err(causa) => Some(Problema::outro(causa)),
     };
 
     match problema {
@@ -136,9 +153,10 @@ pub fn abrir(porta: u16) -> Estado {
             }
 
             Estado {
-                problema: Some(Problema::Outro {
-                    mensagem: "o Funnel nao apareceu depois de aberto".into(),
-                }),
+                problema: Some(Problema::outro(texto!(
+                    "o Funnel nao apareceu depois de aberto",
+                    "the Funnel did not show up after opening",
+                ))),
                 ..depois
             }
         }
@@ -169,7 +187,7 @@ pub fn fechar_se_nosso(porta: u16) {
     match rodar(&["funnel", "--https=443", "off"], LIMITE_DE_CONSULTA) {
         Ok(saida) if saida.sucesso => log::info!("tailscale: funnel fechado"),
         Ok(saida) => log::warn!("tailscale: funnel nao fechou: {}", saida.texto.trim()),
-        Err(causa) => log::warn!("tailscale: funnel nao fechou: {causa}"),
+        Err(causa) => log::warn!("tailscale: funnel nao fechou: {}", causa.pt),
     }
 }
 
@@ -253,15 +271,16 @@ fn problema_de(texto: &str) -> Problema {
         };
     }
 
-    let mensagem = texto
-        .lines()
-        .map(str::trim)
-        .filter(|linha| !linha.is_empty())
-        .last()
-        .unwrap_or("a CLI do Tailscale falhou sem dizer por que")
-        .to_string();
-
-    Problema::Outro { mensagem }
+    match texto.lines().map(str::trim).filter(|linha| !linha.is_empty()).last() {
+        Some(linha) => Problema::Outro {
+            mensagem: linha.to_string(),
+            mensagem_en: linha.to_string(),
+        },
+        None => Problema::outro(texto!(
+            "a CLI do Tailscale falhou sem dizer por que",
+            "the Tailscale CLI failed without saying why",
+        )),
+    }
 }
 
 /// O link que a CLI imprime quando falta liberar algo no painel.
@@ -337,8 +356,8 @@ fn consultar(args: &[&str]) -> Option<Value> {
 /// alguem liberar o Funnel no painel, e sem limite o botao da tela ficaria
 /// girando para sempre. Estourado o limite, o processo morre e o que ele ja
 /// disse (o link) volta mesmo assim.
-fn rodar(args: &[&str], limite: Duration) -> Result<Saida, String> {
-    let caminho = cli().ok_or_else(|| "Tailscale nao instalado".to_string())?;
+fn rodar(args: &[&str], limite: Duration) -> Result<Saida, Texto> {
+    let caminho = cli().ok_or_else(|| texto!("Tailscale nao instalado", "Tailscale is not installed"))?;
 
     let mut comando = Command::new(caminho);
     comando
@@ -350,7 +369,12 @@ fn rodar(args: &[&str], limite: Duration) -> Result<Saida, String> {
 
     let mut filho = comando
         .spawn()
-        .map_err(|causa| format!("a CLI do Tailscale nao abriu: {causa}"))?;
+        .map_err(|causa| {
+            texto!(
+                "a CLI do Tailscale nao abriu: {causa}",
+                "the Tailscale CLI did not start: {causa}",
+            )
+        })?;
 
     let ler = |fluxo: Option<Box<dyn Read + Send>>| {
         std::thread::spawn(move || {
@@ -380,7 +404,12 @@ fn rodar(args: &[&str], limite: Duration) -> Result<Saida, String> {
                 let _ = filho.wait();
                 break false;
             }
-            Err(causa) => return Err(format!("a CLI do Tailscale sumiu: {causa}")),
+            Err(causa) => {
+                return Err(texto!(
+                    "a CLI do Tailscale sumiu: {causa}",
+                    "the Tailscale CLI vanished: {causa}",
+                ))
+            }
         }
     };
 
@@ -483,7 +512,8 @@ mod tests {
         assert_eq!(
             problema_de("algo deu errado\n\nfalha final\n"),
             Problema::Outro {
-                mensagem: "falha final".into()
+                mensagem: "falha final".into(),
+                mensagem_en: "falha final".into(),
             }
         );
     }

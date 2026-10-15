@@ -2,19 +2,20 @@
  * Por qual endereço a mesa chega nesta máquina.
  *
  * O daemon escuta em todas as interfaces, então quem está numa VPN de jogo
- * com o mestre (Tailscale, Hamachi, Radmin) já o alcança. O que faltava era o
- * convite saber disso: ele mostrava só o IP da rede local, e o jogador de
- * outra cidade recebia um endereço que nunca ia responder para ele.
+ * com o mestre (Tailscale, ZeroTier, Hamachi, Radmin) já o alcança. O que
+ * faltava era o convite saber disso: ele mostrava só o IP da rede local, e o
+ * jogador de outra cidade recebia um endereço que nunca ia responder para ele.
  *
  * O aplicativo não conhece ferramenta nenhuma além de reconhecer a faixa de
- * IP de cada uma. O que ele não reconhece (ZeroTier, um nome do DuckDNS, um
- * túnel) entra como endereço digitado pelo mestre.
+ * IP de cada uma, e o nome da placa no caso do ZeroTier, que não tem faixa. O
+ * que ele não reconhece (um nome do DuckDNS, um túnel) entra como endereço
+ * digitado pelo mestre.
  *
  * Conta pura, sem store nem IPC, para ser testável como `lib/geometry`.
  */
 
 /** Uma rede que o Rust reconhece pela faixa. Espelha `serve::Rede`. */
-export type Rede = "local" | "tailscale" | "hamachi" | "radmin";
+export type Rede = "local" | "tailscale" | "hamachi" | "radmin" | "zerotier";
 
 /**
  * O que o mestre escolhe no convite: uma rede detectada, a internet pelo
@@ -27,18 +28,10 @@ export const ESCOLHAS_DE_REDE: EscolhaDeRede[] = [
   "tailscale",
   "hamachi",
   "radmin",
+  "zerotier",
   "internet",
   "outro",
 ];
-
-export const NOME_DA_REDE: Record<EscolhaDeRede, string> = {
-  local: "Rede local",
-  tailscale: "Tailscale",
-  hamachi: "Hamachi",
-  radmin: "Radmin",
-  internet: "Internet",
-  outro: "Outro endereço",
-};
 
 /** Um endereço do daemon numa rede que respondeu agora. Espelha `serve::Endereco`. */
 export type EnderecoDetectado = { rede: Rede; url: string };
@@ -52,7 +45,8 @@ export type ProblemaDoTailscale =
   | { tipo: "funilNaoLiberado"; link: string }
   | { tipo: "semOperador"; comando: string }
   | { tipo: "portaOcupada" }
-  | { tipo: "outro"; mensagem: string };
+  /** `mensagemEn` é a mesma frase em inglês; a da CLI vem igual nas duas. */
+  | { tipo: "outro"; mensagem: string; mensagemEn: string };
 
 /** O Tailscale desta máquina. Espelha `tailscale::Estado`. */
 export type EstadoDoTailscale = {
