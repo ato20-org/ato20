@@ -78,18 +78,30 @@ async function trocarFundo(sceneId: string): Promise<boolean> {
   if (!primeiro)
     throw new Error(resultado.recusados[0] ?? t.fundoDaCena.nadaImportado);
 
+  await porFundoImportado(sceneId, primeiro.id);
+
+  return true;
+}
+
+/**
+ * Põe como fundo um arquivo que JÁ entrou no acervo, com dono `cena`, e tira o
+ * anterior da campanha.
+ *
+ * O depois de toda troca de fundo, num lugar só: o menu do mapa importa pelo
+ * seletor, e o mapa Universal VTT chega com a imagem já gravada pelo Rust. Ver
+ * `importarUVTT`.
+ */
+export async function porFundoImportado(sceneId: string, assetId: string): Promise<void> {
   const anterior = fundoAtual(sceneId);
 
   // Entrou com dono, então a biblioteca não vai listá-lo -- mas o registro dele
   // é o que diz a dimensão natural do arquivo, e há tela que a pede pelo id.
   invalidarAcervo("image");
 
-  useSceneStore.getState().setBackground(sceneId, primeiro.id);
+  useSceneStore.getState().setBackground(sceneId, assetId);
 
   // O mapa trocado sai da campanha junto com a troca. Ver `descartarFundo`.
   await descartarFundo(anterior);
-
-  return true;
 }
 
 /**

@@ -11,8 +11,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { aplicarUVTTCena } from "@/lib/importacao/uvtt";
 import { t } from "@/lib/i18n/cenas";
+import { importarUVTT } from "@/lib/mestre/importar-uvtt";
 import { escolherFundoDaCena, useFundoEmVoo } from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,9 @@ const LADOS = [10, 20, 30, 40] as const;
  * O plano é sempre 1920 por 1080 -- é a geometria que a TV, o celular e a
  * câmera compartilham --, então "o tamanho" do tabuleiro é quantos quadrados
  * cabem na largura: 20 dá o quadrado de 96 que a grade padrão já usa.
+ *
+ * O mapa Universal VTT é a imagem com o resto já pronto: as paredes, as portas,
+ * as luzes e a grade do próprio desenho. Ver `importarUVTT`.
  */
 export function NovoMapaDialog({
   sceneId,
@@ -47,7 +50,8 @@ export function NovoMapaDialog({
     sceneId ? state.cenas.includes(sceneId) : false,
   );
 
-  const [importandoUVTT, setImportandoUVTT] = useState(false);
+  // Os dois cartões usam a trava do fundo; este diz em qual o giro aparece.
+  const [uvttEmCurso, setUvttEmCurso] = useState(false);
 
   function comImagem() {
     if (!sceneId) return;
@@ -61,34 +65,25 @@ export function NovoMapaDialog({
       );
   }
 
-  function comUVTT(evento: React.ChangeEvent<HTMLInputElement>) {
-    const file = evento.target.files?.[0];
-    if (!file || !sceneId) return;
+  function comUVTT() {
+    if (!sceneId) return;
 
-    setImportandoUVTT(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const text = reader.result as string;
-        const res = await aplicarUVTTCena(sceneId, text, file.name);
+    setUvttEmCurso(true);
+    void importarUVTT(sceneId)
+      .then((resumo) => {
+        // Cancelou o seletor: o diálogo fica, como no cartão da imagem.
+        if (!resumo) return;
+
         toast.success(
-          `Mapa importado! ${res.paredes} paredes, ${res.portas} portas e ${res.luzes} tochas adicionadas.`,
+          t.novoMapaDialog.uvttImportado(resumo.paredes, resumo.portas, resumo.luzes),
         );
+        if (resumo.semFundo) toast.warning(t.novoMapaDialog.uvttSemFundo);
         onFechar();
-      } catch (e) {
-        toast.error(
-          e instanceof Error ? e.message : "Falha ao importar Universal VTT",
-        );
-      } finally {
-        setImportandoUVTT(false);
-      }
-    };
-    reader.onerror = () => {
-      toast.error("Erro ao ler o arquivo");
-      setImportandoUVTT(false);
-    };
-    reader.readAsText(file);
-    evento.target.value = "";
+      })
+      // Um texto só para o arquivo que não é mapa e para o que não abriu: para
+      // quem escolheu o arquivo, a resposta é a mesma -- este não deu.
+      .catch(() => toast.error(t.novoMapaDialog.uvttFalhou))
+      .finally(() => setUvttEmCurso(false));
   }
 
   function semMapa() {
@@ -111,11 +106,11 @@ export function NovoMapaDialog({
         <div className="grid gap-3 sm:grid-cols-3">
           <button
             type="button"
-            disabled={importando || importandoUVTT}
+            disabled={importando}
             onClick={comImagem}
             className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg border p-4 text-center disabled:opacity-60"
           >
-            {importando ? (
+            {importando && !uvttEmCurso ? (
               <Loader2 className="size-8 animate-spin" />
             ) : (
               <ImageIcon className="size-8" />
@@ -126,29 +121,22 @@ export function NovoMapaDialog({
             </span>
           </button>
 
-          <label
-            className={cn(
-              "hover:bg-accent flex cursor-pointer flex-col items-center gap-2 rounded-lg border p-4 text-center",
-              (importando || importandoUVTT) && "opacity-60 pointer-events-none cursor-not-allowed",
-            )}
+          <button
+            type="button"
+            disabled={importando}
+            onClick={comUVTT}
+            className="hover:bg-accent flex flex-col items-center gap-2 rounded-lg border p-4 text-center disabled:opacity-60"
           >
-            <input
-              type="file"
-              accept=".dd2vtt,.uvtt,.json"
-              className="hidden"
-              disabled={importando || importandoUVTT}
-              onChange={comUVTT}
-            />
-            {importandoUVTT ? (
+            {uvttEmCurso ? (
               <Loader2 className="size-8 animate-spin" />
             ) : (
               <Compass className="size-8" />
             )}
-            <span className="font-medium">Universal VTT</span>
+            <span className="font-medium">{t.novoMapaDialog.uvtt}</span>
             <span className="text-muted-foreground text-xs">
-              DungeonDraft (.dd2vtt) com paredes e luzes
+              {t.novoMapaDialog.uvttDica}
             </span>
-          </label>
+          </button>
 
           <div className="flex flex-col gap-2 rounded-lg border p-4">
             <div className="flex flex-col items-center gap-2 text-center">
