@@ -441,16 +441,23 @@ function Rodape({
 
   return (
     <footer className="flex shrink-0 items-center gap-2 border-t px-2 py-1.5">
-      {personagem ? <Rosto personagem={personagem} /> : null}
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
-          {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
-        </p>
-        <p className="text-muted-foreground text-xs tabular-nums">
-          {t.iniciativa.rodada(rodada)}
-        </p>
+      {/* A rodada em selo, e não numa linha miúda embaixo do nome: é o número
+          que a mesa pergunta ("em que rodada estamos?") e o que conta a duração
+          das magias, e tem de ser lido de longe. No lugar do retrato, que a
+          linha destacada da ordem já mostra. */}
+      <div
+        title={t.iniciativa.rodada(rodada)}
+        className="flex h-9 min-w-10 shrink-0 flex-col items-center justify-center rounded-md bg-amber-400 px-1.5 leading-none text-amber-950"
+      >
+        <span className="text-[9px] font-semibold uppercase">
+          {t.iniciativa.rotuloDaRodada}
+        </span>
+        <span className="text-base font-bold tabular-nums">{rodada}</span>
       </div>
+
+      <p className="min-w-0 flex-1 truncate text-sm font-medium">
+        {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
+      </p>
 
       {/* Só ícone, como os controles de um tocador: voltar, parar e
           avançar se reconhecem pela forma, e o nome vai no `title`. O parar
