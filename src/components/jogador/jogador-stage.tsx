@@ -14,6 +14,7 @@ import { useZoomDaMesa } from "@/hooks/use-zoom-da-mesa";
 import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
@@ -51,6 +52,7 @@ export function JogadorStage({
   fichas,
   efeitos,
   rolagens,
+  iniciativa,
   pings,
   laser,
   synced,
@@ -74,6 +76,8 @@ export function JogadorStage({
    * que confirma que a mesa recebeu a jogada.
    */
   rolagens: RolagemDaMesa[];
+  /** De quem é a vez, com a iniciativa rodando. Ver `LiveState.iniciativa`. */
+  iniciativa: VezNaMesa | null;
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
   /** O laser do mestre. Ver `LiveState.laser`. */
@@ -141,6 +145,7 @@ export function JogadorStage({
                 fichas={fichas}
                 efeitos={efeitos}
                 rolagens={rolagens}
+                iniciativa={iniciativa}
                 pings={pings}
                 laser={laser}
                 tripe={tripe}

@@ -1,0 +1,847 @@
+"use client";
+
+import {
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as EventoDePonteiro,
+  type ReactNode,
+} from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Crown,
+  GripVertical,
+  Square,
+  Swords,
+  UserMinus,
+  UserPlus,
+} from "lucide-react";
+
+import { Rosto } from "@/components/mestre/characters-window";
+import { DadoEstatico } from "@/components/mestre/saquinho-dados";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useCharacterOwners } from "@/hooks/use-character-owners";
+import { useCharacters } from "@/hooks/use-characters";
+import { t } from "@/lib/i18n/mestre";
+import {
+  daVez,
+  emGrupos,
+  porVez,
+  semAutorNoRotulo,
+  totalDaRolagem,
+  type DadoRolado,
+  type GrupoDaRodada,
+  type Rodada,
+} from "@/lib/iniciativa/rodadas";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
+import { selectCenaParaMesa, useSceneStore } from "@/lib/store/use-scene-store";
+import { duracao } from "@/lib/tempo";
+import { cn } from "@/lib/utils";
+import type { Personagem } from "@/types/character";
+import { tipoDado } from "@/types/dado";
+
+/** Quantos pixels o ponteiro anda antes de o aperto virar arrasto. */
+const LIMIAR_DO_ARRASTO = 4;
+
+/**
+ * A ordem da rodada: quem age, de quem é a vez, e o que aconteceu em cada
+ * rodada.
+ *
+ * A lista é de quem tem token no mapa que a MESA está vendo, e não da campanha
+ * inteira: o combate acontece numa cena, e o bestiário de trinta PNJs da
+ * campanha não tem lugar na ordem. Quem saiu do mapa no meio do combate continua
+ * na ordem -- sair dela é gesto do mestre, e não efeito de mover um token.
+ *
+ * A vez e os botões moram no RODAPÉ, fora da área que rola: são o gesto de todo
+ * turno, e não podem sumir porque a ordem tem doze nomes.
+ */
+export function IniciativaBody() {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const cena = useSceneStore(selectCenaParaMesa);
+  const { personagens, jogadores } = useCharacters();
+  const donos = useCharacterOwners(jogadores);
+
+  const porId = useMemo(
+    () => new Map((personagens ?? []).map((personagem) => [personagem.id, personagem])),
+    [personagens],
+  );
+
+  // Jogadores primeiro, e é nesta ordem que o "Iniciar" os põe: costuma ser o
+  // grupo contra o que está no mapa, e o mestre arruma o resto arrastando.
+  const noMapa = useMemo(() => {
+    if (!cena || !personagens) return [];
+
+    const ids = new Set(
+      cena.items.flatMap((item) => (item.personagemId ? [item.personagemId] : [])),
+    );
+    const presentes = personagens.filter((personagem) => ids.has(personagem.id));
+    const temDono = (personagem: Personagem) => (donos.get(personagem.id) ?? []).length > 0;
+
+    return [
+      ...presentes.filter(temDono),
+      ...presentes.filter((personagem) => !temDono(personagem)),
+    ];
+  }, [cena, personagens, donos]);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <Tabs defaultValue="ordem" className="min-h-0 flex-1 gap-0">
+        <TabsList variant="line" className="h-7 w-full shrink-0 justify-start gap-2 px-2">
+          <TabsTrigger value="ordem" className="flex-none text-xs">
+            {t.iniciativa.abaOrdem}
+          </TabsTrigger>
+          <TabsTrigger value="rodadas" className="flex-none text-xs">
+            {t.iniciativa.abaRodadas}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ordem" className="flex min-h-0 flex-col border-t">
+          <ScrollArea className="min-h-0 flex-1">
+            <AbaOrdem noMapa={noMapa} porId={porId} donos={donos} />
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="rodadas" className="flex min-h-0 flex-col border-t">
+          <ScrollArea className="min-h-0 flex-1">
+            <AbaRodadas rodadas={iniciativa.rodadas} porId={porId} />
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
+
+      <Rodape noMapa={noMapa} porId={porId} donos={donos} />
+    </div>
+  );
+}
+
+type Donos = Map<string, string[]>;
+
+function AbaOrdem({
+  noMapa,
+  porId,
+  donos,
+}: {
+  noMapa: Personagem[];
+  porId: Map<string, Personagem>;
+  donos: Donos;
+}) {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const incluir = useIniciativaStore((state) => state.incluir);
+
+  if (!iniciativa.rodando) {
+    if (noMapa.length === 0)
+      return (
+        <Vazio>
+          <p className="text-foreground">{t.iniciativa.ninguemNoMapa}</p>
+          <p>{t.iniciativa.ninguemNoMapaDica}</p>
+        </Vazio>
+      );
+
+    return (
+      <div className="flex flex-col gap-3 p-2">
+        <Secao titulo={t.iniciativa.noMapa}>
+          {noMapa.map((personagem) => (
+            <li key={personagem.id}>
+              <Linha personagem={personagem} id={personagem.id} donos={donos} />
+            </li>
+          ))}
+        </Secao>
+        <p className="text-muted-foreground px-1.5 text-xs">{t.iniciativa.iniciarDica}</p>
+      </div>
+    );
+  }
+
+  const fora = noMapa.filter((personagem) => !iniciativa.ordem.includes(personagem.id));
+
+  return (
+    <div className="flex flex-col gap-3 p-2">
+      <Secao titulo={t.iniciativa.naOrdem}>
+        {iniciativa.ordem.length === 0 ? (
+          <li className="text-muted-foreground px-1.5 py-2 text-xs">
+            {t.iniciativa.ordemVazia}
+          </li>
+        ) : (
+          <OrdemArrastavel porId={porId} donos={donos} />
+        )}
+      </Secao>
+
+      {fora.length > 0 ? (
+        <Secao titulo={t.iniciativa.foraDaOrdem}>
+          {fora.map((personagem) => (
+            <li key={personagem.id}>
+              <Linha
+                personagem={personagem}
+                id={personagem.id}
+                donos={donos}
+                apagada
+                acao={
+                  <BotaoDaLinha
+                    rotulo={t.iniciativa.por(personagem.nome)}
+                    onClick={() => incluir(personagem.id)}
+                  >
+                    <UserPlus />
+                  </BotaoDaLinha>
+                }
+              />
+            </li>
+          ))}
+        </Secao>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A ordem, que se arruma arrastando a linha.
+ *
+ * Com ponteiro e não com o arrasto nativo do HTML: o nativo desenha um fantasma
+ * da linha que o WebKitGTK pinta como quer, e não avisa nada enquanto o dedo
+ * anda -- só no soltar. Aqui o alvo é recalculado a cada movimento, e a linha
+ * fina mostra onde ele vai cair.
+ *
+ * A linha INTEIRA arrasta, e não só a alça: a alça é a pista de que dá, mas
+ * mirar seis pixels de ícone no meio do combate é pedir demais. Os botões da
+ * linha ficam de fora do gesto.
+ */
+function OrdemArrastavel({
+  porId,
+  donos,
+}: {
+  porId: Map<string, Personagem>;
+  donos: Donos;
+}) {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const mover = useIniciativaStore((state) => state.mover);
+  const retirar = useIniciativaStore((state) => state.retirar);
+
+  const linhas = useRef(new Map<string, HTMLLIElement>());
+  const gesto = useRef<{ id: string; y: number; arrastando: boolean } | null>(null);
+  const [arrasto, setArrasto] = useState<{ id: string; alvo: number } | null>(null);
+
+  const vez = daVez(iniciativa);
+  const { ordem } = iniciativa;
+
+  /** Quantos dos OUTROS ficaram acima do ponteiro: a posição final, sem ele. */
+  function alvoPara(id: string, y: number): number {
+    let alvo = 0;
+    for (const outro of ordem) {
+      if (outro === id) continue;
+      const caixa = linhas.current.get(outro)?.getBoundingClientRect();
+      if (caixa && y > caixa.top + caixa.height / 2) alvo += 1;
+    }
+
+    return alvo;
+  }
+
+  function aoApertar(event: EventoDePonteiro<HTMLLIElement>, id: string) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+
+    gesto.current = { id, y: event.clientY, arrastando: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function aoMover(event: EventoDePonteiro<HTMLLIElement>) {
+    const atual = gesto.current;
+    if (!atual) return;
+    if (!atual.arrastando && Math.abs(event.clientY - atual.y) < LIMIAR_DO_ARRASTO) return;
+
+    atual.arrastando = true;
+    setArrasto({ id: atual.id, alvo: alvoPara(atual.id, event.clientY) });
+  }
+
+  function aoSoltar(event: EventoDePonteiro<HTMLLIElement>) {
+    const atual = gesto.current;
+    gesto.current = null;
+    if (atual?.arrastando) mover(atual.id, alvoPara(atual.id, event.clientY));
+    setArrasto(null);
+  }
+
+  function aoCancelar() {
+    gesto.current = null;
+    setArrasto(null);
+  }
+
+  const outros = arrasto ? ordem.filter((id) => id !== arrasto.id) : ordem;
+
+  return (
+    <>
+      {ordem.map((id) => {
+        const personagem = porId.get(id);
+        const nome = personagem?.nome ?? t.iniciativa.personagemApagado;
+        const indiceEntreOutros = outros.indexOf(id);
+
+        return (
+          <li
+            key={id}
+            ref={(no) => {
+              if (no) linhas.current.set(id, no);
+              else linhas.current.delete(id);
+            }}
+            title={t.iniciativa.arrastar}
+            onPointerDown={(event) => aoApertar(event, id)}
+            onPointerMove={aoMover}
+            onPointerUp={aoSoltar}
+            onPointerCancel={aoCancelar}
+            className={cn(
+              "relative touch-none select-none",
+              arrasto?.id === id && "opacity-40",
+            )}
+          >
+            {arrasto && indiceEntreOutros === arrasto.alvo ? <MarcaDeQueda lado="cima" /> : null}
+            <Linha
+              personagem={personagem}
+              id={id}
+              donos={donos}
+              daVez={id === vez}
+              arrastavel
+              acao={
+                <BotaoDaLinha rotulo={t.iniciativa.tirar(nome)} onClick={() => retirar(id)}>
+                  <UserMinus />
+                </BotaoDaLinha>
+              }
+            />
+            {arrasto &&
+            arrasto.alvo === outros.length &&
+            id === outros[outros.length - 1] ? (
+              <MarcaDeQueda lado="baixo" />
+            ) : null}
+          </li>
+        );
+      })}
+    </>
+  );
+}
+
+/** A linha fina que diz onde o arrastado vai cair. */
+function MarcaDeQueda({ lado }: { lado: "cima" | "baixo" }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "bg-primary pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full",
+        lado === "cima" ? "-top-px" : "-bottom-px",
+      )}
+    />
+  );
+}
+
+/**
+ * Uma linha de personagem: o retrato, o nome, e embaixo quem o joga.
+ *
+ * PNJ não ganha segunda linha: "sem jogador" repetido em dez goblins é ruído,
+ * e a falta do nome já diz a mesma coisa.
+ *
+ * Dois cliques abrem a ficha, como no mapa e na janela de Personagens: no meio
+ * do combate a pergunta seguinte a "de quem é a vez" é "o que ele tem".
+ *
+ * `apagada` é quem está no mapa mas fora da ordem: continua ali para entrar,
+ * mas não disputa o olho com quem está lutando. Volta ao normal sob o mouse,
+ * que é quando o mestre vai pô-lo na ordem.
+ */
+function Linha({
+  personagem,
+  id,
+  donos,
+  daVez = false,
+  arrastavel = false,
+  apagada = false,
+  acao,
+}: {
+  personagem: Personagem | undefined;
+  id: string;
+  donos: Donos;
+  daVez?: boolean;
+  arrastavel?: boolean;
+  apagada?: boolean;
+  acao?: ReactNode;
+}) {
+  const abrirJanela = useAbrirJanela();
+  const quem = (donos.get(id) ?? []).join(", ");
+
+  return (
+    <div
+      onDoubleClick={
+        personagem ? () => abrirJanela({ tipo: "personagem", personagemId: id }) : undefined
+      }
+      className={cn(
+        "flex items-center gap-2 rounded-md border border-transparent px-1.5 py-1 transition-opacity",
+        arrastavel && "hover:bg-muted/50 cursor-grab active:cursor-grabbing",
+        daVez && "border-primary/40 bg-primary/10 hover:bg-primary/10",
+        apagada && "opacity-50 hover:opacity-100",
+      )}
+    >
+      {arrastavel ? (
+        <GripVertical className="text-muted-foreground/60 size-3.5 shrink-0" aria-hidden />
+      ) : null}
+
+      {personagem ? (
+        <Rosto personagem={personagem} />
+      ) : (
+        <span className="bg-muted/60 size-7 shrink-0 rounded border" />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className={cn("truncate text-sm", daVez && "font-medium")}>
+          {personagem?.nome ?? t.iniciativa.personagemApagado}
+        </p>
+        {quem ? <p className="text-muted-foreground truncate text-xs">{quem}</p> : null}
+      </div>
+
+      {acao}
+    </div>
+  );
+}
+
+function BotaoDaLinha({
+  rotulo,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground shrink-0"
+      aria-label={rotulo}
+      title={rotulo}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/**
+ * De quem é a vez, a rodada, e os gestos de todo turno.
+ *
+ * Fora de combate o rodapé inteiro vira o "Iniciar", que põe na ordem todos os
+ * personagens do mapa: é quase sempre o que o mestre faria um por um, e tirar
+ * os dois que não entram é mais rápido que pôr os oito que entram.
+ */
+function Rodape({
+  noMapa,
+  porId,
+  donos,
+}: {
+  noMapa: Personagem[];
+  porId: Map<string, Personagem>;
+  donos: Donos;
+}) {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const iniciar = useIniciativaStore((state) => state.iniciar);
+  const proximo = useIniciativaStore((state) => state.proximo);
+  const anterior = useIniciativaStore((state) => state.anterior);
+  const encerrar = useIniciativaStore((state) => state.encerrar);
+
+  if (!iniciativa.rodando)
+    return (
+      <footer className="shrink-0 border-t p-2">
+        <Button
+          size="sm"
+          className="w-full"
+          disabled={noMapa.length === 0}
+          onClick={() => iniciar(noMapa.map((personagem) => personagem.id))}
+        >
+          <Swords />
+          {t.iniciativa.iniciar}
+        </Button>
+      </footer>
+    );
+
+  const vez = daVez(iniciativa);
+  const personagem = vez ? porId.get(vez) : undefined;
+  const nome = vez ? (personagem?.nome ?? t.iniciativa.personagemApagado) : null;
+  const quem = vez ? (donos.get(vez) ?? []).join(", ") : "";
+  const rodada = iniciativa.rodadas.at(-1)?.numero ?? 1;
+  const semNinguem = iniciativa.ordem.length === 0;
+
+  return (
+    <footer className="flex shrink-0 items-center gap-2 border-t px-2 py-1.5">
+      {/* A rodada em selo, e não numa linha miúda embaixo do nome: é o número
+          que a mesa pergunta ("em que rodada estamos?") e o que conta a duração
+          das magias, e tem de ser lido de longe. No lugar do retrato, que a
+          linha destacada da ordem já mostra.
+
+          Quadrado de tamanho FIXO: a palavra miúda em cima esticava o selo
+          para os lados, e um selo que muda de largura com a língua parece
+          outro elemento a cada rodada. */}
+      <div
+        title={t.iniciativa.rodada(rodada)}
+        className="flex size-10 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md bg-amber-400 leading-none text-amber-950"
+      >
+        <span className="text-[7.5px] font-semibold tracking-tight uppercase">
+          {t.iniciativa.rotuloDaRodada}
+        </span>
+        <span className="text-base font-bold tabular-nums">{rodada}</span>
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
+        </p>
+        {quem ? <p className="text-muted-foreground truncate text-xs">{quem}</p> : null}
+      </div>
+
+      {/* Só ícone, como os controles de um tocador: voltar, parar e
+          avançar se reconhecem pela forma, e o nome vai no `title`. O parar
+          no MEIO e vermelho, para o dedo que vai ao "próximo" a cada turno
+          não encerrar o combate de passagem. */}
+      <div className="flex shrink-0 items-center gap-1">
+        <BotaoDoTurno
+          rotulo={t.iniciativa.anterior}
+          dica={t.iniciativa.anteriorDica}
+          disabled={semNinguem}
+          onClick={anterior}
+        >
+          <ChevronLeft />
+        </BotaoDoTurno>
+        <BotaoDoTurno
+          rotulo={t.iniciativa.encerrar}
+          dica={t.iniciativa.encerrarDica}
+          variante="destructive"
+          onClick={encerrar}
+        >
+          <Square className="fill-current" />
+        </BotaoDoTurno>
+        <BotaoDoTurno
+          rotulo={t.iniciativa.proximo}
+          dica={t.iniciativa.proximoDica}
+          disabled={semNinguem}
+          onClick={proximo}
+        >
+          <ChevronRight />
+        </BotaoDoTurno>
+      </div>
+    </footer>
+  );
+}
+
+function BotaoDoTurno({
+  rotulo,
+  dica,
+  variante = "secondary",
+  disabled = false,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  dica: string;
+  variante?: "secondary" | "destructive";
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant={variante}
+      size="icon"
+      aria-label={rotulo}
+      title={dica}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/**
+ * As rodadas, da corrente para a primeira, e o que aconteceu em cada uma.
+ *
+ * Uma aberta por vez, e a corrente aberta de início: é a que se consulta no
+ * meio do combate ("quanto ele já levou nesta?"). As outras abrem num clique,
+ * com o que aconteceu em blocos pela vez de quem era.
+ */
+function AbaRodadas({
+  rodadas,
+  porId,
+}: {
+  rodadas: Rodada[];
+  porId: Map<string, Personagem>;
+}) {
+  // `undefined` é "a de sempre": a corrente, se houver uma em andamento.
+  const [escolhida, setEscolhida] = useState<number | null | undefined>(undefined);
+
+  if (rodadas.length === 0) return <Vazio>{t.iniciativa.semRodadas}</Vazio>;
+
+  const corrente = rodadas.at(-1);
+  const aberta =
+    escolhida === undefined ? (corrente?.fim === null ? corrente.numero : null) : escolhida;
+
+  return (
+    <ul className="flex flex-col gap-1 p-2">
+      {[...rodadas].reverse().map((rodada) => {
+        const estaAberta = rodada.numero === aberta;
+        const corrente = rodada.fim === null;
+
+        // A corrente em amarelo, a cor do selo da rodada no rodapé: é a mesma
+        // rodada, e a cor é o que liga os dois de relance.
+        return (
+          <li
+            key={rodada.numero}
+            className={cn("rounded-md border", corrente && "border-amber-400/70")}
+          >
+            <button
+              type="button"
+              aria-expanded={estaAberta}
+              onClick={() => setEscolhida(estaAberta ? null : rodada.numero)}
+              className="hover:bg-muted/50 flex w-full items-baseline gap-2 rounded-md px-2 py-1.5 text-left"
+            >
+              <ChevronRight
+                aria-hidden
+                className={cn(
+                  "text-muted-foreground size-3.5 shrink-0 self-center transition-transform",
+                  estaAberta && "rotate-90",
+                )}
+              />
+              <span className="text-sm font-medium">{t.iniciativa.rodada(rodada.numero)}</span>
+              <span className="text-muted-foreground ml-auto flex shrink-0 items-center gap-1.5 text-xs tabular-nums">
+                {corrente ? (
+                  <span
+                    aria-hidden
+                    className="size-1.5 rounded-full bg-amber-400 motion-safe:animate-pulse"
+                  />
+                ) : null}
+                {corrente ? t.iniciativa.emAndamento : duracao((rodada.fim ?? 0) - rodada.inicio)}
+                {" · "}
+                {t.iniciativa.contarEventos(rodada.eventos.length)}
+              </span>
+            </button>
+
+            {estaAberta ? <EventosDaRodada rodada={rodada} porId={porId} /> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function EventosDaRodada({
+  rodada,
+  porId,
+}: {
+  rodada: Rodada;
+  porId: Map<string, Personagem>;
+}) {
+  if (rodada.eventos.length === 0)
+    return (
+      <p className="text-muted-foreground border-t px-2 py-2 text-xs">
+        {t.iniciativa.nadaNaRodada}
+      </p>
+    );
+
+  return (
+    <div className="flex flex-col gap-2 border-t px-2 py-2">
+      {porVez(rodada.eventos).map((bloco, indice) => {
+        const nome = bloco.vezDe
+          ? (porId.get(bloco.vezDe)?.nome ?? t.iniciativa.personagemApagado)
+          : null;
+
+        return (
+          <section key={indice} className="flex flex-col gap-1">
+            <p className="text-muted-foreground text-[10px] font-medium uppercase">
+              {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {emGrupos(bloco.eventos).map((grupo, posicao) =>
+                grupo.tipo === "rolagens" ? (
+                  <GrupoDeRolagens
+                    key={posicao}
+                    grupo={grupo}
+                    vezDe={bloco.vezDe}
+                    porId={porId}
+                  />
+                ) : (
+                  <ul key={posicao}>
+                    <LinhaDeEvento evento={grupo.evento} />
+                  </ul>
+                ),
+              )}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** `2d6 + 1d4`: os dados de uma rolagem sem nome, agrupados por faces. */
+function notacao(dados: readonly DadoRolado[]): string {
+  const porFaces = new Map<number, number>();
+  for (const dado of dados) porFaces.set(dado.faces, (porFaces.get(dado.faces) ?? 0) + 1);
+
+  return [...porFaces].map(([faces, quantos]) => `${quantos}d${faces}`).join(" + ");
+}
+
+/**
+ * As rolagens seguidas de quem rolou: o cabeçalho diz quem, e as linhas
+ * embaixo dizem só o quê.
+ *
+ * As linhas recuadas atrás de um fio, como a resposta de uma conversa: é o fio
+ * que faz o olho ler "isto tudo é do Old Man" sem ler o nome de novo. O mestre
+ * ganha a coroa no lugar do retrato, e é ela que separa de relance a rolagem de
+ * trás do escudo da rolagem da mesa.
+ *
+ * A rolagem do jogador FORA da vez dele continua na rodada -- aconteceu, e às
+ * vezes é a reação ou o teste que o mestre pediu --, mas apagada e marcada: o
+ * que a rodada conta em primeiro plano é o turno de quem estava agindo. O
+ * mestre rola por todos, e nunca está fora da vez.
+ */
+function GrupoDeRolagens({
+  grupo,
+  vezDe,
+  porId,
+}: {
+  grupo: Extract<GrupoDaRodada, { tipo: "rolagens" }>;
+  /** De quem era a vez no bloco onde o grupo está. */
+  vezDe: string | null;
+  porId: Map<string, Personagem>;
+}) {
+  const { autor } = grupo;
+  const personagem = autor.personagemId ? porId.get(autor.personagemId) : undefined;
+  const nome = autor.personagem ?? autor.jogador ?? t.iniciativa.mestre;
+  const ehMestre = autor.jogador === null;
+  const foraDaVez = !ehMestre && vezDe !== null && autor.personagemId !== vezDe;
+
+  return (
+    <div className={cn("flex flex-col gap-0.5", foraDaVez && "opacity-50")}>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        {ehMestre ? (
+          <span className="bg-muted text-foreground grid size-5 shrink-0 place-items-center rounded">
+            <Crown className="size-3" aria-hidden />
+          </span>
+        ) : personagem ? (
+          <Rosto personagem={personagem} className="size-5" />
+        ) : (
+          <span className="bg-muted/60 size-5 shrink-0 rounded border" />
+        )}
+        <span className="truncate font-medium">{nome}</span>
+        {autor.personagem && autor.jogador ? (
+          <span className="text-muted-foreground truncate">{autor.jogador}</span>
+        ) : null}
+        {foraDaVez ? (
+          <span className="text-muted-foreground ml-auto shrink-0 rounded border px-1 text-[10px]">
+            {t.iniciativa.foraDaVez}
+          </span>
+        ) : null}
+      </div>
+
+      <ul className="ml-2.5 flex flex-col gap-0.5 border-l pl-2.5">
+        {grupo.eventos.map((evento, posicao) => (
+          <li key={`${evento.quando}-${posicao}`} className="flex items-center gap-2 text-xs">
+            <DadoDaRolagem dados={evento.dados} />
+            <span className="min-w-0 flex-1 truncate">
+              {evento.rotulo
+                ? semAutorNoRotulo(evento.rotulo, autor.personagem)
+                : notacao(evento.dados)}
+            </span>
+            <span className="shrink-0 font-medium tabular-nums">{totalDaRolagem(evento)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LinhaDeEvento({
+  evento,
+}: {
+  evento: Extract<GrupoDaRodada, { tipo: "evento" }>["evento"];
+}) {
+  switch (evento.tipo) {
+    case "medidor": {
+      const diferenca = evento.antes === null ? null : evento.depois - evento.antes;
+
+      return (
+        <li className="flex items-center gap-2 text-xs">
+          <Bolinha cor={evento.cor} />
+          <span className="min-w-0 flex-1 truncate">
+            {t.iniciativa.noMedidor(evento.personagem, evento.medidor)}
+          </span>
+          <span className="text-muted-foreground shrink-0 tabular-nums">
+            {t.iniciativa.mudouDe(evento.antes, evento.depois, evento.maximo)}
+          </span>
+          {diferenca ? (
+            <span
+              className={cn(
+                "w-8 shrink-0 text-right font-medium tabular-nums",
+                diferenca < 0 ? "text-destructive" : "text-emerald-500",
+              )}
+            >
+              {diferenca > 0 ? `+${diferenca}` : diferenca}
+            </span>
+          ) : null}
+        </li>
+      );
+    }
+
+    case "condicao":
+      return (
+        <li className="flex items-center gap-2 text-xs">
+          <Bolinha cor={evento.cor} />
+          <span className={cn("min-w-0 flex-1 truncate", !evento.ligada && "text-muted-foreground")}>
+            {evento.ligada
+              ? t.iniciativa.ganhou(evento.personagem, evento.condicao)
+              : t.iniciativa.perdeu(evento.personagem, evento.condicao)}
+          </span>
+        </li>
+      );
+  }
+}
+
+/**
+ * O dado da rolagem, o mesmo do saquinho e da mesa, e não um ícone genérico: a
+ * cor e a forma dizem o tipo antes de ler "1d12".
+ *
+ * Um só, o de mais faces: a Luta de dois d20 e um d4 é lida pelo d20, e três
+ * dados de 14 pixels lado a lado viravam uma mancha.
+ */
+function DadoDaRolagem({ dados }: { dados: readonly DadoRolado[] }) {
+  const maior = dados.reduce<DadoRolado | null>(
+    (atual, dado) => (!atual || dado.faces > atual.faces ? dado : atual),
+    null,
+  );
+
+  return (
+    <span className="grid size-4 shrink-0 place-items-center">
+      {maior ? <DadoEstatico tipo={tipoDado(maior.faces)} tamanho={16} /> : null}
+    </span>
+  );
+}
+
+function Bolinha({ cor }: { cor: string }) {
+  return (
+    <span
+      aria-hidden
+      className="size-2 shrink-0 rounded-full"
+      style={{ backgroundColor: cor }}
+    />
+  );
+}
+
+/** Um grupo da lista, com o título miúdo das outras janelas. */
+function Secao({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-1">
+      <p className="text-muted-foreground px-1.5 text-[10px] font-medium uppercase">
+        {titulo}
+      </p>
+      <ul className="flex flex-col gap-0.5">{children}</ul>
+    </section>
+  );
+}
+
+function Vazio({ children }: { children: ReactNode }) {
+  return (
+    <div className="text-muted-foreground flex flex-col items-center gap-1 px-4 py-10 text-center text-xs">
+      {children}
+    </div>
+  );
+}

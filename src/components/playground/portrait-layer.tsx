@@ -12,6 +12,7 @@ import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { CANVAS_PADRAO } from "@/lib/extensoes/fontes";
 import { t } from "@/lib/i18n/palco";
+import { useVezDaMesaStore } from "@/lib/store/use-vez-da-mesa-store";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { MedidoresDoRetrato } from "@/components/playground/medidores-do-retrato";
@@ -286,6 +287,53 @@ function PaginaViva({
  * contorno do fantasma: em pixel de tela, ele teria tamanhos diferentes a cada
  * aproximação da câmera.
  */
+/**
+ * A marca da vez: moldura amarela por DENTRO da figura, e "VEZ" no canto de
+ * cima.
+ *
+ * Amarela como a rodada na janela do Mestre e a moldura no celular: é o mesmo
+ * aviso nas três telas. Tudo por dentro -- a borda, o brilho e o selo --, porque
+ * um brilho por fora ou um selo pendurado sairiam do plano, e peça fora do
+ * plano é o que derruba o palco no WebKitGTK.
+ *
+ * Proporcional à figura, e não em pixel: o retrato é desenhado do tamanho que
+ * o mestre deu, e uma moldura de 3px some num retrato de meia tela.
+ */
+function MarcaDaVez({
+  alvo,
+}: {
+  alvo: { x: number; y: number; width: number; height: number };
+}) {
+  const espessura = Math.max(2, alvo.height * 0.025);
+  const corpo = Math.max(8, alvo.height * 0.07);
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute border-amber-400"
+      style={{
+        left: alvo.x,
+        top: alvo.y,
+        width: alvo.width,
+        height: alvo.height,
+        borderWidth: espessura,
+        boxShadow: `inset 0 0 ${espessura * 3}px rgb(251 191 36 / 0.6)`,
+      }}
+    >
+      <span
+        className="absolute top-0 left-0 bg-amber-400 leading-none font-bold text-amber-950 uppercase"
+        style={{
+          fontSize: corpo,
+          padding: `${corpo * 0.25}px ${corpo * 0.4}px`,
+          borderBottomRightRadius: corpo * 0.3,
+        }}
+      >
+        {t.retrato.vez}
+      </span>
+    </div>
+  );
+}
+
 function MarcaPaginaViva({ escala }: { escala: number }) {
   return (
     <div
@@ -339,6 +387,9 @@ const PortraitView = memo(function PortraitView({
   onPointerDown,
 }: PortraitViewProps) {
   const url = useAssetUrl(portrait.assetId);
+  // Um booleano, e não o id da vez: só o retrato que entra ou sai da vez
+  // redesenha quando ela passa.
+  const naVez = useVezDaMesaStore((state) => state.vezDe === portrait.personagemId);
   const { scale, quadroDaTela } = useSceneScale();
   /**
    * A régua deste retrato.
@@ -570,6 +621,18 @@ const PortraitView = memo(function PortraitView({
           aria-hidden
           className="pointer-events-none absolute inset-0 rounded outline-dashed outline-white/25"
           style={{ outlineWidth: 1.5 / escala }}
+        />
+      ) : null}
+
+      {/* A vez, sobre a figura e embaixo dos selos e do nome. Sem a figura, a
+          moldura vai na caixa: o chefe sem rosto também tem vez. */}
+      {layout.iniciativa && naVez ? (
+        <MarcaDaVez
+          alvo={
+            layout.retrato && lugar
+              ? lugar
+              : { x: 0, y: 0, width: box.width, height: box.height }
+          }
         />
       ) : null}
 

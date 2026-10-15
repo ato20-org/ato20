@@ -1192,12 +1192,24 @@ function SecaoDaLista({
  * lista tem PNJ sem imagem às dezenas, e um boneco repetido em vinte linhas
  * viraria ruído do mesmo jeito que o rótulo "sem dono" virava.
  */
-function Rosto({ personagem }: { personagem: Personagem }) {
+export function Rosto({
+  personagem,
+  className,
+}: {
+  personagem: Personagem;
+  /** Outro tamanho, para quem usa o rosto fora da lista. */
+  className?: string;
+}) {
   const rosto = personagem.retrato ?? personagem.miniatura;
   const animada = useAnimada(rosto);
 
   return (
-    <span className="bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border">
+    <span
+      className={cn(
+        "bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border",
+        className,
+      )}
+    >
       {/* Sem selo: num quadrado de 28px ele cobriria o rosto. O hover na
           linha continua animando. */}
       <MiniaturaDoAcervo assetId={rosto} animada={animada} selo={false} />

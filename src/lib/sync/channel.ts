@@ -1,4 +1,5 @@
 import type { Idioma } from "@/lib/i18n/idioma";
+import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -172,6 +173,13 @@ export type LiveState = {
    * ignora. Ausente = neutro, e é o que um quadro de uma versão anterior diz.
    */
   imagem?: AjusteDeImagem;
+  /**
+   * De quem é a vez, com a iniciativa rodando. `null` fora de combate.
+   *
+   * Opcional, como `idioma`: o quadro de uma versão anterior não o traz, e
+   * ausente é "ninguém está em combate". Ver `VezNaMesa`.
+   */
+  iniciativa?: VezNaMesa | null;
 };
 
 /**

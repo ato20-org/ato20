@@ -91,6 +91,7 @@ const pt = {
     entrar: "Tela cheia",
     sair: "Sair da tela cheia",
   },
+  suaVez: "Sua vez",
 
   /** As ferramentas das docas da tela deitada e as abas da tela em pé. */
   ferramentas: {
@@ -350,6 +351,7 @@ const en: typeof pt = {
     entrar: "Full screen",
     sair: "Exit full screen",
   },
+  suaVez: "Your turn",
 
   ferramentas: {
     personagem: "Character",

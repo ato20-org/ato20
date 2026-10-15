@@ -69,6 +69,7 @@ export type ConteudoJanela =
   // layout guardado com ela migra em `semBiblioteca`.
   | { tipo: "sons" }
   | { tipo: "camadas" }
+  | { tipo: "iniciativa" }
   // A tela que uma EXTENSAO trouxe. Dois campos e nao um id concatenado: quem
   // desenha precisa saber de qual extensao pedir o corpo, e desmontar uma
   // string para descobrir isso seria trocar um tipo por uma convencao.
@@ -133,6 +134,7 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     case "retratos":
     case "sons":
     case "camadas":
+    case "iniciativa":
       return conteudo.tipo;
     // A extensao entra na chave: dois plugins podem chamar o painel de `notas`,
     // e sem o dono os dois disputariam a mesma janela.
