@@ -244,6 +244,7 @@ name = "ato20"
 version = "1.8.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "color_quant",
  "getrandom 0.3.4",
  "if-addrs",

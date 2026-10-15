@@ -38,6 +38,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+# O mapa Universal VTT traz a imagem em base64 dentro do JSON. Ver `uvtt.rs`.
+base64 = "0.22"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"

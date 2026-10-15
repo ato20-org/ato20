@@ -106,6 +106,13 @@ const pt = {
     semMapaDica: "Tabuleiro preto com grade. Escolha quantos quadrados cabem na largura.",
     quadradosNaLargura: "Quadrados na largura",
     criarTabuleiro: "Criar tabuleiro",
+    uvtt: "Universal VTT",
+    uvttDica: "Do Dungeondraft ou do Dungeon Alchemist, já com paredes, portas e luzes.",
+    escolhaUVTT: "Escolha o mapa Universal VTT",
+    uvttImportado: (paredes: number, portas: number, luzes: number) =>
+      `Mapa importado: ${paredes === 1 ? "1 parede" : `${paredes} paredes`}, ${portas === 1 ? "1 porta" : `${portas} portas`} e ${luzes === 1 ? "1 luz" : `${luzes} luzes`}.`,
+    uvttSemFundo: "O mapa entrou sem a imagem. Escolha o fundo pelo menu do mapa.",
+    uvttFalhou: "Este arquivo não abriu como mapa Universal VTT.",
   },
 
   /**
@@ -207,6 +214,13 @@ const en: typeof pt = {
     semMapaDica: "Plain black with a grid. Choose how many squares fit across.",
     quadradosNaLargura: "Squares across",
     criarTabuleiro: "Create grid",
+    uvtt: "Universal VTT",
+    uvttDica: "From Dungeondraft or Dungeon Alchemist, with walls, doors and lights included.",
+    escolhaUVTT: "Choose the Universal VTT map",
+    uvttImportado: (paredes, portas, luzes) =>
+      `Map imported: ${paredes === 1 ? "1 wall" : `${paredes} walls`}, ${portas === 1 ? "1 door" : `${portas} doors`} and ${luzes === 1 ? "1 light" : `${luzes} lights`}.`,
+    uvttSemFundo: "The map came in without its image. Choose the background from the map's menu.",
+    uvttFalhou: "This file didn't open as a Universal VTT map.",
   },
 
   mestreShell: {
