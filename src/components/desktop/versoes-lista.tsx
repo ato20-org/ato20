@@ -6,6 +6,7 @@ import { ChevronRight, ExternalLink, Sparkles, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 import { ChromeButton } from "@/components/desktop/window-chrome";
+import { MarcaKofi } from "@/components/marcas";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,11 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n/desktop";
 import { idioma } from "@/lib/i18n/idioma";
+import { KOFI_DO_ATO20, REPOSITORIO_DO_ATO20 } from "@/lib/projeto";
 import { cn } from "@/lib/utils";
 import { VERSOES, type Mudanca, type Texto } from "@/lib/versoes";
 
 /** A página de releases do repositório. Permitida em `capabilities/default.json`. */
-const RELEASES_URL = "https://github.com/ato20-org/ato20/releases";
+const RELEASES_URL = `${REPOSITORIO_DO_ATO20}/releases`;
 
 /**
  * O que mudou, em dois lugares e com a mesma voz.
@@ -275,7 +277,8 @@ function VersaoAnterior({ versao }: { versao: VersaoPronta }) {
  *
  * O link para as releases no GitHub mora aqui e não nas Configurações: quem
  * está lendo o que mudou é quem quer ver o que vem, baixar outra versão ou
- * ler a nota completa.
+ * ler a nota completa. O Ko-fi vai ao lado, mais discreto: quem gostou do que
+ * mudou é quem pode querer apoiar.
  */
 export function NovidadesDialog() {
   // A cabeça da lista é a versão que está rodando -- a mesma que `versaoAtual`
@@ -347,7 +350,19 @@ export function NovidadesDialog() {
           {/* Fora da área que rola, para estar sempre à mão. Abre no navegador
               da máquina, e não numa janela do aplicativo: a página do GitHub
               tem download, discussão e histórico, e é lá que se usa. */}
-          <footer className="flex shrink-0 justify-end border-t px-4 py-3">
+          <footer className="flex shrink-0 justify-end gap-2 border-t px-4 py-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                void openUrl(KOFI_DO_ATO20).catch(() =>
+                  toast.error(t.novidades.semNavegador),
+                );
+              }}
+            >
+              <MarcaKofi />
+              {t.novidades.apoiar}
+            </Button>
             <Button
               variant="outline"
               size="sm"

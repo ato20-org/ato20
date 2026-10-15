@@ -29,6 +29,15 @@
         },
         {
           "url": "https://ko-fi.com/*"
+        },
+        {
+          "url": "https://x.com/*"
+        },
+        {
+          "url": "https://www.instagram.com/*"
+        },
+        {
+          "url": "mailto:*"
         }
       ]
     },
