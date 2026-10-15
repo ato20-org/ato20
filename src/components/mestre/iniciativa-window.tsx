@@ -652,7 +652,12 @@ function EventosDaRodada({
             <div className="flex flex-col gap-1.5">
               {emGrupos(bloco.eventos).map((grupo, posicao) =>
                 grupo.tipo === "rolagens" ? (
-                  <GrupoDeRolagens key={posicao} grupo={grupo} porId={porId} />
+                  <GrupoDeRolagens
+                    key={posicao}
+                    grupo={grupo}
+                    vezDe={bloco.vezDe}
+                    porId={porId}
+                  />
                 ) : (
                   <ul key={posicao}>
                     <LinhaDeEvento evento={grupo.evento} />
@@ -683,21 +688,30 @@ function notacao(dados: readonly DadoRolado[]): string {
  * que faz o olho ler "isto tudo é do Old Man" sem ler o nome de novo. O mestre
  * ganha a coroa no lugar do retrato, e é ela que separa de relance a rolagem de
  * trás do escudo da rolagem da mesa.
+ *
+ * A rolagem do jogador FORA da vez dele continua na rodada -- aconteceu, e às
+ * vezes é a reação ou o teste que o mestre pediu --, mas apagada e marcada: o
+ * que a rodada conta em primeiro plano é o turno de quem estava agindo. O
+ * mestre rola por todos, e nunca está fora da vez.
  */
 function GrupoDeRolagens({
   grupo,
+  vezDe,
   porId,
 }: {
   grupo: Extract<GrupoDaRodada, { tipo: "rolagens" }>;
+  /** De quem era a vez no bloco onde o grupo está. */
+  vezDe: string | null;
   porId: Map<string, Personagem>;
 }) {
   const { autor } = grupo;
   const personagem = autor.personagemId ? porId.get(autor.personagemId) : undefined;
   const nome = autor.personagem ?? autor.jogador ?? t.iniciativa.mestre;
   const ehMestre = autor.jogador === null;
+  const foraDaVez = !ehMestre && vezDe !== null && autor.personagemId !== vezDe;
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className={cn("flex flex-col gap-0.5", foraDaVez && "opacity-50")}>
       <div className="flex min-w-0 items-center gap-1.5 text-xs">
         {ehMestre ? (
           <span className="bg-muted text-foreground grid size-5 shrink-0 place-items-center rounded">
@@ -711,6 +725,11 @@ function GrupoDeRolagens({
         <span className="truncate font-medium">{nome}</span>
         {autor.personagem && autor.jogador ? (
           <span className="text-muted-foreground truncate">{autor.jogador}</span>
+        ) : null}
+        {foraDaVez ? (
+          <span className="text-muted-foreground ml-auto shrink-0 rounded border px-1 text-[10px]">
+            {t.iniciativa.foraDaVez}
+          </span>
         ) : null}
       </div>
 

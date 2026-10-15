@@ -59,6 +59,7 @@ import {
 } from "@/lib/sync/movimento";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { podeMoverNaVez, type VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
 import type { Ping, TipoDePing } from "@/types/ping";
@@ -184,6 +185,7 @@ export function CenaDoJogador({
   fichas,
   efeitos,
   rolagens,
+  iniciativa,
   pings,
   laser,
   tripe,
@@ -197,6 +199,8 @@ export function CenaDoJogador({
   /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
   efeitos: EfeitosDoPersonagem[];
   rolagens: RolagemDaMesa[];
+  /** De quem é a vez, com a iniciativa rodando. Ver `podeMoverNaVez`. */
+  iniciativa: VezNaMesa | null;
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
   /** O laser do mestre. Ver `LiveState.laser`. */
@@ -228,6 +232,20 @@ export function CenaDoJogador({
   );
 
   const { meus, reler } = useMeusPersonagens(codigo, chave);
+
+  // Os meus que podem andar AGORA: em combate, só o da vez. Filtrar o conjunto,
+  // e não cada gesto, faz o token fora da vez simplesmente não ser pegável --
+  // sem alça, sem arrasto -- pelo mesmo `podePegar` de sempre. Pelos dois
+  // valores simples, e não pelo objeto: o quadro chega dez vezes por segundo,
+  // cada vez com uma `iniciativa` nova.
+  const emCombate = iniciativa !== null;
+  const vezDe = iniciativa?.vezDe ?? null;
+  const meusNaVez = useMemo(() => {
+    if (!emCombate) return meus;
+
+    const vez = { vezDe, rodada: 0 };
+    return new Set([...meus].filter((id) => podeMoverNaVez(vez, id)));
+  }, [meus, emCombate, vezDe]);
 
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -284,7 +302,7 @@ export function CenaDoJogador({
   if (
     naMao &&
     (!noAr ||
-      !podePegar(noAr, meus) ||
+      !podePegar(noAr, meusNaVez) ||
       (naMao.solto &&
         Math.abs(noAr.x - naMao.x) < MESMO_LUGAR &&
         Math.abs(noAr.y - naMao.y) < MESMO_LUGAR &&
@@ -309,8 +327,8 @@ export function CenaDoJogador({
   }, [cena, naMao]);
 
   const pegaveis = useMemo(
-    () => (quadro ? [] : exibida.items.filter((item) => podePegar(item, meus))),
-    [quadro, exibida.items, meus],
+    () => (quadro ? [] : exibida.items.filter((item) => podePegar(item, meusNaVez))),
+    [quadro, exibida.items, meusNaVez],
   );
 
   /**

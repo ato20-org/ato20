@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { podeMoverNaVez, vezNaMesa } from "@/lib/iniciativa/rodadas";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { destinoAceito, type MovimentoDoJogador } from "@/lib/sync/movimento";
 import { fluxoDoMestre } from "@/lib/sync/fluxos-do-mestre";
@@ -53,6 +55,11 @@ export function useMovimentosDaMesa(): void {
             // quadro truncado. A próxima amostra chega em 100ms.
             return;
           }
+
+          // Em combate, só o personagem da vez anda. O celular já não deixa
+          // pegar, mas o de uma versão anterior não sabe disso.
+          const vez = vezNaMesa(useIniciativaStore.getState().iniciativa);
+          if (!podeMoverNaVez(vez, movimento.personagemId)) return;
 
           const { board, updateItem } = useSceneStore.getState();
           const noAr = board?.scenes.find(

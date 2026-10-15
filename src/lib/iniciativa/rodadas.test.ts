@@ -9,12 +9,14 @@ import {
   incluir,
   iniciar,
   mover,
+  podeMoverNaVez,
   porVez,
   proximo,
   registrar,
   retirar,
   semAutorNoRotulo,
   totalDaRolagem,
+  vezNaMesa,
   type FatoDaRodada,
 } from "@/lib/iniciativa/rodadas";
 
@@ -216,5 +218,20 @@ describe("semAutorNoRotulo", () => {
     expect(semAutorNoRotulo("Old Man · Acrobacia", "Old Man")).toBe("Acrobacia");
     expect(semAutorNoRotulo("Dante · Luta", "Old Man")).toBe("Dante · Luta");
     expect(semAutorNoRotulo("Dante · Luta", null)).toBe("Dante · Luta");
+  });
+});
+
+describe("podeMoverNaVez", () => {
+  it("fora de combate todos andam; em combate, só o da vez", () => {
+    expect(podeMoverNaVez(vezNaMesa(SEM_INICIATIVA), "a")).toBe(true);
+
+    const vez = vezNaMesa(proximo(iniciar(["a", "b"], 0), 1));
+    expect(vez).toEqual({ vezDe: "b", rodada: 1 });
+    expect(podeMoverNaVez(vez, "b")).toBe(true);
+    expect(podeMoverNaVez(vez, "a")).toBe(false);
+  });
+
+  it("com a ordem vazia o mapa fica livre", () => {
+    expect(podeMoverNaVez(vezNaMesa(iniciar([], 0)), "a")).toBe(true);
   });
 });

@@ -107,6 +107,28 @@ export type VezNaMesa = {
   rodada: number;
 };
 
+/** O que sai desta máquina, ou `null` fora de combate. Ver `VezNaMesa`. */
+export function vezNaMesa(iniciativa: Iniciativa): VezNaMesa | null {
+  if (!iniciativa.rodando) return null;
+
+  return { vezDe: daVez(iniciativa), rodada: iniciativa.rodadas.at(-1)?.numero ?? 1 };
+}
+
+/**
+ * Se o jogador pode mover o token deste personagem agora.
+ *
+ * Fora de combate, sempre. Em combate, só o personagem da vez anda: é o que
+ * a ordem existe para garantir, e um token que avança fora da vez é a briga
+ * que o mestre teria de apartar. Com a ordem vazia não há vez de ninguém, e o
+ * mapa fica livre como fora de combate.
+ *
+ * Num lugar só porque vale nas duas pontas: o celular nem deixa pegar, e o
+ * Mestre, que é quem aplica, descarta o que um celular de outra versão mandar.
+ */
+export function podeMoverNaVez(vez: VezNaMesa | null, personagemId: string): boolean {
+  return vez === null || vez.vezDe === null || vez.vezDe === personagemId;
+}
+
 export const SEM_INICIATIVA: Iniciativa = {
   rodando: false,
   ordem: [],
