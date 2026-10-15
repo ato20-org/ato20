@@ -71,6 +71,56 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.7.0",
+    data: "2026-10-14",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A mesa pela internet, sem o jogador instalar nada",
+          en: "The table over the internet, with nothing for players to install",
+        },
+        detalhe: {
+          pt: "Com o Tailscale no computador do mestre, o convite ganha a opção Internet. Um botão abre a mesa num endereço https, e o jogador entra pelo navegador do celular, de qualquer lugar. A mesa fecha quando você clica em Fechar ou sai do ATO20, e o botão Entrar na mesa mostra um globo enquanto ela está aberta. Quem chega pela internet não lê os sussurros nem mexe como mestre, e quem erra o código dez vezes espera dez minutos.",
+          en: "With Tailscale on the GM's computer, the invite gets an Internet option. A button opens the table at an https address, and players join from their phone's browser, from anywhere. The table closes when you click Close or leave ATO20, and the Join the table button shows a globe while it's open. Whoever comes in over the internet can't read whispers or act as the GM, and anyone who gets the code wrong ten times waits ten minutes.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O convite pela VPN de jogo",
+          en: "The invite over a gaming VPN",
+        },
+        detalhe: {
+          pt: "Com o Tailscale, o ZeroTier, o Hamachi ou o Radmin ligado, o convite mostra a rede dele ao lado da rede local, e o QR leva o endereço dela. A VPN ligada com o ATO20 aberto aparece sem reiniciar, e a escolha fica gravada no computador. Um endereço seu, como um nome do MagicDNS ou um túnel, entra em Outro endereço.",
+          en: "With Tailscale, ZeroTier, Hamachi or Radmin on, the invite shows its network next to the local one, and the QR code carries its address. A VPN turned on with ATO20 open shows up without restarting, and the choice is saved on the computer. An address of your own, like a MagicDNS name or a tunnel, goes in Other address.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O convite da mesa em inglês",
+          en: "The table invite in English",
+        },
+        detalhe: {
+          pt: "Com o aplicativo em inglês, o convite e a escolha de rede nos Ajustes apareciam em português.",
+          en: "With the app in English, the invite and the network choice in Options showed up in Portuguese.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O convite numa rede sem gateway",
+          en: "The invite on a network without a gateway",
+        },
+        detalhe: {
+          pt: "Numa rede local sem saída nenhuma, como a de uma LAN party com IP fixo, o convite dizia Sem rede. Agora ele acha o endereço pela placa de rede do computador.",
+          en: "On a local network with no way out, like a LAN party with fixed IPs, the invite said No network. Now it finds the address from the computer's network card.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.6.0",
     data: "2026-10-14",
     mudancas: [

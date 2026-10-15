@@ -100,6 +100,45 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.7.0" date="2026-10-14">
+      <description>
+        <p>
+          ATO20 1.7 lets players far away join the table: over the internet
+          through Tailscale Funnel, with nothing for them to install, or through
+          a gaming VPN. The invite now also follows the app's language.
+        </p>
+        <ul>
+          <li>
+            The table over the internet, with nothing for players to install.
+            With Tailscale on the GM's computer, the invite gets an Internet
+            option. A button opens the table at an https address, and players
+            join from their phone's browser, from anywhere. The table closes
+            when you click Close or leave ATO20, and the Join the table button
+            shows a globe while it's open. Whoever comes in over the internet
+            can't read whispers or act as the GM, and anyone who gets the code
+            wrong ten times waits ten minutes.
+          </li>
+          <li>
+            The invite over a gaming VPN. With Tailscale, ZeroTier, Hamachi or
+            Radmin on, the invite shows its network next to the local one, and
+            the QR code carries its address. A VPN turned on with ATO20 open
+            shows up without restarting, and the choice is saved on the
+            computer. An address of your own, like a MagicDNS name or a tunnel,
+            goes in Other address.
+          </li>
+          <li>
+            Fixed: the table invite in English. With the app in English, the
+            invite and the network choice in Options showed up in Portuguese.
+          </li>
+          <li>
+            Fixed: the invite on a network without a gateway. On a local
+            network with no way out, like a LAN party with fixed IPs, the
+            invite said No network. Now it finds the address from the
+            computer's network card.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.6.0" date="2026-10-14">
       <description>
         <p>
