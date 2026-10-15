@@ -114,6 +114,12 @@ const pt = {
 
   /** O menu do botão direito do palco. */
   stageContextMenu: {
+    iniciarIniciativa: (n: number) =>
+      n === 1 ? "Iniciar iniciativa" : `Iniciar iniciativa com ${n}`,
+    porNaIniciativa: (n: number) =>
+      n === 1 ? "Pôr na iniciativa" : `Pôr ${n} na iniciativa`,
+    tirarDaIniciativa: (n: number) =>
+      n === 1 ? "Tirar da iniciativa" : `Tirar ${n} da iniciativa`,
     esconderDeNovo: "Esconder de novo",
     revelarParaMesa: "Revelar para a mesa",
     travar: "Travar",
@@ -295,6 +301,10 @@ const en: typeof pt = {
   },
 
   stageContextMenu: {
+    iniciarIniciativa: (n) => (n === 1 ? "Start initiative" : `Start initiative with ${n}`),
+    porNaIniciativa: (n) => (n === 1 ? "Add to initiative" : `Add ${n} to initiative`),
+    tirarDaIniciativa: (n) =>
+      n === 1 ? "Remove from initiative" : `Remove ${n} from initiative`,
     esconderDeNovo: "Hide again",
     revelarParaMesa: "Reveal to the table",
     travar: "Lock",
