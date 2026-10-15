@@ -1,108 +1,172 @@
 "use client";
 
 import { create } from "zustand";
-import {
-  type EstadoDeCombate,
-  type ParticipanteDeTurno,
-  estadoDeCombateVazio,
-  iniciarCombate,
-  avancarTurno,
-  voltarTurno,
-  adicionarParticipante,
-  removerParticipante,
-  encerrarCombate,
-  participanteAtivo,
-  participantesOrdenados,
-} from "@/lib/combate/iniciativa";
-import type { CanvasItem } from "@/types/scene";
 
-export interface IniciativaStore {
-  estado: EstadoDeCombate;
-  iniciar: (lista: ParticipanteDeTurno[]) => void;
-  avancarTurno: () => void;
-  voltarTurno: () => void;
-  adicionarParticipante: (p: ParticipanteDeTurno) => void;
-  removerParticipante: (id: string) => void;
-  atualizarIniciativa: (id: string, iniciativa: number, desempate?: number) => void;
-  puxarTokensDaCena: (
-    itens: readonly CanvasItem[],
-    resolverNome?: (personagemId?: string, itemId?: string) => string,
-  ) => void;
+import {
+  diferencasDeCondicoes,
+  diferencasDeMedidores,
+} from "@/lib/extensoes/diferencas";
+import {
+  SEM_INICIATIVA,
+  anterior,
+  encerrar,
+  incluir,
+  iniciar,
+  mover,
+  proximo,
+  registrar,
+  retirar,
+  type FatoDaRodada,
+  type Iniciativa,
+} from "@/lib/iniciativa/rodadas";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useDadosStore } from "@/lib/store/use-dados-store";
+import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { entraNaSoma, valorDaRolagem, type Rolagem } from "@/types/dado";
+
+type IniciativaStore = {
+  iniciativa: Iniciativa;
+  iniciar: (ids: readonly string[]) => void;
+  proximo: () => void;
+  anterior: () => void;
+  incluir: (id: string) => void;
+  retirar: (id: string) => void;
+  mover: (id: string, para: number) => void;
   encerrar: () => void;
-  ativo: () => ParticipanteDeTurno | null;
-  ordenados: () => ParticipanteDeTurno[];
+  registrar: (fato: FatoDaRodada) => void;
+};
+
+/**
+ * A ordem da rodada do Mestre. As regras moram em `lib/iniciativa/rodadas`;
+ * daqui sai só o relógio e a escuta.
+ *
+ * Na memória, e por enquanto: fechar o aplicativo encerra o combate. Gravar na
+ * campanha é o passo seguinte, junto com a decisão de como a mesa vê a ordem.
+ */
+export const useIniciativaStore = create<IniciativaStore>((set) => ({
+  iniciativa: SEM_INICIATIVA,
+
+  iniciar: (ids) => {
+    set({ iniciativa: iniciar(ids, Date.now()) });
+    ouvir();
+  },
+  proximo: () => set((state) => ({ iniciativa: proximo(state.iniciativa, Date.now()) })),
+  anterior: () => set((state) => ({ iniciativa: anterior(state.iniciativa) })),
+  incluir: (id) => set((state) => ({ iniciativa: incluir(state.iniciativa, id) })),
+  retirar: (id) =>
+    set((state) => ({ iniciativa: retirar(state.iniciativa, id, Date.now()) })),
+  mover: (id, para) => set((state) => ({ iniciativa: mover(state.iniciativa, id, para) })),
+  encerrar: () => {
+    pararDeOuvir();
+    set((state) => ({ iniciativa: encerrar(state.iniciativa, Date.now()) }));
+  },
+  registrar: (fato) =>
+    set((state) => ({ iniciativa: registrar(state.iniciativa, fato, Date.now()) })),
+}));
+
+let desfazerEscuta: (() => void) | null = null;
+
+function pararDeOuvir() {
+  desfazerEscuta?.();
+  desfazerEscuta = null;
 }
 
-export const useIniciativaStore = create<IniciativaStore>((set, get) => ({
-  estado: estadoDeCombateVazio(),
+function dadosDe(rolagem: Rolagem) {
+  return [
+    {
+      faces: rolagem.faces,
+      valor: valorDaRolagem(rolagem.faces, rolagem.valor),
+      soma: entraNaSoma(rolagem.faces),
+    },
+  ];
+}
 
-  iniciar: (lista) => set({ estado: iniciarCombate(lista) }),
+/**
+ * O que acontece na mesa enquanto a iniciativa roda: dados, medidores e
+ * condições, anotados na rodada corrente.
+ *
+ * No store, e não na janela: o mestre fecha a janela no meio do combate e a
+ * rodada continua acontecendo. São as mesmas três fontes que os plugins ouvem
+ * em `eventos` -- ver `carregar.ts` --, e pelo mesmo jeito: a cabeça do
+ * histórico de dados, e a diferença entre a lista de personagens de antes e a
+ * de agora.
+ */
+function ouvir() {
+  pararDeOuvir();
 
-  avancarTurno: () =>
-    set((state) => ({ estado: avancarTurno(state.estado) })),
+  const anotar = (fato: FatoDaRodada) => useIniciativaStore.getState().registrar(fato);
 
-  voltarTurno: () =>
-    set((state) => ({ estado: voltarTurno(state.estado) })),
+  const personagens = useCharactersStore.subscribe((estado, antes) => {
+    if (estado.personagens === antes.personagens || !estado.personagens) return;
 
-  adicionarParticipante: (p) =>
-    set((state) => ({ estado: adicionarParticipante(state.estado, p) })),
+    const nomeDe = (id: string) =>
+      estado.personagens?.find((personagem) => personagem.id === id)?.nome ?? "";
 
-  removerParticipante: (id) =>
-    set((state) => ({ estado: removerParticipante(state.estado, id) })),
+    for (const mudanca of diferencasDeMedidores(antes.personagens, estado.personagens))
+      anotar({
+        tipo: "medidor",
+        personagemId: mudanca.personagemId,
+        personagem: nomeDe(mudanca.personagemId),
+        medidor: mudanca.medidor.nome,
+        cor: mudanca.medidor.cor,
+        antes: mudanca.antes?.atual ?? null,
+        depois: mudanca.medidor.atual,
+        maximo: mudanca.medidor.maximo,
+      });
 
-  atualizarIniciativa: (id, iniciativa, desempate) =>
-    set((state) => {
-      const atual = state.estado.participantes[id];
-      if (!atual) return state;
-      return {
-        estado: adicionarParticipante(state.estado, {
-          ...atual,
-          iniciativa,
-          ...(desempate !== undefined ? { desempate } : {}),
-        }),
-      };
-    }),
+    for (const mudanca of diferencasDeCondicoes(antes.personagens, estado.personagens))
+      anotar({
+        tipo: "condicao",
+        personagemId: mudanca.personagemId,
+        personagem: nomeDe(mudanca.personagemId),
+        condicao: mudanca.condicao.nome,
+        cor: mudanca.condicao.cor,
+        ligada: mudanca.ligada,
+      });
+  });
 
-  puxarTokensDaCena: (itens, resolverNome) => {
-    const existentes = get().estado.participantes;
-    const novos: ParticipanteDeTurno[] = [];
+  // O histórico do mestre é por mesa, e o dado novo entra na frente, um por vez.
+  const doMestre = useDadosStore.subscribe((estado, antes) => {
+    for (const mesa of ["mapa", "quadro"] as const) {
+      const novo = estado.historico[mesa][0];
+      if (!novo || novo === antes.historico[mesa][0]) continue;
 
-    for (const item of itens) {
-      if (!item.personagemId && !item.id) continue;
-      const chave = item.personagemId ?? item.id;
-      if (existentes[chave]) continue;
-
-      const nome = resolverNome
-        ? resolverNome(item.personagemId, item.id)
-        : item.personagemId
-          ? `Token ${item.personagemId.slice(0, 4)}`
-          : `Token ${item.id.slice(0, 4)}`;
-
-      // Rola iniciativa d20 básica (1..20)
-      const rolagem = Math.floor(Math.random() * 20) + 1;
-      novos.push({
-        id: chave,
-        nome,
-        iniciativa: rolagem,
+      anotar({
+        tipo: "rolagem",
+        jogador: null,
+        personagem: null,
+        rotulo: novo.lance?.rotulo ?? null,
+        lanceId: novo.lance?.id ?? null,
+        modificador: novo.lance?.modificador ?? 0,
+        dados: dadosDe(novo),
       });
     }
+  });
 
-    if (novos.length === 0) return;
+  const dosJogadores = useRolagensStore.subscribe((estado, antes) => {
+    const novo = estado.historico[0];
+    if (!novo || novo === antes.historico[0]) return;
 
-    if (get().estado.rodada === 0) {
-      set({ estado: iniciarCombate(novos) });
-    } else {
-      let estadoAtual = get().estado;
-      for (const novo of novos) {
-        estadoAtual = adicionarParticipante(estadoAtual, novo);
-      }
-      set({ estado: estadoAtual });
-    }
-  },
+    const personagem = novo.personagemId
+      ? (useCharactersStore
+          .getState()
+          .personagens?.find((cada) => cada.id === novo.personagemId)?.nome ?? null)
+      : null;
 
-  encerrar: () => set({ estado: encerrarCombate() }),
+    anotar({
+      tipo: "rolagem",
+      jogador: novo.jogador,
+      personagem,
+      rotulo: novo.lance?.rotulo ?? null,
+      lanceId: novo.lance?.id ?? null,
+      modificador: novo.lance?.modificador ?? 0,
+      dados: dadosDe(novo),
+    });
+  });
 
-  ativo: () => participanteAtivo(get().estado),
-
-  ordenados: () => participantesOrdenados(get().estado),
-}));
+  desfazerEscuta = () => {
+    personagens();
+    doMestre();
+    dosJogadores();
+  };
+}

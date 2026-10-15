@@ -1192,7 +1192,7 @@ function SecaoDaLista({
  * lista tem PNJ sem imagem às dezenas, e um boneco repetido em vinte linhas
  * viraria ruído do mesmo jeito que o rótulo "sem dono" virava.
  */
-function Rosto({ personagem }: { personagem: Personagem }) {
+export function Rosto({ personagem }: { personagem: Personagem }) {
   const rosto = personagem.retrato ?? personagem.miniatura;
   const animada = useAnimada(rosto);
 
