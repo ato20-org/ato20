@@ -8,7 +8,7 @@
  */
 
 import { normaliza, ocorrencias } from "@/lib/search";
-import type { Nota, Pasta, Scene } from "@/types/scene";
+import type { AssetMeta, Nota, Pasta, Scene } from "@/types/scene";
 
 /** O pedaço do texto em volta do achado, com o achado separado para o destaque. */
 export type Trecho = { antes: string; achado: string; depois: string };
@@ -16,7 +16,8 @@ export type Trecho = { antes: string; achado: string; depois: string };
 export type Achado =
   | { tipo: "pasta"; pasta: Pasta; depth: number; total: number }
   | { tipo: "cena"; scene: Scene; depth: number; trecho?: Trecho }
-  | { tipo: "nota"; nota: Nota; depth: number; trecho?: Trecho };
+  | { tipo: "nota"; nota: Nota; depth: number; trecho?: Trecho }
+  | { tipo: "acervo"; asset: AssetMeta; depth: number };
 
 /** Quanto texto vai de cada lado do achado no trecho. A linha do painel é estreita. */
 const EM_VOLTA = 24;
@@ -82,11 +83,13 @@ function textosDoQuadro(scene: Scene): string[] {
  * o que foi achado DENTRO.
  */
 export function buscarArquivos(
-  { quadros, pastas, notas, textos }: {
+  { quadros, pastas, notas, textos, acervo = [] }: {
     quadros: Scene[];
     pastas: Pasta[];
     notas: Nota[];
     textos: Record<string, string | undefined>;
+    /** Os arquivos do acervo na árvore: achados pelo nome, que é o que têm. */
+    acervo?: AssetMeta[];
   },
   busca: string,
 ): Achado[] {
@@ -124,6 +127,12 @@ export function buscarArquivos(
     if (trecho) notaAchada.set(nota.id, trecho);
   }
 
+  const acervoAchado = new Set(
+    acervo.filter((asset) => nomeTem(asset.name)).map((asset) => asset.id),
+  );
+  const pastaDoArquivo = (asset: AssetMeta) =>
+    asset.folderId && existe.has(asset.folderId) ? asset.folderId : undefined;
+
   const pastaAchada = new Set(pastas.filter((pasta) => nomeTem(pasta.nome)).map((pasta) => pasta.id));
 
   // Uma pasta aparece se foi achada, se está dentro de uma achada, ou se tem
@@ -137,12 +146,14 @@ export function buscarArquivos(
   };
   for (const scene of quadros) if (quadroAchado.has(scene.id)) marcarSubindo(pastaDe(scene));
   for (const nota of notas) if (notaAchada.has(nota.id)) marcarSubindo(pastaDe(nota));
+  for (const asset of acervo) if (acervoAchado.has(asset.id)) marcarSubindo(pastaDoArquivo(asset));
   for (const id of pastaAchada) marcarSubindo(id);
 
   function contar(pastaId: string): number {
     let total =
       quadros.filter((scene) => pastaDe(scene) === pastaId).length +
-      notas.filter((nota) => pastaDe(nota) === pastaId).length;
+      notas.filter((nota) => pastaDe(nota) === pastaId).length +
+      acervo.filter((asset) => pastaDoArquivo(asset) === pastaId).length;
     for (const filha of pastas) if (filha.parentId === pastaId) total += contar(filha.id);
     return total;
   }
@@ -166,6 +177,11 @@ export function buscarArquivos(
       if (pastaDe(nota) !== parentId) continue;
       if (!tudo && !notaAchada.has(nota.id)) continue;
       achados.push({ tipo: "nota", nota, depth, trecho: notaAchada.get(nota.id) });
+    }
+    for (const asset of [...acervo].sort((a, b) => a.name.localeCompare(b.name))) {
+      if (pastaDoArquivo(asset) !== parentId) continue;
+      if (!tudo && !acervoAchado.has(asset.id)) continue;
+      achados.push({ tipo: "acervo", asset, depth });
     }
   }
 

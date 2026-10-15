@@ -13,6 +13,7 @@ import {
   instanteDaQueda,
   useQuedaDasRolagens,
 } from "@/hooks/use-queda-das-rolagens";
+import { t as texto } from "@/lib/i18n/mestre";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
 import { textoDoResultado, tipoDado, type RolagemDaMesa } from "@/types/dado";
 
@@ -67,7 +68,7 @@ export function RolagensBody() {
   if (historico.length === 0) {
     return (
       <PainelVazio conteudo={{ tipo: "rolagens" }}>
-        Nenhum dado rolado ainda
+        {texto.rolagens.vazio}
       </PainelVazio>
     );
   }
@@ -75,7 +76,7 @@ export function RolagensBody() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <p className="text-xs font-medium">Na mesa</p>
+        <p className="text-xs font-medium">{texto.rolagens.naMesa}</p>
         <Button
           variant="ghost"
           size="sm"
@@ -84,13 +85,13 @@ export function RolagensBody() {
           onClick={limpar}
         >
           <Trash2 className="size-3" />
-          Limpar tudo
+          {texto.rolagens.limparTudo}
         </Button>
       </div>
 
       {bandeja.length === 0 ? (
         <p className="text-muted-foreground px-3 py-2 text-xs">
-          Nada na mesa agora.
+          {texto.rolagens.nadaNaMesa}
         </p>
       ) : (
         <ul className="divide-y">
@@ -112,7 +113,9 @@ export function RolagensBody() {
       {passado.length > 0 ? (
         <>
           <div className="flex items-center justify-between gap-2 border-y px-3 py-2">
-            <p className="text-muted-foreground text-xs font-medium">Antes</p>
+            <p className="text-muted-foreground text-xs font-medium">
+              {texto.rolagens.antes}
+            </p>
             <Button
               variant="ghost"
               size="sm"
@@ -120,7 +123,7 @@ export function RolagensBody() {
               onClick={esquecer}
             >
               <Eraser className="size-3" />
-              Esquecer
+              {texto.rolagens.esquecer}
             </Button>
           </div>
 
@@ -199,7 +202,7 @@ function NaMesa({
           className="text-muted-foreground text-[10px] leading-tight transition-opacity duration-200 [grid-area:1/1] self-center"
           style={{ opacity: assentou ? 0 : 1 }}
         >
-          Rolando…
+          {texto.rolagens.rolando}
         </span>
       </span>
 
@@ -211,10 +214,11 @@ function NaMesa({
         className="opacity-0 transition-opacity group-hover/rolagem:opacity-100 group-focus-within/rolagem:opacity-100"
         // O nome inteiro no rótulo: a linha o trunca quando o jogador escolheu
         // um nome comprido, e quem lê por voz precisa do todo.
-        aria-label={`Tirar da mesa: ${rolagem.jogador} tirou ${textoDoResultado(
-          rolagem.faces,
-          rolagem.valor,
-        )} no ${tipoDado(rolagem.faces).nome}`}
+        aria-label={texto.rolagens.tirar(
+          rolagem.jogador,
+          textoDoResultado(rolagem.faces, rolagem.valor),
+          tipoDado(rolagem.faces).nome,
+        )}
         onClick={onTirar}
       >
         <X />

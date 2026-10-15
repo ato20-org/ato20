@@ -28,6 +28,7 @@ import {
   ZOOM_CAMERA_STEP,
   type Transmissao,
 } from "@/lib/mestre/camera-actions";
+import { t as textos } from "@/lib/i18n/palco";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
 import type { CameraSalva, Viewport } from "@/types/scene";
@@ -604,7 +605,7 @@ function Alca({ transmissao, scale, arrastando, onMove }: AlcaProps) {
           arrastando && "bg-primary text-primary-foreground",
         )}
         style={{ width: lado, height: lado, cursor: "move" }}
-        title="Arrastar move a câmera. Com Shift, só na horizontal ou só na vertical."
+        title={textos.cameraFrame.arrastar}
         onPointerDown={onMove}
       >
         <Move style={{ width: lado * 0.55, height: lado * 0.55 }} />
@@ -631,17 +632,17 @@ function Alca({ transmissao, scale, arrastando, onMove }: AlcaProps) {
         style={{ width: lado, height: lado }}
         aria-label={
           transmissao === "no-ar"
-            ? "Tirar do ar"
+            ? textos.cameraFrame.tirarDoAr
             : transmissao === "preparada"
-              ? "Desfazer a preparação"
-              : "Transmitir esta câmera"
+              ? textos.cameraFrame.desfazerPreparacao
+              : textos.cameraFrame.transmitir
         }
         title={
           transmissao === "no-ar"
-            ? "No ar. Clique tira do ar: a mesa vê o mapa inteiro."
+            ? textos.cameraFrame.noArDica
             : transmissao === "preparada"
-              ? "Preparada: a mesa vê esta câmera quando o mapa for ao ar. Clique desfaz."
-              : "Transmitir: a mesa passa a ver esta câmera."
+              ? textos.cameraFrame.preparadaDica
+              : textos.cameraFrame.transmitirDica
         }
         onPointerDown={(event) => event.stopPropagation()}
         onClick={alternarTransmissao}

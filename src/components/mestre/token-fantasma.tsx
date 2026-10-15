@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { boxAround } from "@/lib/geometry/transform";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/ferramentas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import {
@@ -13,7 +15,8 @@ import {
   tamanhoDoArrasto,
   useTokenDragStore,
 } from "@/lib/store/use-token-drag-store";
-import { promoverImagemDoItem } from "@/lib/vault/inventory";
+import { itensMudaram } from "@/lib/store/use-itens-store";
+import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
 
 /**
@@ -89,13 +92,17 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       const { largura, altura } = tamanhoDoArrasto(solto);
       const centro = toScene(solto.x, solto.y);
 
-      const por = (assetId: string, personagemId?: string) => {
+      const por = (
+        assetId: string,
+        dono?: { personagemId?: string; itemId?: string },
+      ) => {
         // Já selecionado, como no `+` do acervo: o gesto seguinte é quase
         // sempre ajustar o que acabou de entrar.
         select([
           addItem(sceneId, {
             assetId,
-            personagemId,
+            personagemId: dono?.personagemId,
+            ...(dono?.itemId ? { itemId: dono.itemId } : {}),
             ...boxAround(centro, largura, altura),
           }),
         ]);
@@ -121,23 +128,32 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       }
 
       if (solto.fonte.tipo === "item") {
-        // A imagem do item pode ser um anexo, que não tem id de acervo. O
-        // objeto de cena é GRAVADO e tem de resolver depois de reabrir o
-        // aplicativo, então ele precisa de um asset de verdade — e é aqui,
+        // A imagem do item pode ser a foto do jogador, que não tem id de
+        // acervo. A peça é GRAVADA e tem de resolver depois de reabrir o
+        // aplicativo, então ela precisa de um asset de verdade — e é aqui,
         // depois do gesto, que dá para esperar o disco.
         //
         // O tamanho NÃO vem do asset promovido, e sim do que a sombra mostrou:
         // o mestre acabou de escolhê-lo na roda, e trocá-lo agora pela medida
         // natural do arquivo desmentiria a prévia que ele estava olhando.
-        const { personagemId, itemId } = solto.fonte;
+        //
+        // A peça leva o `itemId`: é ele que faz dela uma peça de ITEM, com o
+        // gizmo e os botões dele, e não uma imagem solta. O item continua onde
+        // estava -- na mochila, no ponto --: pôr no mapa não tira de lá.
+        const { itemId } = solto.fonte;
 
-        void promoverImagemDoItem(personagemId, itemId).then(
-          (asset) => por(asset.id),
+        void promoverImagemDoItem(itemId).then(
+          (asset) => {
+            por(asset.id, { itemId });
+            // A promoção pode ter trocado a foto do jogador pelo asset, e o
+            // catálogo aberto precisa saber.
+            itensMudaram();
+          },
           (cause: unknown) =>
             toast.error(
               cause instanceof Error
                 ? cause.message
-                : "Não deu para pôr o item na mesa.",
+                : t.fantasma.naoDeuItem,
             ),
         );
 
@@ -150,7 +166,9 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       // continua anexada ao ponto.
       por(
         solto.fonte.assetId,
-        solto.fonte.tipo === "personagem" ? solto.fonte.personagemId : undefined,
+        solto.fonte.tipo === "personagem"
+          ? { personagemId: solto.fonte.personagemId }
+          : undefined,
       );
     });
   }, []);
@@ -241,8 +259,13 @@ function medida(
 ): string {
   if (!grid || grid.size <= 0) return `${largura} × ${altura}`;
 
+  // Uma casa decimal sempre, e a vírgula ou o ponto do idioma.
   const quadrados = (medida: number) =>
-    (medida / grid.size).toFixed(1).replace(".", ",");
+    (medida / grid.size).toLocaleString(idioma, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+      useGrouping: false,
+    });
 
-  return `${quadrados(largura)} × ${quadrados(altura)} na grade`;
+  return t.fantasma.naGrade(quadrados(largura), quadrados(altura));
 }

@@ -172,6 +172,8 @@ type TrackStore = SessionAudio & {
   copiarCena: (deId: string, paraId: string) => void;
   /** Cena apagada não deixa memória órfã no mapa. */
   esquecerCena: (cenaId: string) => void;
+  /** Cena importada de um pacote chega com os ambientes que tinha lá. */
+  adotarAmbientes: (cenaId: string, ambientes: Ambiente[]) => void;
 
   // --- geral ----------------------------------------------------------------
 
@@ -452,6 +454,19 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
         // Ids novos: os do original ficariam repetidos entre as duas cenas, e
         // apagar um pela lista apagaria o da outra junto.
         [paraId]: lembrado.map((ambiente) => ({ ...ambiente, id: novoId() })),
+      },
+    });
+  },
+
+  adotarAmbientes(cenaId, ambientes) {
+    if (ambientes.length === 0) return;
+
+    gravar(set, get, {
+      ambientesPorCena: {
+        ...get().ambientesPorCena,
+        // Ids novos pelo mesmo motivo do `copiarCena`: importar duas vezes o
+        // mesmo mapa não pode deixar canais repetidos entre as cópias.
+        [cenaId]: ambientes.map((ambiente) => ({ ...ambiente, id: novoId() })),
       },
     });
   },

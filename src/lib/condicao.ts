@@ -1,5 +1,6 @@
 import { efeitoValido } from "@/lib/efeitos";
 import { sementeDaLuz } from "@/lib/geometry/luz";
+import { t } from "@/lib/i18n/personagens";
 import {
   MAX_CONDICOES,
   type Condicao,
@@ -182,11 +183,11 @@ export type SugestaoDeCondicao = Omit<Condicao, "id" | "escondido">;
  * usa.
  */
 export const SUGESTOES: SugestaoDeCondicao[] = [
-  { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "chamas" },
-  { nome: "Congelado", cor: "#3b82f6", icone: "floco", efeito: "congelado" },
-  { nome: "Envenenado", cor: "#22c55e", icone: "veneno", efeito: "envenenado" },
-  { nome: "Sangrando", cor: "#dc2626", icone: "sangue", efeito: "sangrando" },
-  { nome: "Molhado", cor: "#0ea5e9", icone: "gota", efeito: "molhado" },
+  { nome: t.sugestoes.emChamas, cor: "#f59e0b", icone: "chama", efeito: "chamas" },
+  { nome: t.sugestoes.congelado, cor: "#3b82f6", icone: "floco", efeito: "congelado" },
+  { nome: t.sugestoes.envenenado, cor: "#22c55e", icone: "veneno", efeito: "envenenado" },
+  { nome: t.sugestoes.sangrando, cor: "#dc2626", icone: "sangue", efeito: "sangrando" },
+  { nome: t.sugestoes.molhado, cor: "#0ea5e9", icone: "gota", efeito: "molhado" },
 ];
 
 /** O teto do nome. Espelha `MAX_NOME_CONDICAO`. */

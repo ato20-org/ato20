@@ -7,6 +7,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBuscaNoPdf } from "@/hooks/use-busca-no-pdf";
+import { t } from "@/lib/i18n/palco";
 
 /**
  * A busca no texto do documento, como tira lateral.
@@ -45,9 +46,9 @@ export function BuscaNoPdf({
           <Input
             value={termo}
             onChange={(evento) => setTermo(evento.target.value)}
-            placeholder="Buscar no texto"
+            placeholder={t.leitor.buscar}
             className="pl-7"
-            aria-label="Buscar no texto"
+            aria-label={t.leitor.buscar}
           />
         </div>
 
@@ -55,7 +56,7 @@ export function BuscaNoPdf({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Limpar a busca"
+            aria-label={t.leitor.limparBusca}
             onClick={() => {
               setTermo("");
               limpar();
@@ -69,15 +70,12 @@ export function BuscaNoPdf({
       {progresso ? (
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
           <Loader2 className="size-3 animate-spin" />
-          Página {progresso.lidas} de {progresso.total}
+          {t.leitor.lendo(progresso.lidas, progresso.total)}
         </p>
       ) : null}
 
       {!progresso && termo.trim().length >= 2 && resultados.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          Nada encontrado. Arquivo escaneado sem OCR não tem texto para
-          buscar.
-        </p>
+        <p className="text-muted-foreground text-xs">{t.leitor.nadaEncontrado}</p>
       ) : null}
 
       <ul className="scroll-fade min-h-0 flex-1 space-y-1 overflow-y-auto">
@@ -90,7 +88,7 @@ export function BuscaNoPdf({
               aria-current={ocorrencia.pagina === paginaAtual}
             >
               <span className="text-muted-foreground text-[0.7rem] tabular-nums">
-                p. {ocorrencia.pagina}
+                {t.leitor.paginaCurta(ocorrencia.pagina)}
               </span>
               <span className="block text-xs leading-snug">
                 {ocorrencia.trecho}

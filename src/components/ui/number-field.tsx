@@ -4,6 +4,7 @@ import { NumberField as NumberFieldPrimitive } from "@base-ui/react/number-field
 import { Minus, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { comum } from "@/lib/i18n/comum";
 
 /**
  * Um campo de número com botões de menos e mais.
@@ -32,7 +33,7 @@ function NumberField({
       >
         <NumberFieldPrimitive.Decrement
           className="hover:bg-accent text-muted-foreground hover:text-foreground grid h-full w-9 shrink-0 place-items-center border-r disabled:opacity-40"
-          aria-label="Diminuir"
+          aria-label={comum.diminuir}
         >
           <Minus className="size-3.5" />
         </NumberFieldPrimitive.Decrement>
@@ -41,7 +42,7 @@ function NumberField({
 
         <NumberFieldPrimitive.Increment
           className="hover:bg-accent text-muted-foreground hover:text-foreground grid h-full w-9 shrink-0 place-items-center border-l disabled:opacity-40"
-          aria-label="Aumentar"
+          aria-label={comum.aumentar}
         >
           <Plus className="size-3.5" />
         </NumberFieldPrimitive.Increment>

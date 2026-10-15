@@ -6,6 +6,7 @@ import {
   type Extensao,
   habilitarExtensao,
   importarExtensao,
+  instalarDoCatalogo,
   listarExtensoes,
   removerExtensao,
 } from "@/lib/extensoes/manifesto";
@@ -15,6 +16,8 @@ import { descarregar, garantirCarregada } from "@/lib/extensoes/carregar";
 import { aplicarTemas } from "@/lib/extensoes/tema";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { isDesktop, VaultError } from "@/lib/vault/bridge";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 
 /**
  * As extensões instaladas nesta máquina.
@@ -37,11 +40,19 @@ type ExtensoesStore = {
   carregada: boolean;
   /** Uma operação está em curso. Segura os botões. */
   ocupada: boolean;
+  /** O id do plugin que o catálogo está baixando agora. Um por vez. */
+  instalando: string | null;
   /** A última falha, para a tela mostrar. `null` quando não há. */
   erro: string | null;
 
   carregar: () => Promise<void>;
   importar: () => Promise<void>;
+  /**
+   * Baixa do repositório e instala, ou atualiza o que já estava. Devolve a
+   * mensagem do erro, ou `null` se deu certo: quem pede é o card do catálogo,
+   * que mostra o erro ali mesmo, e não a aba Instalados.
+   */
+  instalar: (id: string, repositorio: string) => Promise<string | null>;
   remover: (id: string) => Promise<void>;
   habilitar: (id: string, habilitada: boolean) => Promise<void>;
 };
@@ -50,13 +61,14 @@ type ExtensoesStore = {
 function mensagem(causa: unknown): string {
   if (causa instanceof VaultError) return causa.message;
 
-  return "Falha ao falar com o aplicativo.";
+  return comum.erros.semAplicativo;
 }
 
 export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
   extensoes: [],
   carregada: false,
   ocupada: false,
+  instalando: null,
   erro: null,
 
   async carregar() {
@@ -74,13 +86,35 @@ export const useExtensoesStore = create<ExtensoesStore>((set, get) => ({
     }
   },
 
+  async instalar(id, repositorio) {
+    if (get().instalando) return null;
+
+    const atualizando = get().extensoes.some((extensao) => extensao.id === id);
+    set({ instalando: id });
+
+    try {
+      await instalarDoCatalogo(repositorio, id);
+      // O módulo velho sai antes da lista nova chegar. Com ela, quem sobe na
+      // abertura sobe de novo, pela URL da versão nova; sem isto, o plugin
+      // seguiria rodando o código antigo até o aplicativo reabrir.
+      if (atualizando) descarregar(id);
+      await get().carregar();
+
+      return null;
+    } catch (causa) {
+      return mensagem(causa);
+    } finally {
+      set({ instalando: null });
+    }
+  },
+
   async importar() {
     if (get().ocupada) return;
 
     set({ ocupada: true, erro: null });
 
     try {
-      const nova = await importarExtensao();
+      const nova = await importarExtensao(t.dialogos.escolherExtensao);
 
       // `null` é o diálogo fechado sem escolher. Cancelar não é falha, e
       // recarregar a lista por causa dele seria trabalho por nada.
@@ -189,6 +223,7 @@ function sincronizarConfiguracoes(extensoes: Extensao[]): void {
         padrao: c.padrao,
         escopo: c.escopo,
         opcoes: c.opcoes.length > 0 ? c.opcoes : undefined,
+        rotulos: c.rotulos,
         minimo: c.minimo ?? undefined,
         maximo: c.maximo ?? undefined,
         dono: extensao.id,

@@ -1,12 +1,23 @@
 "use client";
 
-import { Frame, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import {
+  Frame,
+  Moon,
+  RotateCcw,
+  Settings2,
+  Sun,
+  Tags,
+  Tv,
+} from "lucide-react";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
+import { Opcao } from "@/components/mestre/painel-do-pincel";
 import { GridControl } from "@/components/mestre/grid-control";
 import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
+import { ReguasDaImagem } from "@/components/mestre/reguas-da-imagem";
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,9 +33,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAssetUrl } from "@/hooks/use-asset-url";
 import { corDoVazioDe } from "@/lib/cor";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
+import { t } from "@/lib/i18n/ferramentas";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
+import {
+  escolherCeuDaCena,
+  tirarCeuDaCena,
+  useFundoEmVoo,
+} from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
@@ -58,6 +77,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
   const setCorDoVazio = useSceneStore((state) => state.setCorDoVazio);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
+  const setImagem = useSceneStore((state) => state.setImagem);
 
   const sol = scene.sol;
   const ligado = Boolean(sol);
@@ -76,7 +96,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Configurações do mapa"
+                  aria-label={t.configuracoesDoMapa.titulo}
                 >
                   <Settings2 />
                 </Button>
@@ -85,9 +105,9 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           }
         />
         <TooltipContent>
-          <p className="font-medium">Configurações do mapa</p>
+          <p className="font-medium">{t.configuracoesDoMapa.titulo}</p>
           <p className="text-muted-foreground max-w-48">
-            O que vale para a cena inteira.
+            {t.configuracoesDoMapa.tituloAjuda}
           </p>
         </TooltipContent>
       </Tooltip>
@@ -99,7 +119,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         className="max-h-[min(70vh,34rem)] w-72 space-y-4 overflow-y-auto"
         side="bottom"
       >
-        <p className="text-sm font-medium">Configurações do mapa</p>
+        <p className="text-sm font-medium">{t.configuracoesDoMapa.titulo}</p>
 
         <section className="space-y-3">
           {/* O interruptor na LINHA do título, e não um botão à parte: aqui o
@@ -111,7 +131,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
               htmlFor="sol-da-cena"
             >
               <Sun className="text-muted-foreground size-3.5" />
-              Sol sobre o mapa
+              {t.configuracoesDoMapa.sol}
             </Label>
             <Switch
               id="sol-da-cena"
@@ -123,7 +143,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            Define para onde a sombra cai.
+            {t.configuracoesDoMapa.solAjuda}
           </p>
 
           {/* O céu ACIMA da força, e fora do bloco que só existe com o sol
@@ -136,7 +156,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
               graus". A força fica em régua porque ela não tem gesto no mundo --
               é quão escura a sombra é, e isso se regula olhando o mapa. */}
           <Campo
-            rotulo="Sol no céu"
+            rotulo={t.configuracoesDoMapa.solNoCeu}
             valor={
               sol
                 ? `${sol.angulo}° · ${Math.round(sol.comprimento * 100)}%`
@@ -153,13 +173,15 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           {ligado && sol ? (
             <div className="space-y-4">
               <p className="text-muted-foreground text-[10px] leading-snug">
-                Arraste o sol. Com Shift, de {TRAVA_EM_GRAUS} em{" "}
-                {TRAVA_EM_GRAUS}°.
+                {t.configuracoesDoMapa.arrasteSol(TRAVA_EM_GRAUS)}
               </p>
 
-              <Campo rotulo="Força" valor={`${Math.round(sol.forca * 100)}%`}>
+              <Campo
+                rotulo={t.configuracoesDoMapa.forca}
+                valor={`${Math.round(sol.forca * 100)}%`}
+              >
                 <Slider
-                  aria-label="Força"
+                  aria-label={t.configuracoesDoMapa.forca}
                   value={[Math.round(sol.forca * 100)]}
                   min={5}
                   max={80}
@@ -177,7 +199,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
                 onClick={() => ajustar(SOL_PADRAO)}
               >
                 <RotateCcw className="size-3" />
-                Voltar ao sol padrão
+                {t.configuracoesDoMapa.solPadrao}
               </Button>
             </div>
           ) : null}
@@ -203,6 +225,15 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           cor={corDoVazioDe(scene.corDoVazio)}
           onCor={(cor) => setCorDoVazio(scene.id, cor)}
         />
+        <CeuDoMapa scene={scene} />
+
+        {/* Ainda cor da cena, mas só na TV: o mapa que o mestre vê aqui não
+            muda, e a prévia é a Janela Mesa, pelo botão das réguas. */}
+        <span className="bg-border block h-px w-full" />
+        <ImagemDoMapa
+          valor={scene.imagem}
+          onChange={(imagem) => setImagem(scene.id, imagem)}
+        />
 
         {/* O traço entre os dois: sol e grade valem os dois para a cena
             inteira, mas são assuntos diferentes -- um pinta sombra, o outro
@@ -225,7 +256,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
               htmlFor="info-dos-tokens"
             >
               <Tags className="text-muted-foreground size-3.5" />
-              Nome e medidores nos tokens
+              {t.configuracoesDoMapa.infoDosTokens}
             </Label>
             <Switch
               id="info-dos-tokens"
@@ -235,7 +266,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </div>
 
           <p className="text-muted-foreground text-[10px] leading-snug">
-            Medidores escondidos não aparecem.
+            {t.configuracoesDoMapa.infoDosTokensAjuda}
           </p>
         </section>
       </PopoverContent>
@@ -272,7 +303,7 @@ function Escuridao({
           htmlFor="escuridao-da-cena"
         >
           <Moon className="text-muted-foreground size-3.5" />
-          Escuridão
+          {t.configuracoesDoMapa.escuridao}
         </Label>
         <span className="text-muted-foreground text-[10px] tabular-nums">
           {Math.round(valor * 100)}%
@@ -281,7 +312,7 @@ function Escuridao({
 
       <Slider
         id="escuridao-da-cena"
-        aria-label="Escuridão"
+        aria-label={t.configuracoesDoMapa.escuridao}
         value={[Math.round(valor * 100)]}
         min={0}
         max={100}
@@ -290,12 +321,12 @@ function Escuridao({
       />
 
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Onde nenhuma luz chega. Você vê mais fraco que a mesa.
+        {t.configuracoesDoMapa.escuridaoAjuda}
       </p>
 
       {/* O tom do escuro: a luz ambiente pelo avesso. */}
       <TomDeCor
-        rotulo="Tom"
+        rotulo={t.configuracoesDoMapa.tom}
         cores={CORES_DO_ESCURO}
         nomes={NOME_DO_ESCURO}
         cor={cor}
@@ -327,11 +358,11 @@ function ForaDoMapa({
     <section className="space-y-2">
       <div className="flex items-center gap-2 text-xs">
         <Frame className="text-muted-foreground size-3.5" />
-        Fora do mapa
+        {t.configuracoesDoMapa.foraDoMapa}
       </div>
 
       <TomDeCor
-        rotulo="Cor"
+        rotulo={t.configuracoesDoMapa.cor}
         cores={CORES_DO_VAZIO}
         nomes={NOME_DO_VAZIO}
         cor={cor}
@@ -339,7 +370,122 @@ function ForaDoMapa({
       />
 
       <p className="text-muted-foreground text-[10px] leading-snug">
-        A cor em volta do mapa, no 2D e no 2.5D.
+        {t.configuracoesDoMapa.foraDoMapaAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O ajuste de imagem DESTE mapa na janela do espectador: a masmorra mais
+ * clara, o flashback sem cor. Ver `Scene.imagem`.
+ *
+ * Por cima do ajuste da campanha, que é a calibração da TV: os dois valem, e
+ * multiplicam -- ver `compor`. Só no mapa, como o resto deste painel.
+ */
+function ImagemDoMapa({
+  valor,
+  onChange,
+}: {
+  valor: AjusteDeImagem | undefined;
+  onChange: (imagem: AjusteDeImagem | undefined) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Tv className="text-muted-foreground size-3.5" />
+        {t.configuracoesDoMapa.imagem}
+      </div>
+
+      <ReguasDaImagem valor={valor} onChange={onChange} />
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.imagemAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O céu do 2.5D: a cor de fora do mapa, ou uma imagem. Ver `Scene.ceuAssetId`.
+ *
+ * Embaixo da cor de fora, e não no lugar dela: a cor continua valendo no 2D e
+ * por trás da imagem enquanto ela carrega. A escolha é o que fica atrás do chão
+ * DEITADO -- e é por isso que se chama céu, e não fundo.
+ *
+ * "Imagem" sem céu ainda abre o seletor de arquivo na hora: escolher o modo e
+ * depois procurar o botão de escolher seria um clique a mais para nada. Voltar
+ * para "Cor" tira o céu e leva o arquivo junto, como tirar o mapa.
+ */
+function CeuDoMapa({ scene }: { scene: Scene }) {
+  const comImagem = Boolean(scene.ceuAssetId);
+  const miniatura = useAssetUrl(scene.ceuAssetId, "mini");
+  const recebendo = useFundoEmVoo((state) =>
+    state.cenas.includes(`ceu:${scene.id}`),
+  );
+
+  function escolher() {
+    void escolherCeuDaCena(scene.id).catch((causa: unknown) =>
+      toast.error(
+        causa instanceof Error ? causa.message : t.configuracoesDoMapa.falhaNoCeu,
+      ),
+    );
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs">{t.configuracoesDoMapa.ceu}</span>
+        <div
+          role="radiogroup"
+          aria-label={t.configuracoesDoMapa.ceu}
+          className="bg-muted flex w-36 rounded-md p-0.5"
+        >
+          <Opcao
+            marcada={!comImagem}
+            onClick={() => {
+              if (comImagem) void tirarCeuDaCena(scene.id);
+            }}
+          >
+            {t.configuracoesDoMapa.cor}
+          </Opcao>
+          <Opcao
+            marcada={comImagem}
+            onClick={() => {
+              if (!comImagem && !recebendo) escolher();
+            }}
+          >
+            {t.configuracoesDoMapa.ceuImagem}
+          </Opcao>
+        </div>
+      </div>
+
+      {comImagem ? (
+        <div className="flex items-center gap-2">
+          {miniatura ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={miniatura}
+              alt=""
+              draggable={false}
+              className="h-8 w-16 rounded-sm border border-white/15 object-cover"
+            />
+          ) : (
+            <span className="bg-muted h-8 w-16 rounded-sm" />
+          )}
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={recebendo}
+            onClick={escolher}
+          >
+            {t.configuracoesDoMapa.trocarCeu}
+          </Button>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.ceuAjuda}
       </p>
     </section>
   );
@@ -398,9 +544,9 @@ function TomDeCor({
           ))}
           <button
             type="button"
-            aria-label="Tom personalizado"
+            aria-label={t.configuracoesDoMapa.tomPersonalizado}
             aria-expanded={livreAberto}
-            title="Tom personalizado"
+            title={t.configuracoesDoMapa.tomPersonalizado}
             className={cn(
               "focus-visible:ring-ring size-5 shrink-0 rounded-full border-2 outline-none focus-visible:ring-2",
               livre || livreAberto ? "border-foreground" : "border-transparent",
@@ -418,18 +564,18 @@ function TomDeCor({
 
 /** O nome de cada tom, pelo lugar que ele pinta. */
 const NOME_DO_ESCURO: Record<(typeof CORES_DO_ESCURO)[number], string> = {
-  "#000000": "Breu",
-  "#0b1330": "Noite",
-  "#1c130b": "Caverna",
-  "#170a24": "Abismo",
+  "#000000": t.configuracoesDoMapa.breu,
+  "#0b1330": t.configuracoesDoMapa.noite,
+  "#1c130b": t.configuracoesDoMapa.caverna,
+  "#170a24": t.configuracoesDoMapa.abismo,
 };
 
 /** O nome de cada cor do vazio, pela sala que ela lembra. */
 const NOME_DO_VAZIO: Record<(typeof CORES_DO_VAZIO)[number], string> = {
-  "#000000": "Breu",
-  "#1c1917": "Carvão",
-  "#1e293b": "Ardósia",
-  "#14342b": "Feltro",
+  "#000000": t.configuracoesDoMapa.breu,
+  "#1c1917": t.configuracoesDoMapa.carvao,
+  "#1e293b": t.configuracoesDoMapa.ardosia,
+  "#14342b": t.configuracoesDoMapa.feltro,
 };
 
 function Campo({

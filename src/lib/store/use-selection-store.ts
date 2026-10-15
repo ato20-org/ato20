@@ -67,6 +67,8 @@ type SelectionStore = {
    * -- é gesto de uma só.
    */
   selectedParedeId: string | null;
+  /** Porta selecionada. Uma por vez, pela razão da parede. */
+  selectedPortaId: string | null;
   /** Luz cravada selecionada. Uma por vez, pela razão da parede. */
   selectedLuzId: string | null;
   /**
@@ -118,6 +120,8 @@ type SelectionStore = {
   /** `null` limpa. */
   selectParede: (paredeId: string | null) => void;
   /** `null` limpa. */
+  selectPorta: (portaId: string | null) => void;
+  /** `null` limpa. */
   selectLuz: (luzId: string | null) => void;
   /** `null` limpa. */
   selectPin: (pinId: string | null) => void;
@@ -163,6 +167,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
   selectedPortraitIds: [],
   selectedMedidorId: null,
   selectedParedeId: null,
+  selectedPortaId: null,
   selectedLuzId: null,
   selectedPinId: null,
 
@@ -182,6 +187,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -203,6 +209,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -224,6 +231,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -245,6 +253,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -266,6 +275,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -291,6 +301,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -309,6 +320,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -327,6 +339,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -362,6 +375,26 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: paredeId,
+      selectedPortaId: null,
+      selectedLuzId: null,
+      selectedPinId: null,
+    });
+  },
+
+  selectPorta(portaId) {
+    set({
+      selectedIds: [],
+      selectedTextoIds: [],
+      selectedFormaIds: [],
+      selectedPostitIds: [],
+      selectedDocumentoIds: [],
+      selectedTracoIds: [],
+      selectedFogId: null,
+      selectedAreaDeEfeitoId: null,
+      selectedPortraitIds: [],
+      selectedMedidorId: null,
+      selectedParedeId: null,
+      selectedPortaId: portaId,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -380,6 +413,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: luzId,
       selectedPinId: null,
     });
@@ -398,6 +432,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: pinId,
     });
@@ -420,6 +455,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: portraitIds,
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -442,6 +478,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
         : [...selectedPortraitIds, portraitId],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });
@@ -460,6 +497,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds,
       selectedMedidorId,
       selectedParedeId,
+      selectedPortaId,
       selectedLuzId,
       selectedPinId,
     } = get();
@@ -475,6 +513,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds.length === 0 &&
       selectedMedidorId === null &&
       selectedParedeId === null &&
+      selectedPortaId === null &&
       selectedLuzId === null &&
       selectedPinId === null
     ) {
@@ -493,6 +532,7 @@ export const useSelectionStore = create<SelectionStore>((set, get) => ({
       selectedPortraitIds: [],
       selectedMedidorId: null,
       selectedParedeId: null,
+      selectedPortaId: null,
       selectedLuzId: null,
       selectedPinId: null,
     });

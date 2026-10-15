@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ItemAnexado } from "@/components/mestre/item-anexado";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
@@ -42,6 +43,8 @@ import { useHandoutStore } from "@/lib/store/use-handout-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { t } from "@/lib/i18n/arquivos";
+import { t as textoDosItens } from "@/lib/i18n/itens";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
 import type { AssetMeta, Scene } from "@/types/scene";
@@ -99,6 +102,7 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
   const publicarBoca = useHandoutStore((state) => state.publicarBoca);
   const sobreABoca = useHandoutStore((state) => state.sobreABoca);
   const guardar = useSceneStore((state) => state.guardarNoHandout);
+  const guardarItens = useSceneStore((state) => state.guardarItensNoHandout);
 
   // Uma imagem do acervo está pairando sobre a bolinha: o `useTokenDrag` já
   // decidiu que este é o destino, e a bolinha incha para dizer que recebe.
@@ -114,7 +118,9 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
   /** Engole o clique que fecha um arrasto da bolinha. Ver `SaquinhoDados`. */
   const arrastouEm = useRef(0);
 
-  const quantos = scene.handout?.length ?? 0;
+  const imagens = scene.handout?.length ?? 0;
+  const itens = scene.handoutItens?.length ?? 0;
+  const quantos = imagens + itens;
 
   // A boca é medida na hora, não copiada: a bolinha anda. Ver `naBoca`.
   useEffect(() => {
@@ -134,11 +140,18 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
     const { registrarAlvo } = useTokenDragStore.getState();
 
     return registrarAlvo("handout", (solto) => {
+      // O item da campanha fica guardado aqui como fica num ponto: preso, e
+      // sem sair de onde veio. Ver `Scene.handoutItens`.
+      if (solto.fonte.tipo === "item") {
+        guardarItens(sceneId.current, [solto.fonte.itemId]);
+        return;
+      }
+
       if (solto.fonte.tipo !== "acervo") return;
 
       guardar(sceneId.current, [solto.fonte.assetId]);
     });
-  }, [guardar]);
+  }, [guardar, guardarItens]);
 
   // Arquivo do sistema solto na bolinha: importa no acervo e guarda no handout.
   // O id da cena sai ANTES do `then`: a importação vai ao disco, e se o mestre
@@ -235,7 +248,9 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
                   type="button"
                   data-handout
                   onPointerDown={pegarBolinha}
-                  aria-label={aberto ? "Fechar o handout" : "Handout do mapa"}
+                  aria-label={
+                    aberto ? t.handoutMestre.fecharHandout : t.handoutMestre.handoutDoMapa
+                  }
                   aria-expanded={aberto}
                   className={cn(
                     "bg-background/85 pointer-events-auto absolute z-30 grid place-items-center rounded-full border shadow-lg backdrop-blur transition-transform",
@@ -280,10 +295,8 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
           }
         />
         <TooltipContent side="left">
-          <p className="font-medium">Handout da cena</p>
-          <p className="text-muted-foreground max-w-48">
-            As imagens que a mesa pode receber.
-          </p>
+          <p className="font-medium">{t.handoutMestre.handoutDaCena}</p>
+          <p className="text-muted-foreground max-w-48">{t.handoutMestre.dica}</p>
         </TooltipContent>
       </Tooltip>
 
@@ -298,10 +311,15 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
         {/* O título diz o que é a caixa antes de a primeira imagem entrar: um
             painel só com miniaturas não se apresenta. */}
         <div className="mb-2 flex items-baseline justify-between">
-          <h3 className="text-sm font-medium">Handout da cena</h3>
+          <h3 className="text-sm font-medium">{t.handoutMestre.handoutDaCena}</h3>
           {quantos > 0 ? (
             <span className="text-muted-foreground text-xs tabular-nums">
-              {quantos} {quantos === 1 ? "imagem" : "imagens"}
+              {[
+                imagens > 0 ? t.handoutMestre.contarImagens(imagens) : null,
+                itens > 0 ? textoDosItens.contar(itens) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           ) : null}
         </div>
@@ -321,7 +339,9 @@ function ConteudoDoHandout({
 }) {
   const { assets } = useAssetList("image");
   const guardar = useSceneStore((state) => state.guardarNoHandout);
+  const tirarItem = useSceneStore((state) => state.tirarItemDoHandout);
   const ids = scene.handout ?? [];
+  const itens = scene.handoutItens ?? [];
 
   const escolher = () => void escolherParaHandout(scene.id, guardar);
 
@@ -341,7 +361,7 @@ function ConteudoDoHandout({
       (state) => state.arrasto?.destino?.tipo === "handout",
     ) || arquivoNoAr;
 
-  if (ids.length === 0) {
+  if (ids.length === 0 && itens.length === 0) {
     // Uma zona de soltar desenhada, e não só um parágrafo: texto em painel
     // vazio não é lido. A caixa tracejada com a imagem entrando é o mesmo
     // desenho que todo upload usa, e diz sozinha o que fazer.
@@ -363,7 +383,7 @@ function ConteudoDoHandout({
             aria-hidden
           />
         </span>
-        <p className="text-xs leading-snug">Arraste imagens para cá</p>
+        <p className="text-xs leading-snug">{t.geral.arrasteImagens}</p>
       </button>
     );
   }
@@ -385,12 +405,22 @@ function ConteudoDoHandout({
         />
       ))}
 
+      {/* Os itens depois das imagens, na mesma grade, como no ponto. */}
+      {itens.map((itemId) => (
+        <ItemAnexado
+          key={itemId}
+          itemId={itemId}
+          rotuloTirar={textoDosItens.anexado.tirarDoHandout}
+          onTirar={() => tirarItem(scene.id, itemId)}
+        />
+      ))}
+
       {/* A caixinha de `+` do inventário: a grade sempre termina numa porta. */}
       <li>
         <button
           type="button"
           onClick={escolher}
-          aria-label="Escolher imagens do computador"
+          aria-label={t.geral.escolherImagens}
           className="text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring flex aspect-square w-full items-center justify-center rounded-md border border-dashed focus-visible:ring-2 focus-visible:outline-none"
         >
           <Plus className="size-4" aria-hidden />
@@ -421,7 +451,7 @@ function CelulaDoHandout({
   const transmit = useSpotlightStore((state) => state.transmit);
   const clear = useSpotlightStore((state) => state.clear);
 
-  const nome = asset?.name ?? "Arquivo que saiu do acervo";
+  const nome = asset?.name ?? t.geral.arquivoForaDoAcervo;
 
   return (
     <li
@@ -432,7 +462,7 @@ function CelulaDoHandout({
         // quando o item sai do palco.
         naMesa && "opacity-40",
       )}
-      title={naMesa ? `${nome} (na mesa)` : nome}
+      title={naMesa ? t.handoutMestre.naMesa(nome) : nome}
       onPointerDown={(event) => {
         if (!asset) return;
 
@@ -459,7 +489,7 @@ function CelulaDoHandout({
             variant={noAr ? "default" : "secondary"}
             size="icon-xs"
             aria-label={
-              noAr ? `Tirar ${nome} da evidência` : `Mostrar ${nome} na TV`
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
             }
             onPointerDown={(event) => event.stopPropagation()}
             onClick={noAr ? clear : () => transmit(assetId)}
@@ -472,7 +502,7 @@ function CelulaDoHandout({
         <Button
           variant="secondary"
           size="icon-xs"
-          aria-label={`Tirar ${nome} do handout`}
+          aria-label={t.handoutMestre.tirarDoHandout(nome)}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={() => tirar(sceneId, assetId)}
         >

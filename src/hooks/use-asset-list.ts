@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/arquivos";
 import { absorverImportacao } from "@/lib/mestre/importar-arquivos";
 import {
   invalidarAcervo,
@@ -118,7 +119,7 @@ export function useAssetList(kind: AssetKind): AssetListApi {
         recarregar(kind);
       } catch (cause) {
         toast.error(
-          cause instanceof Error ? cause.message : "Falha ao importar.",
+          cause instanceof Error ? cause.message : t.importar.falhaAoImportar,
         );
       } finally {
         setImportando(false);

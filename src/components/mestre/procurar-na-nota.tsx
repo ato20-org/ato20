@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { t } from "@/lib/i18n/arquivos";
 import { normaliza, ocorrencias } from "@/lib/search";
 
 /** O que marca, no DOM, um pedaço da nota que a busca não lê: as prévias. */
@@ -183,8 +184,8 @@ export function ProcurarNaNota({
       <Input
         ref={campo}
         value={termo}
-        placeholder="Procurar na nota"
-        aria-label="Procurar na nota"
+        placeholder={t.procurarNaNota.procurar}
+        aria-label={t.procurarNaNota.procurar}
         className="h-7 w-48 text-xs"
         onChange={(evento) => {
           setTermo(evento.target.value);
@@ -206,13 +207,17 @@ export function ProcurarNaNota({
         className="text-muted-foreground min-w-14 text-center text-[11px] tabular-nums"
         aria-live="polite"
       >
-        {termo.trim() === "" ? "" : faixas.length === 0 ? "Nada" : `${indice + 1} de ${faixas.length}`}
+        {termo.trim() === ""
+          ? ""
+          : faixas.length === 0
+            ? t.procurarNaNota.nada
+            : t.procurarNaNota.posicao(indice + 1, faixas.length)}
       </span>
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label="Achado anterior"
-        title="Anterior · Shift+Enter"
+        aria-label={t.procurarNaNota.anterior}
+        title={t.procurarNaNota.anteriorDica}
         disabled={faixas.length === 0}
         onClick={() => andar(-1)}
       >
@@ -221,14 +226,20 @@ export function ProcurarNaNota({
       <Button
         variant="ghost"
         size="icon-xs"
-        aria-label="Próximo achado"
-        title="Próximo · Enter"
+        aria-label={t.procurarNaNota.proximo}
+        title={t.procurarNaNota.proximoDica}
         disabled={faixas.length === 0}
         onClick={() => andar(1)}
       >
         <ChevronDown />
       </Button>
-      <Button variant="ghost" size="icon-xs" aria-label="Fechar a busca" title="Fechar · Esc" onClick={aoFechar}>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={t.procurarNaNota.fechar}
+        title={t.procurarNaNota.fecharDica}
+        onClick={aoFechar}
+      >
         <X />
       </Button>
     </div>

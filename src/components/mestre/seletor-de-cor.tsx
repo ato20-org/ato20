@@ -10,6 +10,7 @@ import {
 import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { hexParaHsv, hsvParaHex, normalizarHex, type Hsv } from "@/lib/cor";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 
 /** O quanto uma seta anda no quadrado, em fração. Shift anda dez vezes isso. */
@@ -96,11 +97,14 @@ export function SeletorDeCor({
       <div
         role="slider"
         tabIndex={0}
-        aria-label="Saturação e brilho"
+        aria-label={t.seletorDeCor.saturacaoEBrilho}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(hsv.s * 100)}
-        aria-valuetext={`saturação ${Math.round(hsv.s * 100)}%, brilho ${Math.round(hsv.v * 100)}%`}
+        aria-valuetext={t.seletorDeCor.saturacaoEBrilhoValor(
+          Math.round(hsv.s * 100),
+          Math.round(hsv.v * 100),
+        )}
         className="focus-visible:ring-ring relative h-28 w-full cursor-crosshair touch-none rounded-md outline-none focus-visible:ring-2"
         style={{
           // Branco à esquerda até o matiz puro à direita, e o preto subindo
@@ -126,7 +130,7 @@ export function SeletorDeCor({
       <div
         role="slider"
         tabIndex={0}
-        aria-label="Matiz"
+        aria-label={t.seletorDeCor.matiz}
         aria-valuemin={0}
         aria-valuemax={360}
         aria-valuenow={Math.round(hsv.h)}
@@ -157,7 +161,7 @@ export function SeletorDeCor({
           style={{ backgroundColor: hex }}
         />
         <input
-          aria-label="Cor em hexadecimal"
+          aria-label={t.seletorDeCor.hexadecimal}
           spellCheck={false}
           maxLength={7}
           value={rascunho ?? hex.toUpperCase()}
@@ -282,7 +286,7 @@ const ESPERA_DO_TOM = 200;
 export function CorLivre({
   cor,
   paleta,
-  rotulo = "Outra cor",
+  rotulo = t.seletorDeCor.outraCor,
   className = (livre) =>
     cn("size-5 rounded-full border-2", livre ? "border-foreground" : "border-transparent"),
   onCor,

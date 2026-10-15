@@ -2,6 +2,7 @@
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 
+import { t } from "@/lib/i18n/mestre";
 import { call } from "@/lib/vault/bridge";
 
 /** A campanha aberta. */
@@ -95,9 +96,9 @@ export async function exportCampaign(): Promise<string | null> {
   const sugerido = await call<string>("campaign_export_name");
 
   const dest = await save({
-    title: "Exportar campanha",
+    title: t.dialogos.exportar,
     defaultPath: sugerido,
-    filters: [{ name: "Campanha do ATO20", extensions: ["zip"] }],
+    filters: [{ name: t.dialogos.filtroZip, extensions: ["zip"] }],
   });
 
   if (!dest) return null;
@@ -124,13 +125,13 @@ export type EscolhaDeImport = { zipPath: string; parent: string };
 export async function pickImport(): Promise<EscolhaDeImport | null> {
   const escolhido = await open({
     multiple: false,
-    title: "Escolha o zip da campanha",
-    filters: [{ name: "Campanha do ATO20", extensions: ["zip"] }],
+    title: t.dialogos.escolherZip,
+    filters: [{ name: t.dialogos.filtroZip, extensions: ["zip"] }],
   });
 
   if (typeof escolhido !== "string") return null;
 
-  const parent = await pickFolder("Onde criar a campanha importada");
+  const parent = await pickFolder(t.dialogos.ondeImportar);
   if (!parent) return null;
 
   return { zipPath: escolhido, parent };

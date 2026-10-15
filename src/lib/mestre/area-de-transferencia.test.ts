@@ -19,6 +19,7 @@ import type {
   Forma,
   Luz,
   Parede,
+  Porta,
   Postit,
   Scene,
   Texto,
@@ -53,8 +54,6 @@ const poligono: Forma = {
   fundo: "#22c55e33",
   opacidadeDoTraco: 0.8,
   opacidadeDoFundo: 0.25,
-  arredondado: true,
-  aMao: true,
   pontos: [0, 0, 1, 0, 0.5, 1],
 };
 
@@ -148,8 +147,6 @@ describe("área de transferência", () => {
       fundo: "#22c55e33",
       opacidadeDoTraco: 0.8,
       opacidadeDoFundo: 0.25,
-      arredondado: true,
-      aMao: true,
       pontos: [0, 0, 1, 0, 0.5, 1],
     });
     expect(postits![1]).toMatchObject({
@@ -223,6 +220,16 @@ describe("área de transferência", () => {
       intensidade: 0.5,
       cone: { angulo: 90, abertura: 60 },
     };
+    const porta: Porta = {
+      id: "p",
+      x: 600,
+      y: 200,
+      comprimento: 80,
+      angulo: 90,
+      abertura: -45,
+      ultimaAbertura: -60,
+      altura: 140,
+    };
 
     function montarChao(tipo?: Scene["tipo"]) {
       useSceneStore.setState({
@@ -234,6 +241,7 @@ describe("área de transferência", () => {
               items: [],
               fog: [area],
               paredes: [parede],
+              portas: [porta],
               luzes: [luz],
             } as unknown as Scene,
           ],
@@ -310,6 +318,47 @@ describe("área de transferência", () => {
 
       pasteClipboard();
       expect(atual().paredes).toHaveLength(1);
+    });
+
+    it("cola a porta pela dobradiça, aberta como estava, e a cópia fica na mão", () => {
+      montarChao();
+      useSelectionStore.getState().selectPorta("p");
+      copySelection();
+      pasteClipboard();
+
+      const { portas } = atual();
+      expect(portas).toHaveLength(2);
+      expect(portas![1]).toMatchObject({
+        comprimento: 80,
+        angulo: 90,
+        abertura: -45,
+        ultimaAbertura: -60,
+        altura: 140,
+        x: 600 + PASTE_OFFSET,
+        y: 200 + PASTE_OFFSET,
+      });
+      expect(portas![1]!.id).not.toBe("p");
+      expect(useSelectionStore.getState().selectedPortaId).toBe(portas![1]!.id);
+    });
+
+    it("recortar a porta tira só ela", () => {
+      montarChao();
+      useSelectionStore.getState().selectPorta("p");
+      cutSelection();
+
+      expect(atual().portas ?? []).toHaveLength(0);
+      expect(atual().paredes).toHaveLength(1);
+    });
+
+    it("não cola porta num quadro", () => {
+      montarChao();
+      useSelectionStore.getState().selectPorta("p");
+      copySelection();
+
+      montarChao("quadro");
+      pasteClipboard();
+
+      expect(atual().portas).toHaveLength(1);
     });
 
     it("não cola parede, área nem luz num quadro", () => {

@@ -59,7 +59,7 @@ export type FonteDeLuz = {
   /** Até onde a luz é forte, já preso entre 0 e o `raio`. */
   raioIntenso: number;
   cor: string;
-  /** De 0 a 1, já preso. A lanterna de um token acende sempre inteira. */
+  /** De 0 a 1, já preso. */
   intensidade: number;
   /** Ausente = círculo. A abertura já vem presa. Ver `coneDe`. */
   cone?: ConeDaLuz;
@@ -177,6 +177,24 @@ export function anguloDoFacho(
   return (((angulo + giro) % 360) + 360) % 360;
 }
 
+/**
+ * O inverso de `anguloDoFacho`: o ângulo NA FIGURA que põe o facho apontando
+ * para `noMapa`. Desfaz na ordem contrária -- o giro primeiro, depois os
+ * espelhos, que desfazem a si mesmos.
+ */
+export function anguloNaFigura(
+  item: Pick<CanvasItem, "rotation" | "flipX" | "flipY">,
+  noMapa: number,
+): number {
+  const giro = Number.isFinite(item.rotation) ? item.rotation : 0;
+
+  let angulo = noMapa - giro;
+  if (item.flipY) angulo = -angulo;
+  if (item.flipX) angulo = 180 - angulo;
+
+  return ((angulo % 360) + 360) % 360;
+}
+
 /** O efeito, se for um que existe. O de uma versão futura acende fixo. */
 export function efeitoDe(valor: unknown): EfeitoDaLuz | undefined {
   return (EFEITOS_DA_LUZ as readonly unknown[]).includes(valor)
@@ -243,7 +261,7 @@ export function fontesDaCena(
       raio: item.luz.raio,
       raioIntenso: raioIntensoDe(item.luz.raio, undefined),
       cor: item.luz.cor,
-      intensidade: 1,
+      intensidade: limitarIntensidade(item.luz.intensidade),
       ...(facho
         ? {
             cone: {
@@ -1250,4 +1268,47 @@ export function fatorDoEfeito(
 export function anguloEntre(de: number, ate: number, t: number): number {
   const diferenca = ((((ate - de) % 360) + 540) % 360) - 180;
   return de + diferenca * t;
+}
+
+/** A luz andou desde o último desenho? Uma que acabou de acender não anda. */
+export function luzMudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
+  return (
+    antes !== undefined &&
+    (antes.x !== agora.x ||
+      antes.y !== agora.y ||
+      antes.raio !== agora.raio ||
+      antes.raioIntenso !== agora.raioIntenso ||
+      antes.cone?.angulo !== agora.cone?.angulo ||
+      antes.cone?.abertura !== agora.cone?.abertura)
+  );
+}
+
+/** A luz no meio do caminho entre dois desenhos. `t` de 0 a 1. */
+export function luzEntre(
+  antes: FonteDeLuz | undefined,
+  depois: FonteDeLuz,
+  t: number,
+): FonteDeLuz {
+  if (!antes) return depois;
+
+  return {
+    ...depois,
+    x: antes.x + (depois.x - antes.x) * t,
+    y: antes.y + (depois.y - antes.y) * t,
+    raio: antes.raio + (depois.raio - antes.raio) * t,
+    raioIntenso:
+      antes.raioIntenso + (depois.raioIntenso - antes.raioIntenso) * t,
+    // O cone gira pela volta curta. O que acabou de virar cone, ou de deixar
+    // de ser, chega de uma vez: não há meio caminho entre um e outro.
+    ...(antes.cone && depois.cone
+      ? {
+          cone: {
+            angulo: anguloEntre(antes.cone.angulo, depois.cone.angulo, t),
+            abertura:
+              antes.cone.abertura +
+              (depois.cone.abertura - antes.cone.abertura) * t,
+          },
+        }
+      : {}),
+  };
 }

@@ -15,6 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 import type { Scene } from "@/types/scene";
 
@@ -43,7 +44,9 @@ export function AreasIndex({ scene }: { scene: Scene }) {
 
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
-      <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {/* Sem moldura: a moldura é a pílula do canto, que ele divide com as
+          áreas e os jogadores. Ver `MestreShell`. */}
+      <div className="flex items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -55,7 +58,7 @@ export function AreasIndex({ scene }: { scene: Scene }) {
                     // Mesma regra do índice de pontos: o número ao lado do
                     // ícone diz que há áreas sem precisar abrir a lista.
                     className={cn(total > 0 && "w-auto gap-1 px-2")}
-                    aria-label="Áreas escondidas"
+                    aria-label={t.areas.titulo}
                   >
                     <EyeOff />
                     {total > 0 ? (
@@ -72,9 +75,9 @@ export function AreasIndex({ scene }: { scene: Scene }) {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Áreas escondidas</p>
+            <p className="font-medium">{t.areas.titulo}</p>
             <p className="text-muted-foreground max-w-48">
-              As áreas desta cena. O olho de cada uma revela ou esconde.
+              {t.areas.tituloAjuda}
             </p>
           </TooltipContent>
         </Tooltip>
@@ -83,8 +86,7 @@ export function AreasIndex({ scene }: { scene: Scene }) {
       <PopoverContent className="w-72 p-0" side="bottom" align="start">
         {total === 0 ? (
           <p className="text-muted-foreground p-3 text-xs leading-snug">
-            Nenhuma área nesta cena. Escolha um desenho na régua da esquerda e
-            marque-o como área escondida.
+            {t.areas.nenhuma}
           </p>
         ) : (
           // `flex` com altura máxima: a `FogList` é uma coluna que rola, e

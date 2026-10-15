@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { t } from "@/lib/i18n/arquivos";
 import { MARCA_MENCAO } from "@/lib/mestre/clique-da-mencao";
 import { MINIATURA } from "@/lib/miniatura";
 import type { Token } from "@/lib/mencoes/texto";
@@ -218,6 +219,7 @@ function emLinhas(tokens: Array<Token<TipoNoPostit>>): Linha[] {
  * tamanho em pixel de tela conforme o zoom, e o título tem de escalar junto.
  */
 const BLOCO: Record<Bloco, string> = {
+  // eslint-disable-next-line ato20/texto-fixo -- classe CSS do bloco `titulo`, não texto
   titulo: "block text-[1.45em] leading-tight font-bold",
   subtitulo: "block text-[1.2em] leading-snug font-semibold",
   item: "block pl-[1.1em] before:absolute before:-ml-[1.1em] before:content-['•'] relative",
@@ -347,15 +349,15 @@ function PersonagemChip({
   // não foi entregue — não ganha "ausente": mentiria sobre uma pessoa que não
   // existe.
   const legenda = achado.dono
-    ? `${achado.dono} · ${achado.presente ? "na mesa" : "ausente"}`
-    : "Sem jogador";
+    ? t.geral.donoEPresenca(achado.dono, achado.presente ? t.geral.naMesa : t.geral.ausente)
+    : t.geral.semJogador;
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Referencia
-            title={`Abrir a ficha de ${achado.nome}`}
+            title={t.postitTextoView.abrirFicha(achado.nome)}
             className="text-sky-900 decoration-sky-900/40"
             aoClicar={() =>
               abrirJanela({ tipo: "personagem", personagemId: achado.id })
@@ -424,7 +426,7 @@ function ArquivoChip({
       <TooltipTrigger
         render={
           <Referencia
-            title={imagem ? `Abrir ${asset.name}` : asset.name}
+            title={imagem ? t.geral.abrirNome(asset.name) : asset.name}
             className="text-teal-900 decoration-teal-900/40"
             aoClicar={
               imagem
@@ -463,7 +465,7 @@ function ArquivoChip({
         ) : null}
         <p className="max-w-40 truncate font-medium">{asset.name}</p>
         {imagem ? null : (
-          <p className="opacity-70">Som é da trilha. Aqui é referência.</p>
+          <p className="opacity-70">{t.postitTextoView.somReferencia}</p>
         )}
       </TooltipContent>
     </Tooltip>
@@ -484,7 +486,7 @@ function CenaChip({
       <TooltipTrigger
         render={
           <Referencia
-            title={`Abrir a cena ${cena.name} na bancada`}
+            title={t.postitTextoView.abrirCena(cena.name)}
             className="text-violet-900 decoration-violet-900/40"
             aoClicar={() => irParaCena(cena.id)}
           >
@@ -526,7 +528,7 @@ function MarcadorChip({
       <TooltipTrigger
         render={
           <Referencia
-            title={`Abrir ${livro.titulo} na página ${marcador.pagina}`}
+            title={t.postitTextoView.abrirLivro(livro.titulo, marcador.pagina)}
             className="text-amber-900 decoration-amber-900/40"
             aoClicar={() => abrirLivro(livro.id, livro.titulo, marcador.pagina)}
           >
@@ -539,7 +541,7 @@ function MarcadorChip({
         <MiniaturaDaPagina livroId={livro.id} pagina={marcador.pagina} largura={160} />
         <p className="max-w-40 truncate font-medium">{marcador.rotulo}</p>
         <p className="max-w-40 truncate opacity-70">
-          {livro.titulo} · p. {marcador.pagina}
+          {t.geral.paginaDoLivro(livro.titulo, marcador.pagina)}
         </p>
       </TooltipContent>
     </Tooltip>
@@ -567,7 +569,7 @@ function NaoResolvido({
   return (
     <span
       className="text-neutral-600/80 underline decoration-dotted"
-      title={`Nenhum ${tipo} com esse nome na campanha`}
+      title={t.postitTextoView.naoResolvido[tipo]}
     >
       {bruto}
     </span>

@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
+import { t } from "@/lib/i18n/ferramentas";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
@@ -332,7 +333,7 @@ export function LuzMarcadores({
                   }}
                   onPointerDown={(event) => ajustarRaio(event, luz)}
                 >
-                  <title>Área da luz</title>
+                  <title>{t.luz.areaDaLuz}</title>
                 </circle>
 
                 {/* O raio FORTE, por dentro do da área: traço mais curto, para
@@ -381,7 +382,7 @@ export function LuzMarcadores({
                   }}
                   onPointerDown={(event) => ajustarRaioIntenso(event, luz)}
                 >
-                  <title>Raio forte</title>
+                  <title>{t.luz.raioForte}</title>
                 </circle>
               </>
             ) : null}
@@ -468,7 +469,7 @@ export function LuzMarcadores({
                           ajustarRaioIntenso(event, luz)
                         }
                       >
-                        <title>Raio forte</title>
+                        <title>{t.luz.raioForte}</title>
                       </circle>
 
                       {/* A da abertura é um losango, e não um círculo: é a
@@ -490,7 +491,7 @@ export function LuzMarcadores({
                         }}
                         onPointerDown={(event) => abrir(event, luz, cone)}
                       >
-                        <title>Abertura do cone</title>
+                        <title>{t.luz.aberturaDoCone}</title>
                       </rect>
 
                       <circle
@@ -507,7 +508,7 @@ export function LuzMarcadores({
                         }}
                         onPointerDown={(event) => apontar(event, luz, cone)}
                       >
-                        <title>Direção e alcance</title>
+                        <title>{t.luz.direcaoEAlcance}</title>
                       </circle>
                     </>
                   );

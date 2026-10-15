@@ -36,6 +36,7 @@ import {
   peDe,
   pivoDe,
   raioDoAnel,
+  sobeDe,
 } from "@/lib/geometry/peca-de-esguelha";
 import {
   angleTo,
@@ -45,6 +46,7 @@ import {
   snapAngle,
   type Vec,
 } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/jogador";
 import {
   criarEnvioDeMovimentos,
   type EnvioDeMovimentos,
@@ -58,11 +60,13 @@ import {
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping, TipoDePing } from "@/types/ping";
 import {
   ehQuadro,
   type CanvasItem,
   type FichaNaCena,
+  type Parede,
   type Portrait,
   type Scene,
   type Tripe,
@@ -181,6 +185,7 @@ export function CenaDoJogador({
   efeitos,
   rolagens,
   pings,
+  laser,
   tripe,
   corte,
 }: {
@@ -194,6 +199,8 @@ export function CenaDoJogador({
   rolagens: RolagemDaMesa[];
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
   /**
    * O tripé no ar, quando a mesa vê de esguelha. Aí o celular também vê, e o
    * dedo pega o token pelo chão do tripé. Ver `AlcasDeEsguelha`.
@@ -468,7 +475,7 @@ export function CenaDoJogador({
       cenaId: cena.id,
       x: ponto.x,
       y: ponto.y,
-    }).catch(() => toast.error("O ping não chegou à mesa."));
+    }).catch(() => toast.error(t.cena.pingNaoChegou));
   }
 
   const gesto = naMao && !naMao.solto ? naMao : null;
@@ -484,6 +491,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         // Pela mesma razão do mapa de prumo, logo abaixo.
         variante="tela"
         smooth
@@ -494,6 +502,7 @@ export function CenaDoJogador({
           <AlcasDeEsguelha
             camera={camera}
             itens={pegaveis}
+            paredes={exibida.paredes}
             gesto={gesto}
             onMover={mover}
             onGirar={girar}
@@ -517,6 +526,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        laser={laser}
         smooth
         naMao={naMao?.itemId}
         variante="tela"
@@ -683,11 +693,13 @@ function desenhoDaAlca(
   item: CanvasItem,
   tripe: Tripe,
   tela: Tela,
+  /** O pé no teto em que ele pisa, ou zero. Ver `sobeDe`. */
+  sobe = 0,
 ): DesenhoDaAlca | null {
   // O que está perto demais do olho não se projeta: ver `vistoPeloTripe`.
   const naTela = (ponto: Vec) =>
-    profundidadeNoTripe(tripe, ponto) > PERTO_DO_OLHO
-      ? projetarNoTripe(tripe, tela, ponto)
+    profundidadeNoTripe(tripe, ponto, sobe) > PERTO_DO_OLHO
+      ? projetarNoTripe(tripe, tela, ponto, sobe)
       : null;
 
   const contorno: Vec[] = [];
@@ -702,7 +714,7 @@ function desenhoDaAlca(
   } else {
     // A figura em pé é paralela à tela: o contorno é o retângulo dela ali,
     // pelo pé, na escala daquela profundidade e tombado com a rolagem.
-    const figura = figuraNoTripe(tripe, tela, peDe(item));
+    const figura = figuraNoTripe(tripe, tela, peDe(item), sobe);
     if (!figura) return null;
     const largura = item.width * figura.escala;
     const altura = item.height * figura.escala;
@@ -775,6 +787,7 @@ function emTexto(pontos: Vec[]): string {
 function AlcasDeEsguelha({
   camera,
   itens,
+  paredes,
   gesto,
   onMover,
   onGirar,
@@ -783,6 +796,8 @@ function AlcasDeEsguelha({
   camera: CameraAssinavel;
   /** Os tokens deste jogador. Ver `podePegar`. */
   itens: CanvasItem[];
+  /** Para a alça subir com o token que pisa num teto. Ver `sobeDe`. */
+  paredes: Parede[] | undefined;
   /** O token na mão agora, e o que o dedo faz com ele. */
   gesto: { itemId: string; gesto: Gesto } | null;
   onMover: (event: ReactPointerEvent, item: CanvasItem, levar: Levar) => void;
@@ -829,13 +844,17 @@ function AlcasDeEsguelha({
           : null;
       };
     } else {
-      const figura = figuraNoTripe(vista.tripe, vista.tela, pivo);
+      // Pego no teto, o pé anda no plano dele: o dedo segura a figura onde ela
+      // está desenhada. Ver `sobeDe`.
+      const sobe = sobeDe(item, paredes);
+      const figura = figuraNoTripe(vista.tripe, vista.tela, pivo, sobe);
       if (!figura) return;
       const pega = {
         x: (dedo.x - figura.x) / figura.escala,
         y: (dedo.y - figura.y) / figura.escala,
       };
-      pivoSob = (tripe, tela, aqui) => peSobODedo(tripe, tela, aqui, pega);
+      pivoSob = (tripe, tela, aqui) =>
+        peSobODedo(tripe, tela, aqui, pega, sobe);
     }
 
     // Pelo olho de AGORA a cada passo: a câmera pode andar no meio do gesto.
@@ -858,7 +877,7 @@ function AlcasDeEsguelha({
         const grupo = grupos.current.get(item.id);
         if (!grupo) continue;
         const desenho = vista
-          ? desenhoDaAlca(item, vista.tripe, vista.tela)
+          ? desenhoDaAlca(item, vista.tripe, vista.tela, sobeDe(item, paredes))
           : null;
         if (!desenho) {
           grupo.setAttribute("display", "none");

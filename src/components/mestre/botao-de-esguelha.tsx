@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/mestre";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +39,7 @@ export function BotaoDeEsguelha() {
             variant="ghost"
             size="sm"
             aria-pressed={ligado}
-            aria-label={ligado ? "Voltar ao 2D" : "Ver em 2.5D"}
+            aria-label={ligado ? t.palco.voltarAo2d : t.palco.verEm25d}
             className={cn(
               "h-7 gap-1.5 px-2 text-xs",
               ligado && "bg-accent text-accent-foreground",
@@ -46,16 +47,16 @@ export function BotaoDeEsguelha() {
             onClick={alternar}
           >
             <Box className="size-3.5" />
-            2.5D
+            {t.palco.esguelha}
           </Button>
         }
       />
       <TooltipContent>
-        <p className="font-medium">{ligado ? "Voltar ao 2D" : "Ver em 2.5D"}</p>
+        <p className="font-medium">
+          {ligado ? t.palco.voltarAo2d : t.palco.verEm25d}
+        </p>
         <p className="text-muted-foreground max-w-56">
-          {ligado
-            ? "Mapa, luz e paredes se editam no 2D."
-            : "O chão deita e as paredes ficam de pé. Botão direito sobre o mapa gira e inclina. A janela do espectador só fica assim com um tripé no ar."}
+          {ligado ? t.palco.voltarAo2dDica : t.palco.verEm25dDica}
         </p>
       </TooltipContent>
     </Tooltip>

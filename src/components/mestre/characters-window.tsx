@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  FileInput,
+  FileUp,
   FolderPlus,
   MoreVertical,
   Pencil,
@@ -63,6 +65,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
+import { useImportarFichaPdf } from "@/components/mestre/importar-ficha-pdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -81,6 +84,10 @@ import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
 import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { comum } from "@/lib/i18n/comum";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
+import { t } from "@/lib/i18n/personagens";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   achatarArvore,
@@ -91,7 +98,9 @@ import {
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { entregarItem } from "@/lib/mestre/entregar-item";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import {
   createCharacter,
@@ -187,7 +196,7 @@ function CampoDoNome({
       autoFocus
       {...campo}
       className="h-7 flex-1 text-xs"
-      aria-label={`Novo nome de ${personagem.nome}`}
+      aria-label={t.lista.novoNomeDe(personagem.nome)}
     />
   );
 }
@@ -299,8 +308,8 @@ export function CharactersBody() {
     // pasta vazia recém-criada, esperando quem entre nela.
     return (
       [
-        { tag: "Players", secao: "players", personagens: jogadores },
-        { tag: "NPCs", secao: "npcs", personagens: pnjs },
+        { tag: t.lista.players, secao: "players", personagens: jogadores },
+        { tag: t.lista.npcs, secao: "npcs", personagens: pnjs },
       ] as const
     ).filter(
       (grupo) =>
@@ -326,6 +335,34 @@ export function CharactersBody() {
   );
 
   /**
+   * Soltar um ITEM na linha de um personagem o entrega a ele, com a ficha
+   * aberta ou não. A lista é onde o mestre já olha para achar quem é quem, e
+   * abrir a ficha só para ter onde largar a espada seria um passo a mais. Ver
+   * `entregarItem`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore.getState().registrarAlvo("linha-personagem", (solto, destino) => {
+        if (solto.fonte.tipo !== "item" || destino.tipo !== "personagem") return;
+
+        const para = useCharactersStore
+          .getState()
+          .personagens?.find((personagem) => personagem.id === destino.personagemId);
+        if (!para) return;
+
+        void entregarItem(solto.fonte.itemId, para, solto.fonte.personagemId);
+      }),
+    [],
+  );
+
+  /** Quem está debaixo do item arrastado, para a linha dele acender. */
+  const recebendoItem = useTokenDragStore((state) =>
+    state.arrasto?.destino?.tipo === "personagem"
+      ? state.arrasto.destino.personagemId
+      : null,
+  );
+
+  /**
    * Onde o personagem arrastado cai, como `secao:pastaId` -- `secao:` é a raiz
    * dela --, para a borda acender só ali.
    */
@@ -338,7 +375,7 @@ export function CharactersBody() {
   function criarPasta(secao: Secao) {
     useSceneStore
       .getState()
-      .criarPasta(`Pasta ${pastasDe[secao].length + 1}`, undefined, secao);
+      .criarPasta(t.lista.novaPasta(pastasDe[secao].length + 1), undefined, secao);
   }
 
   const abertas = useWindowStore((state) => state.janelas);
@@ -393,13 +430,25 @@ export function CharactersBody() {
       // Ja com a ficha aberta: o gesto seguinte e anexar a ficha dele.
       abrir({ tipo: "personagem", personagemId: novo.id });
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao criar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.criar);
     }
   }
 
   function abrirCriacao() {
     setNomeNovo("");
     setCriando(true);
+  }
+
+  // A ficha em PDF é o outro jeito de nascer: com nome, números e o PDF
+  // anexado. Termina no mesmo lugar do Criar, com a ficha aberta.
+  const importarFicha = useImportarFichaPdf((id) => {
+    recarregar();
+    abrir({ tipo: "personagem", personagemId: id });
+  });
+
+  function importarEmVezDeDigitar() {
+    setCriando(false);
+    importarFicha.iniciar();
   }
 
   /**
@@ -428,7 +477,7 @@ export function CharactersBody() {
         recarregar();
       },
       (cause) =>
-        toast.error(cause instanceof Error ? cause.message : "Falha ao apagar."),
+        toast.error(cause instanceof Error ? cause.message : t.geral.falhas.apagar),
     );
   }
 
@@ -466,13 +515,13 @@ export function CharactersBody() {
    */
   function gravarRenome(personagem: Personagem, nome: string) {
     void renameCharacter(personagem.id, nome).then(recarregar, (cause) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao renomear."),
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.renomear),
     );
   }
 
   function entregar(personagem: Personagem, jogadorId: string) {
     void linkCharacter(jogadorId, personagem.id).then(recarregar, (cause) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao entregar."),
+      toast.error(cause instanceof Error ? cause.message : t.lista.falhaAoEntregar),
     );
   }
 
@@ -508,12 +557,12 @@ export function CharactersBody() {
       <>
         <Item onClick={() => pedirRenome(personagem)}>
           <Pencil />
-          Renomear
+          {t.geral.renomear}
         </Item>
 
         <Item disabled={impedimento !== null} onClick={porNoMapa}>
           <PersonStanding />
-          Pôr no mapa
+          {t.lista.porNoMapa}
         </Item>
 
         {/* Ao lado de "Pôr no mapa" porque os dois falam da peça: um a põe lá,
@@ -540,14 +589,14 @@ export function CharactersBody() {
         <Sub>
           <SubTrigger>
             <UserPlus />
-            Entregar a
+            {t.lista.entregarA}
           </SubTrigger>
           <SubContent>
             {livres.length === 0 ? (
               <Item disabled>
                 {jogadores.length === 0
-                  ? "Ninguém entrou na mesa ainda"
-                  : "Já está com todo mundo"}
+                  ? t.lista.ninguemEntrou
+                  : t.lista.jaEstaComTodos}
               </Item>
             ) : (
               livres.map((jogador) => (
@@ -562,11 +611,18 @@ export function CharactersBody() {
           </SubContent>
         </Sub>
 
+        <Item
+          onClick={() => usePacoteStore.getState().abrirExportar({ personagens: [personagem.id] })}
+        >
+          <FileUp />
+          {textoDoMestre.pacote.exportarItem}
+        </Item>
+
         <Separator />
 
         <Item variant="destructive" onClick={() => setAApagar(personagem)}>
           <Trash2 />
-          Apagar personagem
+          {t.lista.apagarPersonagem}
         </Item>
 
         <ItensDeExtensao
@@ -617,7 +673,11 @@ export function CharactersBody() {
                 // com ou sem ela entra numa pasta e vira menção na nota.
                 "cursor-grab select-none active:cursor-grabbing",
                 noAr === personagem.id && "opacity-40",
+                // Um item está pairando aqui, e soltar o entrega a ele.
+                recebendoItem === personagem.id && "ring-primary bg-primary/10 ring-1",
               )}
+              // A linha é ALVO do item arrastado. Ver `entregarItem`.
+              data-personagem-alvo={personagem.id}
               style={
                 lugar.depth > 0
                   ? { paddingLeft: lugar.depth * RECUO_PX }
@@ -729,7 +789,7 @@ export function CharactersBody() {
                       variant="ghost"
                       size="icon-xs"
                       className="text-muted-foreground shrink-0"
-                      aria-label={`Opções de ${personagem.nome}`}
+                      aria-label={t.lista.opcoesDe(personagem.nome)}
                     >
                       <MoreVertical />
                     </Button>
@@ -774,9 +834,9 @@ export function CharactersBody() {
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
-          placeholder="Buscar personagem ou jogador"
-          rotulo="Buscar personagem ou jogador"
-          dica="Acha pelo nome do personagem, de quem joga e da pasta. Esc limpa."
+          placeholder={t.lista.buscar}
+          rotulo={t.lista.buscar}
+          dica={t.lista.buscarDica}
         />
 
         <Tooltip>
@@ -786,14 +846,14 @@ export function CharactersBody() {
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Criar personagem"
+                aria-label={t.lista.criarPersonagem}
                 onClick={abrirCriacao}
               >
                 <Plus />
               </Button>
             }
           />
-          <TooltipContent>Criar personagem</TooltipContent>
+          <TooltipContent>{t.lista.criarPersonagem}</TooltipContent>
         </Tooltip>
 
         {/* Ao lado do +, e não num menu: o retrato é do personagem, e quem
@@ -806,7 +866,7 @@ export function CharactersBody() {
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Retratos"
+                aria-label={t.lista.retratos}
                 onClick={() => abrir({ tipo: "retratos" })}
               >
                 <SquareUser />
@@ -814,10 +874,8 @@ export function CharactersBody() {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Retratos</p>
-            <p className="text-muted-foreground">
-              Onde cada retrato aparece na mesa, e o que ele mostra.
-            </p>
+            <p className="font-medium">{t.lista.retratos}</p>
+            <p className="text-muted-foreground">{t.lista.retratosDica}</p>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -833,14 +891,14 @@ export function CharactersBody() {
             <div className="flex min-h-0 flex-1 flex-col">
               <ScrollArea className="min-h-0 flex-1">
                 {personagens === null || achados === null ? (
-                  <p className="text-muted-foreground p-3 text-xs">Lendo…</p>
+                  <p className="text-muted-foreground p-3 text-xs">{t.geral.lendo}</p>
                 ) : personagens.length === 0 ? (
                   <PainelVazio conteudo={{ tipo: "personagens" }}>
-                    Crie o primeiro personagem
+                    {t.lista.primeiro}
                   </PainelVazio>
                 ) : achados.length === 0 ? (
                   <p className="text-muted-foreground p-3 text-xs">
-                    Nenhum personagem com esse nome.
+                    {t.lista.nenhumComEsseNome}
                   </p>
                 ) : (
                   <div className="space-y-2 p-2 pt-0">
@@ -867,17 +925,21 @@ export function CharactersBody() {
         <ContextMenuContent>
           <ContextMenuItem onClick={abrirCriacao}>
             <Plus />
-            Criar personagem
+            {t.lista.criarPersonagem}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={importarFicha.iniciar}>
+            <FileInput />
+            {t.importarFicha.acao}
           </ContextMenuItem>
           {/* As duas, porque o vazio não é de seção nenhuma: a pasta tem de
               saber de qual é para nascer no lugar certo. */}
           <ContextMenuItem onClick={() => criarPasta("npcs")}>
             <FolderPlus />
-            Nova pasta em NPCs
+            {t.lista.novaPastaEm(t.lista.npcs)}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => criarPasta("players")}>
             <FolderPlus />
-            Nova pasta em Players
+            {t.lista.novaPastaEm(t.lista.players)}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -892,40 +954,54 @@ export function CharactersBody() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Criar novo personagem</DialogTitle>
+            <DialogTitle>{t.lista.criarNovo}</DialogTitle>
             {/* Diz o que ESTE dialogo espera, e nao o que se pode fazer depois
                 dele: aqui estava a dica de que F2 renomeia, que e verdade e nao
                 e da hora -- quem abriu quer criar, e leu uma instrucao sobre
                 editar. A linha agora responde a unica pergunta da tela: por que
                 ela pede alguma coisa antes de criar. */}
-            <DialogDescription>
-              O novo personagem precisa de um nome primeiro
-            </DialogDescription>
+            <DialogDescription>{t.lista.precisaDeNome}</DialogDescription>
           </DialogHeader>
 
           <Input
             autoFocus
             value={nomeNovo}
             onChange={(event) => setNomeNovo(event.target.value)}
-            placeholder="Nome do personagem"
-            aria-label="Nome do personagem"
+            placeholder={t.ficha.nomeDoPersonagem}
+            aria-label={t.ficha.nomeDoPersonagem}
             onKeyDown={(event) => {
               if (event.key === "Enter") void criar();
             }}
           />
 
           <DialogFooter>
+            {/* A outra porta, no lugar onde se decide criar: quem tem a ficha
+                pronta não precisa digitar o nome que ela ja traz. A esquerda,
+                longe do Criar, porque nao e a acao principal do dialogo. */}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" className="sm:mr-auto" onClick={importarEmVezDeDigitar}>
+                    <FileInput />
+                    {t.importarFicha.acao}
+                  </Button>
+                }
+              />
+              <TooltipContent className="max-w-64">{t.importarFicha.acaoDica}</TooltipContent>
+            </Tooltip>
             <Button variant="ghost" onClick={() => setCriando(false)}>
-              Cancelar
+              {comum.cancelar}
             </Button>
             {/* Desabilitado sem nome: e a mesma regra do Enter, dita antes do
                 clique em vez de depois. */}
             <Button disabled={!nomeNovo.trim()} onClick={() => void criar()}>
-              Criar
+              {t.geral.criar}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {importarFicha.dialogo}
 
       {/* Pergunta antes, como a lixeira da ficha pergunta -- e pelo mesmo
           motivo: apagar cena ou imagem tem desfazer, isto nao tem. O menu de
@@ -939,7 +1015,7 @@ export function CharactersBody() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deseja apagar {aApagar?.nome}?</AlertDialogTitle>
+            <AlertDialogTitle>{t.ficha.desejaApagar(aApagar?.nome ?? "")}</AlertDialogTitle>
             {/* Ver a gemea na ficha: a descricao nasce `<p>`, e a lista
                 precisa de um elemento que aceite `<ul>` dentro. */}
             <AlertDialogDescription render={<div className="space-y-2" />}>
@@ -948,13 +1024,13 @@ export function CharactersBody() {
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (aApagar) apagar(aApagar);
               }}
             >
-              Apagar
+              {t.geral.apagar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1037,14 +1113,14 @@ function SecaoDaLista({
                 variant="ghost"
                 size="icon-xs"
                 className="ml-auto opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
-                aria-label={`Nova pasta em ${tag}`}
+                aria-label={t.lista.novaPastaEm(tag)}
                 onClick={onCriarPasta}
               >
                 <FolderPlus />
               </Button>
             }
           />
-          <TooltipContent>Nova pasta em {tag}</TooltipContent>
+          <TooltipContent>{t.lista.novaPastaEm(tag)}</TooltipContent>
         </Tooltip>
       </h3>
 
@@ -1161,8 +1237,8 @@ function impedimentoDeMapa(
   miniatura: AssetMeta | undefined,
   temMapa: boolean,
 ): string | null {
-  if (!personagem.miniatura) return "Sem miniatura. Anexe uma na ficha dele.";
-  if (!temMapa) return "Nenhum mapa aberto.";
+  if (!personagem.miniatura) return t.lista.semMiniatura;
+  if (!temMapa) return t.lista.nenhumMapa;
 
   // Sem o registro do acervo nao se sabe a proporcao da imagem, e por o token
   // com tamanho chutado o deixa esticado PARA SEMPRE: o gizmo do item trava a
@@ -1172,7 +1248,7 @@ function impedimentoDeMapa(
   // respondeu, ou a imagem foi apagada de la. No segundo, desabilitar e o
   // certo de qualquer jeito: nao ha imagem para por no mapa.
   if (!miniatura) {
-    return "Lendo o acervo. Se insistir, a imagem da miniatura pode ter sido apagada.";
+    return t.lista.lendoAcervo;
   }
 
   return null;
@@ -1195,7 +1271,7 @@ function PorNoMapa({
             variant="ghost"
             size="icon-xs"
             className="text-muted-foreground shrink-0"
-            aria-label={`Por o token de ${personagem.nome} no mapa`}
+            aria-label={t.lista.porTokenDe(personagem.nome)}
             disabled={impedimento !== null}
             onClick={onPor}
           >
@@ -1205,8 +1281,7 @@ function PorNoMapa({
       />
       <TooltipContent>
         <p className="max-w-48">
-          {impedimento ??
-            `Por ${personagem.nome} no centro do mapa. Arraste a linha para escolher o lugar, e role a roda no ar para o tamanho.`}
+          {impedimento ?? t.lista.porNoCentro(personagem.nome)}
         </p>
       </TooltipContent>
     </Tooltip>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 
+import { pintarAlcance } from "@/components/playground/alcance-da-luz";
 import { useDeclarativo } from "@/components/playground/declarativo";
 import {
   corDaArea,
@@ -19,7 +20,6 @@ import {
 } from "@/hooks/use-silhuetas-dos-tokens";
 import {
   alcancaOclusor,
-  anguloEntre,
   caixaDaFonte,
   caixaDaMatriz,
   chaveDasFontes,
@@ -30,25 +30,25 @@ import {
   FORCA_DO_LADO_ESCURO,
   FORCA_DA_SOMBRA_DA_FIGURA,
   fontesDaCena,
-  inicioDoCone,
   ladoDaLuz,
   matrizDaFigura,
   oclusoresDosItens,
   retanguloDaSilhueta,
   sombraDoToken,
   limitarEscuridao,
-  paradasDaLuz,
-  paradasDoCone,
+  luzEntre,
+  luzMudou,
   segmentosDasParedes,
   sementeDaLuz,
   tremorSoDe,
-  umbrasDaLuz,
   donoDaFonte,
   type Afim,
   type CaixaDaLuz,
   type FonteDeLuz,
   type Oclusor,
 } from "@/lib/geometry/luz";
+import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
+import { folhasNaCaixa, segmentosDasPortas } from "@/lib/geometry/porta";
 import { deitarDaFigura, type Segmento } from "@/lib/geometry/sombra";
 import type { Variante } from "@/lib/vault/assets";
 import {
@@ -59,6 +59,7 @@ import {
   type EfeitoDaLuz,
   type Luz,
   type Parede,
+  type Porta,
   type SceneGrid,
 } from "@/types/scene";
 
@@ -163,6 +164,8 @@ export function LuzLayer({
   items,
   luzes,
   paredes,
+  portas,
+  portaNaMao,
   escuridao,
   corDoEscuro,
   variant,
@@ -177,6 +180,14 @@ export function LuzLayer({
   items: CanvasItem[];
   luzes?: Luz[];
   paredes?: Parede[];
+  /**
+   * As portas, à parte das paredes: a folha gira no gesto, e misturada a elas
+   * trocaria a lista de segmentos a cada quadro -- o que refaz TODAS as luzes.
+   * À parte, ela só refaz as que alcança. Ver `formarLuzes`.
+   */
+  portas?: Porta[];
+  /** A porta que a mão do mestre gira: vai direto. Ver `usePortasNoGiro`. */
+  portaNaMao?: string;
   escuridao?: number;
   /** Ausente = o breu. Ver `Scene.corDoEscuro`. */
   corDoEscuro?: string;
@@ -255,6 +266,13 @@ export function LuzLayer({
   // Parede não se mexe quando um token anda: o quadro do arrasto não
   // recalcula segmento nenhum.
   const segmentos = useMemo(() => segmentosDasParedes(paredes), [paredes]);
+  // A folha gira até a abertura nova; só as luzes que ela alcança se formam
+  // de novo a cada quadro do giro. Ver `formarLuzes`.
+  const portasNoGiro = usePortasNoGiro(portas, portaNaMao);
+  const folhas = useMemo(
+    () => segmentosDasPortas(portasNoGiro),
+    [portasNoGiro],
+  );
 
   // As silhuetas só de quem alguma luz alcança: o resto do mapa não precisa
   // de forno nenhum para isto.
@@ -290,6 +308,7 @@ export function LuzLayer({
           silhuetas={silhuetas}
           chave={chave}
           segmentos={segmentos}
+          folhas={folhas}
           escuro={escuro}
           cor={cor}
           smooth={smooth}
@@ -306,6 +325,7 @@ function CanvasDaLuz({
   silhuetas,
   chave,
   segmentos,
+  folhas,
   escuro,
   cor,
   smooth,
@@ -321,6 +341,8 @@ function CanvasDaLuz({
    */
   chave: string;
   segmentos: Segmento[];
+  /** As folhas das portas. Ver `LuzLayer`. */
+  folhas: Segmento[];
   escuro: number;
   /** A cor do escuro, já validada. Ver `corDoEscuroDe`. */
   cor: string;
@@ -349,7 +371,7 @@ function CanvasDaLuz({
 
     let prontas: LuzPronta[] = [];
     const formar = (quais: FonteDeLuz[], corpos: Oclusor[]) => {
-      prontas = formarLuzes(quais, corpos, silhuetas, segmentos, papel);
+      prontas = formarLuzes(quais, corpos, silhuetas, segmentos, folhas, papel);
       desenhadas.current = new Map(quais.map((fonte) => [fonte.id, fonte]));
       tapados.current = new Map(corpos.map((corpo) => [corpo.id, corpo]));
     };
@@ -363,7 +385,7 @@ function CanvasDaLuz({
     const partida = desenhadas.current;
     const partidaDosCorpos = tapados.current;
     const desliza = (fonte: FonteDeLuz) =>
-      donoDaFonte(fonte) !== naMao && mudou(partida.get(fonte.id), fonte);
+      donoDaFonte(fonte) !== naMao && luzMudou(partida.get(fonte.id), fonte);
     const deslizaCorpo = (corpo: Oclusor) =>
       corpo.id !== naMao && corpoMudou(partidaDosCorpos.get(corpo.id), corpo);
     const anda =
@@ -386,7 +408,7 @@ function CanvasDaLuz({
         const t = Math.min(1, (agora - inicio) / DURACAO_DA_CHEGADA);
         formar(
           fontes.map((fonte) =>
-            donoDaFonte(fonte) === naMao ? fonte : entre(partida.get(fonte.id), fonte, t),
+            donoDaFonte(fonte) === naMao ? fonte : luzEntre(partida.get(fonte.id), fonte, t),
           ),
           oclusores.map((corpo) =>
             corpo.id === naMao
@@ -409,7 +431,7 @@ function CanvasDaLuz({
 
     return () => cancelAnimationFrame(quadro);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a chave É a lista: ela muda quando, e só quando, alguma fonte muda
-  }, [chave, silhuetas, segmentos, escuro, cor, smooth, naMao]);
+  }, [chave, silhuetas, segmentos, folhas, escuro, cor, smooth, naMao]);
 
   return (
     <canvas
@@ -427,19 +449,6 @@ function menosMovimento(): boolean {
   return (
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
-
-/** A luz andou desde o último desenho? Uma que acabou de acender não anda. */
-function mudou(antes: FonteDeLuz | undefined, agora: FonteDeLuz): boolean {
-  return (
-    antes !== undefined &&
-    (antes.x !== agora.x ||
-      antes.y !== agora.y ||
-      antes.raio !== agora.raio ||
-      antes.raioIntenso !== agora.raioIntenso ||
-      antes.cone?.angulo !== agora.cone?.angulo ||
-      antes.cone?.abertura !== agora.cone?.abertura)
   );
 }
 
@@ -473,36 +482,6 @@ function corpoEntre(
       x: depois.caixa.x + (x - depois.x),
       y: depois.caixa.y + (y - depois.y),
     },
-  };
-}
-
-/** A luz no meio do caminho entre dois desenhos. `t` de 0 a 1. */
-function entre(
-  antes: FonteDeLuz | undefined,
-  depois: FonteDeLuz,
-  t: number,
-): FonteDeLuz {
-  if (!antes) return depois;
-
-  return {
-    ...depois,
-    x: antes.x + (depois.x - antes.x) * t,
-    y: antes.y + (depois.y - antes.y) * t,
-    raio: antes.raio + (depois.raio - antes.raio) * t,
-    raioIntenso:
-      antes.raioIntenso + (depois.raioIntenso - antes.raioIntenso) * t,
-    // O cone gira pela volta curta. O que acabou de virar cone, ou de deixar
-    // de ser, chega de uma vez: não há meio caminho entre um e outro.
-    ...(antes.cone && depois.cone
-      ? {
-          cone: {
-            angulo: anguloEntre(antes.cone.angulo, depois.cone.angulo, t),
-            abertura:
-              antes.cone.abertura +
-              (depois.cone.abertura - antes.cone.abertura) * t,
-          },
-        }
-      : {}),
   };
 }
 
@@ -556,6 +535,10 @@ type LuzPronta = PapeisDaLuz & {
  * chamas e um andando: 3,8 fps formando todas a cada quadro do deslize, 17
  * formando só a dele e as das tochas cujos tokens ele tapa.
  *
+ * As portas entram pela mesma porta dos tokens, e não pela das paredes: a
+ * folha que gira só refaz a luz em cuja caixa ela cai. Abrir a porta da cela
+ * não forma de novo as tochas do outro lado do mapa.
+ *
  * O rascunho de uma luz que saiu da cena -- removida ou desligada -- sai
  * junto: sem isso, cada tocha cravada e removida numa sessão deixaria dois
  * canvas para trás.
@@ -565,6 +548,7 @@ function formarLuzes(
   oclusores: ReadonlyArray<Oclusor>,
   silhuetas: ReadonlyMap<string, SilhuetaPronta>,
   segmentos: ReadonlyArray<Segmento>,
+  folhas: ReadonlyArray<Segmento>,
   papel: Rascunhos,
 ): LuzPronta[] {
   const prontas: LuzPronta[] = [];
@@ -587,14 +571,16 @@ function formarLuzes(
     }
     vistas.add(fonte.id);
 
-    const assinatura = assinaturaDaLuz(fonte, oclusores);
+    const portas = folhasNaCaixa(caixa, folhas);
+    const assinatura =
+      assinaturaDaLuz(fonte, oclusores) + assinaturaDasFolhas(portas);
     if (!mesmoMundo || papeis.assinatura !== assinatura) {
       luzRecortada(
         papeis.forma,
         papel.vulto,
         fonte,
         caixa,
-        segmentos,
+        portas.length > 0 ? [...segmentos, ...portas] : segmentos,
         oclusores,
         silhuetas,
       );
@@ -615,6 +601,15 @@ function formarLuzes(
   }
 
   return prontas;
+}
+
+/** As folhas de porta que caem numa luz, na forma de um pedaço da assinatura dela. */
+function assinaturaDasFolhas(folhas: ReadonlyArray<Segmento>): string {
+  let assinatura = "";
+  for (const folha of folhas) {
+    assinatura += `#${folha.x1},${folha.y1},${folha.x2},${folha.y2}`;
+  }
+  return assinatura;
 }
 
 /**
@@ -718,70 +713,7 @@ function luzRecortada(
   silhuetas: ReadonlyMap<string, SilhuetaPronta>,
 ) {
   const contexto = prepararRascunho(rascunho, caixa);
-
-  if (fonte.forma && fonte.forma.length >= 3) {
-    luzDaForma(contexto, fonte, fonte.forma);
-  } else {
-    const degrade = contexto.createRadialGradient(
-      fonte.x,
-      fonte.y,
-      0,
-      fonte.x,
-      fonte.y,
-      fonte.raio,
-    );
-    // O raio forte e a área, e a intensidade multiplicando tudo: a brasa fraca
-    // é fraca de ponta a ponta, e o véu da cor, que sai desta forma, enfraquece
-    // junto. Ver `paradasDaLuz`.
-    for (const [onde, forca] of paradasDaLuz(fonte)) {
-      degrade.addColorStop(onde, `rgba(255,255,255,${forca})`);
-    }
-
-    contexto.fillStyle = degrade;
-    contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
-  }
-
-  // O cone: um degradê que dá a volta no centro, inteiro dentro do facho e
-  // zero fora, multiplicado pela forma. Depois as paredes e os tokens tapam
-  // o que sobrou, como no círculo -- a ordem não importa, as três contas
-  // multiplicam. Ver `paradasDoCone`.
-  if (fonte.cone) {
-    const mascara = contexto.createConicGradient(
-      inicioDoCone(fonte.cone),
-      fonte.x,
-      fonte.y,
-    );
-    for (const [onde, forca] of paradasDoCone(fonte.cone.abertura)) {
-      mascara.addColorStop(onde, `rgba(0,0,0,${forca})`);
-    }
-    contexto.globalCompositeOperation = "destination-in";
-    contexto.fillStyle = mascara;
-    contexto.fillRect(caixa.x, caixa.y, caixa.width, caixa.height);
-    contexto.globalCompositeOperation = "source-over";
-  }
-
-  // A luz com forma alcança do contorno, e não do meio: as paredes que ela
-  // pega são as até o canto mais longe da caixa. Ver `alcanceDaForma`.
-  const umbras = umbrasDaLuz(
-    segmentos,
-    fonte.forma ? { ...fonte, raio: alcanceDaForma(fonte, fonte.forma) } : fonte,
-  );
-  if (umbras.length > 0) {
-    // Um caminho só, com todas as sombras: todas no mesmo sentido de giro,
-    // então o cruzamento de duas não abre buraco. Ver `umbraDoSegmento`.
-    contexto.globalCompositeOperation = "destination-out";
-    contexto.beginPath();
-    for (const umbra of umbras) {
-      const [primeiro, ...resto] = umbra;
-      if (!primeiro) continue;
-      contexto.moveTo(primeiro.x, primeiro.y);
-      for (const ponto of resto) contexto.lineTo(ponto.x, ponto.y);
-      contexto.closePath();
-    }
-    contexto.fillStyle = "#000";
-    contexto.fill();
-    contexto.globalCompositeOperation = "source-over";
-  }
+  pintarAlcance(contexto, fonte, caixa, segmentos, RESOLUCAO);
 
   // As sombras dos tokens. A SILHUETA quando o forno já a entregou -- a mesma
   // figura que o sol deita, agora deitada para longe desta luz -- e, enquanto
@@ -1044,53 +976,6 @@ function prepararRascunhoDoVulto(
   );
 
   return { contexto, largura, altura };
-}
-
-/**
- * A luz com a FORMA de uma área: o contorno cheio, e a queda para fora em
- * `raio` -- o chão em chamas clareia em retângulo, em círculo, em laço, e não
- * em manchas redondas.
- *
- * A queda é a SOMBRA desfocada do contorno, pintada uma vez quando a luz se
- * forma (e não a cada quadro: o laço da animação só compõe os rascunhos). O
- * contorno é desenhado longe, fora do rascunho, e só a sombra dele cai no
- * lugar. O `shadowBlur` e o deslocamento são em pixels do canvas, que a
- * transformação não escala: daí o `RESOLUCAO`.
- */
-function luzDaForma(
-  contexto: CanvasRenderingContext2D,
-  fonte: FonteDeLuz,
-  forma: ReadonlyArray<{ x: number; y: number }>,
-) {
-  const contorno = (dx: number) => {
-    contexto.beginPath();
-    forma.forEach((ponto, i) =>
-      i === 0 ? contexto.moveTo(ponto.x + dx, ponto.y) : contexto.lineTo(ponto.x + dx, ponto.y),
-    );
-    contexto.closePath();
-  };
-  const longe = SCENE_WIDTH * 4;
-
-  // A sombra DUAS vezes, e não o contorno cheio por cima: cheio, ele fazia um
-  // degrau na borda -- inteiro dentro, metade logo fora -- e a área virava um
-  // vidro aceso. Duas sombras chegam à força cheia no miolo e caem sem degrau.
-  contexto.save();
-  contexto.shadowColor = `rgba(255,255,255,${fonte.intensidade})`;
-  contexto.shadowBlur = fonte.raio * RESOLUCAO;
-  contexto.shadowOffsetX = longe * RESOLUCAO;
-  contexto.fillStyle = "#fff";
-  for (let vez = 0; vez < 2; vez++) {
-    contorno(-longe);
-    contexto.fill();
-  }
-  contexto.restore();
-}
-
-/** Até onde a luz com forma alcança, a partir do meio: o contorno mais longe, mais o raio. */
-function alcanceDaForma(fonte: FonteDeLuz, forma: ReadonlyArray<{ x: number; y: number }>): number {
-  return (
-    Math.max(...forma.map((ponto) => Math.hypot(ponto.x - fonte.x, ponto.y - fonte.y))) + fonte.raio
-  );
 }
 
 function prepararRascunho(

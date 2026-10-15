@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useDeclarativo } from "@/components/playground/declarativo";
 import { Button } from "@/components/ui/button";
 import { iconeDeExtensao } from "@/lib/extensoes/icones";
+import { t } from "@/lib/i18n/jogador";
 import { dadosPublicos, enviarAcao } from "@/lib/player/extensoes";
 import { lerSecaoPublica, type SecaoPublica } from "@/lib/player/secao-publica";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
@@ -71,15 +72,12 @@ export function BlocosDePlugin({
 
   if (ligadas.length === 0) return null;
 
-  // UM item da grade do cartão, com as seções empilhadas dentro: cada seção
-  // como item próprio quebraria a conta de linhas que o retrato atravessa.
+  // UM item da pilha do cartão, com as seções empilhadas dentro. Sem moldura,
+  // como as dos medidores e dos atributos: o título já separa uma da outra.
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-3", className)}>
       {ligadas.map(({ extensaoId, secao }) => (
-        <section
-          key={extensaoId}
-          className="bg-muted/20 space-y-1.5 rounded-lg border p-2"
-        >
+        <section key={extensaoId} className="space-y-1.5">
           <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
             {secao.titulo ?? extensaoId}
           </p>
@@ -147,7 +145,7 @@ function Botao({
       onClick={() => {
         setEnviando(true);
         onClick()
-          .catch((causa) => toast.error(causa instanceof Error ? causa.message : "A mesa não recebeu."))
+          .catch((causa) => toast.error(causa instanceof Error ? causa.message : t.plugins.naoRecebeu))
           .finally(() => setEnviando(false));
       }}
     >

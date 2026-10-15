@@ -1,12 +1,18 @@
 "use client";
 
-import { AssetLibrary } from "@/components/mestre/asset-library";
 import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
+import {
+  ApagarItemNoTopo,
+  FundoDoItem,
+  ItemBody,
+  TransmitirItemNoTopo,
+} from "@/components/mestre/item-window";
+import { ItensBody } from "@/components/mestre/itens-window";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
@@ -16,6 +22,8 @@ import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
+import { t } from "@/lib/i18n/mestre";
+import { useItensStore } from "@/lib/store/use-itens-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useMemo } from "react";
 
@@ -56,17 +64,19 @@ export type Rotulo = { titulo: string; subtitulo?: string };
  * uma lista de livros abertos é a Estante, não um menu de painéis.
  */
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
-  { conteudo: { tipo: "cenas" }, titulo: "Cenas" },
-  { conteudo: { tipo: "quadros" }, titulo: "Arquivos" },
-  { conteudo: { tipo: "retratos" }, titulo: "Retratos" },
-  { conteudo: { tipo: "camadas" }, titulo: "Camadas" },
-  { conteudo: { tipo: "imagens" }, titulo: "Biblioteca" },
-  { conteudo: { tipo: "sons" }, titulo: "Sons" },
-  { conteudo: { tipo: "personagens" }, titulo: "Personagens" },
-  { conteudo: { tipo: "rolagens" }, titulo: "Rolagens" },
-  { conteudo: { tipo: "chat" }, titulo: "Chat" },
-  { conteudo: { tipo: "estante" }, titulo: "Estante" },
-  { conteudo: { tipo: "miniplayer" }, titulo: "Mesa" },
+  { conteudo: { tipo: "cenas" }, titulo: t.janelas.cenas },
+  { conteudo: { tipo: "quadros" }, titulo: t.janelas.arquivos },
+  { conteudo: { tipo: "retratos" }, titulo: t.janelas.retratos },
+  { conteudo: { tipo: "camadas" }, titulo: t.janelas.camadas },
+  { conteudo: { tipo: "sons" }, titulo: t.janelas.sons },
+  { conteudo: { tipo: "personagens" }, titulo: t.janelas.personagens },
+  // Logo depois de Personagens: é para eles que os itens são arrastados, e
+  // quem abre um costuma querer o outro ao lado.
+  { conteudo: { tipo: "itens" }, titulo: t.janelas.itens },
+  { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
+  { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
+  { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
+  { conteudo: { tipo: "miniplayer" }, titulo: t.janelas.mesa },
 ];
 
 /**
@@ -114,10 +124,32 @@ export function useTelas(): Array<{
 export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
   const { personagens } = useCharacters();
   const extensoes = useExtensoesStore((state) => state.extensoes);
+  const nomeDoItem = useItensStore((state) =>
+    conteudo.tipo === "item"
+      ? state.itens?.find((item) => item.id === conteudo.itemId)?.nome
+      : undefined,
+  );
 
   switch (conteudo.tipo) {
     case "personagens":
-      return { titulo: "Personagens", subtitulo: "Ficha, miniaturas e donos" };
+      return {
+        titulo: t.janelas.personagens,
+        subtitulo: t.janelas.personagensSub,
+      };
+    case "itens":
+      return { titulo: t.janelas.itens, subtitulo: t.janelas.itensSub };
+    case "item": {
+      const dono = conteudo.personagemId
+        ? personagens?.find((atual) => atual.id === conteudo.personagemId)?.nome
+        : undefined;
+
+      // "Item" enquanto o catálogo não chegou, pela razão da ficha: título que
+      // aparece depois faz a aba pular.
+      return {
+        titulo: nomeDoItem ?? t.janelas.item,
+        subtitulo: dono ? t.janelas.itemNaMochila(dono) : t.janelas.itemSub,
+      };
+    }
     case "personagem": {
       const nome = personagens?.find(
         (atual) => atual.id === conteudo.personagemId,
@@ -125,50 +157,51 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
 
       // "Personagem" enquanto o índice não chegou, e não vazio: título que
       // aparece depois faz a largura da aba pular na frente de quem olha.
-      return { titulo: nome ?? "Personagem", subtitulo: "Ficha do personagem" };
+      return {
+        titulo: nome ?? t.janelas.personagem,
+        subtitulo: t.janelas.personagemSub,
+      };
     }
     case "anexo":
       return {
         titulo: conteudo.anexo.arquivo,
         subtitulo:
           conteudo.anexo.autor === "jogador"
-            ? "Anexo do jogador"
-            : "Anexo do mestre",
+            ? t.janelas.anexoDoJogador
+            : t.janelas.anexoDoMestre,
       };
     case "asset":
-      return { titulo: conteudo.nome, subtitulo: "Imagem do acervo" };
+      return { titulo: conteudo.nome, subtitulo: t.janelas.imagemDoAcervo };
     case "configuracao":
       return {
-        titulo: "Configuração da campanha",
-        subtitulo: "O que vale para a campanha inteira",
+        titulo: t.janelas.configuracao,
+        subtitulo: t.janelas.configuracaoSub,
       };
     case "estante":
       return {
-        titulo: "Estante",
-        subtitulo: "Os livros de regras desta máquina",
+        titulo: t.janelas.estante,
+        subtitulo: t.janelas.estanteSub,
       };
     case "livro":
-      return { titulo: conteudo.titulo, subtitulo: "Livro de regras" };
+      return { titulo: conteudo.titulo, subtitulo: t.janelas.livroSub };
     case "miniplayer":
-      return { titulo: "Mesa", subtitulo: "O que a mesa está vendo" };
+      return { titulo: t.janelas.mesa, subtitulo: t.janelas.mesaSub };
     case "rolagens":
-      return { titulo: "Rolagens", subtitulo: "O que a mesa tirou" };
+      return { titulo: t.janelas.rolagens, subtitulo: t.janelas.rolagensSub };
     case "chat":
-      return { titulo: "Chat", subtitulo: "A conversa da campanha" };
+      return { titulo: t.janelas.chat, subtitulo: t.janelas.chatSub };
     case "cenas":
       // "Cenas" e não "Mapas": o painel passou a ter as duas naturezas, e o
       // nome antigo escondia os fundos atrás da palavra do vizinho.
-      return { titulo: "Cenas", subtitulo: "Mapas e fundos da campanha" };
+      return { titulo: t.janelas.cenas, subtitulo: t.janelas.cenasSub };
     case "quadros":
-      return { titulo: "Arquivos", subtitulo: "Quadros e notas da campanha" };
+      return { titulo: t.janelas.arquivos, subtitulo: t.janelas.arquivosSub };
     case "retratos":
-      return { titulo: "Retratos" };
-    case "imagens":
-      return { titulo: "Biblioteca", subtitulo: "Imagens e arquivos da campanha" };
+      return { titulo: t.janelas.retratos };
     case "sons":
-      return { titulo: "Sons" };
+      return { titulo: t.janelas.sons };
     case "camadas":
-      return { titulo: "Camadas" };
+      return { titulo: t.janelas.camadas };
     case "extensao": {
       const painel = extensoes
         .find((extensao) => extensao.id === conteudo.extensaoId)
@@ -180,10 +213,50 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       // a esta janela em particular ("Edgar"), e o manifesto só sabe o do
       // painel ("Ficha").
       return {
-        titulo: conteudo.titulo ?? painel?.titulo ?? "Plugin",
+        titulo: conteudo.titulo ?? painel?.titulo ?? t.janelas.plugin,
         subtitulo: conteudo.titulo ? painel?.titulo : (painel?.subtitulo ?? undefined),
       };
     }
+  }
+}
+
+/**
+ * Os botões que a tela põe no TOPO da moldura, ao lado do fechar.
+ *
+ * Na moldura, e não dentro do corpo, porque são ações sobre a tela inteira e
+ * que se procuram onde se procura o fechar. Hoje é só o item: o "mostrar na
+ * mesa" e o apagar, que saíram do pé do card -- e com eles o pé inteiro.
+ *
+ * A janela flutuante os põe no cabeçalho dela; o grupo atracado, na tira de
+ * abas, ao lado do `+`, para a aba ativa.
+ */
+export function AcoesDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
+  switch (conteudo.tipo) {
+    case "item":
+      return (
+        <>
+          <TransmitirItemNoTopo itemId={conteudo.itemId} personagemId={conteudo.personagemId} />
+          <ApagarItemNoTopo itemId={conteudo.itemId} personagemId={conteudo.personagemId} />
+        </>
+      );
+    default:
+      return null;
+  }
+}
+
+/**
+ * O fundo que a tela põe ATRÁS do cabeçalho da moldura flutuante.
+ *
+ * Hoje é só o item: a imagem dele desfocada, a mesma do alto do card, para a
+ * janela ter a cor do item também no cabeçalho -- e, recolhida, ser
+ * reconhecida por ela, quando o cabeçalho é tudo o que sobra.
+ */
+export function FundoDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
+  switch (conteudo.tipo) {
+    case "item":
+      return <FundoDoItem itemId={conteudo.itemId} />;
+    default:
+      return null;
   }
 }
 
@@ -205,6 +278,10 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     // cresceria com a lista ao lado -- o quadro ficaria do tamanho do elenco.
     case "retratos":
       return 440;
+    // O catálogo cresce como o chat: uma campanha longa junta centenas de
+    // itens, e crescer com eles cobriria o palco na primeira abertura.
+    case "itens":
+      return 480;
     default:
       return undefined;
   }
@@ -220,9 +297,17 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
 export function larguraPadrao(conteudo: ConteudoJanela): number {
   switch (conteudo.tipo) {
     case "personagens":
+    case "itens":
       return 256;
+    // Larga o bastante para a imagem do item ser vista, e não um ícone, e
+    // estreita o bastante para caber ao lado da ficha de quem o carrega.
+    case "item":
+      return 400;
+    // Larga o bastante para as duas colunas da aba Ficha: as linhas de medidor
+    // e de condição guardam lugar para o olho e a lixeira mesmo escondidos, e
+    // abaixo disto o nome de cada uma virava duas letras.
     case "personagem":
-      return 512;
+      return 720;
     case "anexo":
     case "asset":
       return 560;
@@ -311,7 +396,6 @@ const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
   "cenas",
   "quadros",
   "retratos",
-  "imagens",
   "sons",
   "camadas",
 ]);
@@ -323,6 +407,10 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
   switch (conteudo.tipo) {
     case "personagens":
       return <CharactersBody />;
+    case "itens":
+      return <ItensBody />;
+    case "item":
+      return <ItemBody itemId={conteudo.itemId} personagemId={conteudo.personagemId} />;
     case "personagem":
       return <CharacterBody personagemId={conteudo.personagemId} />;
     case "anexo":
@@ -365,10 +453,6 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
       return <RetratosWindow />;
-    // Acervo é da campanha, não da cena: lista sem cena nenhuma, e a cena
-    // aberta só decide se o `+` de "pôr na cena" aparece.
-    case "imagens":
-      return <AssetLibrary scene={scene} />;
     // Som também não: a trilha é da sessão.
     case "sons":
       return <AudioLibrary />;
@@ -384,7 +468,7 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
         <LayerList scene={scene} />
       ) : (
         <p className="text-muted-foreground p-3 text-xs">
-          Nenhuma camada encontrada na tela.
+          {t.janelas.nenhumaCamada}
         </p>
       );
   }

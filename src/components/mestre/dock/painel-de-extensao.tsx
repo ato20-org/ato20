@@ -5,6 +5,8 @@ import { Puzzle } from "lucide-react";
 
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
+import { t } from "@/lib/i18n/mestre";
+import { rico } from "@/lib/i18n/rico";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
@@ -43,21 +45,19 @@ export function PainelDeExtensao({
   }, [extensao]);
 
   if (!extensao) {
-    return <Aviso>Este plugin não está mais instalado.</Aviso>;
+    return <Aviso>{t.dock.pluginNaoInstalado}</Aviso>;
   }
 
   if (!extensao.habilitada) {
     return (
-      <Aviso>
-        {extensao.nome} está desligado. Ligue em Configurações → Plugins.
-      </Aviso>
+      <Aviso>{t.dock.pluginDesligado(extensao.nome)}</Aviso>
     );
   }
 
   if (carga?.estado === "falhou") {
     return (
       <Aviso>
-        {extensao.nome} falhou ao carregar.
+        {t.dock.pluginFalhou(extensao.nome)}
         {/* O motivo por extenso, e em monoespaçada: é mensagem de erro de
             JavaScript, e quem vai consertar é quem escreveu o plugin -- essa
             pessoa precisa do texto exato, não de um resumo. */}
@@ -75,12 +75,15 @@ export function PainelDeExtensao({
     if (carga?.estado === "pronta") {
       return (
         <Aviso>
-          {extensao.nome} não registrou o painel <code>{painelId}</code>.
+          {rico(t.dock.pluginSemPainel, {
+            nome: extensao.nome,
+            painel: <code>{painelId}</code>,
+          })}
         </Aviso>
       );
     }
 
-    return <Aviso>Carregando {extensao.nome}…</Aviso>;
+    return <Aviso>{t.dock.pluginCarregando(extensao.nome)}</Aviso>;
   }
 
   // `createElement` e não `<Corpo />`: a referência vem do registro, onde foi

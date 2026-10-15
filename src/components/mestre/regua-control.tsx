@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/ferramentas";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { CORES_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -30,23 +31,23 @@ const FORMAS: Record<
   { rotulo: string; dica: string; icone: LucideIcon }
 > = {
   linha: {
-    rotulo: "Régua",
-    dica: "Quanto tem daqui até ali.",
+    rotulo: t.regua.linha,
+    dica: t.regua.linhaDica,
     icone: Minus,
   },
   circulo: {
-    rotulo: "Círculo",
-    dica: "Raio e área: explosão, aura, alcance.",
+    rotulo: t.regua.circulo,
+    dica: t.regua.circuloDica,
     icone: Circle,
   },
   cone: {
-    rotulo: "Cone",
-    dica: "Alcance e abertura: sopro, lanterna.",
+    rotulo: t.regua.cone,
+    dica: t.regua.coneDica,
     icone: Triangle,
   },
   retangulo: {
-    rotulo: "Retângulo",
-    dica: "Lados e área: sala, zona.",
+    rotulo: t.regua.retangulo,
+    dica: t.regua.retanguloDica,
     icone: RectangleHorizontal,
   },
 };
@@ -87,7 +88,11 @@ export function ReguaControl({
           render={
             <PopoverTrigger
               render={
-                <Button variant="ghost" size="icon-sm" aria-label="Forma e cor">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t.regua.formaECor}
+                >
                   <Atual style={{ color: cor }} />
                 </Button>
               }
@@ -95,13 +100,15 @@ export function ReguaControl({
           }
         />
         <TooltipContent>
-          <p>Forma e cor do medidor</p>
+          <p>{t.regua.formaECorDoMedidor}</p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-56 space-y-3 p-3" side={lado}>
         <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">Forma</span>
+          <span className="text-muted-foreground text-[10px]">
+            {t.regua.forma}
+          </span>
 
           <div className="flex items-center gap-1">
             {FORMAS_DE_REGUA.map((opcao) => {
@@ -133,14 +140,16 @@ export function ReguaControl({
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">Cor</span>
+          <span className="text-muted-foreground text-[10px]">
+            {t.regua.cor}
+          </span>
 
           <div className="flex items-center gap-1.5">
             {CORES_LAPIS.map((opcao) => (
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Cor ${opcao}`}
+                aria-label={t.regua.corOpcao(opcao)}
                 aria-pressed={opcao === cor}
                 className={cn(
                   "size-6 rounded-full border transition-transform",
@@ -170,7 +179,7 @@ export function ReguaControl({
             }
           >
             <Trash2 />
-            Apagar os {colocados.length} medidores
+            {t.regua.apagarMedidores(colocados.length)}
           </Button>
         ) : null}
       </PopoverContent>

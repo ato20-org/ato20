@@ -7,6 +7,7 @@ import { DeclarativoProvider } from "@/components/playground/declarativo";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { PalcoSoTela } from "@/components/playground/scene-stage";
 import type { EfeitoPedido } from "@/lib/condicao";
+import { t } from "@/lib/i18n/palco";
 import { encaixarRetratos, lerPedidoDeRetratos, type RetratoParaKit } from "@/lib/kit-de-retratos";
 import { buscarDeclarativo, DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -116,7 +117,7 @@ export function KitDeRetratos({ codigo, encaixar }: { codigo: string | null; enc
         {/* Um retrato torto some com o resto até o próximo pedido, e o kit
             continua ouvindo. Sem aviso: numa live, o aviso seria pior que o
             buraco. */}
-        <BarreiraDeExtensao nome="Kit de retratos" chave={String(pedidos)} reserva={null}>
+        <BarreiraDeExtensao nome={t.kit.retratos} chave={String(pedidos)} reserva={null}>
           <PortraitLayer
             portraits={arrumados}
             variant="mesa"

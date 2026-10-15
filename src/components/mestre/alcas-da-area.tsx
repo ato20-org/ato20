@@ -10,6 +10,7 @@ import {
   pontosNaCaixa,
 } from "@/lib/geometry/area-escondida";
 import { rotateVec, type Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 /**
  * O que estas alças precisam saber: a caixa e os vértices dentro dela.
  *
@@ -201,7 +202,7 @@ export function AlcasDaArea({
           <button
             key={`meio-${indice}`}
             type="button"
-            aria-label={`Acrescentar vértice no lado ${indice + 1}`}
+            aria-label={t.alcasDaArea.acrescentarVertice(indice + 1)}
             className="bg-background/70 pointer-events-auto absolute touch-none rounded-full opacity-60 hover:opacity-100"
             style={{
               left: meio.x,
@@ -227,7 +228,7 @@ export function AlcasDaArea({
         <button
           key={indice}
           type="button"
-          aria-label={`Vértice ${indice + 1}. Alt+clique remove.`}
+          aria-label={t.alcasDaArea.vertice(indice + 1)}
           className="bg-background pointer-events-auto absolute touch-none rounded-full"
           style={{
             left: ponto.x,

@@ -1,0 +1,40 @@
+{
+  "aceitas": [
+    { "texto": "2d4", "dados": [[2, 4]], "modificador": 0 },
+    { "texto": "1d20+5", "dados": [[1, 20]], "modificador": 5 },
+    { "texto": "1d20+5-2*5/2", "dados": [[1, 20]], "modificador": 0 },
+    { "texto": "d20 - 2", "dados": [[1, 20]], "modificador": -2 },
+    { "texto": "2d6+1d4+3", "dados": [[2, 6], [1, 4]], "modificador": 3 },
+    { "texto": "(3+1)*2+1d6", "dados": [[1, 6]], "modificador": 8 },
+    { "texto": "1d20+7/2", "dados": [[1, 20]], "modificador": 3 },
+    { "texto": "1d20-7/2", "dados": [[1, 20]], "modificador": -3 },
+    { "texto": "1d20+(0-7)/2", "dados": [[1, 20]], "modificador": -4 },
+    { "texto": "2 D 10 + 4 × 1 ÷ 2", "dados": [[2, 10]], "modificador": 2 },
+    { "texto": "1d20 − 1", "dados": [[1, 20]], "modificador": -1 },
+    { "texto": "-3+1d8", "dados": [[1, 8]], "modificador": -3 },
+    { "texto": "1d100", "dados": [[1, 100]], "modificador": 0 },
+    { "texto": "2d20+5", "dados": [[2, 20]], "modificador": 5 },
+    { "texto": "20d6", "dados": [[20, 6]], "modificador": 0 },
+    { "texto": "1d20+99999999999999999999*0", "dados": [[1, 20]], "modificador": 0 }
+  ],
+  "recusadas": [
+    { "texto": "", "erro": "vazia" },
+    { "texto": "   ", "erro": "vazia" },
+    { "texto": "5+3", "erro": "sem-dado" },
+    { "texto": "1d20*2", "erro": "dado-fora-da-soma" },
+    { "texto": "2d10×1", "erro": "dado-fora-da-soma" },
+    { "texto": "1d20-1d4", "erro": "dado-fora-da-soma" },
+    { "texto": "-1d6", "erro": "dado-fora-da-soma" },
+    { "texto": "(1d20+5)*2", "erro": "dado-fora-da-soma" },
+    { "texto": "1d7", "erro": "faces" },
+    { "texto": "21d6", "erro": "muitos-dados" },
+    { "texto": "11d6+10d4", "erro": "muitos-dados" },
+    { "texto": "1d20+5/0", "erro": "divisao-por-zero" },
+    { "texto": "1d20+99999", "erro": "modificador-grande" },
+    { "texto": "1d20+", "erro": "sintaxe" },
+    { "texto": "1d20 + abc", "erro": "sintaxe" },
+    { "texto": "(1d20+5", "erro": "sintaxe" },
+    { "texto": "1d20+5)", "erro": "sintaxe" },
+    { "texto": "0d6", "erro": "sintaxe" }
+  ]
+}

@@ -5,6 +5,7 @@ import { createElement, useEffect } from "react";
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
+import { t as textos } from "@/lib/i18n/mestre";
 import {
   chaveContribuicao,
   type Extensao,
@@ -77,10 +78,10 @@ function SecaoDeExtensao({
       ) : (
         <p className="text-muted-foreground text-xs">
           {carga?.estado === "falhou"
-            ? `${extensao.nome} falhou ao carregar.`
+            ? textos.carregador.falhouSecao(extensao.nome)
             : carga?.estado === "pronta"
-              ? `${extensao.nome} não registrou a seção ${secao.id}.`
-              : `Carregando ${extensao.nome}…`}
+              ? textos.carregador.semSecao(extensao.nome, secao.id)
+              : textos.carregador.carregando(extensao.nome)}
         </p>
       )}
     </SecaoFicha>

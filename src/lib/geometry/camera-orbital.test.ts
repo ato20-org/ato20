@@ -11,6 +11,8 @@ import {
   curvaBezier,
   daTelaAoChao,
   daTelaAoChaoNoTripe,
+  daTelaAoPlano,
+  deitadoNoTripe,
   doOlhoAoMundo,
   focalDaLente,
   misturarTripe,
@@ -101,6 +103,21 @@ describe("projetar e daTelaAoChao", () => {
         const noChao = daTelaAoChao(cam, TELA, pixel);
         if (!noChao) continue;
         const deVolta = projetar(cam, TELA, noChao)!;
+
+        expect(deVolta.x).toBeCloseTo(pixel.x, 6);
+        expect(deVolta.y).toBeCloseTo(pixel.y, 6);
+      }
+    }
+  });
+
+  it("no plano erguido também: o topo de uma parede volta ao mesmo pixel", () => {
+    for (const vista of VISTAS) {
+      const cam = camera(vista);
+
+      for (const pixel of PIXELS) {
+        const noTopo = daTelaAoPlano(cam, TELA, pixel, 80);
+        if (!noTopo) continue;
+        const deVolta = projetar(cam, TELA, noTopo, 80)!;
 
         expect(deVolta.x).toBeCloseTo(pixel.x, 6);
         expect(deVolta.y).toBeCloseTo(pixel.y, 6);
@@ -457,6 +474,20 @@ describe("o tripé no mundo", () => {
     }
   });
 
+  it("com o pé num teto, o dedo segura a figura no plano dele", () => {
+    const pe = { x: 600, y: 400 };
+    const pega = { x: 4, y: -40 };
+    const figura = figuraNoTripe(tripe, TELA, pe, 60)!;
+    const dedo = {
+      x: figura.x + pega.x * figura.escala,
+      y: figura.y + pega.y * figura.escala,
+    };
+    const achado = peSobODedo(tripe, TELA, dedo, pega, 60)!;
+
+    expect(achado.x).toBeCloseTo(pe.x, 2);
+    expect(achado.y).toBeCloseTo(pe.y, 2);
+  });
+
   it("acima do horizonte não há chão", () => {
     // Quase deitado: o alto da tela olha por cima do horizonte.
     const deitado = { ...tripe, inclinacao: 85, rolagem: 0 };
@@ -541,6 +572,12 @@ describe("cartazNaTela", () => {
 
     expect(caixa.x + caixa.largura / 2).toBeCloseTo(noChao.x, 6);
     expect(caixa.y + caixa.altura).toBeCloseTo(noChao.y, 6);
+
+    // Erguido num teto, o pé cai onde `projetar` põe o ponto naquela altura.
+    const noTeto = cartazNaTela(camera, TELA, pe, 40, 60, 80)!;
+    const emCima = projetar(camera, TELA, pe, 80)!;
+    expect(noTeto.x + noTeto.largura / 2).toBeCloseTo(emCima.x, 6);
+    expect(noTeto.y + noTeto.altura).toBeCloseTo(emCima.y, 6);
   });
 
   it("atrás do olho não tem caixa", () => {
@@ -584,5 +621,81 @@ describe("figuraNoTripe", () => {
       TELA,
     );
     expect(figuraNoTripe(tripe, TELA, { x: 960, y: 1040 })).toBeNull();
+  });
+});
+
+describe("deitadoNoTripe", () => {
+  const tripe = tripeDaOrbital(
+    { alvo: { x: 960, y: 540 }, zoom: 6, giro: 23, inclinacao: 58 },
+    TELA,
+  );
+
+  /** O ponto da caixa pela matriz, como o CSS a aplica: colunas, e o divisor. */
+  function pelaMatriz(matriz: string, x: number, y: number) {
+    const m = matriz.slice("matrix3d(".length, -1).split(",").map(Number);
+    const w = m[3]! * x + m[7]! * y + m[15]!;
+    return {
+      x: (m[0]! * x + m[4]! * y + m[12]!) / w,
+      y: (m[1]! * x + m[5]! * y + m[13]!) / w,
+    };
+  }
+
+  it("leva os cantos da caixa aos cantos do chão projetados", () => {
+    // Um token girado, como `cantosDeitado` devolve: a ordem é a da caixa.
+    const cantos = [
+      { x: 950, y: 520 },
+      { x: 968, y: 527 },
+      { x: 961, y: 545 },
+      { x: 943, y: 538 },
+    ];
+    const deitado = deitadoNoTripe(tripe, TELA, cantos)!;
+    const { largura, altura } = deitado;
+    const daCaixa = [
+      [0, 0],
+      [largura, 0],
+      [largura, altura],
+      [0, altura],
+    ] as const;
+
+    cantos.forEach((canto, i) => {
+      const esperado = projetarNoTripe(tripe, TELA, canto)!;
+      const [x, y] = daCaixa[i]!;
+      const achado = pelaMatriz(deitado.matriz, x, y);
+      expect(achado.x).toBeCloseTo(esperado.x, 4);
+      expect(achado.y).toBeCloseTo(esperado.y, 4);
+    });
+  });
+
+  it("a caixa tem o tamanho em que a figura aparece", () => {
+    const cantos = [
+      { x: 955, y: 535 },
+      { x: 965, y: 535 },
+      { x: 965, y: 545 },
+      { x: 955, y: 545 },
+    ];
+    const deitado = deitadoNoTripe(tripe, TELA, cantos)!;
+    const a = projetarNoTripe(tripe, TELA, cantos[0]!)!;
+    const b = projetarNoTripe(tripe, TELA, cantos[1]!)!;
+
+    // Dez unidades a 6x de zoom: perto de sessenta pixels, e não dez.
+    expect(deitado.largura).toBeGreaterThan(40);
+    expect(Math.abs(deitado.largura - Math.hypot(b.x - a.x, b.y - a.y))).toBeLessThan(
+      deitado.largura * 0.2,
+    );
+  });
+
+  it("com um canto atrás do olho não tem caixa", () => {
+    const perto = tripeDaOrbital(
+      { alvo: { x: 960, y: 540 }, zoom: 3, giro: 0, inclinacao: 52 },
+      TELA,
+    );
+    expect(
+      deitadoNoTripe(perto, TELA, [
+        { x: 950, y: 1030 },
+        { x: 970, y: 1030 },
+        { x: 970, y: 1050 },
+        { x: 950, y: 1050 },
+      ]),
+    ).toBeNull();
   });
 });

@@ -15,6 +15,7 @@ import {
   RadioTower,
   Trash2,
   TriangleAlert,
+  UserRound,
   X,
   Zap,
 } from "lucide-react";
@@ -45,8 +46,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -59,6 +60,9 @@ import { useCharacters } from "@/hooks/use-characters";
 import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { fonteDaUrl, urlDaFonte } from "@/lib/extensoes/fontes";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
+import { rico } from "@/lib/i18n/rico";
 import { usePaginaVivaSuportada } from "@/lib/motor";
 import { MINIATURA } from "@/lib/miniatura";
 import {
@@ -76,15 +80,23 @@ import { PlayerDialog } from "@/components/mestre/player-dialog";
 import { useRecorte } from "@/components/mestre/recorte-de-imagem";
 import { presente } from "@/hooks/use-players";
 import { desde } from "@/lib/tempo";
-import { InventarioPersonagem } from "./inventario-personagem";
-import { PersonagemDaFichaContext, SecaoFicha } from "./secao-ficha";
-import { SecoesDeExtensao } from "@/components/mestre/secoes-de-extensao";
+import {
+  InventarioPersonagem,
+  useInventarioDaFicha,
+  useRecebendoItem,
+} from "./inventario-personagem";
+import {
+  ModoDaSecaoContext,
+  PersonagemDaFichaContext,
+  SecaoFicha,
+} from "./secao-ficha";
+import { Substituto } from "@/components/mestre/substituto";
+import { abaLembrada, lembrarAba, type AbaDaFicha } from "@/lib/aba-da-ficha";
 import { formatBytes } from "@/lib/player/session";
 import {
   attachToCharacter,
   characterAttachmentUrl,
   characterAttachments,
-  characterNote,
   characterPlayers,
   detachFromCharacter,
   linkCharacter,
@@ -92,10 +104,10 @@ import {
   renameCharacter,
   preencherCampoComArquivo,
   setCharacterCampo,
-  setCharacterNote,
   unlinkCharacter,
 } from "@/lib/vault/characters";
-import type { Player } from "@/lib/vault/players";
+import { playerNotes, type Player } from "@/lib/vault/players";
+import type { Nota } from "@/types/caderno";
 import { cn } from "@/lib/utils";
 import type {
   AnexoPersonagem,
@@ -103,9 +115,8 @@ import type {
   Personagem,
 } from "@/types/character";
 import { doJogador } from "@/types/character";
-import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
-import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
-import { MedidoresPersonagem } from "@/components/mestre/medidores-personagem";
+import { AbaFicha, BarraDosGrupos, useBarraAoLado } from "@/components/mestre/aba-ficha";
+import { useDetalhesDaFicha } from "@/components/mestre/detalhes-personagem";
 
 const ICONE: Record<AttachmentKind, typeof File> = {
   image: FileImage,
@@ -147,7 +158,7 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
   }, [personagens, personagem, fecharJanela, chave]);
 
   if (!personagem) {
-    return <p className="text-muted-foreground p-4 text-xs">Lendo…</p>;
+    return <p className="text-muted-foreground p-4 text-xs">{t.geral.lendo}</p>;
   }
 
   return (
@@ -219,7 +230,7 @@ function Ficha({
 
         setAnexos([]);
         toast.error(
-          cause instanceof Error ? cause.message : "Falha ao ler os arquivos.",
+          cause instanceof Error ? cause.message : t.ficha.falhaAoLerArquivos,
         );
       },
     );
@@ -256,7 +267,7 @@ function Ficha({
       for (const motivo of resultado.recusados) toast.error(motivo);
       if (resultado.aceitos.length > 0) relerAnexos();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.anexar);
     } finally {
       setAnexando(false);
     }
@@ -266,148 +277,184 @@ function Ficha({
     .filter((jogador) => donos.includes(jogador.id))
     .map((jogador) => jogador.nome);
 
+  const inventario = useInventarioDaFicha(personagem, relerAnexos);
+  const detalhes = useDetalhesDaFicha(personagem.id);
+  const recebendo = useRecebendoItem(personagem.id);
+  const soltos = soltosDe(anexos, personagem.ficha);
+
+  // Lida no primeiro render, e não num efeito: ver `abaLembrada`.
+  const [aba, setAba] = useState<AbaDaFicha>(() => abaLembrada(personagem.id));
+
+  const raizRef = useRef<HTMLDivElement>(null);
+  const barraAoLado = useBarraAoLado(raizRef);
+
   return (
-    <ScrollArea className="min-h-0 flex-1">
-      {/* `@container`, e nao breakpoint de tela: esta janela flutua, atraca numa
-          coluna e redimensiona na mao. A largura dela nao tem relacao nenhuma
-          com a da tela, e um `md:` aqui quebraria em duas colunas uma ficha de
-          360 pixels so porque o monitor e grande. */}
-      <div className="@container/ficha space-y-4 p-3">
-        <PersonagemDaFichaContext.Provider value={personagem.id}>
-        <Identidade
-          personagem={personagem}
-          donos={donosNomes}
-          onChanged={onChanged}
-          onRemoved={onRemoved}
-          onAbrirImagem={abrirImagem}
-        />
-
-        {/* Duas colunas a partir de 560: abaixo disso os quadros do inventario
-            cairiam para 50 pixels, e a grade de cinco deixaria de ser legivel.
-            Acima, e a largura que a janela larga finalmente usa -- antes ela so
-            esticava o texto das mesmas linhas empilhadas. */}
-        <div className="grid gap-4 @[560px]/ficha:grid-cols-2 @[560px]/ficha:gap-x-6">
-          <div className="min-w-0 space-y-4">
-            {/* Os dois: preencher a ficha muda o ÍNDICE (o campo) e a pasta de
-                anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
-                ficava dizendo "nada anexado" com a ficha já posta. */}
-            <SecaoFicha secao="campos" titulo="Campos do personagem">
-              <Slots
-                personagem={personagem}
-                onChanged={() => {
-                  onChanged();
-                  relerAnexos();
-                }}
-                onAbrirAnexo={abrirAnexo}
-                onAbrirImagem={abrirImagem}
-              />
-            </SecaoFicha>
-
-            {/* Logo abaixo dos campos, e não numa coluna própria: a aparência é
-                o que aqueles campos mostram, e a distância entre "escolhi
-                Ferido" e "troquei a miniatura" é a distância entre os dois
-                gestos que essa troca sempre pede. */}
-            <AparenciasPersonagem
-              personagem={personagem}
-              onChanged={onChanged}
-            />
-
-            {/* Depois das aparências e antes dos arquivos: os três blocos de
-                cima são o personagem em cena -- a cara dele, o estado dele --,
-                e os de baixo são o que está guardado. Regua muda no meio de
-                uma cena, e arquivo não. */}
-            <MedidoresPersonagem
-              personagem={personagem}
-              onChanged={onChanged}
-            />
-
-            {/* Logo abaixo dos medidores: os dois são o ESTADO do personagem
-                em cena, e é o que o mestre mexe no meio do combate. */}
-            <CondicoesPersonagem
-              personagem={personagem}
-              onChanged={onChanged}
-            />
-
-            {/* As seções que os plugins trouxeram, depois do estado e antes
-                dos arquivos: uma aba de habilidades é do personagem em cena,
-                como medidor e condição. Sem plugin, nada. */}
-            <SecoesDeExtensao personagemId={personagem.id} />
-
-            <Files
-              personagemId={personagem.id}
-              anexos={anexos}
-              ficha={personagem.ficha}
-              anexando={anexando}
-              onAnexar={() => void anexar()}
-              onAbrir={abrirAnexo}
-              onRemover={async (anexo) => {
-                await detachFromCharacter(
-                  personagem.id,
-                  anexo.autor,
-                  anexo.arquivo,
-                );
-                relerAnexos();
-                // Apagar o anexo da ficha limpa o CAMPO ficha do lado nativo —
-                // ver `remove_anexo`. Sem reler o índice, a linha da ficha
-                // continuaria mostrando o nome de um arquivo que saiu do disco.
-                onChanged();
-              }}
-            />
-          </div>
-
-          <div className="min-w-0 space-y-4">
-            {/* O inventário abre a coluna da direita porque é o bloco que mais
-                pede largura: a grade é de cinco, e cada coluna a mais de janela
-                vira quadro maior. Recarrega os anexos junto porque a imagem de
-                item do jogador é um anexo — e a lista de arquivos subtrai
-                justamente os que o inventário usa. */}
-            <InventarioPersonagem
-              personagem={personagem}
-              onChangedAnexos={relerAnexos}
-            />
-
-            {/* Os dois de novo: vincular muda quem são os donos DESTA ficha, que
-                é leitura local, e muda o nome que a lista de personagens mostra
-                embaixo do nome dele — outra janela. Ver `useCharacterOwners`. */}
-            <Owners
+    // `@container`, e nao breakpoint de tela: esta janela flutua, atraca numa
+    // coluna e redimensiona na mao. A largura dela nao tem relacao nenhuma com
+    // a da tela, e um `md:` aqui quebraria em duas colunas uma ficha de 360
+    // pixels so porque o monitor e grande.
+    //
+    // Larga, duas colunas: o personagem (cabecalho e abas) a esquerda, e a
+    // barra dos grupos de detalhes na altura toda a direita, a vista em
+    // qualquer aba. Estreita, a barra desce para o fim da rolagem da aba que
+    // estiver aberta. Ver `useBarraAoLado`.
+    <div ref={raizRef} className="@container/ficha flex min-h-0 flex-1">
+      <PersonagemDaFichaContext.Provider value={personagem.id}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <Cabecalho
               personagem={personagem}
               jogadores={jogadores}
               donos={donos}
-              onChanged={() => {
+              donosNomes={donosNomes}
+              onChanged={onChanged}
+              // Os dois: preencher um campo muda o ÍNDICE (o campo) e a pasta de
+              // anexos (o arquivo). Chamando só `onChanged`, a lista de arquivos
+              // ficava dizendo "nada anexado" com a ficha já posta.
+              onCamposChanged={() => {
+                onChanged();
+                relerAnexos();
+              }}
+              // Os dois de novo: vincular muda quem são os donos DESTA ficha, que
+              // é leitura local, e muda o nome que a lista de personagens mostra
+              // embaixo do nome dele — outra janela. Ver `useCharacterOwners`.
+              onDonosChanged={() => {
                 relerAnexos();
                 onChanged();
               }}
+              onRemoved={onRemoved}
+              onAbrirAnexo={abrirAnexo}
+              onAbrirImagem={abrirImagem}
             />
-          </div>
+
+          {/* `gap-0`: o `Tabs` separa lista e painel por padrão, e aqui a lista
+              é um cabeçalho colado no conteúdo. */}
+          <Tabs
+            value={aba}
+            onValueChange={(valor) => {
+              setAba(valor as AbaDaFicha);
+              lembrarAba(personagem.id, valor as AbaDaFicha);
+            }}
+            className="min-h-0 flex-1 gap-0"
+          >
+            <TabsList
+              variant="line"
+              aria-label={t.ficha.abas.rotulo}
+              className="h-auto w-full shrink-0 justify-start gap-1 rounded-none border-b px-2 py-1"
+            >
+              <TabsTrigger value="ficha" className="flex-none">
+                {t.ficha.abas.ficha}
+              </TabsTrigger>
+
+              {/* O rótulo também é ALVO: um item largado aqui entra no
+                  inventário com a aba fechada. Sem isso, passar um item do
+                  Edgar para a Mira pedia abrir antes o inventário dela, e a
+                  aba que estava aberta era quase sempre a outra. */}
+              <TabsTrigger
+                value="inventario"
+                data-inventario
+                data-personagem-id={personagem.id}
+                className={cn(
+                  "flex-none",
+                  recebendo && "ring-primary text-foreground ring-2",
+                )}
+              >
+                {t.inventario.titulo}
+                <Contagem quantos={inventario.itens?.length} />
+              </TabsTrigger>
+
+              <TabsTrigger value="arquivos" className="flex-none">
+                {t.ficha.arquivos}
+                <Contagem quantos={soltos.length} />
+              </TabsTrigger>
+            </TabsList>
+
+            {/* A rolagem é das abas, e o cabeçalho fica parado: quem é o
+                personagem não sai de vista ao descer até as condições. Cada
+                aba desmonta ao sair, como a seção fechada: o inventário e as
+                notas não montam numa ficha aberta para mexer na vida. A barra
+                dos grupos, sem lugar ao lado, vem no fim dela, em qualquer
+                aba. */}
+            <ScrollArea className="min-h-0 flex-1">
+              <TabsContent value="ficha">
+                <AbaFicha personagem={personagem} onChanged={onChanged} />
+              </TabsContent>
+
+              <TabsContent value="inventario" className="p-3">
+                <ModoDaSecaoContext.Provider value="aba">
+                  <InventarioPersonagem
+                    personagem={personagem}
+                    inventario={inventario}
+                  />
+                </ModoDaSecaoContext.Provider>
+              </TabsContent>
+
+              <TabsContent value="arquivos" className="p-3">
+                <ModoDaSecaoContext.Provider value="aba">
+                  <Files
+                    personagemId={personagem.id}
+                    soltos={soltos}
+                    anexando={anexando}
+                    onAnexar={() => void anexar()}
+                    onAbrir={abrirAnexo}
+                    onRemover={async (anexo) => {
+                      await detachFromCharacter(
+                        personagem.id,
+                        anexo.autor,
+                        anexo.arquivo,
+                      );
+                      relerAnexos();
+                      // Apagar o anexo da ficha limpa o CAMPO ficha do lado
+                      // nativo — ver `remove_anexo`. Sem reler o índice, a linha
+                      // da ficha continuaria mostrando o nome de um arquivo que
+                      // saiu do disco.
+                      onChanged();
+                    }}
+                  />
+                </ModoDaSecaoContext.Provider>
+              </TabsContent>
+
+              {barraAoLado ? null : (
+                <BarraDosGrupos personagem={personagem} detalhes={detalhes} onChanged={onChanged} />
+              )}
+            </ScrollArea>
+          </Tabs>
         </div>
-        </PersonagemDaFichaContext.Provider>
-      </div>
-    </ScrollArea>
+
+        {barraAoLado ? (
+          <BarraDosGrupos personagem={personagem} detalhes={detalhes} aoLado onChanged={onChanged} />
+        ) : null}
+      </PersonagemDaFichaContext.Provider>
+    </div>
+  );
+}
+
+/** A contagem no rótulo de uma aba. Zero some, como no título das seções. */
+function Contagem({ quantos }: { quantos: number | undefined }) {
+  if (!quantos) return null;
+
+  return (
+    <span className="text-muted-foreground font-normal tabular-nums">
+      ({quantos})
+    </span>
   );
 }
 
 /**
- * O que existe ALÉM dos campos: anexos soltos, dos dois autores.
+ * Os anexos que não são o campo ficha.
  *
- * A ficha sai daqui de propósito. Ela é anexo como qualquer outro no disco, mas
- * na tela é um CAMPO — tem linha própria, com miniatura, transmitir e trocar.
- * Aparecendo nos dois lugares, a mesma ficha ficava com dois nomes de gesto:
- * "Trocar" ali e um X aqui, um que limpa o campo e outro que apaga o arquivo.
- * O que sobra nesta lista é o que ninguém nomeou — o mapa da masmorra que o
- * mestre anexou, o desenho que o jogador mandou.
+ * Só a do mestre: um "ficha-edgar.jpg" que o JOGADOR mandou é outro arquivo,
+ * noutra pasta, e não é o campo. Ver `AnexoAutor`. Fora de `Files` porque a
+ * aba conta os mesmos que a lista mostra, com a lista desmontada.
  */
-/**
- * Quem o personagem e: retrato, nome, lixeira, e quem joga com ele.
- *
- * No topo e fora das secoes colapsaveis, porque e a unica parte que nao faz
- * sentido fechar -- uma ficha sem nome nem rosto seria uma janela em branco
- * dentro de uma janela com titulo.
- *
- * O retrato veio para ca de dentro dos campos. Ele continua editavel la, no
- * quadro dele; aqui ele so identifica, e e por isso que o quadrado nao tem
- * botao nenhum: dois lugares para trocar a mesma imagem foi o problema que a
- * lista de arquivos e a linha da ficha ja tinham -- ver `Files`.
- */
+function soltosDe(
+  anexos: AnexoPersonagem[],
+  ficha: string | undefined,
+): AnexoPersonagem[] {
+  return anexos.filter(
+    (anexo) => !(anexo.autor === "mestre" && anexo.arquivo === ficha),
+  );
+}
+
 /**
  * O que a pessoa perde ao apagar um personagem.
  *
@@ -428,7 +475,9 @@ export function OQueVaiJunto() {
   return (
     <>
       <p>
-        Ao apagar você vai <strong className="text-foreground">remover</strong>
+        {rico(t.ficha.aoApagar, {
+          remover: <strong className="text-foreground">{t.ficha.remover}</strong>,
+        })}
       </p>
 
       {/* Substantivo solto, sem artigo e sem oracao. A lista responde "o que
@@ -437,37 +486,62 @@ export function OQueVaiJunto() {
           quatro linhas para ler quatro coisas. Aqui o olho bate na primeira
           palavra de cada uma e ja sabe. */}
       <ul className="text-foreground marker:text-muted-foreground/40 list-disc space-y-0.5 pl-4">
-        <li>Ficha</li>
-        <li>Arquivos em anexo</li>
-        <li>Arquivos do jogador</li>
-        <li>Anotações</li>
+        <li>{t.ficha.vaiJunto.ficha}</li>
+        <li>{t.ficha.vaiJunto.anexos}</li>
+        <li>{t.ficha.vaiJunto.doJogador}</li>
+        <li>{t.ficha.vaiJunto.anotacoes}</li>
       </ul>
 
       {/* O que NAO vai junto, e a pergunta que se faz no meio da sessao: o
           token ja posto no mapa nao some com o personagem. Fica fora da lista
           de proposito -- a lista e do que se perde. */}
-      <p>O token no mapa continua lá, como imagem.</p>
+      <p>{t.ficha.tokenContinua}</p>
 
       <p className="text-foreground flex items-center gap-1.5 font-medium">
         <TriangleAlert className="size-4 shrink-0 text-amber-400" aria-hidden />
-        Não tem como desfazer isso
+        {t.ficha.semVolta}
       </p>
     </>
   );
 }
 
-function Identidade({
+/**
+ * Quem o personagem é, e o que se faz com ele inteiro.
+ *
+ * No topo e fora das abas, porque é a única parte que não faz sentido esconder
+ * -- uma ficha sem nome nem rosto seria uma janela em branco dentro de uma
+ * janela com título. E parado: as abas rolam por baixo dele.
+ *
+ * Os três campos (ficha, retrato, miniatura) moram num popover, e não numa
+ * seção: são arquivos que se escolhem uma vez por personagem, e ocupavam o
+ * topo da ficha em toda abertura. Aqui ficam as miniaturas, que dizem de
+ * relance se o campo está posto, e o clique nelas abre os quadros de sempre.
+ * Quem joga com ele vai para o 👤 pelo mesmo motivo: vincula-se uma vez, e a
+ * resposta para "de quem é este?" continua escrita embaixo do nome.
+ */
+function Cabecalho({
   personagem,
+  jogadores,
   donos,
+  donosNomes,
   onChanged,
+  onCamposChanged,
+  onDonosChanged,
   onRemoved,
+  onAbrirAnexo,
   onAbrirImagem,
 }: {
   personagem: Personagem;
-  /** Os nomes de quem joga com ele, para a linha embaixo do nome. */
+  jogadores: Player[];
+  /** Os ids de quem joga com ele. */
   donos: string[];
+  /** Os nomes deles, para a linha embaixo do nome. */
+  donosNomes: string[];
   onChanged: () => void;
+  onCamposChanged: () => void;
+  onDonosChanged: () => void;
   onRemoved: () => void;
+  onAbrirAnexo: (anexo: AnexoPersonagem) => void;
   onAbrirImagem: (assetId: string, nome: string) => void;
 }) {
   const retrato = useAssetUrl(personagem.retrato);
@@ -476,8 +550,14 @@ function Identidade({
   /** Saiu pelo Escape: o `blur` que vem em seguida não deve gravar. */
   const desistiu = useRef(false);
 
+  /**
+   * O popover dos campos, controlado porque o 📄 também o abre: sem ficha
+   * posta, o ícone não tem o que abrir, e o lugar de anexar é o quadro dela.
+   */
+  const [camposAbertos, setCamposAbertos] = useState(false);
+
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex shrink-0 items-start gap-3 p-3 pb-2">
       {personagem.retrato ? (
         <Thumb
           url={retrato}
@@ -485,182 +565,383 @@ function Identidade({
           onAbrir={() =>
             onAbrirImagem(personagem.retrato as string, personagem.nome)
           }
-          className="size-16 rounded-md"
+          className="size-20 rounded-lg"
         />
       ) : (
         // Sem retrato, um quadrado vazio seria indistinguível de um que ainda
         // está carregando. O ícone diz que não há imagem, e a borda tracejada
         // repete a mesma pista do quadro vazio dos campos.
-        <span className="bg-muted/40 flex size-16 shrink-0 items-center justify-center rounded-md border border-dashed">
-          <FileImage className="text-muted-foreground/40 size-6" aria-hidden />
+        <span className="bg-muted/40 flex size-20 shrink-0 items-center justify-center rounded-lg border border-dashed">
+          <FileImage className="text-muted-foreground/40 size-7" aria-hidden />
         </span>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center gap-2">
-          {editando ? (
-            <Input
-              className="h-8 min-w-0 flex-1 text-sm font-medium"
-              defaultValue={personagem.nome}
-              aria-label="Nome do personagem"
-              // O campo nasce com o foco e com o texto todo marcado: quem
-              // clicou no lápis quer escrever, e não posicionar cursor primeiro.
-              autoFocus
-              onFocus={(event) => event.target.select()}
-              onKeyDown={(event) => {
-                // Enter grava pelo mesmo caminho do `blur`, em vez de duplicar
-                // a gravação aqui: uma escrita só, um lugar só para errar.
-                if (event.key === "Enter") event.currentTarget.blur();
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            {editando ? (
+              <Input
+                className="h-8 text-base font-semibold"
+                defaultValue={personagem.nome}
+                aria-label={t.ficha.nomeDoPersonagem}
+                // O campo nasce com o foco e com o texto todo marcado: quem
+                // clicou no lápis quer escrever, e não posicionar cursor primeiro.
+                autoFocus
+                onFocus={(event) => event.target.select()}
+                onKeyDown={(event) => {
+                  // Enter grava pelo mesmo caminho do `blur`, em vez de
+                  // duplicar a gravação aqui: uma escrita só, um lugar só para
+                  // errar.
+                  if (event.key === "Enter") event.currentTarget.blur();
 
-                if (event.key === "Escape") {
-                  desistiu.current = true;
-                  event.currentTarget.blur();
-                }
-              }}
-              // No `blur`, e não a cada tecla: renomear reescreve o índice
-              // inteiro, e gravar por tecla o regravaria a cada letra.
-              onBlur={(event) => {
-                setEditando(false);
+                  if (event.key === "Escape") {
+                    desistiu.current = true;
+                    event.currentTarget.blur();
+                  }
+                }}
+                // No `blur`, e não a cada tecla: renomear reescreve o índice
+                // inteiro, e gravar por tecla o regravaria a cada letra.
+                onBlur={(event) => {
+                  setEditando(false);
 
-                // Escape sai sem gravar. A marca é um `ref` e não estado
-                // porque ela é lida no `blur` que acontece no mesmo gesto --
-                // um `setState` aqui só chegaria no render seguinte.
-                if (desistiu.current) {
-                  desistiu.current = false;
-                  return;
-                }
+                  // Escape sai sem gravar. A marca é um `ref` e não estado
+                  // porque ela é lida no `blur` que acontece no mesmo gesto --
+                  // um `setState` aqui só chegaria no render seguinte.
+                  if (desistiu.current) {
+                    desistiu.current = false;
+                    return;
+                  }
 
-                const nome = event.target.value.trim();
-                if (!nome || nome === personagem.nome) return;
+                  const nome = event.target.value.trim();
+                  if (!nome || nome === personagem.nome) return;
 
-                void renameCharacter(personagem.id, nome).then(onChanged);
-              }}
-            />
-          ) : (
-            <>
-              {/* Texto, e não um campo sempre aberto. Um `input` em volta do
-                  nome diz "isto está para ser escrito", e o que o mestre faz
-                  com esta linha quase sempre é LER — ele nomeia o personagem
-                  uma vez. O lápis é o que separa as duas coisas. */}
+                  void renameCharacter(personagem.id, nome).then(onChanged);
+                }}
+              />
+            ) : (
+              // Texto, e não um campo sempre aberto. Um `input` em volta do
+              // nome diz "isto está para ser escrito", e o que o mestre faz com
+              // esta linha quase sempre é LER — ele nomeia o personagem uma
+              // vez. O lápis é o que separa as duas coisas.
               <h2
-                className="min-w-0 flex-1 truncate text-sm font-medium"
+                className="truncate text-base leading-8 font-semibold"
                 title={personagem.nome}
               >
                 {personagem.nome}
               </h2>
+            )}
 
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Renomear ${personagem.nome}`}
-                onClick={() => setEditando(true)}
-              >
-                <Pencil />
-              </Button>
-            </>
-          )}
+            {/* Quem joga com ele, logo embaixo do nome: e a pergunta que se
+                faz olhando a ficha de longe -- "de quem e este?". No 👤 fica a
+                lista que se EDITA; aqui e so o que ela diz. */}
+            <p className="text-muted-foreground truncate text-xs">
+              {donosNomes.length === 0 ? t.ficha.semDono : donosNomes.join(", ")}
+            </p>
+          </div>
 
-          {/* Pergunta antes, e é a única ação do aplicativo que pergunta.
-              Apagar cena ou imagem tem desfazer; isto não tem: o personagem sai
-              do índice, a pasta dele sai do disco com a ficha e os anexos
-              dentro, e as notas que os jogadores escreveram vão com ele. E a
-              lixeira fica a um clique do campo de nome, que é onde a mão está
-              logo depois de renomear. */}
-          <AlertDialog>
-            {/* Sem tooltip: ele avisava o que a lixeira apaga, e agora é o
-                próprio diálogo que faz isso -- com mais espaço e no momento em
-                que a informação importa. Dois textos dizendo a mesma coisa, um
-                no hover e um depois do clique, era um deles a mais. */}
-            <AlertDialogTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Apagar este personagem"
-                >
-                  <Trash2 />
-                </Button>
-              }
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Donos
+              personagem={personagem}
+              jogadores={jogadores}
+              donos={donos}
+              onChanged={onDonosChanged}
             />
 
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Deseja apagar {personagem.nome}?
-                </AlertDialogTitle>
-                {/* `render` de `div`: a descricao nasce `<p>`, e uma `<ul>`
-                    dentro de um `<p>` o navegador fecha sozinho antes da
-                    lista -- o texto saia do lugar sem erro nenhum no console. */}
-                <AlertDialogDescription render={<div className="space-y-2" />}>
-                  <OQueVaiJunto />
-                </AlertDialogDescription>
-              </AlertDialogHeader>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t.ficha.renomear(personagem.nome)}
+              onClick={() => setEditando(true)}
+            >
+              <Pencil />
+            </Button>
 
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => {
-                    void removeCharacter(personagem.id).then(
-                      onRemoved,
-                      (cause) =>
-                        toast.error(
-                          cause instanceof Error
-                            ? cause.message
-                            : "Falha ao apagar.",
-                        ),
-                    );
-                  }}
-                >
-                  Apagar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            <AbrirFicha
+              ficha={personagem.ficha}
+              onAbrir={onAbrirAnexo}
+              onAnexar={() => setCamposAbertos(true)}
+            />
+
+            <Apagar personagem={personagem} onRemoved={onRemoved} />
+          </div>
         </div>
 
-        {/* Quem joga com ele, aqui em cima e nao so la embaixo: e a pergunta que
-            se faz olhando a ficha de longe -- "de quem e este?" --, e a resposta
-            estava a oitocentos pixels de rolagem dentro de uma secao. La embaixo
-            continua a lista que se EDITA; aqui e so o que ela diz. */}
-        <p className="text-muted-foreground truncate text-[11px]">
-          {donos.length === 0 ? "Sem dono" : donos.join(", ")}
-        </p>
+        <Popover open={camposAbertos} onOpenChange={setCamposAbertos}>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label={t.ficha.verCampos}
+                title={t.ficha.verCampos}
+                className="hover:bg-muted focus-visible:ring-ring -ml-1 flex w-fit items-center gap-1 rounded-md p-1 focus-visible:ring-2 focus-visible:outline-none"
+              />
+            }
+          >
+            <MiniCampo assetId={personagem.retrato} />
+            <MiniCampo assetId={personagem.miniatura} />
+          </PopoverTrigger>
+
+          {/* `keepMounted`: o quadro de um campo abre o seletor de arquivo e o
+              recorte, e o recorte é um diálogo por cima de tudo. Clicar nele é
+              clicar FORA do popover, que fecha -- e, desmontado, levaria o
+              recorte junto no meio do gesto, com o arquivo escolhido e nada
+              gravado. Montado e escondido, o quadro termina o que começou. */}
+          <PopoverContent
+            keepMounted
+            side="bottom"
+            align="start"
+            className="w-auto space-y-2"
+          >
+            <h3 className="text-xs font-medium">{t.ficha.campos}</h3>
+
+            {/* O miolo que um plugin troca com `secao:campos`, como quando os
+                campos eram uma seção. */}
+            <Substituto alvo="secao:campos" personagemId={personagem.id}>
+              <Slots
+                personagem={personagem}
+                onChanged={onCamposChanged}
+                onAbrirAnexo={onAbrirAnexo}
+                onAbrirImagem={onAbrirImagem}
+              />
+            </Substituto>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
 }
 
+/**
+ * A miniatura de um campo de imagem no cabeçalho: só diz se ele está posto.
+ *
+ * Sem botão próprio -- o botão é o par, que abre os campos. Vazio, o tracejado
+ * de sempre.
+ */
+function MiniCampo({ assetId }: { assetId: string | undefined }) {
+  const url = useAssetUrl(assetId);
+
+  if (!assetId) {
+    return (
+      <span className="bg-muted/40 flex size-8 items-center justify-center rounded-md border border-dashed">
+        <FileImage className="text-muted-foreground/40 size-3.5" aria-hidden />
+      </span>
+    );
+  }
+
+  return (
+    <span className="bg-background size-8 overflow-hidden rounded-md border">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          draggable={false}
+          className="size-full object-cover"
+          {...MINIATURA}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * O 📄: abre a ficha posta, ou leva ao quadro dela para anexar uma.
+ *
+ * Abrir direto, sem passar pelo popover, porque é o gesto da sessão inteira:
+ * consultar a ficha. Trocar a ficha é o gesto raro, e ele está no quadro.
+ */
+function AbrirFicha({
+  ficha,
+  onAbrir,
+  onAnexar,
+}: {
+  ficha: string | undefined;
+  onAbrir: (anexo: AnexoPersonagem) => void;
+  onAnexar: () => void;
+}) {
+  const rotulo = ficha ? t.ficha.abrirFicha(ficha) : t.ficha.anexarFicha;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={rotulo}
+            onClick={() => (ficha ? onAbrir(anexoDaFicha(ficha)) : onAnexar())}
+            className={cn(!ficha && "text-muted-foreground")}
+          >
+            <FileText />
+          </Button>
+        }
+      />
+      <TooltipContent>
+        <p className="max-w-48">{rotulo}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * A lixeira, com a pergunta antes.
+ *
+ * É a única ação do aplicativo que pergunta. Apagar cena ou imagem tem
+ * desfazer; isto não tem: o personagem sai do índice, a pasta dele sai do
+ * disco com a ficha e os anexos dentro, e as notas que os jogadores escreveram
+ * vão com ele.
+ */
+function Apagar({
+  personagem,
+  onRemoved,
+}: {
+  personagem: Personagem;
+  onRemoved: () => void;
+}) {
+  return (
+    <AlertDialog>
+      {/* Sem tooltip: ele avisava o que a lixeira apaga, e agora é o próprio
+          diálogo que faz isso -- com mais espaço e no momento em que a
+          informação importa. Dois textos dizendo a mesma coisa, um no hover e
+          um depois do clique, era um deles a mais. */}
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t.ficha.apagarEste}
+          >
+            <Trash2 />
+          </Button>
+        }
+      />
+
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {t.ficha.desejaApagar(personagem.nome)}
+          </AlertDialogTitle>
+          {/* `render` de `div`: a descricao nasce `<p>`, e uma `<ul>` dentro
+              de um `<p>` o navegador fecha sozinho antes da lista -- o texto
+              saia do lugar sem erro nenhum no console. */}
+          <AlertDialogDescription render={<div className="space-y-2" />}>
+            <OQueVaiJunto />
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+
+        <AlertDialogFooter>
+          <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              void removeCharacter(personagem.id).then(onRemoved, (cause) =>
+                toast.error(
+                  cause instanceof Error ? cause.message : t.geral.falhas.apagar,
+                ),
+              );
+            }}
+          >
+            {t.geral.apagar}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * O 👤: quem joga com ele, num popover.
+ *
+ * `keepMounted` pelo mesmo motivo dos campos: o nome de um jogador abre o
+ * diálogo dele, e o diálogo mora aqui dentro. Fechar o popover ao clicar no
+ * diálogo o desmontaria no primeiro clique.
+ */
+function Donos({
+  personagem,
+  jogadores,
+  donos,
+  onChanged,
+}: {
+  personagem: Personagem;
+  jogadores: Player[];
+  donos: string[];
+  onChanged: () => void;
+}) {
+  const rotulo = t.ficha.quemJoga;
+
+  return (
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={
+                <Button variant="ghost" size="icon-sm" aria-label={rotulo}>
+                  <UserRound />
+                </Button>
+              }
+            />
+          }
+        />
+        <TooltipContent>
+          <p>{rotulo}</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <PopoverContent keepMounted side="bottom" align="end" className="w-80 space-y-2">
+        <h3 className="text-xs font-medium">
+          {rotulo}
+          {donos.length > 0 ? (
+            <span className="text-muted-foreground font-normal"> ({donos.length})</span>
+          ) : null}
+        </h3>
+
+        {/* O miolo que um plugin troca com `secao:nota`, como quando quem
+            joga era uma seção. */}
+        <Substituto alvo="secao:nota" personagemId={personagem.id}>
+          <Owners
+            personagem={personagem}
+            jogadores={jogadores}
+            donos={donos}
+            onChanged={onChanged}
+          />
+        </Substituto>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * O que existe ALÉM dos campos: anexos soltos, dos dois autores.
+ *
+ * A ficha sai daqui de propósito. Ela é anexo como qualquer outro no disco, mas
+ * na tela é um CAMPO — tem linha própria, com miniatura, transmitir e trocar.
+ * Aparecendo nos dois lugares, a mesma ficha ficava com dois nomes de gesto:
+ * "Trocar" ali e um X aqui, um que limpa o campo e outro que apaga o arquivo.
+ * O que sobra nesta lista é o que ninguém nomeou — o mapa da masmorra que o
+ * mestre anexou, o desenho que o jogador mandou.
+ */
 function Files({
   personagemId,
-  anexos,
-  ficha,
+  soltos,
   anexando,
   onAnexar,
   onAbrir,
   onRemover,
 }: {
   personagemId: string;
-  anexos: AnexoPersonagem[];
-  /** O nome do arquivo que é a ficha, para não repeti-lo aqui. */
-  ficha: string | undefined;
+  /** Os anexos sem a ficha, que tem lugar próprio. Ver `soltosDe`. */
+  soltos: AnexoPersonagem[];
   anexando: boolean;
   onAnexar: () => void;
   onAbrir: (anexo: AnexoPersonagem) => void;
   onRemover: (anexo: AnexoPersonagem) => Promise<void>;
 }) {
-  // Só a do mestre: um "ficha-edgar.jpg" que o JOGADOR mandou é outro arquivo,
-  // noutra pasta, e não é o campo. Ver `AnexoAutor`.
-  const soltos = anexos.filter(
-    (anexo) => !(anexo.autor === "mestre" && anexo.arquivo === ficha),
-  );
-
   return (
-    <SecaoFicha secao="arquivos" titulo="Arquivos" contagem={soltos.length}>
+    <SecaoFicha secao="arquivos" titulo={t.ficha.arquivos} contagem={soltos.length}>
       <div className="space-y-2">
         {soltos.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Nada além dos campos. O que entrar aqui o jogador vinculado também
-            lê.
+            {t.ficha.nadaAlemDosCampos}
           </p>
         ) : (
           <ul className="space-y-1">
@@ -711,7 +992,7 @@ function Files({
                         : "bg-amber-400/15 text-amber-300",
                     )}
                   >
-                    {doJogador(anexo) ? "do jogador" : "seu"}
+                    {doJogador(anexo) ? t.ficha.doJogador : t.ficha.seu}
                   </span>
 
                   <span className="text-muted-foreground shrink-0 text-[10px] tabular-nums">
@@ -730,7 +1011,7 @@ function Files({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Apagar ${anexo.arquivo}`}
+                    aria-label={t.ficha.apagarArquivo(anexo.arquivo)}
                     onClick={() => void onRemover(anexo)}
                   >
                     <Trash2 />
@@ -755,11 +1036,12 @@ function Files({
             }
           >
             {anexando ? <Loader2 className="animate-spin" /> : <Paperclip />}
-            Anexar arquivos
+            {t.ficha.anexarArquivos}
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-64">
-            Ficam em <code>personagens/{personagemId}/anexos/</code>, separados
-            por quem os pôs ali. O jogador vinculado também os lê.
+            {rico(t.ficha.ondeFicam, {
+              pasta: <code>personagens/{personagemId}/anexos/</code>,
+            })}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -803,7 +1085,7 @@ function Transmitir({
       transmitShared(id, anexo.arquivo);
     } catch (cause) {
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao transmitir.",
+        cause instanceof Error ? cause.message : t.geral.falhas.transmitir,
       );
     }
   }
@@ -815,7 +1097,7 @@ function Transmitir({
           <Button
             variant={noAr ? "default" : "ghost"}
             size="icon-xs"
-            aria-label={noAr ? "Tirar da evidência" : "Transmitir para a mesa"}
+            aria-label={noAr ? t.ficha.tirarDaEvidencia : t.ficha.transmitirParaAMesa}
             aria-pressed={noAr}
             onClick={() => (noAr ? clear() : void transmitir())}
           >
@@ -825,9 +1107,7 @@ function Transmitir({
       />
       <TooltipContent>
         <p className="max-w-48">
-          {noAr
-            ? "No ar agora. Clique para tirar."
-            : "Põe este arquivo na frente de tudo."}
+          {noAr ? t.geral.noArAgora : t.ficha.poeNaFrente}
         </p>
       </TooltipContent>
     </Tooltip>
@@ -848,21 +1128,9 @@ function Transmitir({
  */
 const CAMPOS: Array<{ campo: CampoPersonagem; titulo: string; nota: string }> =
   [
-    {
-      campo: "ficha",
-      titulo: "Ficha",
-      nota: "Documento. Fica no personagem, e só quem está vinculado lê.",
-    },
-    {
-      campo: "retrato",
-      titulo: "Retrato",
-      nota: "Imagem. Entra no acervo, porque a TV alcança imagem só por lá.",
-    },
-    {
-      campo: "miniatura",
-      titulo: "Miniatura",
-      nota: "A peça dele no mapa. Também entra no acervo, pela mesma razão.",
-    },
+    { campo: "ficha", ...t.ficha.slots.ficha },
+    { campo: "retrato", ...t.ficha.slots.retrato },
+    { campo: "miniatura", ...t.ficha.slots.miniatura },
   ];
 
 /**
@@ -918,7 +1186,7 @@ function RetratoAoVivo({
       onChanged();
     } catch (causa) {
       toast.error(
-        causa instanceof Error ? causa.message : "Não deu para gravar.",
+        causa instanceof Error ? causa.message : t.ficha.naoDeuParaGravar,
       );
     } finally {
       setSalvando(false);
@@ -936,8 +1204,8 @@ function RetratoAoVivo({
                   type="button"
                   aria-label={
                     salva
-                      ? "Retrato ao vivo, configurado"
-                      : "Pôr um retrato ao vivo"
+                      ? t.ficha.retratoAoVivo.configurado
+                      : t.ficha.retratoAoVivo.por
                   }
                   className={cn(
                     "focus-visible:ring-ring absolute top-1 right-1 z-10 flex size-5 items-center justify-center rounded focus-visible:ring-2 focus-visible:outline-none",
@@ -958,19 +1226,17 @@ function RetratoAoVivo({
         <TooltipContent>
           <p className="max-w-48">
             {salva
-              ? "Retrato ao vivo no ar. Clique para trocar."
-              : "Retrato ao vivo"}
+              ? t.ficha.retratoAoVivo.noAr
+              : t.ficha.retratoAoVivo.titulo}
           </p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-80 space-y-2">
         <div>
-          <h3 className="text-xs font-medium">Retrato ao vivo</h3>
+          <h3 className="text-xs font-medium">{t.ficha.retratoAoVivo.titulo}</h3>
           <p className="text-muted-foreground text-[11px]">
-            Uma página que se atualiza sozinha — vida, sanidade, o que o serviço
-            mostrar. Sem internet ela não carrega, e o Retrato do acervo aparece
-            no lugar.
+            {t.ficha.retratoAoVivo.explicacao}
           </p>
         </div>
 
@@ -984,10 +1250,10 @@ function RetratoAoVivo({
                 setFonteId(evento.target.value);
                 setTexto("");
               }}
-              aria-label="Fonte do retrato"
+              aria-label={t.ficha.retratoAoVivo.fonte}
               className="border-input bg-background h-8 shrink-0 rounded-md border px-2 text-xs"
             >
-              <option value="">URL completa</option>
+              <option value="">{t.ficha.retratoAoVivo.urlCompleta}</option>
               {fontes.map((atual) => (
                 <option key={atual.fonte} value={atual.fonte}>
                   {atual.rotulo}
@@ -1000,7 +1266,7 @@ function RetratoAoVivo({
             value={texto}
             onChange={(evento) => setTexto(evento.target.value)}
             placeholder={fonte ? (fonte.exemplo ?? fonte.campo) : "https://…"}
-            aria-label={fonte ? fonte.campo : "URL do retrato ao vivo"}
+            aria-label={fonte ? fonte.campo : t.ficha.retratoAoVivo.url}
             className="h-8 min-w-0 flex-1 text-xs"
             // Enter grava: o campo tem um valor só, e pedir um clique depois de
             // colar é um passo a mais para a coisa mais frequente aqui.
@@ -1016,7 +1282,7 @@ function RetratoAoVivo({
             disabled={salvando || !mudou || !alvo}
             onClick={() => alvo && void gravar(alvo)}
           >
-            Usar
+            {t.ficha.retratoAoVivo.usar}
           </Button>
 
           {salva ? (
@@ -1024,7 +1290,7 @@ function RetratoAoVivo({
               size="icon"
               variant="ghost"
               className="text-muted-foreground hover:text-destructive size-8 shrink-0"
-              aria-label="Tirar o retrato ao vivo"
+              aria-label={t.ficha.retratoAoVivo.tirar}
               disabled={salvando}
               onClick={() => {
                 setTexto("");
@@ -1054,18 +1320,40 @@ function RetratoAoVivo({
           que o link está errado -- quando ele está certo, e a mesa está vendo. */}
         {salva && !paginaVivaOk ? (
           <p className="text-muted-foreground text-[11px]">
-            Esta tela não desenha página viva — ela usa o motor WebKit, e é uma
-            limitação do serviço, não do link. Aqui aparece o Retrato do acervo.
-            <strong className="font-medium">
-              {" "}
-              A TV e os celulares Android mostram normalmente
-            </strong>
-            ; iPhone, não, porque todo navegador de iOS é WebKit.
+            {rico(t.ficha.retratoAoVivo.semPaginaViva, {
+              destaque: (
+                <strong className="font-medium">
+                  {t.ficha.retratoAoVivo.destaque}
+                </strong>
+              ),
+            })}
           </p>
         ) : null}
       </PopoverContent>
     </Popover>
   );
+}
+
+/**
+ * A ficha como registro de anexo, qualquer que seja o tipo dela.
+ *
+ * O registro é montado do NOME, e não procurado na lista de anexos: o campo
+ * guarda o nome, e a lista é outra leitura, que pode não ter chegado ainda —
+ * ou não ter o arquivo, se ele foi apagado por fora. Procurar ali fazia a
+ * miniatura e o transmitir simplesmente não aparecerem, sem dizer por quê.
+ * `tamanho` fica em zero porque só a lista de arquivos o mostra.
+ *
+ * O tipo sai do nome também: imagem tem o dela, PDF é o outro que o app sabe
+ * exibir, e o resto vai sem tipo. Blob sem tipo deixa a decisão de renderizar
+ * para o palpite do navegador — e é o que faz "Abrir no navegador" virar o
+ * download de um arquivo desconhecido.
+ */
+function anexoDaFicha(arquivo: string): AnexoPersonagem {
+  const mimeType =
+    imageMimeByName(arquivo) ??
+    (attachmentKind(arquivo, "") === "pdf" ? "application/pdf" : "");
+
+  return { arquivo, mimeType, tamanho: 0, autor: "mestre" };
 }
 
 /**
@@ -1144,29 +1432,8 @@ function Slot({
   // faria a linha e o diálogo pedirem o mesmo arquivo ao daemon.
   const enderecoAsset = useAssetUrl(campo === "ficha" ? undefined : valor);
 
-  /**
-   * A ficha como registro de anexo, qualquer que seja o tipo dela.
-   *
-   * O registro é montado do NOME, e não procurado na lista de anexos: o campo
-   * guarda o nome, e a lista é outra leitura, que pode não ter chegado ainda —
-   * ou não ter o arquivo, se ele foi apagado por fora. Procurar ali fazia a
-   * miniatura e o transmitir simplesmente não aparecerem, sem dizer por quê.
-   * `tamanho` fica em zero porque só a lista de arquivos o mostra.
-   *
-   * O tipo sai do nome também: imagem tem o dela, PDF é o outro que o app sabe
-   * exibir, e o resto vai sem tipo. Blob sem tipo deixa a decisão de renderizar
-   * para o palpite do navegador — e é o que faz "Abrir no navegador" virar o
-   * download de um arquivo desconhecido.
-   */
-  const fichaAnexo: AnexoPersonagem | null = (() => {
-    if (campo !== "ficha" || !valor) return null;
-
-    const mimeType =
-      imageMimeByName(valor) ??
-      (attachmentKind(valor, "") === "pdf" ? "application/pdf" : "");
-
-    return { arquivo: valor, mimeType, tamanho: 0, autor: "mestre" };
-  })();
+  const fichaAnexo =
+    campo === "ficha" && valor ? anexoDaFicha(valor) : null;
 
   /**
    * A ficha quando ela é IMAGEM.
@@ -1202,7 +1469,7 @@ function Slot({
       );
       if (preenchido) onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao anexar.");
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhas.anexar);
     } finally {
       setOcupado(false);
     }
@@ -1226,7 +1493,7 @@ function Slot({
 
       onChanged();
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Falha ao limpar.");
+      toast.error(cause instanceof Error ? cause.message : t.ficha.falhaAoLimpar);
     }
   }
 
@@ -1279,7 +1546,7 @@ function Slot({
             type="button"
             // O nome vive no `title` do quadro e no cabeçalho da janela: em
             // oitenta pixels ele viraria três letras e reticências.
-            aria-label={`Abrir ${fichaAnexo.arquivo}`}
+            aria-label={t.ficha.abrir(fichaAnexo.arquivo)}
             onClick={() => onAbrirAnexo(fichaAnexo)}
             className="hover:bg-accent focus-visible:ring-ring absolute inset-0 grid size-full place-items-center focus-visible:ring-2 focus-visible:outline-none"
           >
@@ -1319,7 +1586,7 @@ function Slot({
                   variant="ghost"
                   size="icon-xs"
                   className="text-white hover:bg-white/20 hover:text-white"
-                  aria-label={`${preenchido ? "Trocar" : "Anexar"} ${titulo}`}
+                  aria-label={preenchido ? t.ficha.trocar(titulo) : t.ficha.anexar(titulo)}
                   disabled={ocupado}
                   onClick={() => void escolher()}
                 >
@@ -1333,7 +1600,7 @@ function Slot({
             />
             <TooltipContent>
               <p className="max-w-48">
-                {preenchido ? `Trocar ${titulo}` : nota}
+                {preenchido ? t.ficha.trocar(titulo) : nota}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -1343,7 +1610,7 @@ function Slot({
               variant="ghost"
               size="icon-xs"
               className="text-white hover:bg-white/20 hover:text-white"
-              aria-label={`Limpar ${titulo}`}
+              aria-label={t.ficha.limpar(titulo)}
               onClick={() => void limpar()}
             >
               <X />
@@ -1519,7 +1786,7 @@ function Thumb({
         moldura,
         "hover:ring-ring focus-visible:ring-ring cursor-zoom-in hover:ring-2 focus-visible:ring-2 focus-visible:outline-none",
       )}
-      aria-label={`Ver ${alt}`}
+      aria-label={t.ficha.ver(alt)}
       onClick={onAbrir}
     >
       {imagem}
@@ -1528,119 +1795,102 @@ function Thumb({
 }
 
 /**
- * A nota que um jogador escreveu, editável pelo mestre.
+ * O caderno que um jogador escreve sobre este personagem, para o mestre LER.
  *
- * O mestre escreve na nota DO JOGADOR, e não numa nota própria: é o que foi
- * pedido, e o `jogadorId` na chamada diz de quem é o texto, não quem está
- * digitando. Sem esse par, a nota do Edgar e a da Mira sobre o mesmo
- * personagem seriam o mesmo campo.
+ * Só leitura, como na ficha do jogador: o caderno é de quem o escreveu. Era
+ * uma nota solta que o mestre podia reescrever; virou o caderno do personagem
+ * no celular, com título e etiquetas, e reescrever a nota alheia não é gesto
+ * que o mestre precise.
  *
- * Grava no `blur`, e não a cada tecla: é IPC para dentro do SQLite, e o mestre
- * digitando um parágrafo não deveria abrir uma transação por letra. O jogador
- * tem debounce porque escreve pela rede numa aba que pode fechar; aqui a janela
- * é a mesma que grava.
+ * Fechado por padrão: cinco jogadores vinculados eram cinco caixas empilhadas.
+ * A linha diz quantas notas há, e abrir relê -- o jogador escreve no meio da
+ * sessão, e a contagem de quando a janela abriu já estaria velha.
  */
-function PlayerNote({
+function CadernoDoJogador({
   personagemId,
   jogador,
 }: {
   personagemId: string;
   jogador: Player;
 }) {
-  const [texto, setTexto] = useState<string | null>(null);
-  // Fechada por padrão: cinco jogadores vinculados eram cinco caixas vazias
-  // de 64px empilhadas. O resumo na linha diz se há algo dentro.
-  const [aberta, setAberta] = useState(false);
-  const [salvo, setSalvo] = useState(false);
+  const [notas, setNotas] = useState<Nota[] | null>(null);
+  const [aberto, setAberto] = useState(false);
 
   useEffect(() => {
     let ativo = true;
 
-    void characterNote(personagemId, jogador.id).then(
-      (lido) => {
-        if (ativo) setTexto(lido);
+    void playerNotes(jogador.id).then(
+      (todas) => {
+        if (ativo) setNotas(todas.filter((nota) => nota.personagemId === personagemId));
       },
       () => {
-        // Nota ilegível não pode esconder o resto da ficha: campo vazio, e o
-        // mestre pode escrever por cima.
-        if (ativo) setTexto("");
+        // Caderno ilegível não pode esconder o resto da ficha.
+        if (ativo) setNotas([]);
       },
     );
 
     return () => {
       ativo = false;
     };
-  }, [personagemId, jogador.id]);
+  }, [personagemId, jogador.id, aberto]);
 
-  useEffect(() => {
-    if (!salvo) return;
-    const timer = setTimeout(() => setSalvo(false), 2000);
-    return () => clearTimeout(timer);
-  }, [salvo]);
+  if (notas === null) return null;
 
-  if (texto === null) return null;
-
-  const resumo = texto.trim().split("\n")[0] ?? "";
-  const id = `nota-${personagemId}-${jogador.id}`;
+  const id = `caderno-${personagemId}-${jogador.id}`;
 
   return (
     <div className="space-y-1">
       <button
         type="button"
-        onClick={() => setAberta((v) => !v)}
-        aria-expanded={aberta}
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
         aria-controls={id}
-        className="text-muted-foreground hover:text-foreground flex w-full min-w-0 items-center gap-1 rounded px-0.5 text-left text-[11px] focus-visible:ring-2 focus-visible:outline-none"
+        disabled={notas.length === 0}
+        className="text-muted-foreground enabled:hover:text-foreground flex w-full min-w-0 items-center gap-1 rounded px-0.5 text-left text-[11px] focus-visible:ring-2 focus-visible:outline-none"
       >
         <ChevronRight
           className={cn(
             "size-3 shrink-0 transition-transform motion-reduce:transition-none",
-            aberta && "rotate-90",
+            aberto && "rotate-90",
+            notas.length === 0 && "opacity-0",
           )}
           aria-hidden
         />
-        <span className="shrink-0">Nota</span>
+        <span className="shrink-0">{t.ficha.caderno}</span>
         <span className="min-w-0 flex-1 truncate italic">
-          {resumo || "vazia"}
+          {notas.length === 0 ? t.ficha.cadernoVazio : t.ficha.notas(notas.length)}
         </span>
-        {salvo ? (
-          <span className="text-emerald-500 shrink-0 not-italic">salvo</span>
-        ) : null}
       </button>
 
-      {aberta ? (
-        <Textarea
-          id={id}
-          autoFocus
-          className="min-h-16 resize-y text-xs"
-          placeholder={`Sua nota sobre ${jogador.nome} neste personagem`}
-          aria-label={`Sua nota sobre ${jogador.nome}`}
-          defaultValue={texto}
-          onBlur={(event) => {
-            if (event.target.value === texto) return;
-
-            void setCharacterNote(
-              personagemId,
-              jogador.id,
-              event.target.value,
-            ).then(
-              () => {
-                setTexto(event.target.value);
-                setSalvo(true);
-              },
-              (cause) =>
-                toast.error(
-                  cause instanceof Error ? cause.message : "Falha ao gravar.",
-                ),
-            );
-          }}
-        />
+      {aberto && notas.length > 0 ? (
+        <ul id={id} className="scroll-fade max-h-56 space-y-1.5 overflow-y-auto">
+          {notas.map((nota) => (
+            <li key={nota.id} className="rounded border px-2 py-1.5">
+              <div className="flex items-baseline gap-2">
+                <p className="min-w-0 flex-1 truncate text-xs font-medium">
+                  {nota.titulo || t.ficha.semTitulo}
+                </p>
+                <span className="text-muted-foreground shrink-0 text-[10px]">
+                  {desde(nota.atualizadoEm)}
+                </span>
+              </div>
+              {nota.tags.length > 0 ? (
+                <p className="text-muted-foreground mt-0.5 text-[10px]">{nota.tags.join(" · ")}</p>
+              ) : null}
+              {nota.texto ? (
+                <p className="mt-1 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {nota.texto}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
     </div>
   );
 }
 
-/** Quem está com este personagem. */
+/** Quem está com este personagem: a lista que vincula, desvincula e anota. */
 function Owners({
   personagem,
   jogadores,
@@ -1668,17 +1918,13 @@ function Owners({
   const aberto = jogadores.find((jogador) => jogador.id === escolhido) ?? null;
 
   return (
-    <SecaoFicha
-      secao="nota"
-      titulo="Quem joga com ele"
-      contagem={vinculados.length}
-    >
+    <>
       <div className="space-y-2">
         {vinculados.length === 0 ? (
           <p className="text-muted-foreground text-xs">
             {jogadores.length === 0
-              ? "Ninguém entrou na mesa ainda."
-              : "Ninguém vinculado. Vinculado, o jogador vê os arquivos e escreve notas."}
+              ? t.ficha.ninguemEntrou
+              : t.ficha.ninguemVinculado}
           </p>
         ) : (
           <ul className="space-y-1">
@@ -1694,7 +1940,7 @@ function Owners({
                       type="button"
                       onClick={() => setEscolhido(jogador.id)}
                       className="hover:bg-muted flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left focus-visible:ring-2 focus-visible:outline-none"
-                      aria-label={`Abrir ${jogador.nome}`}
+                      aria-label={t.ficha.abrir(jogador.nome)}
                     >
                       <span
                         className={cn(
@@ -1707,13 +1953,13 @@ function Owners({
                         {jogador.nome}
                       </span>
                       <span className="text-muted-foreground shrink-0 text-[10px]">
-                        {naMesa ? "na mesa" : `visto ${desde(jogador.vistoEm)}`}
+                        {naMesa ? t.ficha.naMesa : t.ficha.visto(desde(jogador.vistoEm))}
                       </span>
                     </button>
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Desvincular ${jogador.nome}`}
+                      aria-label={t.ficha.desvincular(jogador.nome)}
                       onClick={() => {
                         void unlinkCharacter(jogador.id, personagem.id).then(
                           onChanged,
@@ -1724,7 +1970,7 @@ function Owners({
                     </Button>
                   </div>
 
-                  <PlayerNote personagemId={personagem.id} jogador={jogador} />
+                  <CadernoDoJogador personagemId={personagem.id} jogador={jogador} />
                 </li>
               );
             })}
@@ -1742,9 +1988,9 @@ function Owners({
           >
             <SelectTrigger
               className="w-full text-xs"
-              aria-label="Vincular a um jogador"
+              aria-label={t.ficha.vincularAUmJogador}
             >
-              <SelectValue placeholder="Vincular a…" />
+              <SelectValue placeholder={t.ficha.vincularA} />
             </SelectTrigger>
             {/* Abaixo do gatilho, e não por cima: sem valor escolhido não há
                 item para alinhar, e o popup cobria o próprio "Vincular a…". */}
@@ -1769,6 +2015,6 @@ function Owners({
         onVoltar={() => setEscolhido(null)}
         onChanged={onChanged}
       />
-    </SecaoFicha>
+    </>
   );
 }

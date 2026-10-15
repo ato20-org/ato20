@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/palco";
 import { TIPOS_DE_PING, type TipoDePing } from "@/types/ping";
 
 /**
@@ -13,12 +14,12 @@ export const APARENCIA_DO_PING: Record<
   TipoDePing,
   { rotulo: string; cor: string }
 > = {
-  olhe: { rotulo: "Olhe aqui", cor: "#38bdf8" },
-  alerta: { rotulo: "Cuidado", cor: "#facc15" },
-  perigo: { rotulo: "Perigo", cor: "#ef4444" },
-  atacar: { rotulo: "Atacar", cor: "#f97316" },
-  ir: { rotulo: "Vou para lá", cor: "#4ade80" },
-  duvida: { rotulo: "O que é isso?", cor: "#c084fc" },
+  olhe: { rotulo: t.ping.olhe, cor: "#38bdf8" },
+  alerta: { rotulo: t.ping.alerta, cor: "#facc15" },
+  perigo: { rotulo: t.ping.perigo, cor: "#ef4444" },
+  atacar: { rotulo: t.ping.atacar, cor: "#f97316" },
+  ir: { rotulo: t.ping.ir, cor: "#4ade80" },
+  duvida: { rotulo: t.ping.duvida, cor: "#c084fc" },
 };
 
 /**

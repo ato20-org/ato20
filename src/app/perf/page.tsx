@@ -24,6 +24,7 @@ import {
   LENTE_DA_MESA,
   tripeDaOrbital,
 } from "@/lib/geometry/camera-orbital";
+import { paredesComPortas } from "@/lib/geometry/porta";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { leandoDaCamera } from "@/lib/geometry/volume";
 import { MestreShell } from "@/components/mestre/mestre-shell";
@@ -39,6 +40,7 @@ import type { Vinculos } from "@/components/mestre/postit-texto-view";
 import { SEM_VINCULOS, VinculosContext } from "@/components/playground/markdown-view";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { moverNoGesto, useGestoStore } from "@/lib/store/use-gesto-store";
+import { useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -59,6 +61,10 @@ import { SCENE_BROADCAST_INTERVAL_MS } from "@/lib/sync/channel";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { useDadosStore } from "@/lib/store/use-dados-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import {
+  fotografarCamera,
+  fotografarTripe,
+} from "@/lib/mestre/foto-da-camera";
 import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
 import type { Personagem } from "@/types/character";
 import {
@@ -75,7 +81,11 @@ import {
   type AssetMeta,
   type CanvasItem,
   type EfeitoDaLuz,
+  type FogRegion,
+  type Nota,
   type Parede,
+  type Pasta,
+  type Porta,
   type Scene,
   type Sol,
   type Tripe,
@@ -202,6 +212,7 @@ type Cenario =
   | "biblioteca"
   | "lista"
   | "lista-mesmo-mapa"
+  | "fotos"
   | "camadas"
   | "camera"
   | "mestre-camera"
@@ -284,6 +295,54 @@ function sombraDaMedida(): Pick<
           }))
         : undefined,
   };
+}
+
+/**
+ * As portas desta corrida, pelo experimento: `portas` põe as portas no caminho
+ * delas, e `portasnaparede` mistura as MESMAS às paredes -- o caminho ingênuo,
+ * em que a lista de segmentos muda a cada amostra e toda luz se forma de novo.
+ * Uma porta ao lado de cada luz, e só a primeira gira: o mestre abrindo a porta
+ * da cela num mapa cheio de tochas. `portabotao` é a mesma porta pelo BOTÃO:
+ * abre e fecha a cada 1,2 s, e cada tela a faz girar -- ver `usePortasNoGiro`.
+ * Sem um dos três, `{}` e a cena de sempre.
+ *
+ * Pelo experimento, e não por um parâmetro novo: as duas variantes saem do
+ * mesmo build numa corrida só (`--experimento portas,portasnaparede`).
+ */
+function portasDaMedida(
+  t: number,
+  paredes: Parede[] | undefined,
+): Pick<Scene, "paredes" | "portas"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const experimento = params.get("experimento") ?? "";
+  if (
+    experimento !== "portas" &&
+    experimento !== "portasnaparede" &&
+    experimento !== "portabotao"
+  )
+    return {};
+
+  const luzes = Math.max(1, Number(params.get("luzes") ?? 0));
+  const portas: Porta[] = Array.from({ length: luzes }, (_, i) => ({
+    id: `perf-porta-${i}`,
+    x: ((i * 389 + 160) % SCENE_WIDTH) + 60,
+    y: ((i * 233 + 120) % SCENE_HEIGHT) - 40,
+    comprimento: 80,
+    angulo: 90,
+    ...(i !== 0
+      ? {}
+      : experimento === "portabotao"
+        ? Math.floor(t / 1200) % 2 === 1
+          ? { abertura: 90 }
+          : {}
+        : { abertura: Math.round(80 * Math.sin(t / 400)) }),
+  }));
+
+  return experimento !== "portasnaparede"
+    ? { portas }
+    : { paredes: paredesComPortas(paredes, portas) };
 }
 
 /** `?parados=1`: os efeitos como o Mestre os vê sem nada selecionado. */
@@ -459,6 +518,7 @@ function declarativoDaMedida(estilo: EstiloDaMedida): Declarativo {
   if (estilo === "fabrica") return { ...DECLARATIVO_VAZIO, efeitos: EFEITOS_DA_MEDIDA };
 
   return {
+    ...DECLARATIVO_VAZIO,
     versao: 1,
     plugins: ["perf"],
     efeitos: EFEITOS_DA_MEDIDA,
@@ -501,6 +561,33 @@ function personagensDaMedida(quantos: number, estilo: EstiloDaMedida): Personage
       escondido: false,
       ...(estiloExtensao ? { estiloExtensao } : {}),
     })),
+  }));
+}
+
+/**
+ * A névoa dinâmica desta corrida: `?nevoa=K`. K áreas em faixas verticais
+ * lado a lado, cobrindo o plano inteiro -- a lanterna que o arrasto move
+ * atravessa uma a uma, e cada área que ela alcança repinta. Com K em um, a
+ * área é o plano todo: o maior canvas que a névoa chega a ter. Ver
+ * `FogRegion.dinamica`.
+ */
+function nevoaDaMedida(): FogRegion[] {
+  if (typeof window === "undefined") return [];
+
+  const quantas = Number(
+    new URLSearchParams(window.location.search).get("nevoa") ?? 0,
+  );
+  if (!(quantas > 0)) return [];
+
+  const largura = SCENE_WIDTH / quantas;
+  return Array.from({ length: quantas }, (_, i) => ({
+    id: `perf-nevoa-${i}`,
+    x: Math.round(i * largura),
+    y: 0,
+    width: Math.round(largura),
+    height: SCENE_HEIGHT,
+    revealed: false,
+    dinamica: true,
   }));
 }
 
@@ -557,7 +644,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     name: "medida",
     backgroundAssetId: "perf-fundo",
     items,
-    fog: [],
+    fog: nevoaDaMedida(),
     ...sombraDaMedida(),
     ...areasDaMedida(),
     cameras: salvas,
@@ -854,7 +941,7 @@ function PalcoEspectador({
         return igual ? antes : proximo;
       });
 
-      const nova = { ...base, items };
+      const nova = { ...base, items, ...portasDaMedida(t, base.paredes) };
       anterior.current = nova;
       setCena(nova);
       // A cadência é a do Mestre de verdade -- 10 Hz. Ver
@@ -896,13 +983,11 @@ function PalcoEspectador({
  * outra tela: o conteúdo é texto e vetor, vive no plano de CONTROLES (ver
  * `scene-stage`) e não tem bitmap nenhum para rasterizar. Esta medida nasceu
  * para responder se os dois planos precisam trocar de forma de ampliação
- * juntos quando o mestre arrasta um elemento -- o plano de conteúdo precisa,
- * porque um item em `zoom` paga layout por quadro; o de controles talvez não,
- * e é ele que carrega o quadro inteiro.
+ * juntos quando o mestre arrasta um elemento. Desde 07/10/2026 nenhum dos
+ * dois troca no gesto: ver `conteudoNoLayout` em `scene-stage`.
  *
  * O gesto fica LIGADO a corrida toda (`comecarGesto`), que é o que reproduz a
- * mão no elemento: sem isso o palco assenta em `zoom` e a medida seria de uma
- * tela parada.
+ * mão no elemento: os efeitos animados pausam como pausariam na mão.
  */
 function PalcoQuadro({
   n,
@@ -1912,6 +1997,9 @@ function ChaoOrbitalDeMedida({
  *                 `Fantasma` chama `atualizarCamera` direto, e cada quadro é
  *                 um commit de board inteiro. É a suspeita que a medida existe
  *                 para confirmar ou desmentir.
+ * `token`         não é a câmera: o item 0, posto no meio do plano e por cima
+ *                 de todos, arrastado pela mão. Com `?zoom=` é o gesto que
+ *                 pesa o plano nítido contra o borrado.
  *
  * O ponteiro é sintético, e é a única concessão: no Wayland não há como
  * injetar mouse de verdade numa janela, e sem gesto nenhum destes caminhos
@@ -1925,12 +2013,20 @@ function PalcoGestoDeCamera({
   gesto,
   sonda,
   roda,
+  zoom,
 }: {
   n: number;
   cameras: number;
   gesto: Gesto;
   sonda: boolean;
   roda: number;
+  /**
+   * A ampliação do palco do mestre durante o gesto. `1` deixa o enquadramento
+   * de sempre (a câmera com folga, ~1,1x); acima disso a câmera da mão encolhe
+   * até o enquadramento dela dar essa ampliação, e o `token` amplia o centro
+   * do plano. É onde o borrão do `transform` aparece, e onde o `zoom` cobra.
+   */
+  zoom: number;
 }) {
   const cena = useSceneStore(selectEditingScene);
   const viewport = useViewportStore((state) => state.viewport);
@@ -1938,6 +2034,33 @@ function PalcoGestoDeCamera({
 
   useEffect(() => {
     const base = montarCena(n, cameras);
+
+    /**
+     * `token`: o item 0 vai para o meio do plano e para cima de todos, que é
+     * onde o robô o pega. Sem isso ele mora no canto (0,0), por baixo, e o
+     * arrasto o levaria para fora do plano -- o que mediria os limites do
+     * conteúdo crescendo, e não a pintura do item andando.
+     */
+    const primeiro = base.items[0];
+    if (gesto === "token" && primeiro)
+      base.items[0] = {
+        ...primeiro,
+        x: SCENE_WIDTH / 2 - primeiro.width / 2,
+        y: SCENE_HEIGHT / 2 - primeiro.height / 2,
+        z: n + 1,
+      };
+
+    const mao = base.cameras?.[gesto === "fantasma" ? 1 : 0];
+    if (zoom > 1 && mao && gesto !== "token") {
+      const width = SCENE_WIDTH / (zoom * 1.45);
+      const height = (width * SCENE_HEIGHT) / SCENE_WIDTH;
+      mao.viewport = {
+        x: mao.viewport.x + mao.viewport.width / 2 - width / 2,
+        y: mao.viewport.y + mao.viewport.height / 2 - height / 2,
+        width,
+        height,
+      };
+    }
 
     useSceneStore.setState({
       board: { scenes: [base], editingSceneId: base.id, liveSceneId: base.id },
@@ -1960,22 +2083,27 @@ function PalcoGestoDeCamera({
       FULL_VIEWPORT;
     const folga = 1.45;
     useViewportStore.getState().setViewport(
-      clampViewport(
-        {
-          x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
-          y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
-          width: alvo.width * folga,
-          height: alvo.height * folga,
-        },
-        PLANO,
-      ),
+      gesto === "token"
+        ? zoomViewport(FULL_VIEWPORT, zoom, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT / 2,
+          })
+        : clampViewport(
+            {
+              x: alvo.x + alvo.width / 2 - (alvo.width * folga) / 2,
+              y: alvo.y + alvo.height / 2 - (alvo.height * folga) / 2,
+              width: alvo.width * folga,
+              height: alvo.height * folga,
+            },
+            PLANO,
+          ),
     );
 
     return () => {
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
       useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
     };
-  }, [n, cameras, gesto]);
+  }, [n, cameras, gesto, zoom]);
 
   if (!cena) return null;
 
@@ -2007,6 +2135,92 @@ function PalcoGestoDeCamera({
  * `?mapas=` é quantas cenas o board tem, e portanto quantas linhas com prévia
  * a lista desenha. Sete é o que a captura que motivou a medida mostrava.
  */
+/**
+ * A árvore de Arquivos de uma campanha longa, para pesar o painel no gesto.
+ *
+ * `total` itens: um quarto quadros, o resto notas, e uma pasta a cada treze --
+ * `arvore=260` dá 60 quadros, 200 notas e 20 pastas, cinco na raiz e o resto
+ * dentro delas. Todas abertas: pasta recolhida não desenha o que tem dentro,
+ * e a medida pesaria menos linhas do que o mestre vê. Ids derivados do índice,
+ * para duas corridas medirem a mesma árvore.
+ */
+function arvoreDaMedida(total: number): { pastas: Pasta[]; quadros: Scene[]; notas: Nota[] } {
+  const nPastas = Math.round(total / 13);
+  const nQuadros = Math.round(total / 4);
+  const pastas: Pasta[] = Array.from({ length: nPastas }, (_, i) => ({
+    id: `perf-pasta-${i}`,
+    nome: `Pasta ${i + 1}`,
+    ...(i >= 5 ? { parentId: `perf-pasta-${i % 5}` } : {}),
+  }));
+  // O item `i` vai para uma das pastas ou, uma vez a cada `nPastas + 1`, para
+  // a raiz.
+  const pastaDe = (i: number) => (nPastas && i % (nPastas + 1) < nPastas ? `perf-pasta-${i % (nPastas + 1)}` : undefined);
+
+  const quadros = Array.from({ length: nQuadros }, (_, i) => {
+    const pastaId = pastaDe(i);
+    return {
+      ...montarCena(0),
+      id: `perf-quadro-${i}`,
+      name: `Quadro ${i + 1}`,
+      tipo: "quadro" as const,
+      backgroundAssetId: undefined,
+      ...(pastaId ? { pastaId } : {}),
+    };
+  });
+  const notas: Nota[] = Array.from({ length: total - nQuadros }, (_, i) => {
+    const pastaId = pastaDe(i + nQuadros);
+    return {
+      id: `perf-nota-${i}`,
+      titulo: `Nota ${i + 1}`,
+      arquivo: `perf-nota-${i}.md`,
+      ...(pastaId ? { pastaId } : {}),
+    };
+  });
+
+  return { pastas, quadros, notas };
+}
+
+/**
+ * O acervo de imagens da medida, distribuído pelas mesmas pastas da árvore.
+ * O servidor da medida responde qualquer `/asset/*` com um bitmap sintético.
+ */
+function acervoDaMedida(total: number, pastas: readonly Pasta[]) {
+  useAssetsStore.setState({
+    image: {
+      assets: Array.from({ length: total }, (_, i) => ({
+        id: `perf-imagem-${i}`,
+        kind: "image" as const,
+        name: `imagem-${i}.png`,
+        mimeType: "image/png",
+        size: 0,
+        createdAt: i,
+        naturalWidth: 512,
+        naturalHeight: 512,
+        ...(pastas.length && i % (pastas.length + 1) < pastas.length
+          ? { folderId: pastas[i % (pastas.length + 1)]!.id }
+          : {}),
+      })),
+      pedido: useAssetsStore.getState().image.pedido + 1,
+      emVoo: false,
+    },
+  });
+}
+
+/**
+ * Ativa uma aba da coluna da esquerda DEPOIS de o shell restaurar o layout
+ * guardado: irmão que vem depois do `MestreShell`, e os efeitos rodam na ordem
+ * da árvore. Antes, a restauração escreveria por cima.
+ */
+function AbaDaMedida({ aba }: { aba: string }) {
+  useEffect(() => {
+    const { layout, ativarAba } = useLayoutStore.getState();
+    const grupo = layout.esquerda.grupos.find((g) => g.abas.some((a) => a.tipo === aba));
+    if (grupo) ativarAba("esquerda", grupo.id, aba);
+  }, [aba]);
+
+  return null;
+}
+
 function PalcoBancada({
   n,
   cameras,
@@ -2016,6 +2230,9 @@ function PalcoBancada({
   painel,
   sonda,
   roda,
+  arvore = 0,
+  imagens = 0,
+  aba = "",
 }: {
   n: number;
   cameras: number;
@@ -2025,6 +2242,9 @@ function PalcoBancada({
   painel: "ambos" | "esquerdo" | "direito" | "nenhum";
   sonda: boolean;
   roda: number;
+  arvore?: number;
+  imagens?: number;
+  aba?: string;
 }) {
   const status = useSceneStore((state) => state.status);
 
@@ -2040,15 +2260,20 @@ function PalcoBancada({
       backgroundAssetId: `perf-fundo-${i}`,
     }));
 
+    const { pastas, quadros, notas } = arvoreDaMedida(arvore);
+
     useSceneStore.setState({
       board: {
-        scenes: [primeira, ...outras],
+        scenes: [primeira, ...outras, ...quadros],
         editingSceneId: primeira.id,
         liveSceneId: primeira.id,
+        pastas,
+        notas,
       },
       status: "ready",
       campaignPath: "/perf",
     });
+    if (imagens > 0) acervoDaMedida(imagens, pastas);
     useCameraLockStore.setState({
       selecionadaId: primeira.cameras?.[0]?.id ?? null,
       espelhoMestre: false,
@@ -2092,13 +2317,14 @@ function PalcoBancada({
       useViewportStore.getState().setViewport(FULL_VIEWPORT);
       useSceneStore.setState({ board: null, status: "idle", campaignPath: null });
     };
-  }, [n, cameras, gesto, mapas, noAr, painel]);
+  }, [n, cameras, gesto, mapas, noAr, painel, arvore, imagens]);
 
   if (status !== "ready") return null;
 
   return (
     <TooltipProvider>
       <MestreShell />
+      {aba ? <AbaDaMedida aba={aba} /> : null}
       {/* Fora do `SceneStage`, e sem nada a mudar por isso: a projeção sai do
           DOM nos dois cenários. Ver `projecaoDoDom`. */}
       <MaoSintetica gesto={gesto} sonda={sonda} roda={roda} />
@@ -2144,10 +2370,21 @@ function molduraNaTela(gesto: Gesto): DOMRect | null {
 type Gesto =
   | "nenhum"
   | "mover"
+  /**
+   * Uma GRAVAÇÃO no quadro por quadro de vídeo, sem mão nenhuma: o primeiro
+   * item da cena anda um pixel. Mede quanto custa cada commit para quem assina
+   * o board -- a árvore de Arquivos, a lista de cenas --, isolado de qual gesto
+   * o provocou. Os gestos de token e de câmera já não gravam a cada quadro
+   * (ver `use-gesto-store`); o que grava é o comando da mesa, o postit e o
+   * cartão arrastados.
+   */
+  | "commit"
   /** `quadro`: um cartão de nota na mão; `-livre` orbita longe dos outros. */
   | "cartao"
   | "cartao-livre"
   | "redimensionar"
+  /** `camera-gesto`: o mestre arrasta um TOKEN, e não a moldura. */
+  | "token"
   | "zoom"
   | "fantasma"
   | "cinegrafista"
@@ -2374,6 +2611,25 @@ function MaoSintetica({
       // uma medida que estava correndo bem.
       if (doPalco) return useViewportStore.getState().viewport;
 
+      // O token anda no `useGestoStore` e só chega ao board no soltar -- e o
+      // robô solta onde pegou, depois de uma volta inteira. Quem diz se ele
+      // andou é o patch do gesto em curso.
+      if (gesto === "token") {
+        const item = selectEditingScene(useSceneStore.getState())?.items.find(
+          (i) => i.id === "perf-item-0",
+        );
+        const patch = useGestoStore
+          .getState()
+          .patches?.find((p) => p.id === "perf-item-0")?.patch;
+        if (!item) return null;
+        return {
+          x: patch?.x ?? item.x,
+          y: patch?.y ?? item.y,
+          width: 0,
+          height: 0,
+        };
+      }
+
       const scene = selectEditingScene(useSceneStore.getState());
       const selecionadaId = useCameraLockStore.getState().selecionadaId;
       const camera =
@@ -2409,6 +2665,15 @@ function MaoSintetica({
      * que esteja dentro da janela e tenha alguém debaixo.
      */
     const mira = (): { x: number; y: number }[] => {
+      if (gesto === "token") {
+        const token = document
+          .querySelector('[data-item-id="perf-item-0"]')
+          ?.getBoundingClientRect();
+        return token
+          ? [{ x: token.left + token.width / 2, y: token.top + token.height / 2 }]
+          : [];
+      }
+
       const caixa = molduraNaTela(gesto);
       if (!caixa) return [];
 
@@ -2743,8 +3008,36 @@ function MaoSintetica({
       limpar = () => despachar(alvo, "pointerup", ponto.x, ponto.y);
     };
 
+    /** O `commit`: o primeiro item anda, e o board muda a cada quadro. */
+    const gravar = () => {
+      if (!vivo) return;
+
+      const cenas = useSceneStore.getState();
+      const id = cenas.board?.editingSceneId;
+      if (id) {
+        diario.movimentos += 1;
+        diario.andou += 1;
+        cenas.updateScene(id, (cena) => ({
+          ...cena,
+          items: cena.items.map((item, indice) =>
+            indice === 0 ? { ...item, x: (item.x + 1) % SCENE_WIDTH } : item,
+          ),
+        }));
+      }
+
+      quadro = requestAnimationFrame(gravar);
+    };
+
+    if (gesto === "commit") diario.gestos = 1;
+
     quadro = requestAnimationFrame(
-      doPalco ? rodarNoPalco : gesto === "cinegrafista" ? cinegrafar : comecar,
+      gesto === "commit"
+        ? gravar
+        : doPalco
+          ? rodarNoPalco
+          : gesto === "cinegrafista"
+            ? cinegrafar
+            : comecar,
     );
 
     return () => {
@@ -2944,6 +3237,89 @@ function PalcoComLista({ n, mesmoMapa }: { n: number; mesmoMapa: boolean }) {
       {/* O mesmo gesto do cenário `arrasto`: um item por quadro, pelo store. */}
       <PalcoMestre n={40} />
     </div>
+  );
+}
+
+/**
+ * As FOTOS das câmeras tiradas sem parar, com o palco do `arrasto` andando:
+ * `?cenario=fotos&n=40`. O pior caso de `useFotografoDasCameras`, que no
+ * aplicativo só fotografa depois de a cena parar -- aqui fotografa a cada
+ * 300 ms, com um item andando a cada quadro, para o relógio de quadros pegar o
+ * custo se ele existir.
+ *
+ * Quatro recortes, um por quadrante: o tamanho de câmera mais comum. O tempo
+ * de cada foto e o tamanho dela saem no console (`--console`), a cada dez.
+ */
+function PalcoComFotos({ n, comTripe }: { n: number; comTripe: boolean }) {
+  // A última foto, à vista no canto: é ela que a captura da bancada mostra,
+  // e é assim que se confere que a perspectiva do tripé saiu certa.
+  const [ultima, setUltima] = useState<string | null>(null);
+
+  useEffect(() => {
+    const recortes = [0, 1, 2, 3].map((i) => ({
+      x: (i % 2) * (SCENE_WIDTH / 2),
+      y: Math.floor(i / 2) * (SCENE_HEIGHT / 2),
+      width: SCENE_WIDTH / 2,
+      height: SCENE_HEIGHT / 2,
+    }));
+    const tempos: number[] = [];
+    const tamanhos: number[] = [];
+    let vez = 0;
+    let ocupado = false;
+
+    const tirar = async () => {
+      const cena = selectEditingScene(useSceneStore.getState());
+      if (!cena || ocupado) return;
+      ocupado = true;
+      const inicio = performance.now();
+      // Com `?tripe=1`, uma de cada duas é do tripé: abaixo da borda de baixo,
+      // olhando o mapa para o norte, como o mestre o põe ao entrar no 2.5D.
+      const doTripe = comTripe && vez % 2 === 0;
+      const url = doTripe
+        ? await fotografarTripe(cena, {
+            x: SCENE_WIDTH / 2,
+            y: SCENE_HEIGHT + 300,
+            altura: 700,
+            giro: 0,
+            inclinacao: 55,
+            rolagem: 0,
+            lente: 45,
+          })
+        : await fotografarCamera(cena, recortes[vez % recortes.length]!);
+      // Com tripé, o canto mostra só a dele: é a perspectiva que se confere.
+      if (url && (doTripe || !comTripe)) setUltima(url);
+      tempos.push(performance.now() - inicio);
+      if (url) tamanhos.push(url.length);
+      vez += 1;
+      ocupado = false;
+
+      if (vez % 10 === 0) {
+        const ordenados = [...tempos].sort((a, b) => a - b);
+        const em = (fracao: number) =>
+          ordenados[Math.min(ordenados.length - 1, Math.floor(ordenados.length * fracao))]!;
+        const kb = tamanhos.reduce((soma, cada) => soma + cada, 0) / tamanhos.length / 1024;
+        console.log(
+          `[fotos] n=${n} tripe=${comTripe ? 1 : 0} fotos=${vez} mediana=${em(0.5).toFixed(1)}ms p95=${em(0.95).toFixed(1)}ms pior=${ordenados[ordenados.length - 1]!.toFixed(1)}ms kb=${kb.toFixed(1)}`,
+        );
+      }
+    };
+
+    const relogio = setInterval(() => void tirar(), 300);
+    return () => clearInterval(relogio);
+  }, [n, comTripe]);
+
+  return (
+    <>
+      <PalcoMestre n={n} />
+      {ultima ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ultima}
+          alt=""
+          className="pointer-events-none fixed top-2 right-2 z-50 w-[384px] rounded border border-white/30"
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -3301,6 +3677,15 @@ function Medida({ params }: { params: URLSearchParams }) {
   const sonda = params.get("sonda") === "1";
   /** Quantos eventos de roda por quadro o robô despacha. Ver `MaoSintetica`. */
   const roda = Math.max(1, Number(params.get("roda") ?? 1));
+  /**
+   * `bancada`: a ÁRVORE de Arquivos -- quantos itens ela tem (um quarto
+   * quadros, o resto notas, uma pasta a cada treze) e quantas imagens o
+   * acervo tem. Zero é a campanha de antes. Ver `arvoreDaMedida`.
+   */
+  const arvore = Number(params.get("arvore") ?? 0);
+  const imagens = Number(params.get("acervo") ?? 0);
+  /** `bancada`: a aba ativa da coluna da esquerda. Ausente = a do layout. */
+  const aba = params.get("aba") ?? "";
   /** `bancada`: que colunas laterais ficam à vista. */
   const painel = (params.get("painel") ?? "ambos") as
     | "ambos"
@@ -3348,7 +3733,18 @@ function Medida({ params }: { params: URLSearchParams }) {
   }, []);
 
   return (
-    <main className="flex h-dvh flex-col bg-black">
+    <main
+      className="flex h-dvh flex-col bg-black"
+      // `?experimento=filtro`: o ajuste de imagem da janela do espectador na
+      // tela inteira, com os quatro canais mexidos -- o pior caso, uma passada
+      // fora da tela por quadro. Para comparar com e sem num build só:
+      // `--experimento ,filtro`. Ver `filtroDaImagem`.
+      style={{
+        filter: (params.get("experimento") ?? "").split("+").includes("filtro")
+          ? "brightness(1.2) contrast(1.1) saturate(0.7) hue-rotate(15deg)"
+          : undefined,
+      }}
+    >
       {cenario === "leitor" ? (
         <PalcoLeitor pagina={pagina} degraus={degraus} rajada={rajada} />
       ) : cenario === "arrasto" ? (
@@ -3377,6 +3773,7 @@ function Medida({ params }: { params: URLSearchParams }) {
           gesto={gesto}
           sonda={sonda}
           roda={roda}
+          zoom={zoomDoPalco}
         />
       ) : cenario === "bancada" ? (
         <PalcoBancada
@@ -3386,11 +3783,16 @@ function Medida({ params }: { params: URLSearchParams }) {
           mapas={mapas}
           noAr={noAr}
           painel={painel}
+          arvore={arvore}
+          imagens={imagens}
+          aba={aba}
           sonda={sonda}
           roda={roda}
         />
       ) : cenario === "dados" ? (
         <PalcoDados n={n} zoom={zoomDoPalco} />
+      ) : cenario === "fotos" ? (
+        <PalcoComFotos n={n} comTripe={params.get("tripe") === "1"} />
       ) : cenario === "lista" || cenario === "lista-mesmo-mapa" ? (
         <PalcoComLista n={n} mesmoMapa={cenario === "lista-mesmo-mapa"} />
       ) : cenario === "camadas" ? (

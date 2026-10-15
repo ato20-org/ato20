@@ -9,6 +9,7 @@ import {
   useLayoutStore,
   type Lado,
 } from "@/lib/store/use-layout-store";
+import { t } from "@/lib/i18n/mestre";
 import { cn } from "@/lib/utils";
 
 /**
@@ -109,7 +110,7 @@ export function DockColumn({
             className="flex min-h-0 min-w-0 flex-col overflow-hidden"
             style={{ flex: `0 1 ${coluna.fracoes[indice] * 100}%` }}
           >
-            <DockGroup lado={lado} grupo={grupo} comRecolher={indice === 0} />
+            <DockGroup lado={lado} grupo={grupo} />
           </div>
 
           {/* Entre este e o próximo, nunca depois do último. */}
@@ -117,7 +118,7 @@ export function DockColumn({
             <Splitter
               direcao="horizontal"
               aparente={perto}
-              rotulo="Redimensionar as regiões"
+              rotulo={t.dock.redimensionarRegioes}
               aoArrastar={(delta) => {
                 if (inicio.current.altura === 0) {
                   inicio.current = {

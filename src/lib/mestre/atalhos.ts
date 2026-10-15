@@ -18,6 +18,7 @@ import {
   removeLuzSelection,
   removePinSelection,
   removeParedeSelection,
+  removePortaSelection,
   removePortraitSelection,
   removeSelection,
   rotateSelection,
@@ -60,6 +61,8 @@ import { useAudioStore } from "@/lib/store/use-audio-store";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { abrirRodaPelaTecla, ehTeclaDoPing } from "@/lib/ping";
+import { mudarTamanhoDoPincel, pincelNaMao } from "@/lib/mestre/pincel";
+import { t } from "@/lib/i18n/bancada";
 
 /**
  * De quanto o empurrão anda por tecla.
@@ -90,8 +93,13 @@ const SETAS: Record<string, { x: number; y: number }> = {
  *
  * Por ASSUNTO e não por tecla: quem abre a lista está procurando "como eu
  * mando isto para trás", não "o que o Ctrl faz".
+ *
+ * O nome do grupo é CHAVE, e fica em português em qualquer idioma: o listener
+ * cala os grupos do palco pelo nome (`GRUPOS_DO_PALCO`), a paleta pula a
+ * "Paleta" pelo nome, e o grupo de um plugin cai no mesmo balde quando tem o
+ * mesmo nome. O que a tela mostra sai de `rotuloDoGrupo`.
  */
-export type GrupoAtalho =
+type GrupoDeFabrica =
   | "Paleta"
   | "Desfazer"
   | "Área de transferência"
@@ -99,11 +107,42 @@ export type GrupoAtalho =
   | "Som"
   | "Camadas"
   | "Seleção"
-  | "Mesa"
+  | "Mesa";
+
+export type GrupoAtalho =
+  | GrupoDeFabrica
   // Extensão declara o grupo dela, ou cai no próprio nome. A união fica aberta
   // para isso -- fechar obrigaria a tabela do aplicativo a conhecer os nomes
   // que um autor de plugin vai escolher.
   | (string & {});
+
+/** O nome de cada grupo de fábrica, no idioma da tela. */
+const ROTULOS_DOS_GRUPOS: Record<GrupoDeFabrica, string> = {
+  Paleta: t.atalhos.grupos.paleta,
+  Desfazer: t.atalhos.grupos.desfazer,
+  "Área de transferência": t.atalhos.grupos.areaDeTransferencia,
+  Câmera: t.atalhos.grupos.camera,
+  Som: t.atalhos.grupos.som,
+  Camadas: t.atalhos.grupos.camadas,
+  Seleção: t.atalhos.grupos.selecao,
+  Mesa: t.atalhos.grupos.mesa,
+};
+
+/**
+ * Por `Map`, e não pelo objeto: um grupo de plugin chamado "toString" acharia
+ * o do protótipo.
+ */
+const ROTULO_DO_GRUPO = new Map<string, string>(
+  Object.entries(ROTULOS_DOS_GRUPOS),
+);
+
+/**
+ * O que a tela escreve como cabeçalho do grupo. O de plugin é texto livre do
+ * autor, e aparece como veio.
+ */
+export function rotuloDoGrupo(grupo: GrupoAtalho): string {
+  return ROTULO_DO_GRUPO.get(grupo) ?? grupo;
+}
 
 export type Atalho = {
   grupo: GrupoAtalho;
@@ -156,7 +195,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Paleta",
     tecla: "Ctrl+K",
-    rotulo: "Abrir a paleta de comandos",
+    rotulo: t.atalhos.abrirPaleta,
     combina: (evento) => comando(evento) && letra(evento) === "k",
     // Primeira da tabela de propósito: a paleta é o caminho para todo o resto,
     // e nenhum outro atalho pode tomar o Ctrl+K dela por precedência.
@@ -168,7 +207,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Desfazer",
     tecla: "Ctrl+Shift+Z",
-    rotulo: "Refazer",
+    rotulo: t.atalhos.refazer,
     combina: (evento) =>
       comando(evento) && evento.shiftKey && letra(evento) === "z",
     executar: () => useSceneStore.getState().redo(),
@@ -177,7 +216,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Desfazer",
     tecla: "Ctrl+Z",
-    rotulo: "Desfazer",
+    rotulo: t.atalhos.desfazer,
     combina: (evento) =>
       comando(evento) && !evento.shiftKey && letra(evento) === "z",
     executar: () => useSceneStore.getState().undo(),
@@ -186,7 +225,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Desfazer",
     tecla: "Ctrl+Y",
-    rotulo: "Refazer",
+    rotulo: t.atalhos.refazer,
     combina: (evento) => comando(evento) && letra(evento) === "y",
     executar: () => useSceneStore.getState().redo(),
     impedirPadrao: true,
@@ -209,7 +248,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad 1..9",
-    rotulo: "Acionar o pad: trilha e ambiente alternam, efeito dispara",
+    rotulo: t.atalhos.acionarPad,
     combina: (evento) => !comando(evento) && padDe(evento) !== null,
     executar: (evento) => {
       const indice = padDe(evento);
@@ -220,7 +259,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad 0",
-    rotulo: "Cortar ambiente e efeitos. A trilha fica",
+    rotulo: t.atalhos.cortarSons,
     combina: (evento) => !comando(evento) && evento.code === "Numpad0",
     // A trilha fica de propósito: o gesto é "corta o cenário", e levar a
     // música junto obrigaria a remontá-la do acervo por causa de um susto.
@@ -230,7 +269,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad +",
-    rotulo: `Subir o volume da mesa ${Math.round(PASSO_DE_VOLUME * 100)}%`,
+    rotulo: t.atalhos.subirVolume(Math.round(PASSO_DE_VOLUME * 100)),
     combina: (evento) => !comando(evento) && evento.code === "NumpadAdd",
     executar: () => mexerNoVolume(PASSO_DE_VOLUME),
     impedirPadrao: true,
@@ -238,7 +277,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad -",
-    rotulo: `Descer o volume da mesa ${Math.round(PASSO_DE_VOLUME * 100)}%`,
+    rotulo: t.atalhos.descerVolume(Math.round(PASSO_DE_VOLUME * 100)),
     combina: (evento) => !comando(evento) && evento.code === "NumpadSubtract",
     executar: () => mexerNoVolume(-PASSO_DE_VOLUME),
     impedirPadrao: true,
@@ -246,7 +285,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad *",
-    rotulo: "Pausar ou retomar a trilha",
+    rotulo: t.atalhos.pausarTrilha,
     combina: (evento) => !comando(evento) && evento.code === "NumpadMultiply",
     executar: () => {
       const { track, setPlaying } = useTrackStore.getState();
@@ -257,7 +296,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Som",
     tecla: "Numpad .",
-    rotulo: "Silenciar ESTA tela. A mesa continua ouvindo",
+    rotulo: t.atalhos.silenciarTela,
     combina: (evento) => !comando(evento) && evento.code === "NumpadDecimal",
     // Do APARELHO, e não da mesa: é o mesmo botão da barra da trilha, e existe
     // porque Mestre e Espectador na mesma máquina soam como eco.
@@ -272,7 +311,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+A",
-    rotulo: "Selecionar tudo no mapa",
+    rotulo: t.atalhos.selecionarTudo,
     combina: (evento) => comando(evento) && letra(evento) === "a",
     executar: selectAllItems,
     impedirPadrao: true,
@@ -280,7 +319,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+C",
-    rotulo: "Copiar",
+    rotulo: t.atalhos.copiar,
     combina: (evento) => comando(evento) && letra(evento) === "c",
     // Imagem e texto solto vão juntos: é uma seleção só. Ver `copySelection`.
     executar: copySelection,
@@ -289,7 +328,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+X",
-    rotulo: "Cortar",
+    rotulo: t.atalhos.cortar,
     combina: (evento) => comando(evento) && letra(evento) === "x",
     executar: cutSelection,
     impedirPadrao: true,
@@ -297,7 +336,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+V",
-    rotulo: "Colar",
+    rotulo: t.atalhos.colar,
     combina: (evento) => comando(evento) && letra(evento) === "v",
     // Barra o browser só quando há algo NOSSO para colar. Sem nada interno, a
     // tecla segue e vira o evento `paste`, que é por onde o texto do sistema
@@ -312,7 +351,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Área de transferência",
     tecla: "Ctrl+D",
-    rotulo: "Duplicar",
+    rotulo: t.atalhos.duplicar,
     combina: (evento) => comando(evento) && letra(evento) === "d",
     executar: duplicateSelection,
     impedirPadrao: true,
@@ -323,7 +362,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Ctrl+Shift+G",
-    rotulo: "Desagrupar",
+    rotulo: t.atalhos.desagrupar,
     combina: (evento) =>
       comando(evento) && evento.shiftKey && letra(evento) === "g",
     executar: desagruparSelecao,
@@ -332,7 +371,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Ctrl+G",
-    rotulo: "Agrupar a seleção",
+    rotulo: t.atalhos.agrupar,
     combina: (evento) =>
       comando(evento) && !evento.shiftKey && letra(evento) === "g",
     executar: () => void agruparSelecao(),
@@ -346,7 +385,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Ctrl+=",
-    rotulo: "Aumentar a letra do postit ou do cartão",
+    rotulo: t.atalhos.aumentarLetra,
     combina: (evento) =>
       comando(evento) &&
       (evento.key === "=" || evento.key === "+") &&
@@ -357,7 +396,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Ctrl+-",
-    rotulo: "Diminuir a letra do postit ou do cartão",
+    rotulo: t.atalhos.diminuirLetra,
     combina: (evento) =>
       comando(evento) &&
       (evento.key === "-" || evento.key === "_") &&
@@ -370,7 +409,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Ctrl+0",
-    rotulo: "Enquadrar o mapa",
+    rotulo: t.atalhos.enquadrarMapa,
     combina: (evento) => comando(evento) && evento.key === "0",
     executar: () => useViewportStore.getState().fit(),
     impedirPadrao: true,
@@ -378,7 +417,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Ctrl+=",
-    rotulo: "Aproximar",
+    rotulo: t.atalhos.aproximar,
     // `+` é o mesmo teclado com Shift, e `event.key` entrega o caractere
     // JÁ deslocado -- por isso os dois.
     combina: (evento) =>
@@ -389,7 +428,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Ctrl+-",
-    rotulo: "Afastar",
+    rotulo: t.atalhos.afastar,
     combina: (evento) =>
       comando(evento) && (evento.key === "-" || evento.key === "_"),
     executar: () => useViewportStore.getState().zoomOut(),
@@ -415,8 +454,8 @@ export const ATALHOS_BASE: Atalho[] = [
   // tecla chega aqui e não faz nada. Ver `camera-nas-setas`.
   {
     grupo: "Câmera",
-    tecla: "Shift+Setas (sem seleção)",
-    rotulo: `Andar com a câmera depressa. Um toque anda ${Math.round(PASSO_CAMERA_LARGO * 100)}%`,
+    tecla: t.atalhos.teclas.shiftSetasSemSelecao,
+    rotulo: t.atalhos.andarDepressa(Math.round(PASSO_CAMERA_LARGO * 100)),
     combina: (evento) =>
       !comando(evento) &&
       evento.shiftKey &&
@@ -428,8 +467,8 @@ export const ATALHOS_BASE: Atalho[] = [
   },
   {
     grupo: "Câmera",
-    tecla: "Setas (sem seleção)",
-    rotulo: `Andar com a câmera enquanto segura. Um toque anda ${Math.round(PASSO_CAMERA * 100)}%`,
+    tecla: t.atalhos.teclas.setasSemSelecao,
+    rotulo: t.atalhos.andarSegurando(Math.round(PASSO_CAMERA * 100)),
     combina: (evento) =>
       !comando(evento) &&
       !evento.shiftKey &&
@@ -444,7 +483,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "=",
-    rotulo: "Aproximar a câmera",
+    rotulo: t.atalhos.aproximarCamera,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -455,7 +494,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "-",
-    rotulo: "Afastar a câmera",
+    rotulo: t.atalhos.afastarCamera,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -467,7 +506,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+C",
-    rotulo: "Tirar do ar: a mesa vê o mapa inteiro",
+    rotulo: t.atalhos.tirarDoAr,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -479,7 +518,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "F",
-    rotulo: "Enquadrar a seleção na câmera",
+    rotulo: t.atalhos.enquadrarSelecao,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -491,7 +530,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "C",
-    rotulo: "Levar a câmera selecionada para onde estás",
+    rotulo: t.atalhos.levarCamera,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -505,8 +544,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+L",
-    rotulo:
-      "Espelhar teu palco na câmera selecionada (no 2.5D: modo cinegrafista)",
+    rotulo: t.atalhos.espelharPalco,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -524,7 +562,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "L",
-    rotulo: "Câmera selecionada segue a seleção",
+    rotulo: t.atalhos.seguirSelecao,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -549,7 +587,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Shift+1..9",
-    rotulo: "Selecionar a câmera nessa posição",
+    rotulo: t.atalhos.selecionarCamera,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -565,7 +603,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "T",
-    rotulo: "Transmitir a câmera selecionada, ou tirar do ar",
+    rotulo: t.atalhos.transmitir,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -577,7 +615,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "N",
-    rotulo: "Nova câmera onde o mouse está, sem mudar o que está no ar",
+    rotulo: t.atalhos.novaCamera,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&
@@ -589,7 +627,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Câmera",
     tecla: "Home",
-    rotulo: "Ir até a câmera selecionada",
+    rotulo: t.atalhos.irParaCamera,
     combina: (evento) => !comando(evento) && evento.key === "Home",
     executar: irParaCamera,
     // Home rola a página para o topo se não for barrado.
@@ -608,7 +646,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Camadas",
     tecla: "Ctrl+Shift+]",
-    rotulo: "Trazer para a frente",
+    rotulo: t.atalhos.trazerParaFrente,
     combina: (evento) =>
       comando(evento) &&
       evento.shiftKey &&
@@ -619,7 +657,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Camadas",
     tecla: "Ctrl+Shift+[",
-    rotulo: "Mandar para o fundo",
+    rotulo: t.atalhos.mandarParaFundo,
     combina: (evento) =>
       comando(evento) &&
       evento.shiftKey &&
@@ -630,7 +668,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Camadas",
     tecla: "Ctrl+]",
-    rotulo: "Subir uma camada",
+    rotulo: t.atalhos.subirCamada,
     combina: (evento) =>
       comando(evento) && !evento.shiftKey && evento.key === "]",
     executar: () => moveSelectionZ("forward"),
@@ -639,7 +677,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Camadas",
     tecla: "Ctrl+[",
-    rotulo: "Descer uma camada",
+    rotulo: t.atalhos.descerCamada,
     combina: (evento) =>
       comando(evento) && !evento.shiftKey && evento.key === "[",
     executar: () => moveSelectionZ("backward"),
@@ -649,7 +687,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Esc",
-    rotulo: "Largar a ferramenta e a seleção, soltar a câmera",
+    rotulo: t.atalhos.largar,
     // Sem exigir a ausência do comando, como estava antes: Ctrl+Esc também
     // larga, e é o comportamento que já existia.
     combina: (evento) => evento.key === "Escape",
@@ -669,11 +707,29 @@ export const ATALHOS_BASE: Atalho[] = [
     impedirPadrao: false,
   },
 
+  // O tamanho do pincel, como em todo editor de imagem: a largura do lápis e
+  // o raio da borracha da névoa. Só com um deles na mão: fora disso a tecla
+  // não tem dono, e Ctrl+[ continua sendo camada. Alt+roda faz o mesmo -- ver
+  // `usePincelNaRoda`.
+  {
+    grupo: "Seleção",
+    tecla: "[  ]",
+    rotulo: t.atalhos.tamanhoDoPincel,
+    combina: (evento) =>
+      !comando(evento) &&
+      (evento.key === "[" || evento.key === "]") &&
+      pincelNaMao(),
+    executar: (evento) => {
+      mudarTamanhoDoPincel(evento.key === "]" ? 1 : -1);
+    },
+    impedirPadrao: true,
+  },
+
   // Espelhar. Shift sozinho, sem Ctrl: Ctrl+V já é colar.
   {
     grupo: "Seleção",
     tecla: "Shift+H",
-    rotulo: "Espelhar na horizontal",
+    rotulo: t.atalhos.espelharHorizontal,
     combina: (evento) =>
       !comando(evento) && evento.shiftKey && letra(evento) === "h",
     executar: () => flipSelection("x"),
@@ -682,7 +738,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Shift+V",
-    rotulo: "Espelhar na vertical",
+    rotulo: t.atalhos.espelharVertical,
     combina: (evento) =>
       !comando(evento) && evento.shiftKey && letra(evento) === "v",
     executar: () => flipSelection("y"),
@@ -692,7 +748,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Seleção",
     tecla: "Delete / Backspace",
-    rotulo: "Apagar o que está selecionado",
+    rotulo: t.atalhos.apagar,
     combina: (evento) =>
       !comando(evento) &&
       (evento.key === "Delete" || evento.key === "Backspace"),
@@ -719,6 +775,7 @@ export const ATALHOS_BASE: Atalho[] = [
       // atenção: a parede só fica selecionada quando o mestre acabou de
       // encostar nela.
       else if (selecao.selectedParedeId) removeParedeSelection();
+      else if (selecao.selectedPortaId) removePortaSelection();
       // A luz, pela mesma regra: só fica selecionada quando o mestre acabou
       // de encostar no ponto dela.
       else if (selecao.selectedLuzId) removeLuzSelection();
@@ -736,8 +793,8 @@ export const ATALHOS_BASE: Atalho[] = [
   // Esquerda e cima giram contra o relógio; direita e baixo, a favor.
   {
     grupo: "Seleção",
-    tecla: "Shift+Setas",
-    rotulo: `Girar ${PASSO_DE_GIRO}° de cada vez`,
+    tecla: t.atalhos.teclas.shiftSetas,
+    rotulo: t.atalhos.girar(PASSO_DE_GIRO),
     combina: (evento) =>
       !comando(evento) && evento.shiftKey && evento.key in SETAS,
     executar: (evento) => girar(evento, PASSO_DE_GIRO),
@@ -745,8 +802,8 @@ export const ATALHOS_BASE: Atalho[] = [
   },
   {
     grupo: "Seleção",
-    tecla: "Setas",
-    rotulo: `Empurrar ${EMPURRAO} de cada vez`,
+    tecla: t.atalhos.teclas.setas,
+    rotulo: t.atalhos.empurrar(EMPURRAO),
     combina: (evento) =>
       !comando(evento) && !evento.shiftKey && evento.key in SETAS,
     executar: (evento) => empurrar(evento, EMPURRAO),
@@ -758,7 +815,7 @@ export const ATALHOS_BASE: Atalho[] = [
   {
     grupo: "Mesa",
     tecla: "'",
-    rotulo: "Ping no mapa, onde o mouse está: segure, aponte e solte",
+    rotulo: t.atalhos.ping,
     combina: (evento) =>
       !comando(evento) &&
       !evento.altKey &&

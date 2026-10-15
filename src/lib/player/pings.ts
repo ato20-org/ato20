@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 import type { Ping, TipoDePing } from "@/types/ping";
 
@@ -23,7 +24,7 @@ export async function marcarPing(
     body: JSON.stringify(pedido),
   });
 
-  if (!response.ok) throw await fail(response, "a mesa não recebeu o ping");
+  if (!response.ok) throw await fail(response, t.erros.pingNaoChegou);
 
   return (await response.json()) as Ping;
 }

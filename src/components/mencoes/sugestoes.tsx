@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
+import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
 
@@ -56,6 +57,7 @@ export function ListaDeSugestoes({
   indice,
   ancora,
   onEscolher,
+  recipiente,
 }: {
   /**
    * O que a lista está oferecendo, numa linha: "Personagens da campanha",
@@ -84,6 +86,12 @@ export function ListaDeSugestoes({
    */
   ancora: RefObject<HTMLElement | null>;
   onEscolher: (nome: string) => void;
+  /**
+   * Onde a lista entra, quando não pode ser o `body`: dentro de um diálogo, a
+   * lista solta no `body` é "fora" dele -- o diálogo modal não a deixa ser
+   * tocada, e o toque nela o fecharia.
+   */
+  recipiente?: HTMLElement | null;
 }) {
   const caixa = useRef<HTMLDivElement | null>(null);
 
@@ -178,9 +186,9 @@ export function ListaDeSugestoes({
       </ul>
 
       <p className="text-muted-foreground border-t px-2 py-1 text-[10px]">
-        ↑↓ escolhe · Enter confirma · Esc fecha
+        {t.sugestoes.rodape}
       </p>
     </div>,
-    document.body,
+    recipiente ?? document.body,
   );
 }

@@ -5,6 +5,7 @@ import {
   unionBounds,
   type Bounds,
 } from "@/lib/geometry/bounds";
+import { caixaDaPorta, portaDeVerdade } from "@/lib/geometry/porta";
 import { PLANO } from "@/lib/geometry/viewport";
 import { caixaDoTexto } from "@/lib/mestre/ligacoes";
 import type { Scene, Traco } from "@/types/scene";
@@ -50,6 +51,10 @@ export function limitesDoConteudo(scene: Scene): Bounds {
   // elas. A parede pela caixa GIRADA, pela razão da área.
   for (const parede of scene.paredes ?? [])
     caixas.push(itemBounds({ ...parede, rotation: parede.rotation ?? 0 }));
+
+  // A porta pela dobradiça e pelas duas pontas: a fechada e a de agora.
+  for (const porta of (scene.portas ?? []).filter(portaDeVerdade))
+    caixas.push(boxBounds(caixaDaPorta(porta)));
 
   for (const luz of scene.luzes ?? [])
     caixas.push({ minX: luz.x, minY: luz.y, maxX: luz.x, maxY: luz.y });

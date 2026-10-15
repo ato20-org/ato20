@@ -3,7 +3,9 @@
 import { memo, useMemo } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import { useSilhueta } from "@/hooks/use-silhueta";
+import { paredesComPortas } from "@/lib/geometry/porta";
 import {
   caixaDoSol,
   cssDaAfim,
@@ -18,6 +20,7 @@ import {
   SCENE_WIDTH,
   type CanvasItem,
   type Parede,
+  type Porta,
   type Sol,
 } from "@/types/scene";
 
@@ -194,16 +197,34 @@ function porcento(fracao: number): string {
  */
 export function SombraLayer({
   items,
-  paredes = SEM_PAREDES,
+  paredes: soParedes = SEM_PAREDES,
+  portas,
+  portaNaMao,
   sol,
   variante,
 }: {
   items: CanvasItem[];
   paredes?: Parede[];
+  /**
+   * As portas, que fazem sombra como parede `linha` onde estão. Junto das
+   * paredes num caminho só, e não à parte: a sombra da porta encosta na do
+   * muro, e dois caminhos escureceriam duas vezes onde se cruzam.
+   */
+  portas?: Porta[];
+  /** A porta que a mão do mestre gira. Ver `usePortasNoGiro`. */
+  portaNaMao?: string;
   sol?: Sol;
   /** O tamanho de arquivo que os itens desta tela desenham. Ver `Variante`. */
   variante?: Variante;
 }) {
+  // O giro aqui, e não no `SceneLayer`: é esta camada e a da luz que mudam
+  // enquanto a folha gira, e o resto do palco não tem por que redesenhar.
+  const portasNoGiro = usePortasNoGiro(portas, portaNaMao);
+  const paredes = useMemo(
+    () => paredesComPortas(soParedes, portasNoGiro) ?? SEM_PAREDES,
+    [soParedes, portasNoGiro],
+  );
+
   /**
    * Parede não se mexe durante um arrasto de token, então este `useMemo` não
    * recalcula nada no quadro em que a figura anda -- que é o quadro que não

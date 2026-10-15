@@ -8,6 +8,7 @@ import {
   type DonoDeCondicoes,
 } from "@/components/mestre/lista-de-condicoes";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
+import { t } from "@/lib/i18n/personagens";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import {
   alternarCondicao,
@@ -49,15 +50,13 @@ export function CondicoesPersonagem({
   return (
     <SecaoFicha
       secao="condicoes"
-      titulo="Condições"
+      titulo={t.geral.condicoes}
       contagem={quantas}
       acao={<AcrescentarCondicao dono={dono} />}
     >
       {quantas === 0 ? (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          Um selo sobre o token e o retrato: envenenado, caído, abençoado. Pode
-          mudar a figura também, com uma aura ou uma cor. Marca-se aqui ou no
-          botão direito do token.
+          {t.condicoesPersonagem.vazio}
         </p>
       ) : (
         <ListaDeCondicoes dono={dono} />
@@ -78,7 +77,11 @@ export function PainelDeCondicoesDoPersonagem({ personagemId }: { personagemId: 
   const recarregar = useCharactersStore((state) => state.recarregar);
 
   if (!personagem) {
-    return <p className="text-muted-foreground w-64 text-[11px]">Lendo o personagem…</p>;
+    return (
+      <p className="text-muted-foreground w-64 text-[11px]">
+        {t.condicoesPersonagem.lendo}
+      </p>
+    );
   }
 
   return <PainelDoPersonagem personagem={personagem} onChanged={recarregar} />;
@@ -96,7 +99,9 @@ function PainelDoPersonagem({
   return (
     <div className="w-64 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-xs font-medium">Condições de {personagem.nome}</p>
+        <p className="truncate text-xs font-medium">
+          {t.condicoesPersonagem.de(personagem.nome)}
+        </p>
         <AcrescentarCondicao dono={dono} />
       </div>
 
@@ -104,8 +109,7 @@ function PainelDoPersonagem({
         <ListaDeCondicoes dono={dono} />
       ) : (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          Um selo sobre o token e o retrato, e o efeito na figura. Também na ficha e no
-          botão direito.
+          {t.condicoesPersonagem.painelVazio}
         </p>
       )}
     </div>
@@ -136,9 +140,8 @@ function useDonoDoPersonagem(personagem: Personagem, onChanged: () => void): Don
           condicao.efeito ?? null,
         ).then(onChanged),
       dicaDoOlho: (escondido) => ({
-        titulo: escondido ? "Só você vê" : "A mesa vê",
-        texto:
-          "Escondida, nem o selo nem o efeito saem do aplicativo — nem para o celular do dono do personagem.",
+        titulo: escondido ? t.geral.soVoceVe : t.geral.aMesaVe,
+        texto: t.condicoesPersonagem.escondida,
       }),
     }),
     [personagem, onChanged],

@@ -5,6 +5,7 @@ import {
   useConfiguracoesStore,
   valorDe,
 } from "@/lib/configuracoes/registro";
+import { t } from "@/lib/i18n/mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Dado } from "@/types/dado";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
@@ -59,7 +60,7 @@ async function sala(
 
   if (!response.ok) {
     const texto = await response.text().catch(() => "");
-    throw new FioError(response.status, texto || "o fio não recebeu a linha");
+    throw new FioError(response.status, texto || t.chat.naoRecebeu);
   }
 
   return response;
@@ -94,9 +95,8 @@ export const CHAVE_DADOS_ABERTOS = "ato20.dados.abertos";
 useConfiguracoesStore.getState().definir([
   {
     chave: CHAVE_DADOS_ABERTOS,
-    titulo: "Rolar aberto para a mesa",
-    descricao:
-      "Os dados do saquinho e da paleta entram no chat para todos. Desligado, entram só para o Mestre.",
+    titulo: t.definicoes.dadosAbertos,
+    descricao: t.definicoes.dadosAbertosDescricao,
     tipo: "booleano",
     padrao: false,
     escopo: "campanha",
@@ -118,8 +118,14 @@ export function definirDadosAbertos(abertos: boolean): void {
  * Uma linha para o gesto inteiro: "2d6" da paleta são dois dados e uma
  * rolagem. Falhar não incomoda ninguém — o dado já está na mesa, e o fio é a
  * memória dele, não a jogada.
+ *
+ * `rotulo` e `modificador` são da rolagem que tem nome -- "Dante · Luta",
+ * `+10` --, a da ficha. A do saquinho e a da paleta vão sem os dois.
  */
-export function anunciarDadosNoFio(dados: readonly Dado[]): void {
+export function anunciarDadosNoFio(
+  dados: readonly Dado[],
+  { rotulo, modificador }: { rotulo?: string; modificador?: number } = {},
+): void {
   if (dados.length === 0) return;
 
   const abertos = valorDe<boolean>(CHAVE_DADOS_ABERTOS) === true;
@@ -127,7 +133,11 @@ export function anunciarDadosNoFio(dados: readonly Dado[]): void {
 
   setTimeout(() => {
     void falarNoFio({
-      rolagem: { dados: dados.map(({ faces, valor }) => ({ faces, valor })) },
+      rolagem: {
+        dados: dados.map(({ faces, valor }) => ({ faces, valor })),
+        ...(modificador ? { modificador } : {}),
+        ...(rotulo ? { rotulo } : {}),
+      },
       para: abertos ? undefined : { tipo: "mestre" },
     }).catch(() => {
       // Sem daemon não há fio. A jogada já aconteceu no palco.

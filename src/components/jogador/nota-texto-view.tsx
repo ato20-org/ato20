@@ -9,6 +9,7 @@ import {
 
 import type { ArquivoDoCaderno } from "@/hooks/use-mencoes-do-caderno";
 import type { Token } from "@/lib/mencoes/texto";
+import { t } from "@/lib/i18n/jogador";
 import { parseNota, type TipoNaNota } from "@/lib/player/caderno-mencoes";
 import { cn } from "@/lib/utils";
 
@@ -96,7 +97,9 @@ function TokenView({
   if (token.tipo === "personagem") {
     const achado = vinculos.personagem(token.valor);
     if (!achado)
-      return <NaoResolvido bruto={token.bruto} alvo="personagem na mesa" />;
+      return (
+        <NaoResolvido bruto={token.bruto} alvo={t.notaTexto.alvoPersonagem} />
+      );
 
     return (
       // Não é clicável: não há o que abrir. A ficha que o jogador alcança é a
@@ -104,7 +107,7 @@ function TokenView({
       // outro é outra feature, que não existe.
       <span
         className="inline-flex items-baseline gap-[0.2em] font-medium text-sky-300"
-        title={`${achado.nome} — ${achado.dono}`}
+        title={t.notaTexto.personagemDe(achado.nome, achado.dono)}
       >
         <VenetianMask
           className={cn(
@@ -125,7 +128,9 @@ function TokenView({
   if (token.tipo === "arquivo") {
     const arquivo = vinculos.arquivo(token.valor);
     if (!arquivo)
-      return <NaoResolvido bruto={token.bruto} alvo="arquivo seu" />;
+      return (
+        <NaoResolvido bruto={token.bruto} alvo={t.notaTexto.alvoArquivo} />
+      );
 
     const imagem = arquivo.anexo.mimeType.startsWith("image/");
 
@@ -133,7 +138,10 @@ function TokenView({
       <button
         type="button"
         className="inline-flex items-baseline gap-[0.2em] font-medium text-teal-300 underline decoration-teal-300/40"
-        title={`${arquivo.anexo.arquivo} — ${arquivo.personagemNome}`}
+        title={t.notaTexto.arquivoDe(
+          arquivo.anexo.arquivo,
+          arquivo.personagemNome,
+        )}
         onClick={() => vinculos.abrirArquivo(arquivo)}
       >
         {/* Imagem e documento com ícones diferentes: o tipo é o que decide o
@@ -150,13 +158,14 @@ function TokenView({
   }
 
   const nota = vinculos.nota(token.valor);
-  if (!nota) return <NaoResolvido bruto={token.bruto} alvo="nota sua" />;
+  if (!nota)
+    return <NaoResolvido bruto={token.bruto} alvo={t.notaTexto.alvoNota} />;
 
   return (
     <button
       type="button"
       className="inline-flex items-baseline gap-[0.2em] font-medium text-violet-300 underline decoration-violet-300/40"
-      title={`Abrir a nota ${nota.titulo}`}
+      title={t.notaTexto.abrirNota(nota.titulo)}
       onClick={() => vinculos.abrirNota(nota.id)}
     >
       <NotebookPen className={ICONE} aria-hidden />
@@ -179,7 +188,7 @@ function NaoResolvido({ bruto, alvo }: { bruto: string; alvo: string }) {
   return (
     <span
       className="text-muted-foreground underline decoration-dotted"
-      title={`Nenhum ${alvo} com esse nome`}
+      title={t.notaTexto.naoResolvido(alvo)}
     >
       {bruto}
     </span>

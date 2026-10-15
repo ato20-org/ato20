@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { garantirCarregada } from "@/lib/extensoes/carregar";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
+import { t } from "@/lib/i18n/mestre";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 
@@ -31,7 +32,7 @@ function avisarCamadaQuebrada(nome: string, chave: string, erro: string) {
   if (camadasAvisadas.has(chave)) return;
   camadasAvisadas.add(chave);
 
-  toast.error(`A camada de ${nome} falhou ao desenhar.`, { description: erro });
+  toast.error(t.palco.camadaQuebrada(nome), { description: erro });
 }
 
 export function CamadasDeExtensoes() {

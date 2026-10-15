@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useCharacterNames } from "@/hooks/use-character-names";
 import { presente as estaPresente, usePlayers } from "@/hooks/use-players";
+import { t } from "@/lib/i18n/mestre";
 import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +98,7 @@ export function PlayersChip() {
                     // ícone é o que responde "quantos entraram?" sem abrir
                     // nada. Mesma pílula do índice de pontos.
                     className={cn(total > 0 && "w-auto gap-1 px-2")}
-                    aria-label={`Jogadores (${total})`}
+                    aria-label={t.jogadores.rotulo(total)}
                   >
                     <Users />
                     {total > 0 ? (
@@ -109,27 +110,28 @@ export function PlayersChip() {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Jogadores</p>
+            <p className="font-medium">{t.jogadores.titulo}</p>
             <p className="text-muted-foreground max-w-48">
               {total === 0
-                ? "Ninguém entrou pelo Jogador ainda."
-                : `${presentes} de ${total} na mesa agora. Escolha um para ver arquivos e notas.`}
+                ? t.jogadores.ninguemAinda
+                : t.jogadores.presentes(presentes, total)}
             </p>
           </TooltipContent>
         </Tooltip>
 
-        <PopoverContent className="w-72 p-0" side="bottom" align="end">
+        {/* Pelo começo: o chip mora na pílula do canto ESQUERDO, e alinhado
+            pelo fim a lista abriria para fora da tela. */}
+        <PopoverContent className="w-72 p-0" side="bottom" align="start">
           {!loaded ? (
             <div className="grid h-20 place-items-center">
               <Loader2
                 className="text-muted-foreground size-4 animate-spin"
-                aria-label="Carregando"
+                aria-label={t.jogadores.carregando}
               />
             </div>
           ) : total === 0 ? (
             <p className="text-muted-foreground p-3 text-xs leading-snug">
-              Ninguém entrou ainda. Mostre o QR de &quot;Entrar na mesa&quot; e
-              peça para abrirem a aba Personagem.
+              {t.jogadores.ninguemEntrou}
             </p>
           ) : (
             <>
@@ -147,15 +149,15 @@ export function PlayersChip() {
                   autoFocus
                   value={busca}
                   onChange={(event) => setBusca(event.target.value)}
-                  placeholder="Buscar por nome ou personagem"
-                  aria-label="Buscar jogador"
+                  placeholder={t.jogadores.buscar}
+                  aria-label={t.jogadores.buscarRotulo}
                   className="h-9 border-0 pl-8 text-sm shadow-none focus-visible:ring-0"
                 />
               </div>
 
               {achados.length === 0 ? (
                 <p className="text-muted-foreground p-3 text-xs">
-                  Ninguém com esse nome.
+                  {t.jogadores.ninguemComEsseNome}
                 </p>
               ) : (
                 // Teto de altura: numa mesa grande a lista cobriria o mapa.
@@ -175,8 +177,8 @@ export function PlayersChip() {
                             className={`size-2 shrink-0 rounded-full ${estaPresente(player, agora) ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
                             aria-label={
                               estaPresente(player, agora)
-                                ? "na mesa agora"
-                                : "não visto há um tempo"
+                                ? t.jogadores.naMesaAgora
+                                : t.jogadores.naoVisto
                             }
                           />
 

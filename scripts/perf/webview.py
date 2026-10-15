@@ -111,6 +111,12 @@ def argumentos():
     # Que colunas laterais ficam à vista: ambos, esquerdo, direito, nenhum.
     # Lista, porque a pergunta é quanto cada uma custa no mesmo gesto.
     p.add_argument("--painel", default="ambos")
+    # `bancada`: a arvore de Arquivos (itens), o acervo (imagens) e a aba ativa
+    # da coluna da esquerda -- `--aba quadros --arvore 260` pesa o painel
+    # Arquivos no gesto. Ver `arvoreDaMedida` em `src/app/perf/page.tsx`.
+    p.add_argument("--arvore", default="0")
+    p.add_argument("--acervo", default="0")
+    p.add_argument("--aba", default="")
     # Repassado ao `medir.mjs`: a pasta com bg.*, bg2.* e char.* de verdade.
     p.add_argument("--imagens", default=None)
 
@@ -151,6 +157,11 @@ def argumentos():
     p.add_argument("--casas", default="4")
     p.add_argument("--areafx", default="chamas")
     p.add_argument("--areaforma", default="retangulo")
+    # A NEVOA dinamica: K areas em faixas cobrindo o plano, abertas pelas
+    # lanternas (`--carregadas`). Ver `nevoaDaMedida` na pagina.
+    p.add_argument("--nevoa", default="0")
+    # As FOTOS de tripe no cenario `fotos`: uma de cada duas em perspectiva.
+    p.add_argument("--tripe", action="store_true")
     # Os efeitos pausados, como o Mestre os ve sem nada selecionado.
     p.add_argument("--parados", action="store_true")
     p.add_argument("--figura", default="misto")
@@ -474,11 +485,14 @@ def main():
                                 f"&condicoes={k}&figura={args.figura}"
                                 f"&areas={args.areas}&casas={args.casas}&areafx={args.areafx}"
                                 f"&areaforma={args.areaforma}"
+                                f"&nevoa={args.nevoa}"
+                                f"&tripe={'1' if args.tripe else '0'}"
                                 f"&parados={'1' if args.parados else '0'}"
                                 f"&modo={modo}"
                                 f"&girando={'1' if args.girando else '0'}"
                                 f"&medidores={med}&estilo={est}"
                                 f"&rotulo={args.rotulo}"
+                                f"&arvore={args.arvore}&acervo={args.acervo}&aba={args.aba}"
                             )
                             if args.escuridao is not None:
                                 url += f"&escuridao={args.escuridao}"
@@ -493,6 +507,8 @@ def main():
                                 rotulo += f" gesto={g}"
                             if cenario in ("bancada", "quadro"):
                                 rotulo += f" painel={painel}"
+                            if args.aba or args.arvore != "0" or args.acervo != "0":
+                                rotulo += f" aba={args.aba or '-'} arvore={args.arvore} acervo={args.acervo}"
                             if cenario == "quadro":
                                 rotulo += f" docs={d}"
                             if exp:

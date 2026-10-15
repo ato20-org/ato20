@@ -7,6 +7,7 @@ import { ImageZoom } from "@/components/attachments/image-zoom";
 import { PdfBody } from "@/components/attachments/pdf-body";
 import { Button } from "@/components/ui/button";
 import { attachmentKind } from "@/lib/attachments/kind";
+import { t } from "@/lib/i18n/palco";
 import type { Attachment } from "@/lib/player/session";
 
 /**
@@ -24,7 +25,7 @@ export function AttachmentBody({ attachment, url }: { attachment: Attachment; ur
   if (!url) {
     return (
       <div className="grid h-40 place-items-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" aria-label="Carregando" />
+        <Loader2 className="text-muted-foreground size-5 animate-spin" aria-label={t.anexo.carregando} />
       </div>
     );
   }
@@ -56,7 +57,7 @@ export function AttachmentBody({ attachment, url }: { attachment: Attachment; ur
       <PdfBody
         key={url}
         url={url}
-        saida={<ExternalButton url={url} label="Abrir o PDF no navegador" />}
+        saida={<ExternalButton url={url} label={t.anexo.abrirPdf} />}
       />
     );
   }
@@ -76,9 +77,7 @@ export function AttachmentBody({ attachment, url }: { attachment: Attachment; ur
   return (
     <div className="flex flex-col items-center gap-3 py-8 text-center">
       <FileQuestion className="text-muted-foreground size-8" aria-hidden />
-      <p className="text-muted-foreground text-sm">
-        Este tipo de arquivo não pode ser exibido aqui.
-      </p>
+      <p className="text-muted-foreground text-sm">{t.anexo.naoExibe}</p>
       <Button
         render={<a href={url} download={attachment.arquivo} />}
         nativeButton={false}
@@ -86,7 +85,7 @@ export function AttachmentBody({ attachment, url }: { attachment: Attachment; ur
         size="sm"
       >
         <Download />
-        Baixar
+        {t.anexo.baixar}
       </Button>
     </div>
   );
@@ -132,13 +131,13 @@ function TextBody({ url, name }: { url: string; name: string }) {
   }, [url]);
 
   if (failed) {
-    return <ExternalButton url={url} label={`Abrir ${name} no navegador`} />;
+    return <ExternalButton url={url} label={t.anexo.abrirNoNavegador(name)} />;
   }
 
   if (content === null) {
     return (
       <div className="grid h-40 place-items-center">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" aria-label="Carregando" />
+        <Loader2 className="text-muted-foreground size-5 animate-spin" aria-label={t.anexo.carregando} />
       </div>
     );
   }

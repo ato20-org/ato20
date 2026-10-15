@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/arquivos";
 import {
   invalidarAcervo,
   useAssetsStore,
@@ -60,7 +61,7 @@ export async function importarCaminhosNoAcervo(
       await importarCaminhos(caminhos, undefined, () => invalidarAcervo()),
     );
   } catch (cause) {
-    toast.error(cause instanceof Error ? cause.message : "Falha ao importar.");
+    toast.error(cause instanceof Error ? cause.message : t.importar.falhaAoImportar);
 
     return [];
   }
@@ -83,7 +84,7 @@ export async function importarBytesNoAcervo(
   try {
     return absorverImportacao(await importarBytes(nome, bytes));
   } catch (cause) {
-    toast.error(cause instanceof Error ? cause.message : "Falha ao colar.");
+    toast.error(cause instanceof Error ? cause.message : t.importar.falhaAoColar);
 
     return [];
   }
@@ -97,10 +98,10 @@ export async function importarBytesNoAcervo(
  * justamente o lugar onde eles vão cair.
  */
 export function rotuloDoArrasto(caminhos: string[]): string {
-  if (caminhos.length === 0) return "Soltar aqui";
-  if (caminhos.length > 1) return `${caminhos.length} arquivos`;
+  if (caminhos.length === 0) return t.importar.soltarAqui;
+  if (caminhos.length > 1) return t.importar.contarArquivos(caminhos.length);
 
   // O separador é do sistema de quem opera: barra no Linux e no mac, contrabarra
   // no Windows. Partir pelos dois dá o nome nos três.
-  return caminhos[0].split(/[\\/]/).pop() || "Soltar aqui";
+  return caminhos[0].split(/[\\/]/).pop() || t.importar.soltarAqui;
 }

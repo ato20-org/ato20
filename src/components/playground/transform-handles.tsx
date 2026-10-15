@@ -13,8 +13,12 @@ import {
   AArrowUp,
   Blend,
   Bold,
+  DoorClosed,
+  DoorOpen,
   Drama,
   Eclipse,
+  Eraser,
+  Flashlight,
   Sparkles,
   Eye,
   EyeOff,
@@ -23,9 +27,12 @@ import {
   Italic,
   Lock,
   LockOpen,
+  Package,
   MoveVertical,
   Palette,
   PanelTop,
+  Radio,
+  RadioTower,
   PanelTopDashed,
   Trash2,
   Underline,
@@ -52,6 +59,8 @@ import {
 import { usePainelNaTela } from "@/hooks/use-painel-na-tela";
 import { useSceneDrag } from "@/hooks/use-scene-drag";
 import { itemBounds } from "@/lib/geometry/bounds";
+import { t } from "@/lib/i18n/palco";
+import { t as textoDosItens } from "@/lib/i18n/itens";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
@@ -187,6 +196,17 @@ const TOM = {
     traco: "var(--color-sky-400)",
     botao: "bg-sky-500 text-white",
   },
+  /**
+   * A peça que É um item da campanha. Âmbar, pela razão do azul do token: o
+   * baú selecionado tem de se distinguir da mobília em volta dele, porque o que
+   * o mestre faz com um item — abrir, mostrar à mesa — não se faz com um
+   * desenho de chão. E âmbar é a cor do alfinete, a outra coisa do mapa que
+   * guarda algo para o grupo achar.
+   */
+  item: {
+    traco: "var(--color-amber-400)",
+    botao: "bg-amber-500 text-amber-950",
+  },
 } as const;
 
 const HANDLE_POSITION: Record<ResizeHandle, { left: string; top: string }> = {
@@ -211,6 +231,11 @@ type TransformHandlesProps = {
    * proporção é uma regra e não uma preferência, como a câmera da mesa.
    */
   keepAspect?: boolean;
+  /**
+   * O menor lado a que as alças deixam a caixa chegar. Ausente = o piso de
+   * item. Ver `minimo` em `resizeItem`.
+   */
+  minimo?: number;
   /** Empilhamento, para o gizmo da câmera ficar acima do da seleção. */
   zIndex?: number;
   /**
@@ -419,7 +444,35 @@ type TransformHandlesProps = {
   altura?: {
     metros: number;
     onChange: (metros: number) => void;
+    /**
+     * O que sobe: "parede", "porta". Ausente = parede. É chave e não texto: o
+     * rótulo sai do dicionário, no idioma da tela.
+     */
+    doQue?: keyof typeof t.transformHandles.alturaDa;
   };
+  /**
+   * Presente = mostra o botão que abre e fecha a PORTA. Só a porta passa.
+   *
+   * Um par estado/ação como o teto: aceso = aberta. Abrir leva à última
+   * abertura -- ver `alternarPorta` --, e a folha gira até lá em cada tela.
+   */
+  porta?: { aberta: boolean; onToggle: () => void };
+  /**
+   * Presente = mostra a LANTERNA, que liga a névoa dinâmica. Só a área
+   * escondida passa.
+   *
+   * Um par estado/ação como o teto: aceso = a lanterna de cada token abre esta
+   * área enquanto alcança. Ver `FogRegion.dinamica`.
+   */
+  dinamica?: { ligada: boolean; onToggle: () => void };
+  /**
+   * Presente = mostra a BORRACHA, que fura esta área no arrasto. Só a área
+   * escondida passa.
+   *
+   * Aceso enquanto ela está na mão: o gesto sobre o palco passa a furar, e é
+   * pelo mesmo botão que se volta à seleção. Ver `FogRegion.furos`.
+   */
+  borracha?: { ativa: boolean; onToggle: () => void };
   /**
    * Presente = mostra o botão que abre a ficha de quem este item é.
    *
@@ -428,6 +481,21 @@ type TransformHandlesProps = {
    * parte dos itens — faria a fileira do gizmo crescer sem dizer nada.
    */
   onOpenSheet?: () => void;
+  /**
+   * Presente = a peça é um ITEM da campanha, e a fileira ganha o que é dele: o
+   * nome, que abre o item, e o botão de mostrá-lo na mesa.
+   *
+   * O nome na fileira, e não só um ícone, é o que faz deste o gizmo de outra
+   * coisa: uma peça de mapa é reconhecida pela cara, mas a mesma imagem de baú
+   * pode ser três baús diferentes no catálogo, e o mestre só sabe QUAL está
+   * selecionado lendo.
+   */
+  item?: {
+    nome: string;
+    noAr: boolean;
+    onAbrir: () => void;
+    onTransmitir: () => void;
+  };
   /**
    * Avisado no pointerdown de redimensionar ou girar.
    *
@@ -451,6 +519,7 @@ export function TransformHandles({
   rotatable = true,
   handles = RESIZE_HANDLES,
   keepAspect = false,
+  minimo,
   zIndex = GIZMO_Z,
   tom = "default",
   outline = true,
@@ -458,6 +527,7 @@ export function TransformHandles({
   onDelete,
   onFlip,
   onOpenSheet,
+  item: doItem,
   onGestureStart,
   onGestureEnd,
   onChange,
@@ -473,6 +543,9 @@ export function TransformHandles({
   mesa,
   teto,
   altura,
+  porta,
+  dinamica,
+  borracha,
   trava,
 }: TransformHandlesProps) {
   const travada = trava?.travada ?? false;
@@ -537,6 +610,9 @@ export function TransformHandles({
 
   const cor = TOM[tom];
 
+  /** "Altura da parede", "Altura da porta": o botão, a dica e a régua. */
+  const rotuloDaAltura = t.transformHandles.alturaDa[altura?.doQue ?? "parede"];
+
   /** Pixels de tela convertidos para unidades de cena. */
   const px = (value: number) => value / scale;
 
@@ -565,6 +641,7 @@ export function TransformHandles({
           resizeItem(snapshot, handle, delta, {
             keepAspect: keepAspect || native.shiftKey,
             round,
+            minimo,
           }),
         ),
       onEnd: () => onGestureEnd?.(),
@@ -640,6 +717,7 @@ export function TransformHandles({
           redimensionamento, e ficariam competindo com as alças nas bordas. */}
       {onFlip ||
       onOpenSheet ||
+      doItem ||
       opacidade ||
       sombra ||
       estilo ||
@@ -650,6 +728,9 @@ export function TransformHandles({
       mesa ||
       teto ||
       altura ||
+      porta ||
+      dinamica ||
+      borracha ||
       trava ||
       onDelete ? (
         <div
@@ -729,7 +810,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Espelhar na horizontal"
+                    aria-label={t.transformHandles.espelhar}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -750,8 +831,90 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Espelhar na horizontal</TooltipContent>
+              <TooltipContent>{t.transformHandles.espelhar}</TooltipContent>
             </Tooltip>
+          ) : null}
+
+          {/* O item primeiro, e o nome dele à esquerda de tudo: é o que diz o
+              que está selecionado, e o resto da fileira é sobre ele. */}
+          {doItem ? (
+            <>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={textoDosItens.peca.abrirItem}
+                      className={cn(
+                        "pointer-events-auto flex shrink-0 touch-none items-center rounded-full font-medium whitespace-nowrap",
+                        cor.botao,
+                      )}
+                      style={{
+                        height: HANDLE_PX * 2,
+                        gap: HANDLE_PX * 0.4,
+                        paddingInline: HANDLE_PX * 0.7,
+                        fontSize: HANDLE_PX * 1.1,
+                        maxWidth: HANDLE_PX * 18,
+                      }}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        doItem.onAbrir();
+                      }}
+                    >
+                      <Package
+                        className="shrink-0"
+                        style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                      />
+                      <span className="truncate">{doItem.nome}</span>
+                    </button>
+                  }
+                />
+                <TooltipContent>{textoDosItens.peca.abrirItem}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={
+                        doItem.noAr
+                          ? textoDosItens.peca.tirar
+                          : textoDosItens.peca.transmitir
+                      }
+                      aria-pressed={doItem.noAr}
+                      className={cn(
+                        "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                        cor.botao,
+                        doItem.noAr && "ring-2 ring-white/70",
+                      )}
+                      style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        doItem.onTransmitir();
+                      }}
+                    >
+                      {doItem.noAr ? (
+                        <RadioTower
+                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                        />
+                      ) : (
+                        <Radio
+                          style={{ width: HANDLE_PX * 1.2, height: HANDLE_PX * 1.2 }}
+                        />
+                      )}
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  {doItem.noAr
+                    ? textoDosItens.peca.tirar
+                    : textoDosItens.peca.transmitir}
+                </TooltipContent>
+              </Tooltip>
+            </>
           ) : null}
 
           {/* Antes do excluir, de propósito: o destrutivo fica na ponta da
@@ -762,7 +925,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Abrir a ficha do personagem"
+                    aria-label={t.transformHandles.abrirFicha}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -783,7 +946,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Abrir a ficha do personagem</TooltipContent>
+              <TooltipContent>{t.transformHandles.abrirFicha}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -792,11 +955,19 @@ export function TransformHandles({
           {estilo
             ? (
                 [
-                  { chave: "negrito", rotulo: "Negrito", Icone: Bold },
-                  { chave: "italico", rotulo: "Itálico", Icone: Italic },
+                  {
+                    chave: "negrito",
+                    rotulo: t.transformHandles.negrito,
+                    Icone: Bold,
+                  },
+                  {
+                    chave: "italico",
+                    rotulo: t.transformHandles.italico,
+                    Icone: Italic,
+                  },
                   {
                     chave: "sublinhado",
-                    rotulo: "Sublinhado",
+                    rotulo: t.transformHandles.sublinhado,
                     Icone: Underline,
                   },
                 ] as const
@@ -841,13 +1012,13 @@ export function TransformHandles({
                 [
                   {
                     chave: "menor",
-                    rotulo: "Diminuir a fonte",
+                    rotulo: t.transformHandles.diminuirFonte,
                     Icone: AArrowDown,
                     acao: fonte.menor,
                   },
                   {
                     chave: "maior",
-                    rotulo: "Aumentar a fonte",
+                    rotulo: t.transformHandles.aumentarFonte,
                     Icone: AArrowUp,
                     acao: fonte.maior,
                   },
@@ -891,7 +1062,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Estilo"
+                    aria-label={t.transformHandles.estilo}
                     aria-expanded={paletaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -914,7 +1085,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Estilo</TooltipContent>
+              <TooltipContent>{t.transformHandles.estilo}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -924,7 +1095,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Opacidade da imagem"
+                    aria-label={t.transformHandles.opacidadeDaImagem}
                     aria-expanded={painelAberto}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -949,7 +1120,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Opacidade da imagem</TooltipContent>
+              <TooltipContent>{t.transformHandles.opacidadeDaImagem}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -961,7 +1132,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Sombra"
+                    aria-label={t.transformHandles.sombra}
                     aria-expanded={sombraAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -985,7 +1156,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Sombra</TooltipContent>
+              <TooltipContent>{t.transformHandles.sombra}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -995,7 +1166,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={botaoDoPainel?.rotulo ?? "Condições"}
+                    aria-label={botaoDoPainel?.rotulo ?? t.transformHandles.condicoes}
                     aria-expanded={condicoesAbertas}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1019,7 +1190,9 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>{botaoDoPainel?.rotulo ?? "Condições"}</TooltipContent>
+              <TooltipContent>
+                {botaoDoPainel?.rotulo ?? t.transformHandles.condicoes}
+              </TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1029,7 +1202,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Cor do papel"
+                    aria-label={t.transformHandles.corDoPapel}
                     aria-expanded={papelAberto}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1052,7 +1225,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Cor do papel</TooltipContent>
+              <TooltipContent>{t.transformHandles.corDoPapel}</TooltipContent>
             </Tooltip>
           ) : null}
 
@@ -1065,7 +1238,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Como escrever aqui"
+                    aria-label={t.transformHandles.comoEscrever}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
                       cor.botao,
@@ -1100,7 +1273,9 @@ export function TransformHandles({
                   <button
                     type="button"
                     aria-label={
-                      mesa.naMesa ? "Tirar da mesa" : "Mostrar para a mesa"
+                      mesa.naMesa
+                        ? t.transformHandles.tirarDaMesa
+                        : t.transformHandles.mostrarParaAMesa
                     }
                     aria-pressed={mesa.naMesa}
                     className={cn(
@@ -1128,8 +1303,152 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {mesa.naMesa
-                  ? "A mesa está vendo. Clique para esconder."
-                  : "Só você vê. Clique para mostrar na TV e nos celulares."}
+                  ? t.transformHandles.mesaVendoDica
+                  : t.transformHandles.soVoceVeDica}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* Abrir e fechar a porta, na frente da fileira: é o gesto da sessão,
+              e o resto -- altura, cadeado, lixeira -- é de quem prepara. */}
+          {porta ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      porta.aberta
+                        ? t.transformHandles.fecharPorta
+                        : t.transformHandles.abrirPorta
+                    }
+                    aria-pressed={porta.aberta}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      porta.aberta
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      porta.onToggle();
+                    }}
+                  >
+                    {porta.aberta ? (
+                      <DoorOpen
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    ) : (
+                      <DoorClosed
+                        style={{
+                          width: HANDLE_PX * 1.2,
+                          height: HANDLE_PX * 1.2,
+                        }}
+                      />
+                    )}
+                  </button>
+                }
+              />
+              <TooltipContent>
+                {porta.aberta
+                  ? t.transformHandles.fecharPorta
+                  : t.transformHandles.abrirPorta}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* A névoa dinâmica e a borracha, depois da porta e pela mesma razão:
+              são gestos da sessão -- abrir o corredor que os jogadores acabaram
+              de explorar --, e o resto da fileira é de quem prepara. */}
+          {dinamica ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      dinamica.ligada
+                        ? t.transformHandles.desligarNevoaDinamica
+                        : t.transformHandles.ligarNevoaDinamica
+                    }
+                    aria-pressed={dinamica.ligada}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      dinamica.ligada
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      dinamica.onToggle();
+                    }}
+                  >
+                    <Flashlight
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="text-muted-foreground max-w-56">
+                  {dinamica.ligada
+                    ? t.transformHandles.nevoaDinamicaDica
+                    : t.transformHandles.nevoaParadaDica}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {borracha ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      borracha.ativa
+                        ? t.transformHandles.sairDaBorracha
+                        : t.transformHandles.borracha
+                    }
+                    aria-pressed={borracha.ativa}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      borracha.ativa
+                        ? "bg-amber-500 text-neutral-950"
+                        : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      borracha.onToggle();
+                    }}
+                  >
+                    <Eraser
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="text-muted-foreground max-w-56">
+                  {borracha.ativa
+                    ? t.transformHandles.borrachaAtivaDica
+                    : t.transformHandles.borrachaDica}
+                </p>
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1143,7 +1462,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Altura da parede"
+                    aria-label={rotuloDaAltura}
                     aria-pressed={alturaAberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1168,10 +1487,9 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>
-                <p className="font-medium">Altura da parede</p>
+                <p className="font-medium">{rotuloDaAltura}</p>
                 <p className="text-muted-foreground max-w-52">
-                  Quanto ela sobe. É o que decide o comprimento da sombra que
-                  ela joga no mapa.
+                  {t.transformHandles.alturaDica}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -1187,7 +1505,11 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={teto.coberta ? "Tirar o teto" : "Pôr um teto"}
+                    aria-label={
+                      teto.coberta
+                        ? t.transformHandles.tirarTeto
+                        : t.transformHandles.porTeto
+                    }
                     aria-pressed={teto.coberta}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1222,8 +1544,8 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {teto.coberta
-                  ? "Coberta: a sombra não entra nela, porque o miolo é a pedra do mapa."
-                  : "A céu aberto: a sombra dos muros cai dentro dela, como cai para fora."}
+                  ? t.transformHandles.cobertaDica
+                  : t.transformHandles.ceuAbertoDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1237,7 +1559,11 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label={travada ? "Destravar" : "Travar"}
+                    aria-label={
+                      travada
+                        ? t.transformHandles.destravar
+                        : t.transformHandles.travar
+                    }
                     aria-pressed={travada}
                     className={cn(
                       "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
@@ -1270,8 +1596,8 @@ export function TransformHandles({
               />
               <TooltipContent>
                 {travada
-                  ? "Travado: não move, não muda de tamanho e não apaga. Clique para destravar."
-                  : "Travar no lugar, para não mexer sem querer."}
+                  ? t.transformHandles.travadoDica
+                  : t.transformHandles.travarDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
@@ -1282,7 +1608,7 @@ export function TransformHandles({
                 render={
                   <button
                     type="button"
-                    aria-label="Excluir"
+                    aria-label={t.transformHandles.excluir}
                     className="pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full bg-red-600 text-white"
                     style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
                     // `pointerdown` e não `click`: o palco inteiro reage a
@@ -1302,7 +1628,7 @@ export function TransformHandles({
                   </button>
                 }
               />
-              <TooltipContent>Excluir do mapa</TooltipContent>
+              <TooltipContent>{t.transformHandles.excluirDoMapa}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
@@ -1358,7 +1684,7 @@ export function TransformHandles({
               {Math.round(opacidade.valor * 100)}%
             </span>
             <Slider
-              aria-label="Opacidade da imagem"
+              aria-label={t.transformHandles.opacidadeDaImagem}
               orientation="vertical"
               value={[Math.round(opacidade.valor * 100)]}
               min={OPACIDADE_MINIMA}
@@ -1403,10 +1729,10 @@ export function TransformHandles({
             }}
           >
             <span className="text-muted-foreground text-[10px] tabular-nums">
-              {altura.metros.toFixed(1).replace(".", ",")} m
+              {t.transformHandles.metros(altura.metros)}
             </span>
             <Slider
-              aria-label="Altura da parede, em metros"
+              aria-label={t.transformHandles.emMetros(rotuloDaAltura)}
               orientation="vertical"
               value={[altura.metros]}
               min={ALTURA_MINIMA_M}
@@ -1455,19 +1781,19 @@ export function TransformHandles({
               escolhida={paleta.cor}
               // O padrão volta pelo primeiro botão, e ele existe nas duas
               // fileiras: sem ele, escolher uma cor seria um caminho sem volta.
-              padrao="A"
+              padrao={t.transformHandles.padraoLetra}
               onEscolher={(valor) => paleta.onChange({ cor: valor })}
             />
             {paleta.opacidade ? (
               <Opacidade
-                rotulo={`Opacidade do ${paleta.titulo.toLowerCase()}`}
+                rotulo={t.transformHandles.opacidadeDe(paleta.titulo)}
                 valor={paleta.opacidade.traco}
                 onChange={(traco) => paleta.opacidade?.onChange({ traco })}
               />
             ) : null}
             {paleta.semFundo ? null : (
               <Fileira
-                titulo="Fundo"
+                titulo={t.transformHandles.fundo}
                 escolhida={paleta.fundo}
                 padrao="∅"
                 translucido
@@ -1478,7 +1804,7 @@ export function TransformHandles({
                 mexe e não muda nada parece quebrado. */}
             {paleta.opacidade ? (
               <Opacidade
-                rotulo="Opacidade do fundo"
+                rotulo={t.transformHandles.opacidadeDoFundo}
                 valor={paleta.opacidade.fundo}
                 desligada={paleta.fundo === undefined}
                 onChange={(fundo) => paleta.opacidade?.onChange({ fundo })}
@@ -1618,7 +1944,7 @@ export function TransformHandles({
             <div
               key={`rotate-${handle}`}
               role="button"
-              aria-label={`Rotacionar pelo canto ${handle}`}
+              aria-label={t.transformHandles.girarPeloCanto(handle)}
               className="pointer-events-auto absolute touch-none"
               style={{
                 left: ROTATE_ZONE_POSITION[handle].left,
@@ -1640,7 +1966,7 @@ export function TransformHandles({
         <button
           key={handle}
           type="button"
-          aria-label={`Redimensionar ${handle}`}
+          aria-label={t.transformHandles.redimensionar(handle)}
           className="bg-background pointer-events-auto absolute touch-none rounded-[1px]"
           style={{
             ...HANDLE_POSITION[handle],
@@ -1861,7 +2187,7 @@ function Fileira({
       <div className="flex items-center gap-1">
         <button
           type="button"
-          aria-label={`${titulo}: padrão`}
+          aria-label={t.transformHandles.padrao(titulo)}
           aria-pressed={escolhida === undefined}
           className={cn(
             "grid size-5 place-items-center rounded-full border text-[9px] transition-transform",
@@ -1894,7 +2220,7 @@ function Fileira({
         <CorLivre
           cor={escolhida}
           paleta={CORES_LAPIS}
-          rotulo={`${titulo}: outra cor`}
+          rotulo={t.transformHandles.outraCor(titulo)}
           className={(livre) =>
             cn(
               "size-5 rounded-full border transition-transform",

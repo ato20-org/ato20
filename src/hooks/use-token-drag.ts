@@ -274,13 +274,6 @@ function ler(sob: Element): DestinoDoArrasto | null {
       return { tipo: "split", painel: split.dataset.painel, zona };
   }
 
-  const pasta = sob.closest<HTMLElement>("[data-pasta-acervo]");
-  // A pasta é lida ANTES do palco de propósito: o painel do acervo é uma janela
-  // da bancada, e ela fica por cima do mapa. Quem está por cima é quem recebe.
-  if (pasta) {
-    return { tipo: "pasta", folderId: pasta.dataset.folderId || undefined };
-  }
-
   // A bolinha do handout também fica por cima do mapa, e o painel dela idem.
   if (sob.closest("[data-handout]")) return { tipo: "handout" };
 
@@ -315,6 +308,16 @@ function ler(sob: Element): DestinoDoArrasto | null {
       lista,
       pastaId: personagens?.dataset.pastaId || undefined,
     };
+
+  // A janela de Itens também fica sobre o mapa.
+  const itens = sob.closest<HTMLElement>("[data-pasta-itens]");
+  if (itens) return { tipo: "pasta-itens", pastaId: itens.dataset.pastaId || undefined };
+
+  // A linha de um personagem na lista: o item largado nela vai para ele.
+  const linha = sob.closest<HTMLElement>("[data-personagem-alvo]");
+  if (linha?.dataset.personagemAlvo) {
+    return { tipo: "personagem", personagemId: linha.dataset.personagemAlvo };
+  }
 
   const inventario = sob.closest<HTMLElement>("[data-inventario]");
   if (inventario?.dataset.personagemId) {

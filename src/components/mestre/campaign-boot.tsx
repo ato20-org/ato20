@@ -14,13 +14,15 @@ import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import { esquecerItens } from "@/lib/store/use-itens-store";
+import { esquecerMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import {
   esquecerEfeitosDaCampanha,
   useEfeitosDaCampanhaStore,
 } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
+import { t } from "@/lib/i18n/mestre";
 import { listAssets } from "@/lib/vault/assets";
-import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
 
 /**
@@ -39,9 +41,9 @@ const MINIMO_MS = 500;
 type Fase = "board" | "sessao" | "acervo" | "pronto";
 
 const ROTULOS: Record<Exclude<Fase, "pronto">, string> = {
-  board: "Lendo os mapas",
-  sessao: "Retratos e trilha",
-  acervo: "Acervo de imagens e sons",
+  board: t.abertura.lendoMapas,
+  sessao: t.abertura.retratosETrilha,
+  acervo: t.abertura.acervo,
 };
 
 const ORDEM: Array<Exclude<Fase, "pronto">> = ["board", "sessao", "acervo"];
@@ -82,7 +84,11 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // módulo e sobrevivem à troca, então só recarregar a janela consertava.
       esquecerAcervo();
       esquecerPersonagens();
+      // O catálogo de itens, pela mesma razão do elenco: o ponto desta mesa que
+      // citasse um id igual mostraria a espada da outra.
+      esquecerItens();
       esquecerCondicoes();
+      esquecerMoldeDeDetalhes();
       // Os efeitos que a outra campanha criou: a condição desta que apontasse
       // para um id igual desenharia o fogo da outra mesa.
       esquecerEfeitosDaCampanha();
@@ -133,7 +139,6 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
           carregarPersonagens(),
           listAssets("image"),
           listAssets("audio"),
-          listFolders(),
         ]);
         if (!ativo) return;
 
@@ -149,7 +154,7 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
           setErro(
             cause instanceof Error
               ? cause.message
-              : "Falha ao abrir a campanha",
+              : t.abertura.falhou,
           );
       }
     }

@@ -13,6 +13,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
+import { t } from "@/lib/i18n/mestre";
 import { importarCapaDaCampanha } from "@/lib/mestre/scene-background";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { ehFundo } from "@/types/scene";
@@ -43,7 +44,7 @@ export function CapaDaCampanha() {
 
   function importar() {
     void importarCapaDaCampanha().catch((cause: unknown) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao importar."),
+      toast.error(cause instanceof Error ? cause.message : t.capa.importarFalhou),
     );
   }
 
@@ -51,7 +52,7 @@ export function CapaDaCampanha() {
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <BookImage />
-        Capa da campanha
+        {t.capa.titulo}
       </DropdownMenuSubTrigger>
 
       <DropdownMenuSubContent className="w-56">
@@ -61,7 +62,7 @@ export function CapaDaCampanha() {
             coisa que se põe, não a última. Ver `importarCapaDaCampanha`. */}
         <DropdownMenuItem onClick={importar}>
           <ImagePlus />
-          Importar imagem…
+          {t.capa.importarImagem}
         </DropdownMenuItem>
 
         {fundos.length === 0 ? null : (
@@ -77,7 +78,9 @@ export function CapaDaCampanha() {
               // marca cair em alguma linha, e `null` não é um.
               onValueChange={(id) => definirCapa((id as string) || null)}
             >
-              <DropdownMenuRadioItem value="">Sem capa</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="">
+                {t.capa.semCapa}
+              </DropdownMenuRadioItem>
 
               {fundos.map((fundo) => (
                 <DropdownMenuRadioItem key={fundo.id} value={fundo.id}>

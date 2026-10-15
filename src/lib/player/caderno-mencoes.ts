@@ -22,6 +22,7 @@
  * a cada tecla.
  */
 
+import { t } from "@/lib/i18n/jogador";
 import { parseMencoes, type Token } from "@/lib/mencoes/texto";
 import { fragmentoNoCursor, type Fragmento } from "@/lib/mencoes/sugestao";
 
@@ -47,9 +48,9 @@ export const SINAIS_DA_NOTA_EM_ORDEM = Object.keys(SINAIS_DA_NOTA) as SinalDaNot
  * pinça o acervo inteiro.
  */
 export const TITULO_DA_NOTA: Record<SinalDaNota, string> = {
-  "@": "Personagens da mesa",
-  "/": "Seus arquivos",
-  "#": "Notas do caderno",
+  "@": t.mencoes.personagens,
+  "/": t.mencoes.arquivos,
+  "#": t.mencoes.notas,
 };
 
 export function parseNota(texto: string): Array<Token<TipoNaNota>> {

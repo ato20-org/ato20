@@ -7,6 +7,8 @@
 
 # ATO20
 
+**Português** · [English](README.en.md)
+
 O ATO20 é um VTT (*virtual tabletop*) open source, pensado para facilitar a organização e o
 gerenciamento de campanhas de RPG. Na mesa, o controle de câmera avançado traz imersão de
 verdade aos jogadores; fora dela, o mestre mantém os documentos atualizados e a história
@@ -27,14 +29,14 @@ celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.1.0/ato20_1.1.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.6.0/ato20_1.6.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.1.0/ato20_1.1.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.6.0/ato20_1.6.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -80,6 +82,13 @@ A aba **Arquivos** põe quadros, notas e imagens na mesma árvore de pastas, e a
 arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma nota aparece em
 dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na janela do
 espectador e no celular.
+
+Os **itens** são da campanha, e não de quem os carrega: a janela Itens guarda o catálogo em
+pastas, com busca, e de lá a espada vai para a mochila de um personagem, para o mapa, para o
+cartão de um ponto ou para o handout. Cada item tem imagem, descrição em Markdown, atributos
+livres ("Dano: 1d8+2 cortante", com o dado a um clique) e medidores, cujo valor é de cada
+mochila — a varinha do Edgar com 3 cargas, a da Mira com 5. Mostrar um item na mesa põe o
+cartão dele na TV e nos celulares, sem o que está escondido.
 
 ![A nota fixada no mapa, depois o Quadro 1 aberto pela aba Arquivos: a Frente de Ferro, com Bruno, o Inimigo, a granada, setas e post-it](docs/midia/arquivos.gif)
 

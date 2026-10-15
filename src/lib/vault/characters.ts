@@ -5,17 +5,22 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { deleteAsset, importAssets, importarBytes } from "@/lib/vault/assets";
 import { call } from "@/lib/vault/bridge";
+import { t } from "@/lib/i18n/personagens";
 import type { AssetMeta } from "@/types/scene";
 import type {
   AnexoAutor,
   AnexoPersonagem,
+  AplicacaoDeAtributo,
   AplicacaoDeModelos,
   Aparencia,
+  Atributo,
   CampoPersonagem,
   Condicao,
   EstiloMedidor,
   Medidor,
+  ModeloDeAtributo,
   ModeloDeMedidor,
+  PatchAtributo,
   PatchCondicao,
   PatchMedidor,
   PatchModelo,
@@ -95,7 +100,7 @@ export async function preencherCampoComArquivo(
 
     const primeiro = resultado.aceitos[0];
     if (!primeiro)
-      throw new Error(resultado.recusados[0] ?? "Nada foi anexado.");
+      throw new Error(resultado.recusados[0] ?? t.arquivos.nadaAnexado);
 
     await setCharacterCampo(id, campo, primeiro.arquivo);
 
@@ -111,7 +116,7 @@ export async function preencherCampoComArquivo(
 
   const primeiro = resultado.aceitos[0];
   if (!primeiro)
-    throw new Error(resultado.recusados[0] ?? "Nada foi importado.");
+    throw new Error(resultado.recusados[0] ?? t.arquivos.nadaImportado);
 
   const escolhido =
     recortar && !primeiro.animada
@@ -178,7 +183,7 @@ async function passarPeloRecorte(
     );
     const novo = recortado.aceitos[0];
     if (!novo)
-      throw new Error(recortado.recusados[0] ?? "O recorte não entrou no acervo.");
+      throw new Error(recortado.recusados[0] ?? t.arquivos.recorteForaDoAcervo);
 
     return novo.id;
   } finally {
@@ -363,6 +368,73 @@ export function gravarDadosDeExtensao(
   });
 }
 
+// --- atributos --------------------------------------------------------------
+
+/** Cria um atributo no fim da lista. O Rust ajusta sigla e valor. */
+export function criarAtributo(
+  id: string,
+  sigla: string,
+  valor: number,
+): Promise<Atributo> {
+  return call<Atributo>("character_atributo_criar", { id, sigla, valor });
+}
+
+/** Edita um atributo e devolve como ele ficou DEPOIS do ajuste. */
+export function editarAtributo(
+  id: string,
+  atributoId: string,
+  patch: PatchAtributo,
+): Promise<Atributo> {
+  return call<Atributo>("character_atributo_editar", { id, atributoId, patch });
+}
+
+export function removerAtributo(id: string, atributoId: string): Promise<void> {
+  return call("character_atributo_remover", { id, atributoId });
+}
+
+// --- atributos da campanha --------------------------------------------------
+
+export function listarAtributosDaCampanha(): Promise<ModeloDeAtributo[]> {
+  return call<ModeloDeAtributo[]>("atributos_da_campanha_list");
+}
+
+/**
+ * Cria um atributo de fábrica e o põe em TODO personagem que já existe. Quem
+ * já tem a mesma sigla não ganha outra.
+ */
+export function criarAtributoDaCampanha(
+  sigla: string,
+  valor: number,
+  descricao: string | null,
+): Promise<AplicacaoDeAtributo> {
+  return call<AplicacaoDeAtributo>("atributo_da_campanha_criar", {
+    sigla,
+    valor,
+    descricao,
+  });
+}
+
+/**
+ * Põe todos os atributos de fábrica em todos os personagens. Quem já tem a
+ * sigla não ganha outro, e o que já tem fica com o valor dele.
+ */
+export function aplicarAtributosEmTodos(): Promise<AplicacaoDeAtributo> {
+  return call<AplicacaoDeAtributo>("atributos_da_campanha_aplicar_em_todos");
+}
+
+/** Edita um atributo de fábrica. NÃO mexe nas fichas. */
+export function editarAtributoDaCampanha(
+  modeloId: string,
+  patch: PatchAtributo,
+): Promise<ModeloDeAtributo> {
+  return call<ModeloDeAtributo>("atributo_da_campanha_editar", { modeloId, patch });
+}
+
+/** Tira o atributo da campanha. Os que ele produziu ficam nas fichas. */
+export function removerAtributoDaCampanha(modeloId: string): Promise<void> {
+  return call("atributo_da_campanha_remover", { modeloId });
+}
+
 // --- modelos de medidor da campanha -----------------------------------------
 
 export function listarModelos(): Promise<ModeloDeMedidor[]> {
@@ -532,13 +604,18 @@ export async function attachToCharacter(
 ): Promise<AnexoImport | null> {
   const escolhidos = await open({
     multiple: true,
-    title: "Escolha os arquivos do personagem",
+    title: t.arquivos.escolhaOsArquivos,
   });
   if (!escolhidos) return null;
 
   const paths = Array.isArray(escolhidos) ? escolhidos : [escolhidos];
   if (paths.length === 0) return null;
 
+  return anexarCaminhos(id, paths);
+}
+
+/** O mesmo, com os caminhos já escolhidos: a ficha em PDF que virou o personagem. */
+export function anexarCaminhos(id: string, paths: string[]): Promise<AnexoImport> {
   return call<AnexoImport>("character_attach", { id, paths });
 }
 
@@ -614,29 +691,4 @@ export function characterLinks(): Promise<Array<[string, string]>> {
 /** Quem está com um personagem, por id de jogador. */
 export function characterPlayers(id: string): Promise<string[]> {
   return call<string[]>("character_players", { id });
-}
-
-// --- notas ------------------------------------------------------------------
-
-/**
- * A nota que um jogador escreveu sobre um personagem.
- *
- * O par (personagem, jogador) é a chave, e não só o personagem: dois jogadores
- * com o mesmo personagem escrevem coisas diferentes sobre ele.
- */
-export function characterNote(id: string, jogadorId: string): Promise<string> {
-  return call<string>("character_note", { id, jogadorId });
-}
-
-/**
- * O mestre reescreve a nota de um jogador.
- *
- * O `jogadorId` diz de QUEM é a nota, não quem está escrevendo.
- */
-export function setCharacterNote(
-  id: string,
-  jogadorId: string,
-  texto: string,
-): Promise<void> {
-  return call("character_set_note", { id, jogadorId, texto });
 }

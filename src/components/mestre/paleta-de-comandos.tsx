@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 import { useTelas } from "@/components/mestre/dock/window-content";
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import {
   Dialog,
   DialogContent,
@@ -33,9 +33,13 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useEstante } from "@/hooks/use-estante";
 import { executarComando } from "@/lib/extensoes/carregar";
 import { centeredBox } from "@/lib/geometry/transform";
-import { atalhos } from "@/lib/mestre/atalhos";
-import { rolarNaMesa } from "@/lib/mestre/dados-actions";
-import { lerNotacaoDeDados } from "@/lib/mestre/notacao-de-dados";
+import { t } from "@/lib/i18n/mestre";
+import { atalhos, rotuloDoGrupo } from "@/lib/mestre/atalhos";
+import { useCharacters } from "@/hooks/use-characters";
+import { rolarExpressao } from "@/lib/mestre/dados-actions";
+import { lerExpressaoDeRolagem, textoDaExpressao } from "@/lib/mestre/expressao-de-rolagem";
+import { listarRolagens } from "@/lib/vault/detalhes";
+import type { RolagemDaFicha } from "@/types/detalhe";
 import { normaliza } from "@/lib/search";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { usePaineisStore } from "@/lib/store/use-paineis-store";
@@ -92,10 +96,9 @@ export function PaletaDeComandos() {
         // da tela cobre o palco; no alto ela fica onde o olho já procura.
         className="mt-[12vh] gap-0 self-start p-0 sm:max-w-[min(36rem,calc(100%-2rem))]"
       >
-        <DialogTitle className="sr-only">Paleta de comandos</DialogTitle>
+        <DialogTitle className="sr-only">{t.paleta.titulo}</DialogTitle>
         <DialogDescription className="sr-only">
-          Digite para achar uma janela, cena, livro, imagem ou atalho. Uma
-          notação como 2d6 joga dados na mesa.
+          {t.paleta.descricao}
         </DialogDescription>
         {aberta && <Miolo aoExecutar={fechar} />}
       </DialogContent>
@@ -151,8 +154,8 @@ function Miolo({ aoExecutar }: { aoExecutar: () => void }) {
             setAtivo(0);
           }}
           onKeyDown={aoTeclar}
-          placeholder="Janela, cena, livro, imagem, atalho… ou 2d6"
-          aria-label="Comando"
+          placeholder={t.paleta.placeholder}
+          aria-label={t.paleta.comando}
           aria-controls="paleta-lista"
           aria-activedescendant={
             comandos[ativo] ? `paleta-${comandos[ativo].id}` : undefined
@@ -169,7 +172,7 @@ function Miolo({ aoExecutar }: { aoExecutar: () => void }) {
       >
         {comandos.length === 0 && (
           <li className="text-muted-foreground px-2 py-6 text-center text-sm">
-            Nada com esse nome.
+            {t.paleta.nada}
           </li>
         )}
         {comandos.map((comando, indice) => {
@@ -242,6 +245,14 @@ function useComandos(consulta: string): Comando[] {
 
   const extensoes = useExtensoesStore((state) => state.extensoes);
 
+  // As rolagens das fichas, lidas ao abrir a paleta: ela abre de vez em
+  // quando, e a expressão que o mestre acabou de escrever tem de estar aqui.
+  const { personagens } = useCharacters();
+  const [rolagens, setRolagens] = useState<RolagemDaFicha[]>([]);
+  useEffect(() => {
+    listarRolagens().then(setRolagens, () => setRolagens([]));
+  }, []);
+
   return useMemo(() => {
     const termo = normaliza(consulta.trim());
     const vazia = termo === "";
@@ -249,26 +260,51 @@ function useComandos(consulta: string): Comando[] {
 
     const lista: Comando[] = [];
 
-    // Dados primeiro: quem digitou "2d6" quer jogar, não ler uma lista.
-    const jogada = lerNotacaoDeDados(consulta);
-    if (jogada) {
+    // Dados primeiro: quem digitou "2d6" ou "1d20+5" quer jogar, não ler uma
+    // lista. O "roll"/"rolar" na frente continua valendo, como valia.
+    const leitura = lerExpressaoDeRolagem(consulta.replace(/^\s*(?:roll|rolar|r)\s+/i, ""));
+    if (leitura.ok) {
+      const texto = textoDaExpressao(leitura.expressao);
       lista.push({
-        id: `dado-${jogada.quantidade}d${jogada.faces}`,
-        grupo: "Dados",
-        titulo: `Rolar ${jogada.quantidade}d${jogada.faces}`,
-        detalhe: "na mesa",
+        id: `dado-${texto}`,
+        grupo: t.paleta.dados,
+        titulo: t.paleta.rolar(texto),
+        detalhe: t.paleta.naMesa,
         icone: Dices,
-        executar: () => void rolarNaMesa(jogada),
+        executar: () => void rolarExpressao(leitura.expressao),
       });
+    }
+
+    // As rolagens das fichas, pelo nome: "luta" acha a Luta de cada
+    // personagem, "dante" acha as do Dante. Só com algo digitado -- trinta
+    // perícias de dez personagens soterrariam a lista vazia.
+    if (!vazia) {
+      const nomes = new Map((personagens ?? []).map((personagem) => [personagem.id, personagem.nome]));
+      for (const rolagem of rolagens) {
+        const nome = nomes.get(rolagem.personagemId);
+        if (!nome || !casa(t.paleta.buscaRolagem(rolagem.rotulo, nome))) continue;
+
+        const lida = lerExpressaoDeRolagem(rolagem.rolagem);
+        if (!lida.ok) continue;
+
+        lista.push({
+          id: `rolagem-${rolagem.personagemId}-${rolagem.grupo}-${rolagem.rotulo}`,
+          grupo: t.paleta.rolagens,
+          titulo: t.paleta.rolarDe(rolagem.rotulo, nome),
+          detalhe: textoDaExpressao(lida.expressao),
+          icone: Dices,
+          executar: () => void rolarExpressao(lida.expressao, `${nome} · ${rolagem.rotulo}`),
+        });
+      }
     }
 
     if (live && editingSceneId && live.id !== editingSceneId) {
       const editando = scenes?.find((scene) => scene.id === editingSceneId);
-      if (editando && casa(`transmitir a cena atual ${editando.name}`)) {
+      if (editando && casa(t.paleta.buscaTransmitirAtual(editando.name))) {
         lista.push({
           id: "transmitir-atual",
-          grupo: "Cenas",
-          titulo: "Transmitir a cena atual",
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.transmitirAtual,
           detalhe: editando.name,
           icone: Radio,
           executar: () => setLiveSceneId(editando.id),
@@ -277,20 +313,20 @@ function useComandos(consulta: string): Comando[] {
     }
 
     for (const scene of scenes ?? []) {
-      if (scene.id !== editingSceneId && casa(`editar cena ${scene.name}`)) {
+      if (scene.id !== editingSceneId && casa(t.paleta.buscaEditar(scene.name))) {
         lista.push({
           id: `editar-${scene.id}`,
-          grupo: "Cenas",
-          titulo: `Editar: ${scene.name}`,
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.editar(scene.name),
           icone: Pencil,
           executar: () => setEditingSceneId(scene.id),
         });
       }
-      if (scene.id !== live?.id && casa(`transmitir cena ${scene.name}`)) {
+      if (scene.id !== live?.id && casa(t.paleta.buscaTransmitir(scene.name))) {
         lista.push({
           id: `transmitir-${scene.id}`,
-          grupo: "Cenas",
-          titulo: `Transmitir: ${scene.name}`,
+          grupo: t.paleta.cenas,
+          titulo: t.paleta.transmitir(scene.name),
           icone: Radio,
           executar: () => setLiveSceneId(scene.id),
         });
@@ -298,32 +334,32 @@ function useComandos(consulta: string): Comando[] {
     }
 
     for (const tela of telas) {
-      if (!casa(`abrir janela ${tela.titulo}`)) continue;
+      if (!casa(t.paleta.buscaAbrir(tela.titulo))) continue;
       lista.push({
         id: `tela-${JSON.stringify(tela.conteudo)}`,
-        grupo: "Janelas",
-        titulo: `Abrir: ${tela.titulo}`,
+        grupo: t.paleta.janelas,
+        titulo: t.paleta.abrir(tela.titulo),
         icone: AppWindow,
         executar: () => abrirJanela(tela.conteudo),
       });
     }
 
     for (const livro of livros) {
-      if (!casa(`livro ${livro.titulo}`)) continue;
+      if (!casa(t.paleta.buscaLivro(livro.titulo))) continue;
       lista.push({
         id: `livro-painel-${livro.id}`,
-        grupo: "Livros",
+        grupo: t.paleta.livros,
         titulo: livro.titulo,
-        detalhe: "num painel",
+        detalhe: t.paleta.numPainel,
         icone: Columns2,
         executar: () =>
           abrirNoPainel({ tipo: "livro", livroId: livro.id, titulo: livro.titulo }),
       });
       lista.push({
         id: `livro-janela-${livro.id}`,
-        grupo: "Livros",
+        grupo: t.paleta.livros,
         titulo: livro.titulo,
-        detalhe: "em janela",
+        detalhe: t.paleta.emJanela,
         icone: BookOpen,
         executar: () =>
           abrirJanela({
@@ -337,10 +373,10 @@ function useComandos(consulta: string): Comando[] {
     if (!vazia && editingSceneId) {
       // Só o que não tem dono, como a biblioteca. Ver `AssetMeta.escopo`.
       for (const asset of assets) {
-        if (asset.escopo || !casa(`imagem na mesa ${asset.name}`)) continue;
+        if (asset.escopo || !casa(t.paleta.buscaImagem(asset.name))) continue;
         lista.push({
           id: `imagem-${asset.id}`,
-          grupo: "Imagem na mesa",
+          grupo: t.paleta.imagemNaMesa,
           titulo: asset.name,
           icone: ImageIcon,
           executar: () => {
@@ -361,7 +397,7 @@ function useComandos(consulta: string): Comando[] {
         if (atalho.grupo === "Paleta" || !casa(atalho.rotulo)) continue;
         lista.push({
           id: `atalho-${atalho.grupo}-${atalho.tecla}`,
-          grupo: atalho.grupo,
+          grupo: rotuloDoGrupo(atalho.grupo),
           titulo: atalho.rotulo,
           detalhe: atalho.tecla,
           icone: Keyboard,
@@ -405,5 +441,7 @@ function useComandos(consulta: string): Comando[] {
     abrirNoPainel,
     assets,
     extensoes,
+    personagens,
+    rolagens,
   ]);
 }

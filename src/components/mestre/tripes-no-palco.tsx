@@ -18,6 +18,7 @@ import {
   type Tela,
 } from "@/lib/geometry/camera-orbital";
 import type { Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import {
   moverTripeNoGesto,
   terminarGestoDoTripe,
@@ -63,14 +64,14 @@ type Anel = keyof typeof COR_DO_ANEL;
 
 /** O que cada parte faz, dito no hover: o mestre sabe o que vai pegar antes de pegar. */
 const ROTULO_DO_EIXO: Record<Eixo, string> = {
-  x: "Mover em X",
-  y: "Mover em Y",
-  z: "Subir e descer",
+  x: t.tripe.moverX,
+  y: t.tripe.moverY,
+  z: t.tripe.subirDescer,
 };
 const ROTULO_DO_ANEL: Record<Anel, string> = {
-  giro: "Girar",
-  inclinacao: "Inclinar",
-  rolagem: "Rolar",
+  giro: t.tripe.girar,
+  inclinacao: t.tripe.inclinar,
+  rolagem: t.tripe.rolar,
 };
 
 /**
@@ -338,7 +339,7 @@ export function TripesNoPalco({
               {/* Sobre o tripé escolhido, o que o corpo faz; sobre os outros,
                   o nome -- é por ele que o mestre os reconhece nos chips. */}
               <text data-rotulo="corpo" textAnchor="middle" className={ROTULO}>
-                {selecionado ? "Arrastar pelo chão" : tripe.nome}
+                {selecionado ? t.tripe.arrastarPeloChao : tripe.nome}
               </text>
             </g>
 

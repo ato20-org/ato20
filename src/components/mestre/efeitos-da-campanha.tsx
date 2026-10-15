@@ -38,6 +38,8 @@ import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
 import { vincularEfeitoDaCondicao } from "@/lib/vault/characters";
@@ -93,7 +95,7 @@ export function TelaDaCondicao({
     <div className="space-y-3">
       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
         <ArrowLeft />
-        Condições
+        {t.efeito.condicoes}
       </Button>
 
       <div className="flex items-center gap-2 rounded-md border p-2.5">
@@ -106,11 +108,16 @@ export function TelaDaCondicao({
               onEditar({ nome });
               renomear(nome);
             }}
-            rotulos={{ campo: "Nome da condição", lapis: "Renomear condição" }}
+            rotulos={{
+              campo: t.efeito.nomeDaCondicao,
+              lapis: t.efeito.renomearCondicao,
+            }}
           />
         </div>
         <label className="flex shrink-0 items-center gap-1.5">
-          <span className="text-muted-foreground text-[11px]">A mesa vê</span>
+          <span className="text-muted-foreground text-[11px]">
+            {t.efeito.aMesaVe}
+          </span>
           <Switch
             size="sm"
             checked={!modelo.escondido}
@@ -124,7 +131,9 @@ export function TelaDaCondicao({
           condição criada à mão chega ao fogo ou ao gelo prontos -- o
           cardápio não tem mais seletor de efeito. */}
       <div className="flex flex-wrap items-center gap-1">
-        <span className="text-muted-foreground mr-1 text-[11px]">Partir de um efeito pronto:</span>
+        <span className="text-muted-foreground mr-1 text-[11px]">
+          {t.efeito.partirDePronto}
+        </span>
         {EFEITOS_DE_FABRICA.map((pronto) => (
           <Button
             key={pronto.id}
@@ -149,21 +158,22 @@ export function TelaDaCondicao({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Trocar o efeito pelo {trocarPor?.titulo}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.efeito.trocarPelo(trocarPor?.titulo ?? "")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              O que você ajustou no efeito de {modelo.nome} é substituído. Quem já está com a
-              condição passa a desenhar o efeito novo.
+              {t.efeito.trocarNaCondicao(modelo.nome)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (trocarPor) partirDe(trocarPor);
                 setTrocarPor(null);
               }}
             >
-              Trocar
+              {t.efeito.trocar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -206,7 +216,7 @@ export function TelaDoEfeitoEmArea({
     <div className="space-y-3">
       <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
         <ArrowLeft />
-        Efeitos em área
+        {t.efeito.efeitosEmArea}
       </Button>
 
       <div className="flex items-center gap-2 rounded-md border p-2.5">
@@ -216,13 +226,18 @@ export function TelaDoEfeitoEmArea({
             nome={efeito.titulo}
             ocupado={false}
             onGravar={(titulo) => salvar({ ...efeito, titulo })}
-            rotulos={{ campo: "Nome do efeito", lapis: "Renomear efeito" }}
+            rotulos={{
+              campo: t.efeito.nomeDoEfeito,
+              lapis: t.efeito.renomearEfeito,
+            }}
           />
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        <span className="text-muted-foreground mr-1 text-[11px]">Partir de um efeito pronto:</span>
+        <span className="text-muted-foreground mr-1 text-[11px]">
+          {t.efeito.partirDePronto}
+        </span>
         {efeitosDeAreaProntos(deFora).map((pronto) => (
           <Button
             key={pronto.id}
@@ -251,12 +266,12 @@ export function TelaDoEfeitoEmArea({
             <SecaoDasParticulas
               particulas={efeito.particulas}
               onMudar={(particulas) => salvar(com(efeito, "particulas", particulas))}
-              descricao="O que sobe da área: a fagulha, a bolha, a cinza."
+              descricao={t.efeito.particulasDaArea}
             />
             <SecaoDaLuz
               luz={efeito.luz}
               onMudar={(luz) => salvar(com(efeito, "luz", luz))}
-              descricao="A área clareia em volta, com a forma dela, e as paredes tapam. Num mapa sem escuro, é um véu da cor."
+              descricao={t.efeito.luzDaArea}
             />
           </div>
         </div>
@@ -270,21 +285,22 @@ export function TelaDoEfeitoEmArea({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Trocar o efeito pelo {trocarPor?.titulo}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.efeito.trocarPelo(trocarPor?.titulo ?? "")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              O que você ajustou em {efeito.titulo} é substituído. As áreas que o usam passam a
-              desenhar o efeito novo.
+              {t.efeito.trocarNaArea(efeito.titulo)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (trocarPor) partirDe(trocarPor);
                 setTrocarPor(null);
               }}
             >
-              Trocar
+              {t.efeito.trocar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -301,7 +317,7 @@ function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => 
         <button
           key={opcao}
           type="button"
-          aria-label={`Cor ${opcao}`}
+          aria-label={t.efeito.corDe(opcao)}
           aria-pressed={opcao === cor}
           className={cn(
             "size-4 rounded-full ring-offset-1 ring-offset-background",
@@ -408,7 +424,7 @@ function useEfeitoDaCondicao(modelo: Condicao) {
       try {
         await vincularEfeitoDaCondicao(modelo.id, criado.id);
       } catch (cause) {
-        toast.error(cause instanceof Error ? cause.message : "Falha ao ligar o efeito.");
+        toast.error(cause instanceof Error ? cause.message : t.efeito.falhaAoLigar);
       }
       recarregarCondicoes();
       recarregarPersonagens();
@@ -477,19 +493,19 @@ function EditorDeEfeito({
         </div>
 
         <div className="space-y-3">
-          <Secao titulo="Na figura" descricao="O que acontece com a própria figura.">
-            <Interruptor rotulo="Halo atrás" valor={Boolean(figura.halo)} onMudar={(v) => mudarFigura("halo", v || undefined)} />
+          <Secao titulo={t.efeito.naFigura} descricao={t.efeito.naFiguraDescricao}>
+            <Interruptor rotulo={t.efeito.haloAtras} valor={Boolean(figura.halo)} onMudar={(v) => mudarFigura("halo", v || undefined)} />
             <Interruptor
-              rotulo="Cor por cima"
+              rotulo={t.efeito.corPorCima}
               valor={typeof figura.tinta === "number"}
               onMudar={(v) => mudarFigura("tinta", v ? 0.5 : undefined)}
             />
             {typeof figura.tinta === "number" ? (
-              <Faixa rotulo="Força da cor" valor={figura.tinta} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudarFigura("tinta", v)} />
+              <Faixa rotulo={t.efeito.forcaDaCor} valor={figura.tinta} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudarFigura("tinta", v)} />
             ) : null}
-            <Interruptor rotulo="Cinza e escura" valor={Boolean(figura.cinza)} onMudar={(v) => mudarFigura("cinza", v || undefined)} />
-            <Interruptor rotulo="Meio transparente" valor={Boolean(figura.translucido)} onMudar={(v) => mudarFigura("translucido", v || undefined)} />
-            <Interruptor rotulo="Tremendo" valor={Boolean(figura.tremor)} onMudar={(v) => mudarFigura("tremor", v || undefined)} />
+            <Interruptor rotulo={t.efeito.cinzaEEscura} valor={Boolean(figura.cinza)} onMudar={(v) => mudarFigura("cinza", v || undefined)} />
+            <Interruptor rotulo={t.efeito.meioTransparente} valor={Boolean(figura.translucido)} onMudar={(v) => mudarFigura("translucido", v || undefined)} />
+            <Interruptor rotulo={t.efeito.tremendo} valor={Boolean(figura.tremor)} onMudar={(v) => mudarFigura("tremor", v || undefined)} />
           </Secao>
 
           <SecaoDoExterno externo={efeito.externo} onMudar={(externo) => mudar("externo", externo)} />
@@ -520,13 +536,13 @@ function SecaoDoExterno({
 
   return (
     <Secao
-      titulo="Imagem em volta"
-      descricao="Uma imagem atrás ou na frente da figura: o fogo, a fumaça, o círculo."
+      titulo={t.efeito.imagemEmVolta}
+      descricao={t.efeito.imagemEmVoltaDescricao}
       ligado={ligado}
       onLigar={(v) => onMudar(v ? { imagem: "" } : undefined)}
     >
       <ImagemDoAcervo
-        rotulo="Imagem"
+        rotulo={t.efeito.imagem}
         assetId={e.imagem || undefined}
         // Os mipmaps são da imagem ANTIGA -- a cópia do fogo de fábrica os
         // traz --, e o nível escolhido pelo zoom desenharia o fogo velho.
@@ -538,54 +554,54 @@ function SecaoDoExterno({
         onMudar={(q) => mudar("quadros", q as QuadrosDoEfeito | undefined)}
         comFps
       />
-      <Faixa rotulo="Tamanho" valor={e.tamanho ?? 1.5} min={0.25} max={2} passo={0.05} sufixo="×" onMudar={(v) => mudar("tamanho", v)} />
+      <Faixa rotulo={t.efeito.tamanho} valor={e.tamanho ?? 1.5} min={0.25} max={2} passo={0.05} sufixo="×" onMudar={(v) => mudar("tamanho", v)} />
       <Escolha
-        rotulo="Lado"
+        rotulo={t.efeito.lado}
         valor={e.lado ?? "atras"}
         opcoes={[
-          { valor: "atras", rotulo: "Atrás" },
-          { valor: "frente", rotulo: "Na frente" },
+          { valor: "atras", rotulo: t.efeito.atras },
+          { valor: "frente", rotulo: t.efeito.naFrente },
         ]}
         onMudar={(v) => mudar("lado", v === "atras" ? undefined : v)}
       />
       <Escolha
-        rotulo="Cresce de"
+        rotulo={t.efeito.cresceDe}
         valor={e.ancora ?? "centro"}
         opcoes={[
-          { valor: "centro", rotulo: "Centro" },
-          { valor: "base", rotulo: "Pés" },
-          { valor: "topo", rotulo: "Cabeça" },
+          { valor: "centro", rotulo: t.efeito.centro },
+          { valor: "base", rotulo: t.efeito.pes },
+          { valor: "topo", rotulo: t.efeito.cabeca },
         ]}
         onMudar={(v) => mudar("ancora", v === "centro" ? undefined : v)}
       />
-      <Faixa rotulo="Opacidade" valor={e.opacidade ?? 1} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudar("opacidade", v >= 1 ? undefined : v)} />
+      <Faixa rotulo={t.efeito.opacidade} valor={e.opacidade ?? 1} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudar("opacidade", v >= 1 ? undefined : v)} />
       <Interruptor
-        rotulo="Pintar na cor da condição"
-        dica="A imagem em tons de cinza ganha a cor da condição: o mesmo fogo vira azul ou verde."
+        rotulo={t.efeito.pintarNaCorDaCondicao}
+        dica={t.efeito.pintarImagemDica}
         valor={e.cores === "condicao"}
         onMudar={(v) => mudar("cores", v ? "condicao" : undefined)}
       />
       <ImagemDoAcervo
-        rotulo="Máscara"
-        dica="Tons de cinza: o claro deixa a imagem aparecer, o escuro apaga."
+        rotulo={t.efeito.mascara}
+        dica={t.efeito.mascaraDica}
         assetId={e.mascara}
         onMudar={(id) => mudar("mascara", id)}
       />
       <ImagemDoAcervo
-        rotulo="Profundidade"
-        dica="Tons de cinza: o claro passa na frente da figura, o escuro fica atrás."
+        rotulo={t.efeito.profundidade}
+        dica={t.efeito.profundidadeDica}
         assetId={e.profundidade}
         onMudar={(id) => mudar("profundidade", id)}
       />
       <Escolha
-        rotulo="Movimento"
+        rotulo={t.efeito.movimento}
         valor={animacao?.tipo ?? "nenhum"}
         opcoes={[
-          { valor: "nenhum", rotulo: "Parada" },
-          { valor: "pulsar", rotulo: "Pulsar" },
-          { valor: "girar", rotulo: "Girar" },
-          { valor: "flutuar", rotulo: "Flutuar" },
-          { valor: "piscar", rotulo: "Piscar" },
+          { valor: "nenhum", rotulo: t.efeito.parada },
+          { valor: "pulsar", rotulo: t.efeito.pulsar },
+          { valor: "girar", rotulo: t.efeito.girar },
+          { valor: "flutuar", rotulo: t.efeito.flutuar },
+          { valor: "piscar", rotulo: t.efeito.piscar },
         ]}
         onMudar={(v) =>
           mudar("animacao", v === "nenhum" ? undefined : { ...(animacao ?? {}), tipo: v as AnimacaoDoEfeito["tipo"] })
@@ -593,8 +609,8 @@ function SecaoDoExterno({
       />
       {animacao ? (
         <>
-          <Faixa rotulo="Ciclo" valor={animacao.periodo ?? 2} min={0.2} max={10} passo={0.1} sufixo=" s" onMudar={(v) => mudarAnimacao("periodo", v)} />
-          <Faixa rotulo="Intensidade" valor={animacao.intensidade ?? 0.5} min={0} max={1} passo={0.05} porcento onMudar={(v) => mudarAnimacao("intensidade", v)} />
+          <Faixa rotulo={t.efeito.ciclo} valor={animacao.periodo ?? 2} min={0.2} max={10} passo={0.1} sufixo=" s" onMudar={(v) => mudarAnimacao("periodo", v)} />
+          <Faixa rotulo={t.efeito.intensidade} valor={animacao.intensidade ?? 0.5} min={0} max={1} passo={0.05} porcento onMudar={(v) => mudarAnimacao("intensidade", v)} />
         </>
       ) : null}
     </Secao>
@@ -619,14 +635,14 @@ function SecaoDoChao({
 
   return (
     <Secao
-      titulo="Chão"
-      descricao="A textura deitada no chão da área, recortada na forma dela: é o que mostra onde a área termina."
+      titulo={t.efeito.chao}
+      descricao={t.efeito.chaoDescricao}
       ligado={base !== undefined}
       onLigar={(v) => onMudar(v ? { imagem: "" } : undefined)}
     >
       <ImagemDoAcervo
-        rotulo="Textura"
-        dica="Uma imagem que emenda nas quatro bordas: ela se repete pelo chão."
+        rotulo={t.efeito.textura}
+        dica={t.efeito.texturaDica}
         assetId={b.imagem || undefined}
         onMudar={(id) => onMudar(com(com(b, "mipmaps", undefined), "imagem", id ?? ""))}
       />
@@ -636,7 +652,7 @@ function SecaoDoChao({
         comFps
       />
       <Faixa
-        rotulo="Tamanho do ladrilho"
+        rotulo={t.efeito.tamanhoDoLadrilho}
         valor={b.escala ?? 1}
         min={0.5}
         max={4}
@@ -645,7 +661,7 @@ function SecaoDoChao({
         onMudar={(v) => mudar("escala", v === 1 ? undefined : v)}
       />
       <Faixa
-        rotulo="Escurecer o chão"
+        rotulo={t.efeito.escurecerChao}
         valor={b.escurece ?? 0}
         min={0}
         max={1}
@@ -654,7 +670,7 @@ function SecaoDoChao({
         onMudar={(v) => mudar("escurece", v > 0 ? v : undefined)}
       />
       <Faixa
-        rotulo="Opacidade"
+        rotulo={t.efeito.opacidade}
         valor={b.opacidade ?? 1}
         min={0.05}
         max={1}
@@ -663,8 +679,8 @@ function SecaoDoChao({
         onMudar={(v) => mudar("opacidade", v >= 1 ? undefined : v)}
       />
       <Interruptor
-        rotulo="Pintar na cor do efeito"
-        dica="A textura em tons de cinza ganha a cor do efeito: o mesmo chão vira brasa ou veneno."
+        rotulo={t.efeito.pintarNaCorDoEfeito}
+        dica={t.efeito.pintarTexturaDica}
         valor={b.cores === "condicao"}
         onMudar={(v) => mudar("cores", v ? "condicao" : undefined)}
       />
@@ -695,14 +711,14 @@ function SecaoDosElementos({
 
   return (
     <Secao
-      titulo="Elementos"
-      descricao="O que se levanta do chão e se repete pela área: a chama, a bolha, o cristal. Muitos pequenos, e não um esticado."
+      titulo={t.efeito.elementos}
+      descricao={t.efeito.elementosDescricao}
       ligado={area.foco !== undefined}
       onLigar={(v) => onMudar(v ? { ...area, foco: { imagem: "" } } : com(area, "foco", undefined))}
     >
       <ImagemDoAcervo
-        rotulo="Imagem"
-        dica="Um elemento só, estreito, com o pé macio: a área o repete."
+        rotulo={t.efeito.imagem}
+        dica={t.efeito.elementoDica}
         assetId={foco.imagem || undefined}
         onMudar={(id) =>
           onMudar({ ...area, foco: com(com(foco, "mipmaps", undefined), "imagem", id ?? "") })
@@ -714,12 +730,12 @@ function SecaoDosElementos({
         comFps
       />
       <Interruptor
-        rotulo="Pintar na cor do efeito"
+        rotulo={t.efeito.pintarNaCorDoEfeito}
         valor={foco.cores === "condicao"}
         onMudar={(v) => mudarFoco("cores", v ? "condicao" : undefined)}
       />
       <Faixa
-        rotulo="Tamanho"
+        rotulo={t.efeito.tamanho}
         valor={area.escala ?? 1.5}
         min={1}
         max={2.5}
@@ -728,7 +744,7 @@ function SecaoDosElementos({
         onMudar={(v) => mudar("escala", v)}
       />
       <Faixa
-        rotulo="Divisões por casa"
+        rotulo={t.efeito.divisoesPorCasa}
         valor={area.divisoes ?? 1}
         min={1}
         max={4}
@@ -736,7 +752,7 @@ function SecaoDosElementos({
         onMudar={(v) => mudar("divisoes", v === 1 ? undefined : v)}
       />
       <Faixa
-        rotulo="Mínimo no menor lado"
+        rotulo={t.efeito.minimoNoMenorLado}
         valor={area.densidade ?? 0}
         min={0}
         max={8}
@@ -750,7 +766,7 @@ function SecaoDosElementos({
 function SecaoDasParticulas({
   particulas,
   onMudar,
-  descricao = "O que a figura solta: a fagulha, a gota, a cinza.",
+  descricao = t.efeito.particulasDaFigura,
 }: {
   particulas: ParticulasDoEfeito | undefined;
   onMudar: (particulas: ParticulasDoEfeito | undefined) => void;
@@ -768,45 +784,45 @@ function SecaoDasParticulas({
 
   return (
     <Secao
-      titulo="Partículas"
+      titulo={t.efeito.particulas}
       descricao={descricao}
       ligado={particulas !== undefined}
       onLigar={(v) => onMudar(v ? { quantidade: 8 } : undefined)}
     >
-      <Faixa rotulo="Quantidade" valor={p.quantidade} min={1} max={24} passo={1} onMudar={(v) => mudar("quantidade", v)} />
-      <Faixa rotulo="Tamanho" valor={p.tamanho ?? 0.06} min={0.01} max={0.5} passo={0.01} porcento onMudar={(v) => mudar("tamanho", v)} />
-      <Faixa rotulo="Variação do tamanho" valor={p.variacao ?? 0.5} min={0} max={1} passo={0.05} porcento onMudar={(v) => mudar("variacao", v)} />
-      <Faixa rotulo="Direção" valor={p.direcao ?? 270} min={0} max={359} passo={1} sufixo="°" onMudar={(v) => mudar("direcao", v)} />
-      <Faixa rotulo="Abertura" valor={p.abertura ?? 40} min={0} max={360} passo={1} sufixo="°" onMudar={(v) => mudar("abertura", v)} />
-      <Faixa rotulo="Velocidade" valor={p.velocidade ?? 1} min={0} max={5} passo={0.05} sufixo=" fig/s" onMudar={(v) => mudar("velocidade", v)} />
-      <Faixa rotulo="Vida" valor={p.vida ?? 1.5} min={0.3} max={6} passo={0.1} sufixo=" s" onMudar={(v) => mudar("vida", v)} />
-      <Faixa rotulo="Largura de onde nascem" valor={emissor.largura ?? 0.8} min={0} max={2} passo={0.05} porcento onMudar={(v) => mudarEmissor("largura", v)} />
-      <Faixa rotulo="Altura de onde nascem" valor={emissor.altura ?? 0.3} min={0} max={2} passo={0.05} porcento onMudar={(v) => mudarEmissor("altura", v)} />
+      <Faixa rotulo={t.efeito.quantidade} valor={p.quantidade} min={1} max={24} passo={1} onMudar={(v) => mudar("quantidade", v)} />
+      <Faixa rotulo={t.efeito.tamanho} valor={p.tamanho ?? 0.06} min={0.01} max={0.5} passo={0.01} porcento onMudar={(v) => mudar("tamanho", v)} />
+      <Faixa rotulo={t.efeito.variacaoDoTamanho} valor={p.variacao ?? 0.5} min={0} max={1} passo={0.05} porcento onMudar={(v) => mudar("variacao", v)} />
+      <Faixa rotulo={t.efeito.direcao} valor={p.direcao ?? 270} min={0} max={359} passo={1} sufixo="°" onMudar={(v) => mudar("direcao", v)} />
+      <Faixa rotulo={t.efeito.abertura} valor={p.abertura ?? 40} min={0} max={360} passo={1} sufixo="°" onMudar={(v) => mudar("abertura", v)} />
+      <Faixa rotulo={t.efeito.velocidade} valor={p.velocidade ?? 1} min={0} max={5} passo={0.05} sufixo=" fig/s" onMudar={(v) => mudar("velocidade", v)} />
+      <Faixa rotulo={t.efeito.vida} valor={p.vida ?? 1.5} min={0.3} max={6} passo={0.1} sufixo=" s" onMudar={(v) => mudar("vida", v)} />
+      <Faixa rotulo={t.efeito.larguraDeOndeNascem} valor={emissor.largura ?? 0.8} min={0} max={2} passo={0.05} porcento onMudar={(v) => mudarEmissor("largura", v)} />
+      <Faixa rotulo={t.efeito.alturaDeOndeNascem} valor={emissor.altura ?? 0.3} min={0} max={2} passo={0.05} porcento onMudar={(v) => mudarEmissor("altura", v)} />
       <Escolha
-        rotulo="Nascem em"
+        rotulo={t.efeito.nascemEm}
         valor={emissor.ancora ?? "base"}
         opcoes={[
-          { valor: "base", rotulo: "Pés" },
-          { valor: "centro", rotulo: "Centro" },
-          { valor: "topo", rotulo: "Cabeça" },
+          { valor: "base", rotulo: t.efeito.pes },
+          { valor: "centro", rotulo: t.efeito.centro },
+          { valor: "topo", rotulo: t.efeito.cabeca },
         ]}
         onMudar={(v) => mudarEmissor("ancora", v as "base" | "centro" | "topo")}
       />
       <ImagemDoAcervo
-        rotulo="Imagem da partícula"
-        dica="Sem imagem, é um brilho redondo na cor da condição."
+        rotulo={t.efeito.imagemDaParticula}
+        dica={t.efeito.imagemDaParticulaDica}
         assetId={p.imagem}
         onMudar={(id) => mudar("imagem", id)}
       />
       {p.imagem ? (
         <>
           <Interruptor
-            rotulo="Pintar na cor da condição"
-            dica="A imagem vira só a forma, na cor da condição."
+            rotulo={t.efeito.pintarNaCorDaCondicao}
+            dica={t.efeito.pintarParticulaDica}
             valor={Boolean(p.pintar)}
             onMudar={(v) => mudar("pintar", v || undefined)}
           />
-          <Faixa rotulo="Giro na vida" valor={p.giro ?? 0} min={-720} max={720} passo={10} sufixo="°" onMudar={(v) => mudar("giro", v || undefined)} />
+          <Faixa rotulo={t.efeito.giroNaVida} valor={p.giro ?? 0} min={-720} max={720} passo={10} sufixo="°" onMudar={(v) => mudar("giro", v || undefined)} />
           <Quadros quadros={p.quadros} onMudar={(q) => mudar("quadros", q)} />
         </>
       ) : null}
@@ -817,7 +833,7 @@ function SecaoDasParticulas({
 function SecaoDaLuz({
   luz,
   onMudar,
-  descricao = "A figura clareia em volta, e as paredes tapam. Num mapa sem escuro, é um véu da cor.",
+  descricao = t.efeito.luzDaFigura,
 }: {
   luz: LuzDoEfeito | undefined;
   onMudar: (luz: LuzDoEfeito | undefined) => void;
@@ -830,26 +846,26 @@ function SecaoDaLuz({
 
   return (
     <Secao
-      titulo="Luz"
+      titulo={t.efeito.luz}
       descricao={descricao}
       ligado={luz !== undefined}
       onLigar={(v) => onMudar(v ? { raio: 2.5 } : undefined)}
     >
-      <Faixa rotulo="Alcance" valor={l.raio} min={0.5} max={10} passo={0.1} sufixo="× a figura" onMudar={(v) => mudar("raio", v)} />
-      <Faixa rotulo="Intensidade" valor={l.intensidade ?? 1} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudar("intensidade", v >= 1 ? undefined : v)} />
+      <Faixa rotulo={t.efeito.alcance} valor={l.raio} min={0.5} max={10} passo={0.1} sufixo={t.efeito.vezesAFigura} onMudar={(v) => mudar("raio", v)} />
+      <Faixa rotulo={t.efeito.intensidade} valor={l.intensidade ?? 1} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudar("intensidade", v >= 1 ? undefined : v)} />
       <Escolha
-        rotulo="Movimento"
+        rotulo={t.efeito.movimento}
         valor={l.efeito ?? "fixa"}
         opcoes={[
-          { valor: "fixa", rotulo: "Fixa" },
-          { valor: "fogo", rotulo: "Fogo" },
-          { valor: "pulsando", rotulo: "Pulsando" },
-          { valor: "piscando", rotulo: "Piscando" },
+          { valor: "fixa", rotulo: t.efeito.fixa },
+          { valor: "fogo", rotulo: t.efeito.fogo },
+          { valor: "pulsando", rotulo: t.efeito.pulsando },
+          { valor: "piscando", rotulo: t.efeito.piscando },
         ]}
         onMudar={(v) => mudar("efeito", v === "fixa" ? undefined : (v as LuzDoEfeito["efeito"]))}
       />
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs">Cor</span>
+        <span className="text-xs">{t.efeito.cor}</span>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -860,13 +876,13 @@ function SecaoDaLuz({
             )}
             onClick={() => mudar("cor", undefined)}
           >
-            Da condição
+            {t.efeito.daCondicao}
           </button>
           {CORES_LAPIS.map((opcao) => (
             <button
               key={opcao}
               type="button"
-              aria-label={`Luz na cor ${opcao}`}
+              aria-label={t.efeito.luzNaCor(opcao)}
               aria-pressed={l.cor === opcao}
               className={cn(
                 "size-5 rounded-full border-2",
@@ -879,7 +895,7 @@ function SecaoDaLuz({
           <CorLivre
             cor={l.cor}
             paleta={CORES_LAPIS}
-            rotulo="Luz em outra cor"
+            rotulo={t.efeito.luzEmOutraCor}
             onCor={(cor) => mudar("cor", cor)}
           />
         </div>
@@ -1112,8 +1128,8 @@ function Quadros({
   return (
     <div className="space-y-2">
       <Interruptor
-        rotulo="Animada (grade de quadros)"
-        dica="A imagem é uma grade de quadros, tocados em ordem, da esquerda para a direita e de cima para baixo."
+        rotulo={t.efeito.animada}
+        dica={t.efeito.animadaDica}
         valor={quadros !== undefined}
         onMudar={(v) =>
           onMudar(v ? { colunas, total, ...(comFps ? { fps: 12 } : {}) } : undefined)
@@ -1121,16 +1137,16 @@ function Quadros({
       />
       {quadros ? (
         <div className="flex flex-wrap items-end gap-2">
-          <Numero rotulo="Colunas" valor={colunas} min={1} max={16} onMudar={(v) => grade({ colunas: v })} />
-          <Numero rotulo="Quadros" valor={total} min={1} max={64} onMudar={(v) => grade({ total: v })} />
+          <Numero rotulo={t.efeito.colunas} valor={colunas} min={1} max={16} onMudar={(v) => grade({ colunas: v })} />
+          <Numero rotulo={t.efeito.quadros} valor={total} min={1} max={64} onMudar={(v) => grade({ total: v })} />
           {emLaco ? (
-            <Numero rotulo="Por segundo" valor={fps ?? 12} min={1} max={60} onMudar={(v) => grade({ fps: v })} />
+            <Numero rotulo={t.efeito.porSegundo} valor={fps ?? 12} min={1} max={60} onMudar={(v) => grade({ fps: v })} />
           ) : null}
           {!comFps ? (
             <div className="w-full">
               <Interruptor
-                rotulo="Em laço"
-                dica="Ligado, a grade toca sem parar. Desligado, uma vez ao longo da vida da partícula."
+                rotulo={t.efeito.emLaco}
+                dica={t.efeito.emLacoDica}
                 valor={emLaco}
                 onMudar={(v) => grade({ fps: v ? 12 : undefined })}
               />
@@ -1138,7 +1154,7 @@ function Quadros({
           ) : null}
           {!linhasCheias ? (
             <p className="text-destructive w-full text-[10px]">
-              O total tem de encher as linhas: um múltiplo de {colunas}.
+              {t.efeito.multiploDe(colunas)}
             </p>
           ) : null}
         </div>
@@ -1216,13 +1232,13 @@ function ImagemDoAcervo({
         ) : null}
         <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => void escolher()}>
           <ImagePlus />
-          {assetId ? "Trocar" : "Escolher"}
+          {assetId ? t.efeito.trocar : t.efeito.escolher}
         </Button>
         {assetId ? (
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={`Tirar ${rotulo.toLowerCase()}`}
+            aria-label={t.efeito.tirar(rotulo)}
             onClick={() => onMudar(undefined)}
           >
             <X />

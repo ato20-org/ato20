@@ -1,13 +1,17 @@
 mod appimage;
+mod catalogo;
 mod commands;
 mod configuracoes;
 mod db;
 mod error;
 mod estante;
 mod extensoes;
+mod importar;
+mod presenca;
 mod serve;
 mod tailscale;
 mod vault;
+mod webkit;
 
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -24,6 +28,9 @@ pub fn run() {
     // no `LD_PRELOAD`, e daqui nao se volta. Nada pode existir ainda -- nem
     // thread, nem janela, nem banco.
     appimage::corrigir_wayland();
+
+    // O WebKitGTK 2.54 pisca o que anima ao entrar e ao sair. Ver o modulo.
+    webkit::compor_como_o_252();
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -177,6 +184,10 @@ pub fn run() {
                 config_dir,
             });
 
+            // Fora do `AppState`: nao e campanha, nem disco, nem daemon. Ver
+            // `presenca`.
+            app.manage(presenca::Presenca::iniciar());
+
             relogio_da_mesa(app.handle().clone());
 
             Ok(())
@@ -212,11 +223,6 @@ pub fn run() {
             commands::asset_set_tipo_de_som,
             commands::asset_set_folder,
             commands::asset_set_peaks,
-            commands::folder_list,
-            commands::folder_create,
-            commands::folder_move,
-            commands::folder_rename,
-            commands::folder_delete,
             commands::portraits_load,
             commands::portraits_save,
             commands::track_load,
@@ -238,6 +244,30 @@ pub fn run() {
             commands::character_aparencia_renomear,
             commands::character_aparencia_remover,
             commands::character_aparencia_ativar,
+            commands::detalhes_list,
+            commands::detalhe_criar,
+            commands::detalhe_editar,
+            commands::detalhe_remover,
+            commands::detalhes_reordenar,
+            commands::detalhes_da_campanha,
+            commands::detalhes_rolagens,
+            commands::grupo_de_detalhes_criar,
+            commands::grupo_de_detalhes_editar,
+            commands::grupo_de_detalhes_remover,
+            commands::grupos_de_detalhes_reordenar,
+            commands::detalhe_da_campanha_criar,
+            commands::detalhes_da_campanha_aplicar_em_todos,
+            commands::detalhe_da_campanha_editar,
+            commands::detalhe_da_campanha_remover,
+            commands::detalhes_da_campanha_reordenar,
+            commands::character_atributo_criar,
+            commands::character_atributo_editar,
+            commands::character_atributo_remover,
+            commands::atributos_da_campanha_list,
+            commands::atributo_da_campanha_criar,
+            commands::atributo_da_campanha_editar,
+            commands::atributo_da_campanha_remover,
+            commands::atributos_da_campanha_aplicar_em_todos,
             commands::character_medidor_criar,
             commands::character_medidor_editar,
             commands::character_medidor_remover,
@@ -277,20 +307,33 @@ pub fn run() {
             commands::player_characters,
             commands::character_players,
             commands::character_links,
-            commands::character_note,
-            commands::character_set_note,
+            commands::itens_list,
+            commands::item_create,
+            commands::item_update,
+            commands::item_remove,
+            commands::item_set_imagem,
+            commands::item_promote_imagem,
+            commands::itens_portadores,
             commands::inventory_list,
             commands::inventory_add,
+            commands::inventory_give,
             commands::inventory_update,
             commands::inventory_remove,
             commands::inventory_move,
-            commands::inventory_set_imagem,
-            commands::inventory_promote_imagem,
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,
+            commands::pacote_exportar,
+            commands::pacote_abrir,
+            commands::pacote_importar,
+            commands::pacote_fechar,
             commands::estante_list,
             commands::estante_import,
+            commands::importar_ler_pasta,
+            commands::importar_ler_arquivos,
+            commands::importar_identificar,
+            commands::ficha_pdf_ler,
+            commands::sistema_aplicar,
             commands::estante_pagina,
             commands::estante_remover,
             commands::estante_abrir,
@@ -300,11 +343,13 @@ pub fn run() {
             commands::marcador_remover,
             commands::extensoes_listar,
             commands::extensao_importar,
+            commands::extensao_instalar_do_catalogo,
             commands::extensao_remover,
             commands::extensao_habilitar,
             commands::configuracoes_ler,
             commands::configuracoes_gravar,
             commands::configuracoes_abrir_arquivo,
+            presenca::definir_presenca,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

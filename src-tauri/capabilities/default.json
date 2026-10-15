@@ -19,7 +19,7 @@
           "url": "http://localhost:*/*"
         },
         {
-          "url": "https://github.com/ato20-org/ato20/*"
+          "url": "https://github.com/*"
         },
         {
           "url": "https://login.tailscale.com/*"
@@ -32,6 +32,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-close",
+    "core:window:allow-set-title",
     "core:webview:allow-set-webview-zoom"
   ]
 }

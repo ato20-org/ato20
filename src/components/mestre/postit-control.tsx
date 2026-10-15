@@ -11,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/arquivos";
 import { useToolStore } from "@/lib/store/use-tool-store";
 import { cn } from "@/lib/utils";
 import { CORES_POSTIT, type CorPostit } from "@/types/scene";
@@ -48,7 +49,7 @@ export function PostitControl({
    * régua do mapa, encostada na direita -- para cima, das duas, o painel
    * subiria por cima das próprias ferramentas.
    */
-  lado?: "top" | "right" | "left";
+  lado?: "top" | "right" | "left" | "bottom";
 } = {}) {
   const tool = useToolStore((state) => state.tool);
   const corPostit = useToolStore((state) => state.corPostit);
@@ -66,7 +67,7 @@ export function PostitControl({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Cor do postit"
+                  aria-label={t.postit.corDoPostit}
                 >
                   <span
                     className={cn(
@@ -80,13 +81,13 @@ export function PostitControl({
           }
         />
         <TooltipContent>
-          <p>Cor do postit</p>
+          <p>{t.postit.corDoPostit}</p>
         </TooltipContent>
       </Tooltip>
 
       <PopoverContent align="start" className="w-52 space-y-2 p-3" side={lado}>
         <span className="text-muted-foreground text-[10px]">
-          Cor do próximo postit
+          {t.postit.corDoProximo}
         </span>
 
         <div className="flex items-center gap-2">
@@ -94,7 +95,7 @@ export function PostitControl({
             <button
               key={cor}
               type="button"
-              aria-label={`Papel ${cor}`}
+              aria-label={t.postit.papel(t.postit.cores[cor])}
               aria-pressed={cor === corPostit}
               className={cn(
                 "size-8 rounded-[3px] ring-1 transition-transform",
@@ -109,8 +110,7 @@ export function PostitControl({
         </div>
 
         <p className="text-muted-foreground text-[10px] leading-snug">
-          A cor separa assunto: pista, regra, fala de PNJ, lembrete. Trocar aqui
-          não repinta os papéis já colados.
+          {t.postit.explicacaoDaCor}
         </p>
       </PopoverContent>
     </Popover>

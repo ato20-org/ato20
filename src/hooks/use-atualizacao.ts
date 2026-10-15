@@ -6,6 +6,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import { toast } from "sonner";
 
 import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
+import { t } from "@/lib/i18n/mestre";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { isDesktop } from "@/lib/vault/bridge";
 
@@ -58,11 +59,11 @@ export function useAtualizacao(): void {
       (atualizacao) => {
         if (!vivo || !atualizacao) return;
 
-        toast(`Versão ${atualizacao.version} disponível`, {
-          description: "Baixa, instala e reabre o ATO20.",
+        toast(t.atualizacao.disponivel(atualizacao.version), {
+          description: t.atualizacao.descricao,
           duration: Infinity,
           action: {
-            label: "Atualizar",
+            label: t.atualizacao.atualizar,
             onClick: () => {
               void (async () => {
                 try {
@@ -74,7 +75,7 @@ export function useAtualizacao(): void {
                   toast.error(
                     cause instanceof Error
                       ? cause.message
-                      : "A atualização não instalou.",
+                      : t.atualizacao.falhou,
                   );
                 }
               })();

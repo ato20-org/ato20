@@ -20,6 +20,7 @@ import {
   type Tela,
 } from "@/lib/geometry/camera-orbital";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
+import { t } from "@/lib/i18n/ferramentas";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import {
   moverTripeNoGesto,
@@ -347,12 +348,16 @@ export function MiniMapaDaEsguelha({
         onPointerDown={arrastar}
       >
         <IconeDoMapa className="text-muted-foreground size-3.5" />
-        <span className="flex-1 font-medium">Minimapa</span>
+        <span className="flex-1 font-medium">{t.esguelha.minimapa}</span>
         <Button
           variant="ghost"
           size="icon-sm"
           className="size-5"
-          aria-label={janela.aberto ? "Recolher o minimapa" : "Abrir o minimapa"}
+          aria-label={
+            janela.aberto
+              ? t.esguelha.recolherMinimapa
+              : t.esguelha.abrirMinimapa
+          }
           onPointerDown={(evento) => evento.stopPropagation()}
           onClick={alternar}
         >
@@ -368,7 +373,7 @@ export function MiniMapaDaEsguelha({
             vista.zoom > 1 && "cursor-grab active:cursor-grabbing",
           )}
           style={{ width: enquadre.largura, height: enquadre.altura }}
-          title="Roda: aproximar. Duplo clique: o mapa todo."
+          title={t.esguelha.minimapaDica}
           onPointerDown={arrastarVista}
           onDoubleClick={() => setVista(VISTA_INTEIRA)}
         >
@@ -428,7 +433,7 @@ export function MiniMapaDaEsguelha({
               />
               <polygon fill="currentColor" />
               <circle r={3.5} fill="#0c4a6e" stroke="white" strokeWidth={1.5}>
-                <title>Você está aqui</title>
+                <title>{t.esguelha.voceEstaAqui}</title>
               </circle>
             </g>
           </svg>
@@ -621,7 +626,7 @@ function TripeDeCima({
         style={{ pointerEvents: "all" }}
         onPointerDown={onPointerDown}
       >
-        <title>{`${tripe.nome}: arraste para mover`}</title>
+        <title>{t.esguelha.arrasteTripe(tripe.nome)}</title>
       </circle>
     </g>
   );

@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { COR_DA_AREA, EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { copiaParaACampanha } from "@/lib/efeitos";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
@@ -68,7 +70,7 @@ export function EfeitosEmAreaDaCampanha() {
 
     salvar({
       ...criado,
-      titulo: "Efeito em área",
+      titulo: t.efeitosEmArea.novo,
       area: { cor: CORES_LAPIS[lista.length % 6] ?? COR_DA_AREA },
     });
     setConfigurando(criado.id);
@@ -97,9 +99,9 @@ export function EfeitosEmAreaDaCampanha() {
     <section className="space-y-2">
       <div className="flex items-center gap-1">
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">Efeitos em área da campanha</h3>
+          <h3 className="text-sm font-medium">{t.efeitosEmArea.titulo}</h3>
           <p className="text-muted-foreground text-[11px] leading-snug">
-            O que o gizmo de uma área oferece: o chão em chamas, a névoa.
+            {t.efeitosEmArea.nota}
           </p>
         </div>
 
@@ -109,7 +111,7 @@ export function EfeitosEmAreaDaCampanha() {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Criar efeito em área"
+                aria-label={t.efeitosEmArea.criar}
                 disabled={cheio || ocupado}
                 onClick={() => void novo()}
               >
@@ -118,10 +120,10 @@ export function EfeitosEmAreaDaCampanha() {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Criar efeito em área</p>
+            <p className="font-medium">{t.efeitosEmArea.criar}</p>
             {cheio ? (
               <p className="text-muted-foreground max-w-48">
-                Limite de {MAX_EFEITOS} efeitos na campanha, contando os das condições.
+                {t.efeitosEmArea.limite(MAX_EFEITOS)}
               </p>
             ) : null}
           </TooltipContent>
@@ -129,10 +131,14 @@ export function EfeitosEmAreaDaCampanha() {
       </div>
 
       {efeitos === null ? (
-        <p className="text-muted-foreground text-[11px]">Lendo…</p>
+        <p className="text-muted-foreground text-[11px]">
+          {t.efeitosEmArea.lendo}
+        </p>
       ) : lista.length === 0 ? (
         <div className="space-y-2">
-          <PainelVazio icone={WandSparkles}>Nenhum efeito em área</PainelVazio>
+          <PainelVazio icone={WandSparkles}>
+            {t.efeitosEmArea.nenhum}
+          </PainelVazio>
           <Button
             variant="outline"
             size="sm"
@@ -140,7 +146,7 @@ export function EfeitosEmAreaDaCampanha() {
             disabled={ocupado || cheio}
             onClick={() => void sugerir()}
           >
-            Usar sugestões
+            {t.efeitosEmArea.usarSugestoes}
           </Button>
         </div>
       ) : (
@@ -160,7 +166,7 @@ export function EfeitosEmAreaDaCampanha() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Configurar ${efeito.titulo}`}
+                aria-label={t.efeitosEmArea.configurar(efeito.titulo)}
                 onClick={() => setConfigurando(efeito.id)}
               >
                 <Settings2 />
@@ -168,7 +174,7 @@ export function EfeitosEmAreaDaCampanha() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`Apagar ${efeito.titulo}`}
+                aria-label={t.efeitosEmArea.apagar(efeito.titulo)}
                 disabled={ocupado}
                 onClick={() => setApagando(efeito)}
               >
@@ -186,7 +192,7 @@ export function EfeitosEmAreaDaCampanha() {
             <div className="min-w-0 flex-1">
               <h4 className="truncate text-xs font-medium">{grupo.nome}</h4>
               <p className="text-muted-foreground text-[11px] leading-snug">
-                Vêm do plugin e não se editam.
+                {t.efeitosEmArea.doPlugin}
               </p>
             </div>
           </div>
@@ -214,20 +220,22 @@ export function EfeitosEmAreaDaCampanha() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Apagar {apagando?.titulo}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.efeitosEmArea.apagarTitulo(apagando?.titulo ?? "")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              As áreas que usam este efeito ficam sem efeito, no mapa e na mesa.
+              {t.efeitosEmArea.apagarExplicacao}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (apagando) void apagar(apagando.id);
                 setApagando(null);
               }}
             >
-              Apagar
+              {t.efeitosEmArea.apagarConfirmar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

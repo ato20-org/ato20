@@ -15,19 +15,23 @@ minha-campanha/
     a1b2c3.webp        os binários, nomeados pelo id
     trilha.ogg
   assets.json          nome, tipo, medidas e pasta de cada arquivo
-  pastas.json
   documentos/
     rumores.md         os cartões de Markdown dos quadros
   personagens.json     o elenco, com medidores e condições de cada um
+  itens.json           o catálogo de itens da campanha
   personagens/
     c4d5.../
       _notas.json      a nota do personagem
-      _inventario.json
+      _inventario.json referências ao catálogo, com quantidade e "escondido" de cada uma
+      _detalhes.json   Identidade, perícias, poderes: os detalhes da ficha
+      _extensoes.json  os dados de cada plugin nesta ficha
       anexos/
         mestre/        o que o mestre anexou à ficha
         jogador/       o que o jogador anexou à ficha
   medidores.json       os modelos de medidor da campanha
   condicoes.json       o cardápio de condições
+  detalhes.json        o molde da ficha: grupos e detalhes de fábrica
+  efeitos.json         os efeitos da campanha, de condição e de área
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
@@ -118,18 +122,99 @@ campanhas recentes; `{campanha}/.ato20/estado.db` guarda o estado da sessão. A 
 forçada pelo modelo: uma lista de campanhas não pode morar dentro de uma das campanhas que
 lista.
 
-## Pastas do acervo
+## O acervo mora na árvore de Arquivos
 
-A Biblioteca agrupa por pasta, com pasta dentro de pasta pelo `parentId`. Mora em
-`pastas.json`, no Rust, porque o arquivo que ela organiza também mora lá.
+Desde a versão 2 do formato, imagem e arquivo do acervo ficam nas mesmas pastas que a nota
+e o quadro, no painel Arquivos. A pasta de um arquivo é o `folderId` dele em `assets.json`,
+e esse id é o de uma pasta de `board.pastas` sem `lista`, a mesma árvore das notas. O Rust
+grava o `folderId` sem conferir o id: a árvore é do TypeScript, e um id que não existe mais
+faz o arquivo aparecer na raiz.
 
-Arquivo entra na pasta arrastando a linha para o cabeçalho dela. Upload novo cai na raiz.
-A busca acha pelo nome do arquivo e pelo caminho da pasta, e mostra os achados agrupados
-pela pasta de cada um.
+Dentro de cada pasta a ordem é por tipo: subpastas, quadros na ordem que o mestre arrasta,
+notas por título, e por último imagens e arquivos por nome. O som não entra na árvore, ele
+mora no painel Sons. O que tem dono (retrato, fundo de cena, imagem de efeito) também não:
+ver `AssetMeta.escopo`.
 
 Pasta guarda o id e não o nome, para renomear não obrigar a reescrever todos os arquivos
-dentro. E **apagar pasta não apaga arquivo**: o conteúdo volta para a raiz, porque perder um
-mapa por causa de um clique em "apagar pasta" seria dano desproporcional ao gesto.
+dentro. E **desfazer pasta não apaga nada**: o conteúdo sobe um nível, o que está no board
+pelo `removerPasta` e os arquivos do acervo pelo `asset_set_folder`, porque perder um mapa
+por causa de um clique em "desfazer pasta" seria dano desproporcional ao gesto.
+
+**A migração da versão 1.** Até a 1, o acervo tinha pastas próprias, em `pastas.json`, e o
+painel Biblioteca. Ao abrir uma campanha da versão 1 (`campaign_open`, ou o import de um
+zip), o Rust cria a pasta "Biblioteca" na raiz de Arquivos, recolhida, recria dentro dela
+cada pasta do acervo com o mesmo id, e põe nela o que estava solto. O `pastas.json` fica
+guardado como `pastas.antigo.json`. A lista de campanhas recentes, que abre cada campanha
+para ler a capa, não migra nada. Ver `vault/migrar.rs`.
+
+## Os itens da campanha
+
+Desde a versão 3 do formato, **item é item**: ele é da campanha, e não de quem o carrega.
+O catálogo mora em `itens.json`, na raiz, e o `_inventario.json` de cada personagem guarda
+só referências a ele — `{itemId, quantidade, escondido, adicionadoEm, medidores?}`. A mesma poção pode
+estar na mochila de três personagens, e corrigir o nome dela no catálogo corrige nos três.
+Ver `vault/itens.rs` e `vault/inventory.rs`.
+
+Antes o item morava dentro do inventário, e isso respondia mal a duas coisas que a mesa
+pede: dar a mesma coisa a mais de um personagem (eram cópias, que divergiam na primeira
+correção de digitação) e ter itens que ainda não são de ninguém — o baú que o grupo não
+abriu, o anel pregado num ponto do mapa.
+
+**Quantidade e "escondido" são do inventário, não do item.** Um personagem tem três poções
+e outro uma; o mestre esconde o anel amaldiçoado na mochila de um e o mostra na de outro.
+Nome, descrição e imagem são do item, e mudam em todo inventário que o tem. Para o mestre e
+para o celular, o inventário volta achatado — o item com `quantidade` e `escondido` ao lado
+—, que é a mesma forma de antes com `criadoPor` a mais; uma entrada que aponta para um item
+que não existe mais é pulada em silêncio.
+
+**Atributos e medidores do item.** Os atributos são pares de nome e valor livres ("Dano:
+1d8+2 cortante", "Peso: 2 kg") e são do item: iguais em toda mochila. Os medidores
+(durabilidade, cargas, munição) são *definidos* no item, com a mesma forma de um modelo de
+medidor da campanha, mas o valor atual é de cada mochila: a espada do Edgar em 7/10 e a da
+Mira em 10/10 são o mesmo item. A entrada guarda só os valores que alguém mexeu
+(`medidores`, pelo id do medidor); medidor sem valor guardado está cheio, e o item fora de
+qualquer mochila — na janela de Itens — aparece cheio também. A leitura prende o valor
+guardado ao máximo de hoje e ignora o de um medidor que saiu do item, então encolher o
+máximo ou apagar um medidor não reescreve mochila nenhuma. O inventário achatado e a lista
+de portadores trazem esses valores já resolvidos em `atuais`. Atributo e medidor podem ser
+escondidos, e o daemon os corta — com o valor — antes de qualquer resposta ao celular, como
+faz com o item escondido. O celular nunca os escreve: a definição muda só por
+`item_update`, e o valor só pelo `inventory_update` do mestre.
+
+**Quem mexe em quê.** O mestre mexe em tudo, pelo IPC. O jogador mexe só no item que ele
+mesmo escreveu, e só pelo personagem por onde escreveu — é o `criadoPor` do item. A carta
+que o jogador do Edgar escreveu e o mestre deu também à Mira aparece no celular da Mira, e
+ela não a reescreve. Tirar da mochila, para o mestre, tira só a entrada: o item continua na
+campanha. Para o jogador, se ninguém mais carrega o que ele escreveu, o item sai do catálogo
+também — é a nota que o autor jogou fora. O teto de 40 itens por inventário conta só o que
+jogador escreveu, porque é isso que chega pela rede; o catálogo inteiro tem teto de 5 mil.
+
+**A foto do jogador fica onde chegou.** O jogador sobe a foto do item pelo celular, e ela
+vira anexo na pasta do personagem por onde chegou (`personagens/{id}/anexos/jogador/`), e
+não asset: o acervo é do mestre, e um celular na rede não o faz crescer. Por isso a imagem
+de um item é `{tipo: "asset", id}` ou `{tipo: "anexo", personagem, autor, arquivo}` — o
+`personagem` diz em que pasta a foto mora, e o campo não se chama `personagemId` porque o
+pacote trata essa chave como "leve este personagem junto". Quando o item passa a outra
+mochila, a foto não se copia: quem o carrega por outro personagem a vê por
+`/eu/personagens/{id}/inventario/{itemId}/imagem`, que confere que o item está, visível, no
+inventário *dele*. Remover um personagem leva antes para o acervo a foto de cada item que
+mora na pasta dele, porque o item sobrevive ao personagem.
+
+**Uma trava para o catálogo e os inventários.** Com um `itens.json` que o mestre grava pelo
+IPC e vários celulares gravam pelo daemon, cada um numa thread, ler, mudar e gravar sem
+trava perdia atualização: dois jogadores criando item no mesmo instante, e o segundo
+`save` apagava o do primeiro. Toda leitura-e-escrita dos dois arquivos passa por uma trava
+só, do processo — uma por arquivo, pedidas em ordens diferentes por dois caminhos, seriam um
+deadlock esperando acontecer. Ler não trava: a escrita é atômica.
+
+**A migração da versão 2.** Ao abrir uma campanha da versão 2, cada item de cada inventário
+vira um item do catálogo com o **mesmo id** — a cena que o citava continua citando — e uma
+entrada com a quantidade e o escondido que ele tinha. A foto continua no arquivo onde
+estava; nenhum arquivo se move. Só os personagens do índice entram, e um inventário
+ilegível fica como está, com aviso no log. O passo é repetível: o catálogo é gravado antes
+dos inventários, e rodar de novo não duplica nada. Um mesmo id em dois personagens (o
+personagem importado de pacote na mesma campanha copiava os ids) vira um item só se as
+cópias forem iguais, e dois se divergiram.
 
 ## Pastas dos painéis
 
@@ -191,3 +276,66 @@ Uma coisa que um teste ensinou: um `estado.db` ilegível **não** derruba o expo
 derrubava, e isso estava errado — as cenas, o acervo e os anexos estão intactos em arquivos
 ao lado, e quem exporta costuma estar exportando justamente porque algo deu errado. Perde-se
 o texto dos jogadores, que era o que estava ilegível de todo jeito.
+
+## Exportar e importar partes: o pacote
+
+Além da campanha inteira, o mestre leva **partes** dela para outra campanha: mapas e
+fundos (todos ou um a um), personagens e a configuração da campanha por seção (efeitos,
+modelos de medidor, condições, ajuste de imagem do espectador, ajustes, configurações de
+plugins e layout dos retratos). A configuração do ATO20 (zoom, volumes, idioma, Discord,
+som dos dados, configurações de plugin e a lista de plugins da máquina) vai junto se for
+marcada. Fica no menu da campanha, em Exportar… e Importar…, e na linha de cada mapa,
+fundo e personagem.
+
+**O pacote tem o desenho da pasta de campanha**, só com o que foi escolhido, mais um
+`pacote.json` que diz o que tem dentro e que plugins o conteúdo cita (id, nome, versão e
+repositório). Com o mesmo desenho, abrir um pacote e abrir a exportação de uma campanha
+inteira são a mesma leitura: dá para puxar um mapa de uma campanha antiga sem abri-la.
+Ver `src-tauri/src/vault/pacote.rs`.
+
+**As referências são achadas por varredura**, e não campo a campo: todo texto do JSON
+igual a um id do acervo de origem é um asset, `campanha/…` é um efeito da campanha,
+`personagemId` é um personagem, e `{plugin}/…` num `efeito` ou `estiloExtensao`,
+`plugin:{id}@…` numa imagem e as chaves de `extensoes` são plugins. Um campo novo da cena
+viaja sem o pacote saber dele. Um mapa leva a imagem, o céu, os tokens, os anexos dos
+pins, o handout, os sons de ambiente e os efeitos da campanha que usa; um personagem leva
+a ficha, a pasta dele e os retratos, menos as notas dos jogadores e o vínculo com jogador.
+
+**Os itens da campanha viajam do mesmo jeito.** Todo texto igual ao id de um item do
+catálogo — a peça de mapa, o ponto, o handout, a entrada do inventário — leva o item para o
+`itens.json` do pacote, com a imagem do acervo que ele usa. A foto de jogador só viaja se o
+personagem em cuja pasta ela mora viaja; senão o item vai sem imagem. Na importação cada
+item ganha **id novo**, e a cena e o inventário que o citam são reescritos para ele; o
+`criadoPor` e a foto passam ao personagem novo, ou caem se ele não entrou. Um pacote de
+antes da versão 3, com o item inteiro dentro do inventário, passa pela mesma conversão da
+migração ao ser lido.
+
+**Importar nunca sobrescreve.**
+
+- Asset, cena, personagem e item entram com id novo; nome repetido de cena e personagem
+  ganha "(2)". Acima do teto de itens da campanha, o resto fica de fora, com aviso.
+- Efeito, condição e modelo de medidor com o mesmo nome de um da campanha ficam de fora,
+  e o que apontava para eles passa a apontar para o da campanha. O import avisa, e
+  respeita os tetos (32 efeitos, 16 condições, 6 modelos).
+- Chave da configuração da campanha só entra onde a campanha ainda não tem valor; o layout
+  dos retratos, só se a campanha ainda está no de fábrica.
+- A configuração do ATO20 é a exceção: marcada, troca os ajustes desta máquina. Rede e
+  convite não viajam, porque são da máquina de origem.
+
+**A cena importada entra pelo store da tela**, e não por escrita em `cenas/`: o autosave
+grava a lista do store como a verdade e apagaria o arquivo que chegasse por fora. O Rust
+grava o que é dele (acervo, efeitos, condições, modelos, itens, personagens) e devolve as cenas,
+os ambientes e as chaves do registro para a tela pôr no lugar.
+
+**Plugins que faltam.** O diálogo de importar lista os plugins que o conteúdo marcado cita
+e esta máquina não tem (e, com a configuração do ATO20 marcada, os que a outra máquina
+tinha). **Baixar** instala pelo Catálogo, com o repositório do catálogo ou o que o pacote
+anotou. **Remover** tira o plugin do que entra: a área de efeito dele sai, a condição fica
+sem o efeito, o estilo de medidor volta ao de fábrica, e os dados e configurações dele não
+entram. Sem nenhum dos dois, a referência entra igual, e o ATO20 desenha o de fábrica até
+o plugin chegar.
+
+As defesas são as do import de campanha (`enclosed_name`, só componente normal, link
+simbólico pulado, 5 GB e 50 mil entradas contados no que sai), mais uma: o `id` do asset
+e o `arquivo` da cena vêm do pacote e viram caminho, então só passam se forem nome simples,
+sem barra e sem `..`.

@@ -3,6 +3,7 @@
 import { BookOpen } from "lucide-react";
 
 import { useCapaDoLivro } from "@/hooks/use-capa-do-livro";
+import { t } from "@/lib/i18n/mestre";
 import { formatBytes } from "@/lib/player/session";
 import type { Livro } from "@/lib/vault/estante";
 
@@ -40,7 +41,7 @@ export function Livro3D({
     <button
       type="button"
       onClick={onAbrir}
-      title={`Abrir ${livro.arquivo} no programa de PDF`}
+      title={t.leitor.abrirNoPrograma(livro.arquivo)}
       className="group focus-visible:ring-ring flex w-[7.5rem] cursor-pointer shrink-0 flex-col items-center gap-2 rounded-lg p-2 text-left focus-visible:ring-2 focus-visible:outline-none"
     >
       <span
@@ -142,7 +143,7 @@ export function Livro3D({
             é ele, e o Rust copia o arquivo sem abri-lo. */}
         <span className="text-muted-foreground block text-[10px] tabular-nums">
           {formatBytes(livro.tamanho)}
-          {livro.paginas ? ` · ${livro.paginas} págs.` : ""}
+          {livro.paginas ? ` · ${t.livro.paginas(livro.paginas)}` : ""}
         </span>
       </span>
     </button>

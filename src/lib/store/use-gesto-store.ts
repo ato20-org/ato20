@@ -14,7 +14,7 @@ import {
 } from "@/lib/store/use-scene-store";
 import { gravarCameraManual } from "@/lib/mestre/camera-actions";
 import { publicarCenaAoVivo } from "@/hooks/use-scene-broadcast";
-import type { Scene, Tripe, Viewport } from "@/types/scene";
+import type { Porta, Scene, Tripe, Viewport } from "@/types/scene";
 
 /**
  * O que o gesto está fazendo com papel, cartão e risco.
@@ -73,6 +73,13 @@ type GestoStore = {
    * Mesmo princípio da moldura: o board só sabe dele ao soltar.
    */
   tripe: { tripeId: string; olho: Tripe } | null;
+  /**
+   * A porta sendo aberta, movida ou refeita pela dobradiça, com o que já
+   * mudou nela. A folha que gira refaz a luz que ela alcança, e o board
+   * gravando a cada quadro somaria a isso o `MestreShell` inteiro. Ver
+   * `PortaMarcadores`.
+   */
+  porta: { portaId: string; patch: Partial<Omit<Porta, "id">> } | null;
 
   mover: (
     sceneId: string,
@@ -94,6 +101,13 @@ type GestoStore = {
   moverTripe: (sceneId: string, tripeId: string, olho: Tripe) => void;
   /** Larga só o tripé, como `soltarCamera`. */
   soltarTripe: () => void;
+  moverPorta: (
+    sceneId: string,
+    portaId: string,
+    patch: Partial<Omit<Porta, "id">>,
+  ) => void;
+  /** Larga só a porta, como `soltarCamera`. */
+  soltarPorta: () => void;
   terminar: () => void;
 };
 
@@ -135,6 +149,7 @@ export const useGestoStore = create<GestoStore>((set) => ({
   tracos: null,
   camera: null,
   tripe: null,
+  porta: null,
 
   // Lista vazia vira `null`: um gesto só de texto não tem por que devolver uma
   // lista de itens nova a cada quadro, e é a identidade dela que faz os
@@ -163,7 +178,7 @@ export const useGestoStore = create<GestoStore>((set) => ({
 
       return {
         camera: null,
-        sceneId: resta || state.tripe ? state.sceneId : null,
+        sceneId: resta || state.tripe || state.porta ? state.sceneId : null,
       };
     }),
   moverTripe: (sceneId, tripeId, olho) =>
@@ -177,9 +192,26 @@ export const useGestoStore = create<GestoStore>((set) => ({
         state.postits ||
         state.documentos ||
         state.tracos ||
-        state.camera;
+        state.camera ||
+        state.porta;
 
       return { tripe: null, sceneId: resta ? state.sceneId : null };
+    }),
+  moverPorta: (sceneId, portaId, patch) =>
+    set({ sceneId, porta: { portaId, patch } }),
+  soltarPorta: () =>
+    set((state) => {
+      const resta =
+        state.patches ||
+        state.textos ||
+        state.formas ||
+        state.postits ||
+        state.documentos ||
+        state.tracos ||
+        state.camera ||
+        state.tripe;
+
+      return { porta: null, sceneId: resta ? state.sceneId : null };
     }),
   terminar: () =>
     set({
@@ -192,6 +224,7 @@ export const useGestoStore = create<GestoStore>((set) => ({
       tracos: null,
       camera: null,
       tripe: null,
+      porta: null,
     }),
 }));
 
@@ -212,7 +245,9 @@ export function aplicarGesto(
     // Os três que só andam entram como OPCIONAIS: quem não os conhece --
     // um teste do gesto de câmera, um chamador antigo -- continua passando o
     // mesmo objeto de antes, e ausente é o mesmo que nenhum.
-    Partial<Pick<GestoStore, "postits" | "documentos" | "tracos" | "tripe">>,
+    Partial<
+      Pick<GestoStore, "postits" | "documentos" | "tracos" | "tripe" | "porta">
+    >,
 ): Scene {
   if (gesto.sceneId !== scene.id) return scene;
   if (
@@ -223,7 +258,8 @@ export function aplicarGesto(
     !gesto.documentos &&
     !gesto.tracos &&
     !gesto.camera &&
-    !gesto.tripe
+    !gesto.tripe &&
+    !gesto.porta
   )
     return scene;
 
@@ -316,6 +352,16 @@ export function aplicarGesto(
       ),
       // No ar, o olho da mesa é o dele -- o mesmo espelho de `atualizarTripe`.
       tripeNoAr: vista.cameraNoArId === tripeId ? olho : vista.tripeNoAr,
+    };
+  }
+
+  if (gesto.porta) {
+    const { portaId, patch } = gesto.porta;
+    vista = {
+      ...vista,
+      portas: vista.portas?.map((porta) =>
+        porta.id === portaId ? { ...porta, ...patch } : porta,
+      ),
     };
   }
 
@@ -445,3 +491,28 @@ export function terminarGestoDoTripe(): void {
   ultimaPublicacaoAoVivo = 0;
 }
 
+/**
+ * Um quadro do arrasto de uma porta. A mesa vê a folha girar se está nesta
+ * cena: é a sala do outro lado acendendo, e quem joga precisa ver isso.
+ */
+export function moverPortaNoGesto(
+  sceneId: string,
+  portaId: string,
+  patch: Partial<Omit<Porta, "id">>,
+): void {
+  useGestoStore.getState().moverPorta(sceneId, portaId, patch);
+  publicarGestoAoVivo(sceneId);
+}
+
+/**
+ * A mão soltou a porta: o que mudou vai para o board de uma vez -- um passo de
+ * desfazer só -- e o gesto da porta some. Larga SÓ a porta.
+ */
+export function terminarGestoDaPorta(): void {
+  const { sceneId, porta } = useGestoStore.getState();
+  if (sceneId && porta) {
+    useSceneStore.getState().updatePorta(sceneId, porta.portaId, porta.patch);
+  }
+  useGestoStore.getState().soltarPorta();
+  ultimaPublicacaoAoVivo = 0;
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import {
   SCENE_BROADCAST_INTERVAL_MS,
   type LiveState,
@@ -198,18 +199,14 @@ export async function checkRoom(
       `${base}/sala?codigo=${encodeURIComponent(codigo)}`,
     );
 
-    if (response.status === 403)
-      return { erro: "Código não confere com esta mesa." };
+    if (response.status === 403) return { erro: t.sala.codigoNaoConfere };
     if (response.status === 503) {
-      return { erro: "O mestre ainda não abriu uma campanha." };
+      return { erro: t.sala.semCampanha };
     }
-    if (!response.ok)
-      return { erro: "A mesa respondeu de um jeito inesperado." };
+    if (!response.ok) return { erro: t.sala.respostaInesperada };
 
     return (await response.json()) as { nome: string };
   } catch {
-    return {
-      erro: "Não foi possível alcançar a mesa. Confira o Wi-Fi e o endereço.",
-    };
+    return { erro: t.sala.inalcancavel };
   }
 }

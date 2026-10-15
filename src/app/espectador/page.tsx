@@ -4,6 +4,7 @@ import { Tv } from "lucide-react";
 
 import { RoomDoor } from "@/components/playground/room-door";
 import { EspectadorStage } from "@/components/playground/espectador-stage";
+import { t } from "@/lib/i18n/jogador";
 
 /**
  * A TV.
@@ -16,7 +17,7 @@ import { EspectadorStage } from "@/components/playground/espectador-stage";
 export default function EspectadorPage() {
   return (
     <RoomDoor
-      titulo="Espectador"
+      titulo={t.porta.tituloEspectador}
       icone={<Tv className="text-muted-foreground size-8" aria-hidden />}
     >
       {(codigo) => <EspectadorStage codigo={codigo} />}

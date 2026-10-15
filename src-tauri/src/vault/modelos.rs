@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::atomic::{read_json, write_json};
-use super::characters::{estilo_extensao_valido, Estilo, Medidor, MAX_MEDIDORES};
+use super::characters::{
+    chave_do_nome, estilo_extensao_valido, Estilo, Medidor, MAX_MEDIDORES, MAX_NOME_MEDIDOR,
+};
 use super::Vault;
 use crate::error::{AppError, AppResult};
 
@@ -34,8 +36,10 @@ const ARQUIVO: &str = "medidores.json";
 /// nascem ja recusando parte deles.
 pub const MAX_MODELOS: usize = MAX_MEDIDORES;
 
-const MAX_NOME: usize = 24;
-const MAX_VALOR: i64 = 1_000_000;
+/// O mesmo teto do nome do medidor de personagem: o modelo vira um, e o item
+/// desenha os dele com a mesma linha. Ver `characters::MAX_NOME_MEDIDOR`.
+const MAX_NOME: usize = MAX_NOME_MEDIDOR;
+pub const MAX_VALOR: i64 = 1_000_000;
 
 /// Um medidor de fabrica: tudo que um `Medidor` tem, menos o valor.
 ///
@@ -43,14 +47,25 @@ const MAX_VALOR: i64 = 1_000_000;
 /// distingue o goblin com tres de vida do goblin com vinte --, e guardar um
 /// aqui daria ao mestre um campo para preencher que nao quer dizer nada. O
 /// medidor materializado nasce cheio.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// E tambem a forma do medidor de um ITEM -- ver `itens::Item::medidores`: o
+/// item define o medidor, e o valor e de cada mochila, que e exatamente o corte
+/// entre molde e valor que este tipo ja faz.
+///
+/// `id`, `estilo` e `escondido` tem padrao para o medidor de item que a tela
+/// cria sem id -- `itens` sorteia um -- e para o corpo que omite o que e de
+/// fabrica. O `medidores.json` de sempre tem os tres, e nao muda de forma.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Modelo {
+    #[serde(default)]
     pub id: String,
     pub nome: String,
     pub cor: String,
+    #[serde(default)]
     pub estilo: Estilo,
     pub maximo: i64,
+    #[serde(default)]
     pub escondido: bool,
     /// O estilo de plugin que o medidor materializado ja traz. Ver
     /// `Medidor::estilo_extensao` -- o `estilo` acima segue como reserva.
@@ -112,13 +127,95 @@ fn texto_curto(valor: &str, teto: usize) -> String {
     valor.trim().chars().take(teto).collect()
 }
 
-fn ajustar(modelo: &mut Modelo) {
+/// Poe o modelo em forma: nome curto e nunca vazio, maximo entre um e o teto,
+/// e estilo de plugin so com chave valida.
+///
+/// As mesmas regras do medidor de personagem (`characters::ajustar`), porque o
+/// modelo vira um. `pub(crate)` porque o medidor de ITEM e um `Modelo` e passa
+/// por aqui tambem -- ver `itens::medidores_validos` --, e duas copias da regra
+/// divergiriam na primeira correcao.
+///
+/// Estilo de plugin com chave torta volta ao de fabrica em vez de recusar: o
+/// `estilo` continua ali de reserva, e a chave torta so viria de um arquivo
+/// editado a mao ou de um pacote.
+pub(crate) fn normalizar(modelo: &mut Modelo) {
     modelo.nome = texto_curto(&modelo.nome, MAX_NOME);
     if modelo.nome.is_empty() {
         modelo.nome = "Medidor".to_string();
     }
 
     modelo.maximo = modelo.maximo.clamp(1, MAX_VALOR);
+
+    if modelo
+        .estilo_extensao
+        .as_deref()
+        .is_some_and(|estilo| !estilo_extensao_valido(estilo))
+    {
+        modelo.estilo_extensao = None;
+    }
+}
+
+/// Acrescenta modelos de medidor que vieram de um pacote, cada um com id novo.
+/// Estilo de plugin que nao e um id valido volta ao de fabrica.
+pub fn adotar(vault: &Vault, novos: Vec<Modelo>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut modelos = load(vault)?;
+    for mut modelo in novos {
+        if modelos.len() >= MAX_MODELOS {
+            break;
+        }
+        modelo.id = uuid::Uuid::new_v4().to_string();
+        normalizar(&mut modelo);
+        modelos.push(modelo);
+    }
+
+    save(vault, &modelos)
+}
+
+/// Junta os medidores de um sistema aos da campanha, pelo nome. Ver
+/// `vault::sistema`.
+pub fn juntar(
+    vault: &Vault,
+    novos: &[crate::extensoes::MedidorDoSistema],
+) -> AppResult<super::sistema::Juntados> {
+    let mut modelos = load(vault)?;
+    let mut juntados = super::sistema::Juntados::default();
+
+    for novo in novos {
+        let chave = chave_do_nome(&novo.nome);
+        if modelos.iter().any(|m| chave_do_nome(&m.nome) == chave) {
+            juntados.ja_havia += 1;
+        } else if modelos.len() >= MAX_MODELOS {
+            juntados.nao_couberam.push(novo.nome.trim().to_string());
+        } else {
+            let mut modelo = Modelo {
+                id: uuid::Uuid::new_v4().to_string(),
+                nome: novo.nome.clone(),
+                cor: novo.cor.clone(),
+                estilo: novo.estilo,
+                maximo: novo.maximo,
+                escondido: novo.escondido,
+                estilo_extensao: novo
+                    .estilo_extensao
+                    .clone()
+                    .filter(|estilo| estilo_extensao_valido(estilo)),
+                mostrar_nome: None,
+                mostrar_valor: None,
+            };
+            normalizar(&mut modelo);
+            modelos.push(modelo);
+            juntados.entraram += 1;
+        }
+    }
+
+    if juntados.entraram > 0 {
+        save(vault, &modelos)?;
+    }
+
+    Ok(juntados)
 }
 
 fn sem_modelo(id: &str) -> AppError {
@@ -155,7 +252,7 @@ pub fn criar(
         mostrar_nome: None,
         mostrar_valor: None,
     };
-    ajustar(&mut modelo);
+    normalizar(&mut modelo);
 
     modelos.push(modelo.clone());
     save(vault, &modelos)?;
@@ -216,7 +313,7 @@ pub fn editar(vault: &Vault, modelo_id: &str, patch: PatchModelo) -> AppResult<M
         modelo.mostrar_valor = Some(mostrar);
     }
 
-    ajustar(modelo);
+    normalizar(modelo);
     let saida = modelo.clone();
 
     save(vault, &modelos)?;

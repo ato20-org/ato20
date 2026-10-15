@@ -19,10 +19,12 @@ export function DeclarativoDoMestre({ children }: { children: ReactNode }) {
   const versao = useDeclarativoStore((state) => state.versao);
   const estilos = useDeclarativoStore((state) => state.estilos);
   const efeitos = useDeclarativoStore((state) => state.efeitos);
+  const estilosDeAtributos = useDeclarativoStore((state) => state.estilosDeAtributos);
+  const estiloDosAtributos = useDeclarativoStore((state) => state.estiloDosAtributos);
   const plugins = useDeclarativoStore((state) => state.plugins);
   const valor = useMemo(
-    () => ({ versao, estilos, efeitos, plugins }),
-    [versao, estilos, efeitos, plugins],
+    () => ({ versao, estilos, efeitos, estilosDeAtributos, estiloDosAtributos, plugins }),
+    [versao, estilos, efeitos, estilosDeAtributos, estiloDosAtributos, plugins],
   );
 
   return <DeclarativoProvider valor={valor}>{children}</DeclarativoProvider>;

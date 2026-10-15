@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/personagens";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { cn } from "@/lib/utils";
 import type { AncoraRetrato } from "@/types/scene";
@@ -15,14 +16,7 @@ const AREAS: AncoraRetrato[] = [
 ];
 
 /** O nome de cada uma, para quem lê com leitor de tela. */
-const LUGAR: Record<AncoraRetrato, string> = {
-  "cima-esquerda": "cima, à esquerda",
-  "cima-centro": "cima, ao centro",
-  "cima-direita": "cima, à direita",
-  "baixo-esquerda": "baixo, à esquerda",
-  "baixo-centro": "baixo, ao centro",
-  "baixo-direita": "baixo, à direita",
-};
+const LUGAR: Record<AncoraRetrato, string> = t.lugar;
 
 /**
  * A posição dos retratos: onde eles ficam por padrão. Mora na configuração da
@@ -66,7 +60,7 @@ export function PosicaoDosRetratos() {
             <button
               key={area}
               type="button"
-              aria-label={`Retratos em ${LUGAR[area]}`}
+              aria-label={t.posicaoDosRetratos.retratosEm(LUGAR[area])}
               aria-pressed={ancoraPadrao === area}
               className={cn(
                 "rounded-sm border border-dashed text-[10px] transition-colors",
@@ -88,7 +82,7 @@ export function PosicaoDosRetratos() {
       </div>
 
       <p className="text-muted-foreground text-[10px] leading-snug">
-        Quem está numa união segue a área dela.
+        {t.posicaoDosRetratos.seguemAUniao}
       </p>
     </div>
   );

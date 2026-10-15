@@ -33,6 +33,8 @@ import {
   type Regiao,
   type Tamanho,
 } from "@/lib/geometry/recorte";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/personagens";
 import { cn } from "@/lib/utils";
 import { assetUrl } from "@/lib/vault/assets";
 import type { Recortar, RespostaDoRecorte } from "@/lib/vault/characters";
@@ -272,7 +274,7 @@ function RecorteDeImagem({
       onResponder(await pintar(no, regiao, formato));
     } catch (causa) {
       toast.error(
-        causa instanceof Error ? causa.message : "Não deu para recortar.",
+        causa instanceof Error ? causa.message : t.recorte.naoDeuParaRecortar,
       );
       setGravando(false);
     }
@@ -289,17 +291,14 @@ function RecorteDeImagem({
     >
       <DialogContent className="sm:max-w-sm" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Recortar {nome}</DialogTitle>
-          <DialogDescription>
-            Arraste para enquadrar. A roda do mouse aproxima onde o cursor
-            aponta.
-          </DialogDescription>
+          <DialogTitle>{t.recorte.titulo(nome)}</DialogTitle>
+          <DialogDescription>{t.recorte.explicacao}</DialogDescription>
         </DialogHeader>
 
         <div
           ref={palco}
           tabIndex={0}
-          aria-label={`Enquadramento do ${nome}. Setas movem, mais e menos aproximam.`}
+          aria-label={t.recorte.enquadramento(nome)}
           className={cn(
             "focus-visible:ring-ring relative mx-auto touch-none overflow-hidden rounded-md bg-neutral-900 select-none focus-visible:ring-2 focus-visible:outline-none",
             regiao && "cursor-grab active:cursor-grabbing",
@@ -384,7 +383,7 @@ function RecorteDeImagem({
 
           {falhou ? (
             <p className="absolute inset-0 flex items-center justify-center p-6 text-center text-xs text-white/80">
-              Não deu para abrir a imagem aqui. Ela ainda pode entrar inteira.
+              {t.recorte.naoAbriu}
             </p>
           ) : !regiao ? (
             <Loader2
@@ -398,14 +397,14 @@ function RecorteDeImagem({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Afastar"
+            aria-label={t.recorte.afastar}
             disabled={!regiao}
             onClick={() => mudarZoom((enquadre?.zoom ?? 1) / PASSO_DO_BOTAO)}
           >
             <ZoomOut />
           </Button>
           <Slider
-            aria-label="Zoom"
+            aria-label={t.recorte.zoom}
             value={[enquadre?.zoom ?? ZOOM_MINIMO]}
             min={ZOOM_MINIMO}
             max={ZOOM_MAXIMO}
@@ -419,7 +418,7 @@ function RecorteDeImagem({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Aproximar"
+            aria-label={t.recorte.aproximar}
             disabled={!regiao}
             onClick={() => mudarZoom((enquadre?.zoom ?? 1) * PASSO_DO_BOTAO)}
           >
@@ -427,14 +426,14 @@ function RecorteDeImagem({
           </Button>
         </div>
 
-        <div role="group" aria-label="Formato" className="flex gap-1">
+        <div role="group" aria-label={t.recorte.formato} className="flex gap-1">
           <Button
             variant={formato === "quadrado" ? "secondary" : "ghost"}
             size="sm"
             aria-pressed={formato === "quadrado"}
             onClick={() => setFormato("quadrado")}
           >
-            <Square /> Quadrado
+            <Square /> {t.recorte.quadrado}
           </Button>
           <Button
             variant={formato === "circulo" ? "secondary" : "ghost"}
@@ -442,7 +441,7 @@ function RecorteDeImagem({
             aria-pressed={formato === "circulo"}
             onClick={() => setFormato("circulo")}
           >
-            <Circle /> Círculo
+            <Circle /> {t.recorte.circulo}
           </Button>
         </div>
 
@@ -452,7 +451,7 @@ function RecorteDeImagem({
             disabled={gravando}
             onClick={() => onResponder(null)}
           >
-            Cancelar
+            {comum.cancelar}
           </Button>
           {/* A saída para a figura de corpo inteiro e para o recorte que já
               veio pronto: o arquivo entra como era antes deste editor. */}
@@ -461,11 +460,11 @@ function RecorteDeImagem({
             disabled={gravando}
             onClick={() => onResponder("inteira")}
           >
-            Usar inteira
+            {t.recorte.usarInteira}
           </Button>
           <Button disabled={!regiao || gravando} onClick={() => void aplicar()}>
             {gravando ? <Loader2 className="animate-spin" /> : null}
-            Aplicar
+            {t.recorte.aplicar}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -492,7 +491,7 @@ async function pintar(
   canvas.height = saida.altura;
 
   const contexto = canvas.getContext("2d");
-  if (!contexto) throw new Error("Não deu para desenhar o recorte.");
+  if (!contexto) throw new Error(t.recorte.naoDeuDesenhar);
 
   contexto.imageSmoothingQuality = "high";
 
@@ -519,7 +518,7 @@ async function pintar(
   const blob = await new Promise<Blob | null>((resolver) =>
     canvas.toBlob(resolver, "image/png"),
   );
-  if (!blob) throw new Error("Não deu para gerar a imagem do recorte.");
+  if (!blob) throw new Error(t.recorte.naoDeuGerar);
 
   return new Uint8Array(await blob.arrayBuffer());
 }

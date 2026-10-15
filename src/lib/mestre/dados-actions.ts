@@ -1,11 +1,12 @@
 "use client";
 
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
+import type { ExpressaoDeRolagem } from "@/lib/mestre/expressao-de-rolagem";
 import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import type { Jogada } from "@/lib/mestre/notacao-de-dados";
 import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import type { Dado } from "@/types/dado";
+import type { Dado, Lance } from "@/types/dado";
 
 /** Velocidade do arremesso sem gesto, em unidades de cena por segundo. */
 const IMPULSO = 400;
@@ -29,7 +30,7 @@ const IMPULSO = 400;
  * Devolve os DADOS, e não só quantos: a API de plugin precisa do valor de
  * cada um para somar. A paleta continua contando.
  */
-export function lancarNaMesa({ quantidade, faces }: Jogada): Dado[] {
+export function lancarNaMesa({ quantidade, faces }: Jogada, lance?: Lance): Dado[] {
   const { viewport } = useViewportStore.getState();
   const { lancar } = useDadosStore.getState();
 
@@ -55,6 +56,9 @@ export function lancarNaMesa({ quantidade, faces }: Jogada): Dado[] {
       centro.x + direcao.x * roda,
       centro.y + direcao.y * roda,
       { x: direcao.x * IMPULSO, y: direcao.y * IMPULSO },
+      undefined,
+      undefined,
+      lance,
     );
 
     if (!dado) break;
@@ -74,6 +78,27 @@ export function lancarNaMesa({ quantidade, faces }: Jogada): Dado[] {
 export function rolarNaMesa(jogada: Jogada): number {
   const dados = lancarNaMesa(jogada);
   anunciarDadosNoFio(dados);
+
+  return dados.length;
+}
+
+/**
+ * Rola uma expressão: os dados caem na mesa, e o fio recebe a linha com o
+ * rótulo e o modificador -- "Dante · Luta: 2d20 (15, 7) + 10 = 32".
+ *
+ * Cada termo é um lançamento (`2d6+1d4` são dois), e a linha do fio é uma só,
+ * do gesto inteiro. Devolve quantos dados caíram: a mesa cheia pode cortar
+ * no meio, e quem chamou decide se avisa.
+ */
+export function rolarExpressao(expressao: ExpressaoDeRolagem, rotulo?: string): number {
+  // Os dados do gesto inteiro levam o mesmo lance: é por ele que o saquinho
+  // soma o modificador e junta os dois d20 numa linha só.
+  const lance: Lance | undefined =
+    rotulo || expressao.modificador !== 0
+      ? { id: crypto.randomUUID(), modificador: expressao.modificador, ...(rotulo && { rotulo }) }
+      : undefined;
+  const dados = expressao.dados.flatMap((jogada) => lancarNaMesa(jogada, lance));
+  anunciarDadosNoFio(dados, { rotulo, modificador: expressao.modificador });
 
   return dados.length;
 }

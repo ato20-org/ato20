@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { CeuPanoramico } from "@/components/playground/ceu-panoramico";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
@@ -23,6 +24,7 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
+import { LaserLayer } from "@/components/playground/laser-layer";
 import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
@@ -43,6 +45,7 @@ import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
@@ -86,6 +89,11 @@ type SceneLayerProps = {
    */
   naMao?: string;
   /**
+   * A porta que a mão do mestre está girando, por id. Ela vai direto, e as
+   * outras giram até a abertura nova. Ver `usePortasNoGiro`.
+   */
+  portaNaMao?: string;
+  /**
    * Qual tamanho dos arquivos desenhar. Ausente = os arquivos -- com uma
    * exceção, o FUNDO, que passou a escolher sozinho entre a redução de palco e
    * o original conforme o zoom. Ver `useVarianteDoFundo`.
@@ -127,6 +135,14 @@ type SceneLayerProps = {
    * `Ping.cenaId`.
    */
   pings?: Ping[];
+  /**
+   * O laser do mestre, como chegou no quadro. Filtrado aqui pela cena, como os
+   * pings.
+   *
+   * `undefined` é a tela que não recebe laser nenhum -- o próprio Mestre, que
+   * desenha o dele na hora, no plano de controles. Ali a camada nem monta.
+   */
+  laser?: LaserNaMesa | null;
   /**
    * Nome e medidores para desenhar sobre a cabeça dos tokens.
    *
@@ -244,10 +260,12 @@ export function SceneLayer({
   variant = "mesa",
   smooth = false,
   naMao,
+  portaNaMao,
   variante,
   portraits,
   rolagens,
   pings,
+  laser,
   fichas,
   efeitos,
   onItemPointerDown,
@@ -303,6 +321,7 @@ export function SceneLayer({
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
   );
+
 
   /**
    * O espaço do retrato: o 16:9 da tela da mesa em volta da câmera, e não o
@@ -413,6 +432,8 @@ export function SceneLayer({
         <SombraLayer
           items={items}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           sol={scene.sol}
           // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
           // arquivo que o token já baixou. Ver `SombraDaFigura`.
@@ -501,6 +522,8 @@ export function SceneLayer({
           items={items}
           luzes={scene.luzes}
           paredes={scene.paredes}
+          portas={scene.portas}
+          portaNaMao={portaNaMao}
           escuridao={scene.escuridao}
           corDoEscuro={scene.corDoEscuro}
           variant={variant}
@@ -516,11 +539,20 @@ export function SceneLayer({
         />
       )}
 
+      {/* As lanternas abrem a névoa dinâmica, e as paredes e portas param a
+          revelação como param a luz -- a mesma lista que a `LuzLayer` lê.
+          Na prévia, o bloco de sempre: ver `simples`. */}
       <FogLayer
         fog={scene.fog}
         variant={variant}
         smooth={smooth}
         onFogPointerDown={onFogPointerDown}
+        items={items}
+        paredes={scene.paredes}
+        portas={scene.portas}
+        portaNaMao={portaNaMao}
+        naMao={naMao}
+        simples={variante === "mini"}
       />
 
       {/* Depois da névoa: o medidor é instrumento sobre o mapa, e medir por
@@ -568,6 +600,10 @@ export function SceneLayer({
           do retrato, que é HUD. Ver `PingLayer`. */}
       <PingLayer pings={pingsDaCena} />
 
+      {laser !== undefined ? (
+        <LaserLayer laser={laser?.cenaId === scene.id ? laser : null} />
+      ) : null}
+
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
           portraits={portraits}
@@ -605,6 +641,16 @@ export function SceneLayer({
     // da caixa. Na TV a caixa é o plano; no Mestre, a área do palco. A corrente
     // não está no `style`: quem a põe é o efeito lá em cima.
     <div className="absolute inset-0 overflow-hidden">
+      {/* O céu, antes de tudo: atrás do chão, e da caixa da câmera, que é a
+          tela no Mestre e o plano na TV. Sem ele, o vazio é a cor da cena.
+          Ver `Scene.ceuAssetId`. */}
+      {scene.ceuAssetId ? (
+        <CeuPanoramico
+          assetId={scene.ceuAssetId}
+          variante={variante === "mini" ? "tela" : variante}
+          camera={orbital}
+        />
+      ) : null}
       <div
         className="absolute inset-0"
         style={{

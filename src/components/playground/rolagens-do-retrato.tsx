@@ -8,6 +8,7 @@ import {
 } from "@/hooks/use-queda-das-rolagens";
 import { textoDoResultado, type RolagemDaMesa } from "@/types/dado";
 import { limitarEscala } from "@/lib/geometry/portrait";
+import { t as textos } from "@/lib/i18n/palco";
 import type { LugarDaPeca } from "@/types/scene";
 
 /** Quantas rolagens antigas a coluna mostra. O resto está no histórico do mestre. */
@@ -248,7 +249,7 @@ export function RolagensDoRetrato({
             opacity: emQueda < DURACAO_DA_CHEGADA ? 1 : 0,
           }}
         >
-          Rolando…
+          {textos.dados.rolando}
         </span>
       </div>
     </div>

@@ -3,6 +3,8 @@
 import { Component, type ReactNode } from "react";
 import { Puzzle } from "lucide-react";
 
+import { t } from "@/lib/i18n/palco";
+
 /**
  * O que contém um plugin que estoura ao DESENHAR.
  *
@@ -65,7 +67,7 @@ export class BarreiraDeExtensao extends Component<
       <div className="text-muted-foreground grid h-full place-items-center p-4 text-center text-xs">
         <div>
           <Puzzle className="mx-auto mb-2 size-5 opacity-50" aria-hidden />
-          {nome} falhou ao desenhar.
+          {t.barreira.falhou(nome)}
           <span className="text-muted-foreground mt-1 block font-mono text-[10px] wrap-break-word">
             {erro}
           </span>

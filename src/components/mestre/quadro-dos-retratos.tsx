@@ -37,6 +37,7 @@ import {
   scalePortraitGroup,
 } from "@/lib/geometry/portrait";
 import { computeSnap, SNAP_THRESHOLD_PX, type Guide } from "@/lib/geometry/snap";
+import { t } from "@/lib/i18n/personagens";
 import { removePortraitSelection } from "@/lib/mestre/item-actions";
 import { uniaoDoRetrato } from "@/lib/mestre/unioes";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
@@ -427,7 +428,7 @@ export function QuadroDosRetratos() {
     escolhidos.length > 1
       ? uniaoEscolhida
         ? `${uniaoEscolhida.nome} · ${escolhidos.length}`
-        : `${escolhidos.length} retratos`
+        : t.quadroDosRetratos.retratos(escolhidos.length)
       : null;
 
   const todosEspelhados =
@@ -455,7 +456,7 @@ export function QuadroDosRetratos() {
           <div
             ref={quadroRef}
             role="group"
-            aria-label="Tela da mesa"
+            aria-label={t.quadroDosRetratos.telaDaMesa}
             className="bg-muted/30 ring-border relative isolate aspect-video w-full touch-none overflow-hidden rounded-md ring-1"
             onPointerDown={aoApertarFundo}
           >
@@ -508,7 +509,7 @@ export function QuadroDosRetratos() {
 
             {portraits.length === 0 ? (
               <p className="text-muted-foreground pointer-events-none absolute inset-0 grid place-items-center p-4 text-center text-[11px] leading-snug">
-                Nenhum retrato nesta cena. Ligue o olho de alguém no Elenco.
+                {t.quadroDosRetratos.nenhum}
               </p>
             ) : null}
           </div>
@@ -528,7 +529,7 @@ export function QuadroDosRetratos() {
             }
           >
             {todosNoAr ? <EyeOff /> : <Eye />}
-            {todosNoAr ? "Tirar do ar" : "Pôr no ar"}
+            {todosNoAr ? t.quadroDosRetratos.tirarDoAr : t.geral.porNoAr}
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() =>
@@ -541,14 +542,14 @@ export function QuadroDosRetratos() {
             }
           >
             <FlipHorizontal />
-            Espelhar
+            {t.geral.espelhar}
           </ContextMenuItem>
           {escolhidos.length > 1 && !uniaoEscolhida ? (
             <ContextMenuItem
               onClick={() => unir(escolhidos.map((retrato) => retrato.id))}
             >
               <Group />
-              Unir os {escolhidos.length}
+              {t.quadroDosRetratos.unirOs(escolhidos.length)}
             </ContextMenuItem>
           ) : null}
 
@@ -566,7 +567,7 @@ export function QuadroDosRetratos() {
               primeiro ajuste. */}
           <ContextMenuItem variant="destructive" onClick={removePortraitSelection}>
             <Trash2 />
-            Esquecer a posição
+            {t.quadroDosRetratos.esquecerPosicao}
           </ContextMenuItem>
         </ContextMenuContent>
       ) : null}
@@ -575,14 +576,7 @@ export function QuadroDosRetratos() {
 }
 
 /** O nome de cada área, para o rótulo do alvo. */
-const LUGAR: Record<AncoraRetrato, string> = {
-  "cima-esquerda": "cima, à esquerda",
-  "cima-centro": "cima, ao centro",
-  "cima-direita": "cima, à direita",
-  "baixo-esquerda": "baixo, à esquerda",
-  "baixo-centro": "baixo, ao centro",
-  "baixo-direita": "baixo, à direita",
-};
+const LUGAR: Record<AncoraRetrato, string> = t.lugar;
 
 /**
  * As seis áreas de uma união escolhida, com um alvo no meio de cada.
@@ -628,7 +622,7 @@ function AreasDaUniao({
             />
             <button
               type="button"
-              aria-label={`Levar ${uniao.nome} para ${LUGAR[ancora]}`}
+              aria-label={t.quadroDosRetratos.levarPara(uniao.nome, LUGAR[ancora])}
               aria-pressed={atual}
               className={cn(
                 "absolute flex h-5 -translate-x-1/2 -translate-y-1/2 items-center rounded-full border px-1 text-[9px] leading-none shadow-sm transition-colors",

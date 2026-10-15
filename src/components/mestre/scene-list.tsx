@@ -9,6 +9,7 @@ import {
 import {
   BookImage,
   CopyPlus,
+  FileUp,
   FolderPlus,
   GripVertical,
   Image as ImageIcon,
@@ -33,6 +34,11 @@ import {
 } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
+import {
+  CamerasDaCena,
+  quantasCameras,
+  SetaDasCameras,
+} from "@/components/mestre/cameras-da-cena";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
@@ -69,6 +75,10 @@ import {
   aoApertarF2,
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
+import { t as textoDeArquivos } from "@/lib/i18n/arquivos";
+import { t } from "@/lib/i18n/cenas";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import {
   achatarArvore,
   caminhoDaPasta,
@@ -118,10 +128,10 @@ export function SceneList({ ready }: { ready: boolean }) {
           className="h-7 w-full shrink-0 justify-start gap-2 px-2"
         >
           <TabsTrigger value="mapas" className="flex-none text-xs">
-            Mapas
+            {t.sceneList.abaMapas}
           </TabsTrigger>
           <TabsTrigger value="fundos" className="flex-none text-xs">
-            Fundos
+            {t.sceneList.abaFundos}
           </TabsTrigger>
         </TabsList>
 
@@ -156,10 +166,12 @@ export function SceneList({ ready }: { ready: boolean }) {
  * disco: nos dois, inventar um número seria pior do que omiti-lo.
  */
 function resumoDaCena(scene: Scene, imagem: AssetMeta | undefined): string {
-  const itens = `${scene.items.length} itens`;
+  const itens = t.sceneList.contarItens(scene.items.length);
 
-  if (!ehFundo(scene)) return `${itens} · ${scene.fog.length} áreas`;
-  if (!scene.backgroundAssetId) return `sem imagem · ${itens}`;
+  if (!ehFundo(scene)) {
+    return `${itens} · ${t.sceneList.contarAreas(scene.fog.length)}`;
+  }
+  if (!scene.backgroundAssetId) return `${t.sceneList.semImagem} · ${itens}`;
 
   const { naturalWidth, naturalHeight } = imagem ?? {};
 
@@ -317,12 +329,13 @@ function ListaDeCenas({
     }
 
     void escolherFundoDaCena(id).catch((cause: unknown) =>
-      toast.error(cause instanceof Error ? cause.message : "Falha ao importar."),
+      toast.error(cause instanceof Error ? cause.message : t.geral.falhaAoImportar),
     );
   }
 
   function criarPasta() {
-    useSceneStore.getState().criarPasta(`Pasta ${pastas.length + 1}`, undefined, lista);
+    const nomeDaPasta = textoDeArquivos.nomesPadrao.pasta(pastas.length + 1);
+    useSceneStore.getState().criarPasta(nomeDaPasta, undefined, lista);
   }
 
   /** O "Novo mapa aqui" do menu da pasta. */
@@ -331,7 +344,7 @@ function ListaDeCenas({
       return (
         <Item onClick={() => criar(pastaId)}>
           <Plus />
-          Novo {nome} aqui
+          {t.sceneList.novoAqui(nome)}
         </Item>
       );
     };
@@ -376,8 +389,8 @@ function ListaDeCenas({
         <CampoDeBusca
           valor={busca}
           onMudar={setBusca}
-          placeholder={`Buscar ${nome}`}
-          rotulo={`Buscar nos ${nome}s pelo nome`}
+          placeholder={t.sceneList.buscarPlaceholder(nome)}
+          rotulo={t.sceneList.buscarRotulo(nome)}
         />
         <Tooltip>
           <TooltipTrigger
@@ -386,7 +399,7 @@ function ListaDeCenas({
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label="Nova pasta"
+                aria-label={t.sceneList.novaPasta}
                 onClick={criarPasta}
                 disabled={!ready}
               >
@@ -395,7 +408,7 @@ function ListaDeCenas({
             }
           />
           <TooltipContent>
-            <p className="max-w-48">Nova pasta. Arraste {nome}s para dentro.</p>
+            <p className="max-w-48">{t.sceneList.novaPastaDica(nome)}</p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
@@ -405,7 +418,7 @@ function ListaDeCenas({
                 variant="outline"
                 size="icon"
                 className="shrink-0 rounded-full"
-                aria-label={`Novo ${nome}`}
+                aria-label={t.sceneList.novo(nome)}
                 onClick={() => criar()}
                 disabled={!ready}
               >
@@ -413,7 +426,7 @@ function ListaDeCenas({
               </Button>
             }
           />
-          <TooltipContent>Novo {nome}</TooltipContent>
+          <TooltipContent>{t.sceneList.novo(nome)}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -433,11 +446,11 @@ function ListaDeCenas({
             <ContextMenuContent className="w-48">
               <ContextMenuItem disabled={!ready} onClick={() => criar()}>
                 <Plus />
-                Novo {nome}
+                {t.sceneList.novo(nome)}
               </ContextMenuItem>
               <ContextMenuItem disabled={!ready} onClick={criarPasta}>
                 <FolderPlus />
-                Nova pasta
+                {t.sceneList.novaPasta}
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
@@ -449,7 +462,7 @@ function ListaDeCenas({
               conteudo={{ tipo: "cenas" }}
               className="pointer-events-none absolute inset-0"
             >
-              Crie o primeiro {nome}
+              {t.sceneList.vazio(nome)}
             </PainelVazio>
           ) : null}
 
@@ -459,7 +472,7 @@ function ListaDeCenas({
             <ul className="relative z-10 space-y-1 p-2 pt-0">
               {achados.length === 0 ? (
                 <li className="text-muted-foreground px-2 py-2 text-xs">
-                  Nada com “{busca.trim()}”.
+                  {t.sceneList.nadaCom(busca.trim())}
                 </li>
               ) : null}
               {achados.map((scene) => (
@@ -596,6 +609,11 @@ function SceneRow({
   // botão "Renomear" não fazer nada.
   const renomear = useRenomearPeloMenu(onRename);
 
+  // As câmeras da cena, abertas debaixo da linha. Por linha e sem lembrar:
+  // é consulta de passagem, e a lista inteira aberta ao voltar seria ruído.
+  const [camerasAbertas, setCamerasAbertas] = useState(false);
+  const comCameras = quantasCameras(scene) > 0;
+
   const fundoEmVoo = useFundoEmVoo((state) => state.cenas.includes(scene.id));
   const arrastarParaNota = useTokenDrag();
 
@@ -618,15 +636,21 @@ function SceneRow({
     <>
       <Item disabled={live} onClick={onGoLive}>
         <Radio />
-        Colocar no ar
+        {t.geral.colocarNoAr}
       </Item>
       <Item onClick={renomear.pedir}>
         <Pencil />
-        Renomear
+        {t.sceneList.renomear}
       </Item>
       <Item onClick={() => duplicateScene(scene.id)}>
         <CopyPlus />
-        Duplicar
+        {t.sceneList.duplicar}
+      </Item>
+      {/* Esta lista é de mapas e fundos; o quadro mora em Arquivos e não
+          viaja em pacote. */}
+      <Item onClick={() => usePacoteStore.getState().abrirExportar({ cenas: [scene.id] })}>
+        <FileUp />
+        {textoDoMestre.pacote.exportarItem}
       </Item>
       <ItensDeMover
         kit={kit}
@@ -648,7 +672,7 @@ function SceneRow({
             toast.error(
               cause instanceof Error
                 ? cause.message
-                : "Falha ao importar.",
+                : t.geral.falhaAoImportar,
             ),
           );
         }}
@@ -659,10 +683,10 @@ function SceneRow({
           <ImageIcon />
         )}
         {fundoEmVoo
-          ? "Importando o fundo…"
+          ? t.sceneList.importandoFundo
           : scene.backgroundAssetId
-            ? "Trocar o fundo"
-            : "Escolher o fundo"}
+            ? t.sceneList.trocarFundo
+            : t.sceneList.escolherFundo}
       </Item>
 
       {scene.backgroundAssetId ? (
@@ -670,7 +694,7 @@ function SceneRow({
           onClick={() => void tirarFundoDaCena(scene.id)}
         >
           <ImageOff />
-          Tirar o fundo
+          {t.sceneList.tirarFundo}
         </Item>
       ) : null}
 
@@ -680,7 +704,7 @@ function SceneRow({
       {ehFundo(scene) ? (
         <Item onClick={() => definirCapa(scene.capa ? null : scene.id)}>
           <BookImage />
-          {scene.capa ? "Deixar de ser capa" : "Usar como capa"}
+          {scene.capa ? t.sceneList.deixarDeSerCapa : t.sceneList.usarComoCapa}
         </Item>
       ) : null}
 
@@ -691,7 +715,7 @@ function SceneRow({
         onClick={() => setConfirmando(true)}
       >
         <Trash2 />
-        Remover
+        {t.sceneList.remover}
       </Item>
 
       <ItensDeExtensao
@@ -704,9 +728,10 @@ function SceneRow({
   };
 
   return (
-    // Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
-    // que deixa o dropdown dos tres pontos, la dentro, continuar
-    // disparando. Ver a nota em `asset-library`.
+    <>
+    {/* Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
+        que deixa o dropdown dos tres pontos, la dentro, continuar
+        disparando. Ver as linhas de `arquivos-list`. */}
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
       <ContextMenuTrigger
         render={
@@ -731,6 +756,17 @@ function SceneRow({
           >
             <GripVertical className="size-3.5" />
           </span>
+        ) : null}
+        {/* A seta das câmeras, antes da miniatura: só na cena que tem câmera.
+            Sem ela, um vão do mesmo tamanho -- as miniaturas da lista ficam
+            alinhadas umas com as outras. */}
+        {comCameras ? (
+          <SetaDasCameras
+            aberta={camerasAbertas}
+            onAlternar={() => setCamerasAbertas((aberta) => !aberta)}
+          />
+        ) : temCamera(scene) ? (
+          <span className="size-6 shrink-0" aria-hidden />
         ) : null}
         <button
           type="button"
@@ -762,7 +798,7 @@ function SceneRow({
             {fundoEmVoo ? (
               <span
                 className="absolute inset-0 flex items-center justify-center rounded bg-black/50"
-                aria-label="Importando o fundo"
+                aria-label={t.sceneList.importandoFundoRotulo}
               >
                 <Loader2 className="size-4 animate-spin" />
               </span>
@@ -782,11 +818,13 @@ function SceneRow({
               <>
                 <span className="block truncate text-sm">
                   {scene.name}
-                  {live ? <span className="text-red-500"> · no ar</span> : null}
+                  {live ? (
+                    <span className="text-red-500"> · {t.sceneList.noAr}</span>
+                  ) : null}
                   {/* Sem cor de aviso: a capa não está acontecendo agora, ela
                       é o que ACONTECE quando nada mais está. */}
                   {scene.capa ? (
-                    <span className="text-muted-foreground"> · capa</span>
+                    <span className="text-muted-foreground"> · {t.sceneList.capa}</span>
                   ) : null}
                 </span>
                 <span className="text-muted-foreground block truncate text-[10px]">
@@ -818,7 +856,7 @@ function SceneRow({
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`Colocar ${scene.name} no ar`}
+                      aria-label={t.sceneList.colocarNomeNoAr(scene.name)}
                       onClick={onGoLive}
                     >
                       <Radio />
@@ -827,8 +865,9 @@ function SceneRow({
                 />
                 <TooltipContent>
                   <p className="max-w-48">
-                    Abre este {NOME_DO_TIPO[scene.tipo ?? "mapa"].toLowerCase()}{" "}
-                    e passa a mesa para ele.
+                    {t.sceneList.abreEPassa(
+                      NOME_DO_TIPO[scene.tipo ?? "mapa"].toLowerCase(),
+                    )}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -840,7 +879,7 @@ function SceneRow({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Opções de ${scene.name}`}
+                    aria-label={t.sceneList.opcoesDe(scene.name)}
                   >
                     <MoreVertical />
                   </Button>
@@ -853,17 +892,17 @@ function SceneRow({
             <ConfirmarRemocao
               aberto={confirmando}
               onAberto={setConfirmando}
-              titulo={`Deseja remover ${scene.name}?`}
+              titulo={t.sceneList.removerTitulo(scene.name)}
               // O que a cena REALMENTE tem: um fundo não guarda área escondida
               // nem câmera, e prometer apagá-las num diálogo de remoção é
               // descrever outra cena para quem está prestes a confirmar.
               itens={[
-                "Tokens e imagens",
-                ...(temNevoa(scene) ? ["Áreas escondidas"] : []),
-                ...(temCamera(scene) ? ["Câmeras salvas"] : []),
-                "Postits e anotações",
+                t.sceneList.removerTokens,
+                ...(temNevoa(scene) ? [t.sceneList.removerAreas] : []),
+                ...(temCamera(scene) ? [t.sceneList.removerCameras] : []),
+                t.sceneList.removerAnotacoes,
               ]}
-              acao="Remover"
+              acao={t.sceneList.remover}
               onConfirmar={() => removeScene(scene.id)}
             />
           </>
@@ -874,5 +913,14 @@ function SceneRow({
         {itens(KIT_CONTEXTO)}
       </ContextMenuContent>
     </ContextMenu>
+
+    {comCameras && camerasAbertas ? (
+      <CamerasDaCena
+        scene={scene}
+        recuo={depth > 0 ? 4 + depth * RECUO_PX : 4}
+        onOpen={onOpen}
+      />
+    ) : null}
+    </>
   );
 }

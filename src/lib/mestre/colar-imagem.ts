@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { imageMimeByName } from "@/lib/attachments/kind";
 import { boxAround, fitInitialSize } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/arquivos";
 import { importarBytesNoAcervo } from "@/lib/mestre/importar-arquivos";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -216,7 +217,7 @@ async function receberDataUrl(endereco: URL, noAcervo: boolean): Promise<void> {
 
     await receber(nomeDeColagem(mime), bytes, noAcervo);
   } catch {
-    toast.error("Não deu para ler a imagem embutida.");
+    toast.error(t.colarImagem.imagemEmbutida);
   }
 }
 
@@ -284,17 +285,17 @@ async function baixarEReceber(
   /** O que a área de transferência oferecia, só para o texto do erro. */
   tipos: string[],
 ): Promise<void> {
-  const aviso = toast.loading("Baixando imagem…");
+  const aviso = toast.loading(t.colarImagem.baixando);
 
   try {
     const resposta = await fetch(endereco);
     if (!resposta.ok) {
-      throw new Error(`o endereço respondeu ${resposta.status}`);
+      throw new Error(t.colarImagem.respondeu(resposta.status));
     }
 
     const tipo = resposta.headers.get("content-type")?.split(";")[0]?.trim();
     if (deHtml && tipo && !tipo.startsWith("image/")) {
-      throw new Error(`o endereço devolveu ${tipo}, que não é imagem`);
+      throw new Error(t.colarImagem.naoEImagem(tipo));
     }
 
     const bytes = new Uint8Array(await resposta.arrayBuffer());
@@ -304,14 +305,14 @@ async function baixarEReceber(
   } catch (cause) {
     toast.dismiss(aviso);
 
-    const motivo = cause instanceof Error ? cause.message : "falha na rede";
+    const motivo = cause instanceof Error ? cause.message : t.colarImagem.falhaNaRede;
 
     // "Load failed" é o que o WebKit diz quando a resposta não libera a origem
     // do aplicativo, e sozinho ele não ensina nada a ninguém. A lista do que a
     // área de transferência tinha é o que permite entender por que se chegou a
     // depender da rede — o caminho curto é o bitmap, e ele deveria ter vindo.
-    toast.error(`Não deu para baixar a imagem: ${motivo}`, {
-      description: `A área de transferência oferecia: ${tipos.join(", ") || "nada"}.`,
+    toast.error(t.colarImagem.naoBaixou(motivo), {
+      description: t.colarImagem.oferecia(tipos.join(", ") || t.colarImagem.nada),
     });
   }
 }
@@ -342,9 +343,7 @@ async function receber(
   noAcervo: boolean,
 ): Promise<void> {
   if (bytes.byteLength > MAX_COLADO) {
-    toast.error(
-      `${nome}: passou de ${MAX_COLADO / (1024 * 1024)} MB, o teto do que entra colado. Arraste o arquivo.`,
-    );
+    toast.error(t.colarImagem.grandeDemais(nome, MAX_COLADO / (1024 * 1024)));
 
     return;
   }
@@ -420,7 +419,7 @@ export function nomeDeColagem(mime: string): string {
     `${agora.getFullYear()}-${dois(agora.getMonth() + 1)}-${dois(agora.getDate())}` +
     ` ${dois(agora.getHours())}h${dois(agora.getMinutes())}`;
 
-  return `Colado ${carimbo}.${extensaoDoMime(mime)}`;
+  return t.nomesPadrao.colado(carimbo, extensaoDoMime(mime));
 }
 
 /**

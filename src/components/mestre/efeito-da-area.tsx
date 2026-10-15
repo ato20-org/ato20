@@ -9,13 +9,13 @@ import {
   efeitosEmAreaDosPlugins,
 } from "@/lib/area-de-efeito";
 import { definicaoDoEfeito } from "@/lib/efeitos";
+import { t } from "@/lib/i18n/ferramentas";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { cn } from "@/lib/utils";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
-import type { AreaDeEfeito } from "@/types/scene";
 
 /**
  * Os efeitos em área da campanha, e os ids que as condições usam -- a lista
@@ -80,17 +80,26 @@ export function useEfeitosEmAreaDosPlugins(): EfeitosEmAreaDoPlugin[] {
  * lista existir) o mostra marcado no alto, para o mestre saber o que ela tem.
  */
 export function EscolhaDoEfeitoDaArea({
-  area,
+  efeito: escolhido,
   onEscolher,
+  comTitulo = true,
+  className = "w-56",
 }: {
-  area: AreaDeEfeito;
+  /**
+   * O efeito marcado: o da área no gizmo, o das próximas áreas no painel de
+   * Elementos. `undefined` = nenhum.
+   */
+  efeito: string | undefined;
   /** `undefined` = sem efeito. */
   onEscolher: (efeito: string | undefined) => void;
+  /** O painel de Elementos já dá nome à linha; o gizmo, não. */
+  comTitulo?: boolean;
+  className?: string;
 }) {
   const lista = useEfeitosEmAreaDaCampanha();
   const dosPlugins = useEfeitosEmAreaDosPlugins();
   const deFora = useDeclarativoStore((state) => state.efeitos);
-  const atual = area.efeito ? definicaoDoEfeito(area.efeito, deFora) : undefined;
+  const atual = escolhido ? definicaoDoEfeito(escolhido, deFora) : undefined;
   const foraDaLista =
     atual &&
     !lista.some((efeito) => efeito.id === atual.id) &&
@@ -99,8 +108,10 @@ export function EscolhaDoEfeitoDaArea({
       : undefined;
 
   return (
-    <div className="w-56 space-y-1.5">
-      <p className="text-xs font-medium">Efeito da área</p>
+    <div className={cn("space-y-1.5", className)}>
+      {comTitulo ? (
+        <p className="text-xs font-medium">{t.efeitoDaArea.titulo}</p>
+      ) : null}
 
       <ul className="space-y-0.5">
         {foraDaLista ? (
@@ -110,7 +121,7 @@ export function EscolhaDoEfeitoDaArea({
           <Opcao
             key={efeito.id}
             efeito={efeito}
-            escolhida={efeito.id === area.efeito}
+            escolhida={efeito.id === escolhido}
             onEscolher={() => onEscolher(efeito.id)}
           />
         ))}
@@ -123,7 +134,7 @@ export function EscolhaDoEfeitoDaArea({
               <Opcao
                 key={efeito.id}
                 efeito={efeito}
-                escolhida={efeito.id === area.efeito}
+                escolhida={efeito.id === escolhido}
                 onEscolher={() => onEscolher(efeito.id)}
               />
             ))}
@@ -134,21 +145,20 @@ export function EscolhaDoEfeitoDaArea({
             type="button"
             className={cn(
               "hover:bg-accent flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-xs",
-              !area.efeito && "bg-accent",
+              !escolhido && "bg-accent",
             )}
             onClick={() => onEscolher(undefined)}
           >
             <span className="border-muted-foreground/50 size-3 shrink-0 rounded-full border border-dashed" />
-            <span className="flex-1 truncate">Nenhum</span>
-            {!area.efeito ? <Check className="size-3.5" /> : null}
+            <span className="flex-1 truncate">{t.efeitoDaArea.nenhum}</span>
+            {!escolhido ? <Check className="size-3.5" /> : null}
           </button>
         </li>
       </ul>
 
       {lista.length === 0 ? (
         <p className="text-muted-foreground text-[11px] leading-snug">
-          A campanha ainda não tem efeitos em área. Eles se criam na Configuração da campanha, em
-          Efeitos, Efeito em área.
+          {t.efeitoDaArea.semEfeitos}
         </p>
       ) : null}
     </div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { idioma } from "@/lib/i18n/idioma";
+import { t as textos } from "@/lib/i18n/mestre";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -111,7 +113,7 @@ async function carregar(extensao: Extensao): Promise<void> {
   const { marcar, esquecer } = useContribuicoesStore.getState();
 
   if (!extensao.principal) {
-    marcar(extensao.id, "falhou", "A extensão não declara `principal`.");
+    marcar(extensao.id, "falhou", textos.carregador.semPrincipal);
     return;
   }
 
@@ -129,7 +131,7 @@ async function carregar(extensao: Extensao): Promise<void> {
     const plugin = modulo.default;
 
     if (!plugin || typeof plugin !== "object") {
-      throw new Error("o módulo não tem `export default` com um objeto.");
+      throw new Error(textos.carregador.semExportDefault);
     }
 
     const registrados: Desfazer[] = [];
@@ -156,7 +158,7 @@ async function carregar(extensao: Extensao): Promise<void> {
 
     // Avisa UMA vez, e na tela: o `console` não é lugar de erro que o usuário
     // precisa ver, e a tela de Plugins guarda o motivo para ele reler depois.
-    toast.error(`O plugin ${extensao.nome} falhou ao carregar.`, {
+    toast.error(textos.carregador.falhouAoCarregar(extensao.nome), {
       description: motivo,
     });
   }
@@ -192,7 +194,7 @@ export async function executarComando(
     const { estado } =
       useContribuicoesStore.getState().carga[extensao.id] ?? {};
     if (estado === "pronta") {
-      toast.error(`${extensao.nome} não registrou o comando ${comandoId}.`);
+      toast.error(textos.carregador.semComando(extensao.nome, comandoId));
     }
 
     return;
@@ -203,7 +205,7 @@ export async function executarComando(
   } catch (causa) {
     // O comando que estoura não derruba nada, e o aviso diz de quem é: sem o
     // nome da extensão, o erro parece do aplicativo.
-    toast.error(`O comando de ${extensao.nome} falhou.`, {
+    toast.error(textos.carregador.comandoFalhou(extensao.nome), {
       description: causa instanceof Error ? causa.message : String(causa),
     });
   }
@@ -231,7 +233,7 @@ export async function executarItemDeMenu(
   if (!item) {
     const { estado } = useContribuicoesStore.getState().carga[extensao.id] ?? {};
     if (estado === "pronta") {
-      toast.error(`${extensao.nome} não registrou o item de menu ${itemId}.`);
+      toast.error(textos.carregador.semItemDeMenu(extensao.nome, itemId));
     }
 
     return;
@@ -240,7 +242,7 @@ export async function executarItemDeMenu(
   try {
     await item.executar(contexto);
   } catch (causa) {
-    toast.error(`O item de menu de ${extensao.nome} falhou.`, {
+    toast.error(textos.carregador.itemDeMenuFalhou(extensao.nome), {
       description: causa instanceof Error ? causa.message : String(causa),
     });
   }
@@ -267,7 +269,7 @@ export async function executarAcao(extensao: Extensao, acao: AcaoDoJogador): Pro
   if (!executar) {
     const { estado } = useContribuicoesStore.getState().carga[extensao.id] ?? {};
     if (estado === "pronta") {
-      toast.error(`${extensao.nome} não registrou a ação ${acao.acao}.`);
+      toast.error(textos.carregador.semAcao(extensao.nome, acao.acao));
     }
 
     return;
@@ -276,7 +278,7 @@ export async function executarAcao(extensao: Extensao, acao: AcaoDoJogador): Pro
   try {
     await executar(acao);
   } catch (causa) {
-    toast.error(`A ação de ${extensao.nome} falhou.`, {
+    toast.error(textos.carregador.acaoFalhou(extensao.nome), {
       description: causa instanceof Error ? causa.message : String(causa),
     });
   }
@@ -318,6 +320,10 @@ function conteudoDe(extensaoId: string, janela: JanelaDeExtensao): ConteudoJanel
   if (janela.tela === "personagem") {
     return { tipo: "personagem", personagemId: janela.personagemId };
   }
+
+  // A Biblioteca virou parte de Arquivos: o plugin que pede a tela dela abre a
+  // árvore onde as imagens estão agora.
+  if (janela.tela === "imagens") return { tipo: "quadros" };
 
   return { tipo: janela.tela };
 }
@@ -362,6 +368,7 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
   return {
     versao: API_VERSAO_ATUAL,
     react: React,
+    idioma,
 
     extensao: {
       id: extensao.id,

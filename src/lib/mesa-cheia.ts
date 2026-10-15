@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/palco";
 import { mesaCheia, TETO_DA_MESA } from "@/lib/store/use-dados-store";
 
 /**
@@ -22,9 +23,9 @@ import { mesaCheia, TETO_DA_MESA } from "@/lib/store/use-dados-store";
 export function recusaPorMesaCheia(): boolean {
   if (!mesaCheia()) return false;
 
-  toast.warning(`A mesa está cheia: ${TETO_DA_MESA} dados.`, {
+  toast.warning(t.dados.mesaCheia(TETO_DA_MESA), {
     id: "mesa-cheia",
-    description: "Recolha os dados no saquinho para jogar de novo.",
+    description: t.dados.mesaCheiaSaida,
   });
 
   return true;

@@ -5,9 +5,12 @@ import { topicosAchados } from "@/lib/mestre/topicos-da-campanha";
 describe("topicosAchados", () => {
   it("termo vazio acha todos, na ordem da barra", () => {
     expect(topicosAchados("  ", {})).toEqual([
-      "quadro",
+      "sistema",
       "medidores",
+      "atributos",
+      "detalhes",
       "efeitos",
+      "espectador",
       "ajustes",
     ]);
   });
@@ -23,6 +26,14 @@ describe("topicosAchados", () => {
 
   it("acha pela palavra de quem não sabe o nome do tópico", () => {
     expect(topicosAchados("vida", {})).toEqual(["medidores"]);
+  });
+
+  it("acha os atributos pela sigla que o mestre criou", () => {
+    expect(topicosAchados("vig", { atributos: ["VIG"] })).toEqual(["atributos"]);
+  });
+
+  it("acha os detalhes pelo grupo que o mestre criou", () => {
+    expect(topicosAchados("trilha", { detalhes: ["Identidade", "Trilha"] })).toEqual(["detalhes"]);
   });
 
   it("acha pelo que o mestre criou dentro do tópico", () => {
@@ -41,12 +52,22 @@ describe("topicosAchados", () => {
     expect(topicosAchados("retrato", {})).toEqual([]);
   });
 
-  it("o plugin se acha pelo nome do tópico que o guarda", () => {
-    expect(topicosAchados("plugin", {})).toEqual(["ajustes"]);
+  it("o plugin se acha pelos tópicos que o guardam: o sistema e os ajustes", () => {
+    expect(topicosAchados("plugin", {})).toEqual(["sistema", "ajustes"]);
   });
 
-  it("o canto arredondado se acha pela palavra de quem procura", () => {
-    expect(topicosAchados("borda", {})).toEqual(["quadro"]);
+  it("quem procura o jogo acha o sistema", () => {
+    expect(topicosAchados("ordem", {})).toEqual(["sistema"]);
+    expect(topicosAchados("regras", {})).toEqual(["sistema"]);
+  });
+
+  it("quem procura a TV ou o projetor acha a imagem do espectador", () => {
+    expect(topicosAchados("projetor", {})).toEqual(["espectador"]);
+    expect(topicosAchados("SÉPIA", {})).toEqual(["espectador"]);
+  });
+
+  it("o brilho mora nos dois: o da fagulha e o da TV", () => {
+    expect(topicosAchados("brilho", {})).toEqual(["efeitos", "espectador"]);
   });
 
   it("nada bate, nada volta", () => {

@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "ato20"
-version = "1.1.0"
+version = "1.6.0"
 dependencies = [
  "axum",
  "color_quant",
@@ -251,7 +251,9 @@ dependencies = [
  "log",
  "mime",
  "png 0.18.1",
+ "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",

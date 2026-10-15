@@ -104,9 +104,14 @@ function retanguloRedondo(
 /**
  * O rabisco de uma forma do quadro, na caixa dela.
  *
- * A MESMA geometria da forma limpa -- o recuo de meia espessura, o raio do
- * canto, os vértices do polígono --, só que tremida: ligar e desligar o traço
- * à mão não pode mudar o tamanho nem o lugar do que está desenhado.
+ * A MESMA geometria da mira limpa que recebe o clique -- o recuo de meia
+ * espessura, o raio do canto, os vértices do polígono --, só que tremida: o
+ * clique pega a figura onde ela está desenhada.
+ *
+ * Toda forma é assim, e todo retângulo e polígono tem canto redondo: não há
+ * traço limpo nem canto vivo para escolher. A forma gravada quando havia
+ * escolha também sai assim, e os campos `arredondado` e `aMao` que ela ainda
+ * carregue no arquivo não são lidos.
  */
 export function rabiscoDaForma(forma: NewForma, semente: number): Rabisco {
   const { width, height, espessura } = forma;
@@ -139,29 +144,20 @@ export function rabiscoDaForma(forma: NewForma, semente: number): Rabisco {
       const vertices = pontosNaCaixa(forma, forma.pontos ?? []);
       if (vertices.length < 3) return { contorno: "" };
 
-      return forma.arredondado
-        ? rabiscar(
-            (o) =>
-              gerador.path(
-                caminhoArredondado(vertices, raioDoCanto(width, height)),
-                o,
-              ),
-            opcoes,
-          )
-        : rabiscar(
-            (o) =>
-              gerador.polygon(
-                vertices.map((ponto) => [ponto.x, ponto.y]),
-                o,
-              ),
-            opcoes,
-          );
+      return rabiscar(
+        (o) =>
+          gerador.path(
+            caminhoArredondado(vertices, raioDoCanto(width, height)),
+            o,
+          ),
+        opcoes,
+      );
     }
 
     case "retangulo": {
       const largura = Math.max(0, width - recuo * 2);
       const altura = Math.max(0, height - recuo * 2);
-      const raio = forma.arredondado ? raioDoCanto(largura, altura) : 0;
+      const raio = raioDoCanto(largura, altura);
 
       return raio > 0
         ? rabiscar(

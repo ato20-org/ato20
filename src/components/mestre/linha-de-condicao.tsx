@@ -21,6 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import { t } from "@/lib/i18n/personagens";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
@@ -99,7 +100,7 @@ export function LinhaDeCondicao({
           nome={condicao.nome}
           ocupado={ocupado}
           onGravar={(nome) => onEditar({ nome })}
-          rotulos={{ campo: "Nome da condição", lapis: "Renomear condição" }}
+          rotulos={{ campo: t.linhaDeCondicao.nome, lapis: t.linhaDeCondicao.renomear }}
         />
       </div>
 
@@ -111,7 +112,7 @@ export function LinhaDeCondicao({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={`Configurar ${condicao.nome}`}
+                  aria-label={t.linhaDeCondicao.configurar(condicao.nome)}
                   disabled={ocupado}
                   onClick={onConfigurar}
                 >
@@ -119,7 +120,7 @@ export function LinhaDeCondicao({
                 </Button>
               }
             />
-            <TooltipContent>Configurar a condição e o efeito dela</TooltipContent>
+            <TooltipContent>{t.linhaDeCondicao.configurarDica}</TooltipContent>
           </Tooltip>
         ) : null}
         {condicao.efeito ? (
@@ -135,7 +136,7 @@ export function LinhaDeCondicao({
                 variant="ghost"
                 size="icon-xs"
                 aria-label={
-                  condicao.escondido ? "Mostrar para a mesa" : "Esconder da mesa"
+                  condicao.escondido ? t.geral.mostrarParaAMesa : t.geral.esconderDaMesa
                 }
                 aria-pressed={condicao.escondido}
                 disabled={ocupado}
@@ -155,7 +156,7 @@ export function LinhaDeCondicao({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Apagar condição"
+          aria-label={t.linhaDeCondicao.apagar}
           disabled={ocupado}
           className={cn(
             "text-muted-foreground hover:text-destructive",
@@ -202,7 +203,9 @@ export function AparenciaDaCondicao({
         render={
           <button
             type="button"
-            aria-label={comEfeito ? "Ícone, cor e efeito" : "Ícone e cor"}
+            aria-label={
+              comEfeito ? t.linhaDeCondicao.iconeCorEEfeito : t.linhaDeCondicao.iconeECor
+            }
             disabled={ocupado}
             className="focus-visible:ring-ring shrink-0 rounded-full focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
           >
@@ -213,7 +216,7 @@ export function AparenciaDaCondicao({
 
       <PopoverContent align="start" className="w-64 space-y-3" side="bottom">
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Ícone</Label>
+          <Label className="text-xs font-normal">{t.linhaDeCondicao.icone}</Label>
           <div className="grid grid-cols-8 gap-0.5">
             {ICONES_DA_CONDICAO.map(({ chave, rotulo, Icone }) => (
               <Tooltip key={chave}>
@@ -244,13 +247,13 @@ export function AparenciaDaCondicao({
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-normal">Cor</Label>
+          <Label className="text-xs font-normal">{t.linhaDeCondicao.cor}</Label>
           <div className="flex gap-1">
             {CORES_LAPIS.map((opcao) => (
               <button
                 key={opcao}
                 type="button"
-                aria-label={`Cor ${opcao}`}
+                aria-label={t.geral.cor(opcao)}
                 aria-pressed={condicao.cor === opcao}
                 className={cn(
                   "size-6 rounded-full border-2",
@@ -275,7 +278,7 @@ export function AparenciaDaCondicao({
 
         {comEfeito ? (
           <div className="space-y-1.5">
-            <Label className="text-xs font-normal">Efeito na figura</Label>
+            <Label className="text-xs font-normal">{t.linhaDeCondicao.efeitoNaFigura}</Label>
             <div className="grid grid-cols-3 gap-1">
               <Button
                 variant={efeito === null ? "secondary" : "ghost"}
@@ -284,7 +287,7 @@ export function AparenciaDaCondicao({
                 className="h-7 px-1 text-[11px]"
                 onClick={() => onEditar({ efeito: null })}
               >
-                Nenhum
+                {t.linhaDeCondicao.nenhum}
               </Button>
               {EFEITOS_DE_FABRICA.map((opcao) => (
                 <OpcaoDeEfeito
@@ -298,7 +301,7 @@ export function AparenciaDaCondicao({
             {daCampanha.length > 0 ? (
               <>
                 <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
-                  Da campanha
+                  {t.linhaDeCondicao.daCampanha}
                 </p>
                 <div className="grid grid-cols-3 gap-1">
                   {daCampanha.map((opcao) => (
@@ -315,7 +318,7 @@ export function AparenciaDaCondicao({
           {dePlugin.length > 0 ? (
             <>
               <p className="text-muted-foreground pt-1 text-[10px] tracking-wide uppercase">
-                Dos plugins
+                {t.linhaDeCondicao.dosPlugins}
               </p>
               <div className="grid grid-cols-3 gap-1">
                 {dePlugin.map((opcao) => (
@@ -334,10 +337,10 @@ export function AparenciaDaCondicao({
               parágrafo que ninguém lê para escolher um. */}
           <p className="text-muted-foreground text-[11px] leading-snug">
             {!efeito
-              ? "Só o selo, sem mexer na figura."
+              ? t.linhaDeCondicao.soOSelo
               : definicao
                 ? definicao.dica
-                : "Um efeito que esta mesa não tem. Aparece só o selo."}
+                : t.linhaDeCondicao.efeitoDesconhecido}
           </p>
         </div>
         ) : null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
 
 /**
@@ -21,7 +22,7 @@ export async function dadosPublicos(
     { headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível ler os dados dos plugins.");
+  if (!response.ok) throw await fail(response, t.erros.lerPlugins);
 
   return (await response.json()) as Record<string, unknown>;
 }
@@ -36,5 +37,5 @@ export async function enviarAcao(
     body: JSON.stringify(acao),
   });
 
-  if (!response.ok) throw await fail(response, "A mesa não recebeu a ação.");
+  if (!response.ok) throw await fail(response, t.erros.acaoNaoChegou);
 }

@@ -1,14 +1,12 @@
 "use client";
 
 import { memo } from "react";
-import { Minus, Signature, Square, SquareRoundCorner } from "lucide-react";
 
 import {
   caixaDaForma,
   FormaView,
 } from "@/components/playground/quadro-mesa-layer";
 import { TransformHandles } from "@/components/playground/transform-handles";
-import { Chave } from "@/components/mestre/chave-de-estilo";
 import { Slider } from "@/components/ui/slider";
 import { RESIZE_HANDLES } from "@/lib/geometry/transform";
 import {
@@ -16,6 +14,7 @@ import {
   terminarGesto,
   useGestoStore,
 } from "@/lib/store/use-gesto-store";
+import { t } from "@/lib/i18n/ferramentas";
 import { FORMA_Z } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -196,7 +195,7 @@ const FormaDaCena = memo(function FormaDaCena({
           }}
           handles={RESIZE_HANDLES}
           paleta={{
-            titulo: "Traço",
+            titulo: t.forma.traco,
             cor: forma.cor,
             fundo: forma.fundo,
             onChange: ({ cor, fundo }) =>
@@ -272,12 +271,12 @@ const FormaDaCena = memo(function FormaDaCena({
 });
 
 /**
- * O que o painel de Estilo sabe da forma e o gizmo não: a espessura, os
- * cantos e o traço à mão -- as mesmas escolhas do popover da ferramenta, agora
- * para ESTA forma. Antes eram dois botões soltos na fileira do gizmo e a
- * espessura não tinha lugar nenhum depois de a forma nascer.
+ * O que o painel de Estilo sabe da forma e o gizmo não: a espessura, a mesma
+ * escolha do painel da ferramenta, agora para ESTA forma. Antes ela não tinha
+ * lugar nenhum depois de a forma nascer.
  *
- * Reto e limpo são a AUSÊNCIA do campo, como no resto da forma.
+ * Canto e traço não entram: toda forma é à mão, com canto redondo. Ver
+ * `rabiscoDaForma`.
  */
 function EstiloDaForma({
   forma,
@@ -298,40 +297,21 @@ function EstiloDaForma({
   );
 
   return (
-    <>
-      <div className="space-y-1.5">
-        <span className="text-muted-foreground text-[10px]">Espessura</span>
-        <Slider
-          aria-label="Espessura"
-          value={[degrau]}
-          min={0}
-          max={ESPESSURAS_LAPIS.length - 1}
-          step={1}
-          onValueChange={(valor) => {
-            const indice = Array.isArray(valor) ? (valor[0] ?? degrau) : valor;
-            onChange({ espessura: ESPESSURAS_LAPIS[indice] ?? forma.espessura });
-          }}
-        />
-      </div>
-
-      {/* Só onde há canto: elipse e linha não têm. */}
-      {forma.tipo === "retangulo" || forma.tipo === "poligono" ? (
-        <Chave
-          titulo="Cantos"
-          ligada={!!forma.arredondado}
-          desligada={{ rotulo: "Cantos retos", Icone: Square }}
-          ligadaComo={{ rotulo: "Cantos arredondados", Icone: SquareRoundCorner }}
-          onMudar={(valor) => onChange({ arredondado: valor ? true : undefined })}
-        />
-      ) : null}
-
-      <Chave
-        titulo="Traço"
-        ligada={!!forma.aMao}
-        desligada={{ rotulo: "Traço limpo", Icone: Minus }}
-        ligadaComo={{ rotulo: "Traço à mão", Icone: Signature }}
-        onMudar={(valor) => onChange({ aMao: valor ? true : undefined })}
+    <div className="space-y-1.5">
+      <span className="text-muted-foreground text-[10px]">
+        {t.forma.espessura}
+      </span>
+      <Slider
+        aria-label={t.forma.espessura}
+        value={[degrau]}
+        min={0}
+        max={ESPESSURAS_LAPIS.length - 1}
+        step={1}
+        onValueChange={(valor) => {
+          const indice = Array.isArray(valor) ? (valor[0] ?? degrau) : valor;
+          onChange({ espessura: ESPESSURAS_LAPIS[indice] ?? forma.espessura });
+        }}
       />
-    </>
+    </div>
   );
 }

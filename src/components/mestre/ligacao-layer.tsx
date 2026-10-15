@@ -23,6 +23,7 @@ import {
   tracadoDe,
   type Seta,
 } from "@/lib/mestre/ligacoes";
+import { t } from "@/lib/i18n/ferramentas";
 import { LIGACAO_Z, useQuadroStore } from "@/lib/store/use-quadro-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useToolStore } from "@/lib/store/use-tool-store";
@@ -368,8 +369,8 @@ export function LigacaoLayer({ scene }: { scene: Scene }) {
             ref={campo}
             className="bg-card text-foreground rounded border px-1 py-0.5 shadow outline-none"
             style={{ fontSize: px(SETA_ROTULO_PX), width: px(160) }}
-            aria-label="Rótulo da seta"
-            placeholder="o que esta seta diz"
+            aria-label={t.seta.rotulo}
+            placeholder={t.seta.rotuloPlaceholder}
             defaultValue={editando.ligacao.rotulo ?? ""}
             onBlur={(event) => {
               updateLigacao(scene.id, editando.ligacao.id, {

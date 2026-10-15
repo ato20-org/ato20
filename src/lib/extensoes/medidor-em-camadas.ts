@@ -5,7 +5,7 @@ import type {
 import type { EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
 import type { EstiloMedidor } from "@/types/character";
 import { urlDaExtensao } from "@/lib/extensoes/manifesto";
-import { isDesktop } from "@/lib/vault/bridge";
+import { daemonAddrSeConhecido, isDesktop } from "@/lib/vault/bridge";
 
 /**
  * As contas do medidor em camadas, sem React. Quem desenha é `FormaEmCamadas`.
@@ -26,6 +26,13 @@ export const ENCAIXE_INTEIRO: EncaixeDoMedidor = { x: 0, y: 0, largura: 1, altur
  * em `/plugin/{id}/...`, relativo porque é ele quem serve a página; ele só
  * responde as imagens que o estilo declarou. A versão vai nas duas para a
  * moldura nova aparecer quando o plugin sobe de versão.
+ *
+ * O Mestre em DESENVOLVIMENTO também vai pelo daemon: lá a janela é
+ * `http://localhost:3000`, e o WebKitGTK não pede `<img>` de esquema próprio a
+ * partir de página http -- o protocolo nem é chamado, e a imagem vira o
+ * xadrez. Medido em 09/10/2026 numa bancada WebKitGTK 2.54: da página
+ * `tauri://`, que é a do release, a mesma imagem carrega. Sem o endereço do
+ * daemon ainda conhecido, fica o protocolo, que é o que já se tinha.
  */
 export function urlDaImagemDoEstilo(
   plugin: string,
@@ -33,11 +40,20 @@ export function urlDaImagemDoEstilo(
   versao: string,
   desktop: boolean = isDesktop(),
 ): string {
-  if (desktop) return urlDaExtensao(plugin, arquivo, versao);
-
   const caminho = arquivo.split("/").map(encodeURIComponent).join("/");
+  const peloDaemon = `/plugin/${encodeURIComponent(plugin)}/${caminho}?v=${encodeURIComponent(versao)}`;
 
-  return `/plugin/${encodeURIComponent(plugin)}/${caminho}?v=${encodeURIComponent(versao)}`;
+  if (!desktop) return peloDaemon;
+
+  const daemon = paginaHttp() ? daemonAddrSeConhecido() : null;
+  if (daemon) return `${daemon.url}${peloDaemon}`;
+
+  return urlDaExtensao(plugin, arquivo, versao);
+}
+
+/** A janela é servida por http -- o `next dev` do desenvolvimento. */
+function paginaHttp(): boolean {
+  return typeof location !== "undefined" && location.protocol.startsWith("http");
 }
 
 /**
@@ -79,6 +95,39 @@ export function quadroDaSequencia(fracao: number, total: number): number {
   const faixa = Math.ceil(Math.min(1, fracao) * (total - 1) - 1e-6);
 
   return Math.min(total - 1, Math.max(1, faixa));
+}
+
+/**
+ * Como a fileira de pontos ocupa o encaixe: o tamanho de UM ponto, o vão
+ * entre dois, e se ela virou o resumo (`×11`).
+ *
+ * Uma linha só, sempre, e a altura dela não muda com o valor -- pela razão dos
+ * pontos de fábrica: a coluna do retrato soma esta altura, e o medidor de
+ * baixo andaria sozinho. O ponto encolhe para caber; com a `proporcao`, ele
+ * encolhe pela largura dele e não pela de um quadrado, e a bala estreita cabe
+ * o dobro antes de diminuir.
+ *
+ * O resumo é decidido pelo MÁXIMO, e não pelo valor: um pente de trinta que
+ * mudasse de forma no décimo tiro faria a mesa reaprender o medidor no meio
+ * do combate. No resumo o ponto ocupa no máximo metade do encaixe, e o número
+ * fica com o resto.
+ */
+export function fileiraDePontos(
+  total: number,
+  largura: number,
+  altura: number,
+  { proporcao, ate }: { proporcao?: number | null; ate?: number | null } = {},
+): { resumo: boolean; largura: number; altura: number; vao: number } {
+  const p = proporcao ?? 1;
+  const vao = altura * 0.15;
+  const resumo = ate != null && total > ate;
+
+  const lado = resumo
+    ? Math.min(altura, (largura * 0.5) / p)
+    : Math.min(altura, (largura - vao * (total - 1)) / (total * p));
+  const alto = Math.max(0, lado);
+
+  return { resumo, largura: alto * p, altura: alto, vao };
 }
 
 /**

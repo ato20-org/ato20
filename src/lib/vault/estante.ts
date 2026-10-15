@@ -2,6 +2,7 @@
 
 import { open } from "@tauri-apps/plugin-dialog";
 
+import { t } from "@/lib/i18n/mestre";
 import { call, daemonAddr } from "@/lib/vault/bridge";
 
 /**
@@ -68,7 +69,7 @@ export function listarLivros(): Promise<Livro[]> {
 export async function importarLivros(): Promise<EstanteImport | null> {
   const escolhidos = await open({
     multiple: true,
-    title: "Escolha os livros de regras",
+    title: t.dialogos.escolherLivros,
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
 

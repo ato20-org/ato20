@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { toast } from "sonner";
 
+import { t } from "@/lib/i18n/personagens";
 import { listarCondicoesDaCampanha } from "@/lib/vault/characters";
 import type { Condicao } from "@/types/character";
 
@@ -72,7 +73,7 @@ function buscar(set: Set, get: Get): void {
       // sempre. Vazio é um estado que as três telas sabem desenhar.
       set({ modelos: [], emVoo: false });
       toast.error(
-        cause instanceof Error ? cause.message : "Falha ao ler as condições.",
+        cause instanceof Error ? cause.message : t.stores.falhaAoLerCondicoes,
       );
     },
   );

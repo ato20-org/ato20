@@ -34,6 +34,7 @@ import {
   tamanhoDoSelo,
 } from "@/lib/geometry/portrait";
 import { condicoesVisiveis } from "@/lib/condicao";
+import { t } from "@/lib/i18n/personagens";
 import { medidoresVisiveis } from "@/lib/medidor";
 import { usePortraitStore } from "@/lib/store/use-portrait-store";
 import { cn } from "@/lib/utils";
@@ -94,7 +95,7 @@ const FIGURA_PADRAO = { width: 0.75, height: 1 };
 const EXEMPLO: Medidor[] = [
   {
     id: "exemplo-vida",
-    nome: "Vida",
+    nome: t.layoutDoRetrato.exemplo.vida,
     cor: "#ef4444",
     estilo: "barra",
     atual: 14,
@@ -103,7 +104,7 @@ const EXEMPLO: Medidor[] = [
   },
   {
     id: "exemplo-cargas",
-    nome: "Cargas",
+    nome: t.layoutDoRetrato.exemplo.cargas,
     cor: "#3b82f6",
     estilo: "pontos",
     atual: 2,
@@ -122,14 +123,14 @@ const EXEMPLO: Medidor[] = [
 const EXEMPLO_DE_CONDICOES: Condicao[] = [
   {
     id: "exemplo-veneno",
-    nome: "Envenenado",
+    nome: t.layoutDoRetrato.exemplo.envenenado,
     cor: "#22c55e",
     icone: "frasco",
     escondido: false,
   },
   {
     id: "exemplo-caido",
-    nome: "Caído",
+    nome: t.layoutDoRetrato.exemplo.caido,
     cor: "#ef4444",
     icone: "cama",
     escondido: false,
@@ -179,27 +180,27 @@ export function LayoutDoRetratoPainel({
   /** As peças que saíram do automático, e por isso têm o que desfazer. */
   const livres = [
     {
-      nome: "Retrato",
+      nome: t.layoutDoRetrato.pecas.retrato,
       solta: efetivo.lugarDoRetrato !== undefined,
       limpar: () => trocar({ lugarDoRetrato: null }),
     },
     {
-      nome: "Nome",
+      nome: t.layoutDoRetrato.pecas.nome,
       solta: efetivo.lugarDoNome !== undefined,
       limpar: () => trocar({ lugarDoNome: null }),
     },
     {
-      nome: "Medidores",
+      nome: t.layoutDoRetrato.pecas.medidores,
       solta: efetivo.lugarDosMedidores !== undefined,
       limpar: () => trocar({ lugarDosMedidores: null }),
     },
     {
-      nome: "Dados",
+      nome: t.layoutDoRetrato.pecas.dados,
       solta: efetivo.lugarDosDados !== undefined,
       limpar: () => trocar({ lugarDosDados: null }),
     },
     {
-      nome: "Condições",
+      nome: t.layoutDoRetrato.pecas.condicoes,
       solta: efetivo.lugarDasCondicoes !== undefined,
       limpar: () => trocar({ lugarDasCondicoes: null }),
     },
@@ -210,8 +211,8 @@ export function LayoutDoRetratoPainel({
       <div className="space-y-1">
         <Peca
           icone={User}
-          nome="Retrato"
-          nota="A figura. Desligada, as barras continuam no ar sem o rosto."
+          nome={t.layoutDoRetrato.pecas.retrato}
+          nota={t.layoutDoRetrato.notas.retrato}
           valor={efetivo.retrato}
           diverge={selecionado ? proprio.retrato !== undefined : false}
           onTrocar={(retrato) => trocar({ retrato })}
@@ -219,8 +220,8 @@ export function LayoutDoRetratoPainel({
         />
         <Peca
           icone={Type}
-          nome="Nome"
-          nota="O nome do personagem, embaixo da figura."
+          nome={t.layoutDoRetrato.pecas.nome}
+          nota={t.layoutDoRetrato.notas.nome}
           valor={efetivo.nome}
           diverge={selecionado ? proprio.nome !== undefined : false}
           onTrocar={(nome) => trocar({ nome })}
@@ -228,8 +229,8 @@ export function LayoutDoRetratoPainel({
         />
         <Peca
           icone={Gauge}
-          nome="Medidores"
-          nota="A coluna de barras ao lado."
+          nome={t.layoutDoRetrato.pecas.medidores}
+          nota={t.layoutDoRetrato.notas.medidores}
           valor={efetivo.medidores}
           diverge={selecionado ? proprio.medidores !== undefined : false}
           onTrocar={(medidores) => trocar({ medidores })}
@@ -237,8 +238,8 @@ export function LayoutDoRetratoPainel({
         />
         <Peca
           icone={Sparkles}
-          nome="Condições"
-          nota="Os selos das condições, no alto da figura."
+          nome={t.layoutDoRetrato.pecas.condicoes}
+          nota={t.layoutDoRetrato.notas.condicoes}
           valor={efetivo.condicoes}
           diverge={selecionado ? proprio.condicoes !== undefined : false}
           onTrocar={(condicoes) => trocar({ condicoes })}
@@ -246,8 +247,8 @@ export function LayoutDoRetratoPainel({
         />
         <Peca
           icone={Dices}
-          nome="Dados"
-          nota="Os dados que caem quando este personagem rola."
+          nome={t.layoutDoRetrato.pecas.dados}
+          nota={t.layoutDoRetrato.notas.dados}
           valor={efetivo.dados}
           diverge={selecionado ? proprio.dados !== undefined : false}
           onTrocar={(dados) => trocar({ dados })}
@@ -257,7 +258,7 @@ export function LayoutDoRetratoPainel({
 
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-2">
-          <Label className="text-xs font-normal">Onde cada peça fica</Label>
+          <Label className="text-xs font-normal">{t.layoutDoRetrato.ondeCadaPeca}</Label>
 
           {/* A explicação num tooltip, e não num parágrafo: ela se lê uma vez na
               vida e depois ocupa três linhas do painel para sempre. O painel é
@@ -266,14 +267,13 @@ export function LayoutDoRetratoPainel({
             <TooltipTrigger
               render={
                 <span className="text-muted-foreground cursor-help text-[10px] underline decoration-dotted underline-offset-2">
-                  arraste
+                  {t.layoutDoRetrato.arraste}
                 </span>
               }
             />
             <TooltipContent>
               <p className="text-muted-foreground max-w-56">
-                No automático a peça se vira sozinha: fica ao lado ou embaixo, e
-                troca de lado quando não cabe na tela. Arrastar crava o lugar.
+                {t.layoutDoRetrato.arrasteDica}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -325,7 +325,7 @@ export function LayoutDoRetratoPainel({
                 onClick={limpar}
               >
                 <RotateCcw className="size-3" />
-                {nome} no automático
+                {t.layoutDoRetrato.noAutomatico(nome)}
               </Button>
             ))}
           </div>
@@ -378,7 +378,7 @@ function Peca({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label={`${nome}: voltar a seguir a mesa`}
+                aria-label={t.layoutDoRetrato.voltarASeguir(nome)}
                 onClick={onSeguir}
               >
                 <RotateCcw />
@@ -386,7 +386,7 @@ function Peca({
             }
           />
           <TooltipContent>
-            <p className="font-medium">Voltar a seguir a mesa</p>
+            <p className="font-medium">{t.layoutDoRetrato.voltarASeguirDica}</p>
           </TooltipContent>
         </Tooltip>
       ) : null}
@@ -676,7 +676,7 @@ function MiniPalco({
       {layout.retrato ? (
         umaCaixa > 0 ? (
           <Peso
-            rotulo="Retrato"
+            rotulo={t.layoutDoRetrato.pecas.retrato}
             left={emX(lugarDe("retrato").x)}
             top={emY(lugarDe("retrato").y)}
             largura={rosto * umaCaixa}
@@ -705,7 +705,9 @@ function MiniPalco({
                   className="size-full object-contain select-none"
                 />
               ) : (
-                <span className="text-[9px] text-white/40">retrato</span>
+                <span className="text-[9px] text-white/40">
+                  {t.layoutDoRetrato.retratoVazio}
+                </span>
               )}
             </div>
           </Peso>
@@ -721,7 +723,7 @@ function MiniPalco({
             height: `${figuraNoMini.height}%`,
           }}
         >
-          sem rosto
+          {t.layoutDoRetrato.semRosto}
         </div>
       )}
 
@@ -730,7 +732,7 @@ function MiniPalco({
           ficar". */}
       {layout.nome && umaCaixa > 0 ? (
         <Peso
-          rotulo="Nome"
+          rotulo={t.layoutDoRetrato.pecas.nome}
           left={emX(lugarDe("nome").x)}
           top={emY(lugarDe("nome").y)}
           largura={larguraDoNome(umaCaixa, layout.escalaNome)}
@@ -742,7 +744,7 @@ function MiniPalco({
           onPegar={(evento) => pegar(evento, "nome")}
         >
           <TextoDoNome
-            nome={selecionado?.nome ?? "Nome"}
+            nome={selecionado?.nome ?? t.layoutDoRetrato.pecas.nome}
             largura={larguraDoNome(umaCaixa, layout.escalaNome)}
           />
         </Peso>
@@ -750,7 +752,7 @@ function MiniPalco({
 
       {layout.condicoes && umaCaixa > 0 ? (
         <Peso
-          rotulo="Condições"
+          rotulo={t.layoutDoRetrato.pecas.condicoes}
           left={emX(lugarDe("condicoes").x)}
           top={emY(lugarDe("condicoes").y)}
           largura={larguraDosSelos(
@@ -775,7 +777,7 @@ function MiniPalco({
 
       {layout.medidores && umaCaixa > 0 ? (
         <Peso
-          rotulo="Medidores"
+          rotulo={t.layoutDoRetrato.pecas.medidores}
           left={emX(lugarDe("medidores").x)}
           top={emY(lugarDe("medidores").y)}
           largura={colunaEmCaixas * umaCaixa}
@@ -807,7 +809,7 @@ function MiniPalco({
 
       {layout.dados && umaCaixa > 0 ? (
         <Peso
-          rotulo="Dados"
+          rotulo={t.layoutDoRetrato.pecas.dados}
           left={emX(lugarDe("dados").x)}
           top={emY(lugarDe("dados").y)}
           largura={larguraDosDados(umaCaixa, layout.escalaDados)}
@@ -902,7 +904,7 @@ function Peso({
     <div
       role="button"
       tabIndex={0}
-      aria-label={`Mover ${rotulo}`}
+      aria-label={t.layoutDoRetrato.mover(rotulo)}
       className={cn(
         "absolute cursor-grab touch-none rounded-sm p-0.5 outline outline-transparent transition-colors",
         automatico ? "outline-dashed outline-white/25" : "outline-primary/60",
@@ -919,7 +921,7 @@ function Peso({
           canto de cima à esquerda, e é ele que fica parado. */}
       {escolhida ? (
         <AlcaDeTamanho
-          rotulo={`de ${rotulo}`}
+          rotulo={rotulo}
           escala={escala}
           minimo={minimo}
           maximo={maximo}
@@ -988,7 +990,7 @@ function AlcaDeTamanho({
     <span
       role="slider"
       tabIndex={0}
-      aria-label={`Tamanho ${rotulo}`}
+      aria-label={t.layoutDoRetrato.tamanhoDe(rotulo)}
       aria-valuemin={Math.round(minimo * 100)}
       aria-valuemax={Math.round(maximo * 100)}
       aria-valuenow={porcento}

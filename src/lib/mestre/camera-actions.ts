@@ -10,6 +10,7 @@ import {
   quadroDaMesa,
   viewportQueCabe,
 } from "@/lib/geometry/viewport";
+import { t } from "@/lib/i18n/ferramentas";
 import { ponteiroNaCena } from "@/lib/mestre/ponteiro-no-palco";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
@@ -387,7 +388,7 @@ function criarCamera(
 
   const ordem = (scene.cameras?.length ?? 0) + 1;
   const id = useSceneStore.getState().salvarCamera(scene.id, {
-    nome: nome ?? `Câmera ${ordem}`,
+    nome: nome ?? t.nomes.camera(ordem),
     viewport,
   });
 
@@ -427,7 +428,7 @@ export function novoTripeDaqui(nome?: string): string | undefined {
   const ordem = (scene.tripes?.length ?? 0) + 1;
   const id = useSceneStore.getState().salvarTripe(scene.id, {
     ...olho,
-    nome: nome ?? `Tripé ${ordem}`,
+    nome: nome ?? t.nomes.tripe(ordem),
   });
 
   useCameraLockStore.getState().selecionar(id);

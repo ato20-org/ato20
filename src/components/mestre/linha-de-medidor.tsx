@@ -28,6 +28,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/personagens";
 import {
   fracaoDoMedidor,
   pontosDoMedidor,
@@ -147,7 +148,7 @@ export function LinhaDeMedidor({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                aria-label="Cor e forma"
+                aria-label={t.linhaDeMedidor.corEForma}
                 disabled={ocupado}
               >
                 <Palette className="size-3.5" />
@@ -164,8 +165,8 @@ export function LinhaDeMedidor({
                     size="icon-xs"
                     aria-label={
                       medidor.escondido
-                        ? "Mostrar para a mesa"
-                        : "Esconder da mesa"
+                        ? t.geral.mostrarParaAMesa
+                        : t.geral.esconderDaMesa
                     }
                     aria-pressed={medidor.escondido}
                     disabled={ocupado}
@@ -187,7 +188,7 @@ export function LinhaDeMedidor({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label="Apagar medidor"
+              aria-label={t.linhaDeMedidor.apagar}
               disabled={ocupado}
               className={cn(
                 "text-muted-foreground hover:text-destructive",
@@ -246,7 +247,7 @@ export function NomeDoMedidor({
   nome,
   ocupado,
   onGravar,
-  rotulos = { campo: "Nome do medidor", lapis: "Renomear medidor" },
+  rotulos = { campo: t.linhaDeMedidor.nome, lapis: t.linhaDeMedidor.renomear },
 }: {
   nome: string;
   ocupado: boolean;
@@ -362,7 +363,7 @@ export function SeloDoMedidor({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Menos um"
+          aria-label={t.linhaDeMedidor.menosUm}
           disabled={ocupado || !passos.podeMenos}
           onClick={passos.onMenos}
         >
@@ -395,7 +396,7 @@ export function SeloDoMedidor({
         <Button
           variant="ghost"
           size="icon-xs"
-          aria-label="Mais um"
+          aria-label={t.linhaDeMedidor.maisUm}
           disabled={ocupado || !passos.podeMais}
           onClick={passos.onMais}
         >

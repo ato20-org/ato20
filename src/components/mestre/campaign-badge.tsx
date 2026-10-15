@@ -4,6 +4,8 @@ import { useState } from "react";
 import type * as React from "react";
 import {
   ChevronDown,
+  FileDown,
+  FileUp,
   FolderSymlink,
   PackageOpen,
   SlidersHorizontal,
@@ -35,6 +37,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { comum } from "@/lib/i18n/comum";
+import { t } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
 /**
@@ -76,9 +81,9 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
     void exportar().then(
       (dest) => {
         // `null` é o diálogo fechado sem escolher: não avisa nada.
-        if (dest) toast.success(`Campanha exportada em ${dest}`);
+        if (dest) toast.success(t.campanha.exportadaEm(dest));
       },
-      () => toast.error("Não foi possível exportar a campanha."),
+      () => toast.error(t.campanha.exportarFalhou),
     );
   }
 
@@ -120,21 +125,31 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
             onClick={() => abrirJanela({ tipo: "configuracao" })}
           >
             <SlidersHorizontal />
-            Configuração da campanha
+            {t.campanha.configuracao}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 
           <DropdownMenuItem onClick={exportarCampanha}>
             <PackageOpen />
-            Exportar campanha
+            {t.campanha.exportar}
+          </DropdownMenuItem>
+          {/* Partes da campanha, num pacote que outra campanha importa. Ver
+              `vault/pacote.rs`. */}
+          <DropdownMenuItem onClick={() => usePacoteStore.getState().abrirExportar()}>
+            <FileUp />
+            {t.pacote.exportarItem}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void usePacoteStore.getState().escolherPacote()}>
+            <FileDown />
+            {t.pacote.importarItem}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 
           <DropdownMenuItem onClick={() => setTrocando(true)}>
             <FolderSymlink />
-            Trocar de campanha
+            {t.campanha.trocar}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -142,17 +157,18 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
       <AlertDialog open={trocando} onOpenChange={setTrocando}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Fechar {campaign.nome}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t.campanha.fecharTitulo(campaign.nome)}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              A mesa sai da tela e você volta para a lista de campanhas. A TV e
-              os celulares continuam conectados enquanto você olha a lista.
+              {t.campanha.fecharExplicacao}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction onClick={close}>
-              Fechar campanha
+              {t.campanha.fechar}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -175,10 +191,7 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
           }
         />
         <TooltipContent>
-          <p className="max-w-52">
-            O código desta campanha. Ele viaja no zip, então continua o mesmo
-            depois de importar noutra máquina.
-          </p>
+          <p className="max-w-52">{t.campanha.codigoAjuda}</p>
         </TooltipContent>
       </Tooltip>
     </div>

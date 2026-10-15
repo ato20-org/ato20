@@ -21,6 +21,7 @@ import {
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { t } from "@/lib/i18n/arquivos";
 import { useProgresso } from "@/lib/store/use-audio-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
@@ -64,7 +65,7 @@ export function SomAtual({ porId }: { porId: Map<string, AssetMeta> }) {
   if (!track && ambientes.length === 0 && disparos.length === 0) {
     return (
       <PainelVazio conteudo={{ tipo: "sons" }}>
-        Nenhum som tocando
+        {t.somAtual.vazio}
       </PainelVazio>
     );
   }
@@ -212,7 +213,7 @@ function LinhaDoCanal({
           // faixa, que é `flex-1` e encolhe até zero.
           <div className="w-16 shrink-0">
             <Slider
-              aria-label={`Volume de ${nome}`}
+              aria-label={t.somAtual.volumeDe(nome)}
               value={[Math.round((ganho ?? 1) * 100)]}
               max={100}
               step={1}
@@ -232,8 +233,8 @@ function LinhaDoCanal({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={loop ? `${nome} repetindo` : `${nome} toca uma vez`}
-            title={loop ? "Repetindo" : "Toca uma vez"}
+            aria-label={loop ? t.somAtual.repetindo(nome) : t.somAtual.tocaUmaVez(nome)}
+            title={loop ? t.geral.repetindo : t.geral.tocaUmaVez}
             aria-pressed={loop}
             className={cn(!loop && "text-muted-foreground/60")}
             onClick={onLoop}
@@ -246,7 +247,7 @@ function LinhaDoCanal({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={tocando ? `Pausar ${nome}` : `Retomar ${nome}`}
+            aria-label={tocando ? t.somAtual.pausar(nome) : t.somAtual.retomar(nome)}
             onClick={onTocando}
           >
             {tocando ? <Pause /> : <Play />}
@@ -257,7 +258,7 @@ function LinhaDoCanal({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label={`Tirar ${nome}`}
+            aria-label={t.somAtual.tirar(nome)}
             onClick={onTirar}
           >
             <X />
@@ -330,7 +331,7 @@ function LinhaDoDisparo({
 
 /** O acervo guarda o nome; o canal guarda só o id. Arquivo apagado ainda toca. */
 function nomeDe(porId: Map<string, AssetMeta>, assetId: string): string {
-  return porId.get(assetId)?.name ?? "Arquivo removido";
+  return porId.get(assetId)?.name ?? t.geral.arquivoRemovido;
 }
 
 function primeiro(value: number | readonly number[]): number {

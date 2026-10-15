@@ -4,6 +4,7 @@ import { Eye, EyeOff, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { t } from "@/lib/i18n/ferramentas";
 import { toggleFogRevealed } from "@/lib/mestre/item-actions";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
@@ -13,8 +14,8 @@ import type { FormatoDeArea, Scene } from "@/types/scene";
 /** Como cada recorte se chama na lista. O retângulo não se anuncia: é o comum. */
 const FORMATO: Record<FormatoDeArea, string> = {
   retangulo: "",
-  elipse: " · redonda",
-  poligono: " · livre",
+  elipse: t.areas.redonda,
+  poligono: t.areas.livre,
 };
 
 /**
@@ -49,14 +50,14 @@ export function FogList({ scene }: { scene: Scene }) {
               className="min-w-0 flex-1 text-left"
               onClick={() => selectFog(region.id)}
             >
-              <span className="block text-sm">Área {index + 1}</span>
+              <span className="block text-sm">{t.areas.area(index + 1)}</span>
               <span className="text-muted-foreground block text-[10px]">
                 {region.width} × {region.height}
                 {/* O formato entra na linha porque a lista é como o mestre acha
                     a área certa sem procurá-la no mapa -- e num mapa com seis
                     áreas o tamanho sozinho não distingue duas parecidas. */}
                 {FORMATO[region.formato ?? "retangulo"]}
-                {region.revealed ? " · revelada" : ""}
+                {region.revealed ? t.areas.revelada : ""}
               </span>
             </button>
 
@@ -65,8 +66,8 @@ export function FogList({ scene }: { scene: Scene }) {
               size="icon-xs"
               aria-label={
                 region.revealed
-                  ? `Esconder área ${index + 1}`
-                  : `Revelar área ${index + 1}`
+                  ? t.areas.esconder(index + 1)
+                  : t.areas.revelar(index + 1)
               }
               onClick={() => toggleFogRevealed(region.id)}
             >
@@ -75,7 +76,7 @@ export function FogList({ scene }: { scene: Scene }) {
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`Remover área ${index + 1}`}
+              aria-label={t.areas.remover(index + 1)}
               // Travada não sai, como no palco: destrava pelo cadeado dela.
               disabled={Boolean(region.locked)}
               onClick={() => removeFog(scene.id, region.id)}

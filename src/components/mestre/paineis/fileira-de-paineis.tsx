@@ -11,12 +11,21 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { BookOpen, FileText, Presentation, X } from "lucide-react";
+import {
+  BookOpen,
+  FileText,
+  PanelLeft,
+  PanelRight,
+  PanelTop,
+  Presentation,
+  X,
+} from "lucide-react";
 
 import { Splitter } from "@/components/mestre/dock/splitter";
 import { NotaEditor } from "@/components/mestre/editor-markdown";
 import { LeitorLivro } from "@/components/mestre/leitor/leitor-livro";
 import { VistaDoQuadro } from "@/components/mestre/paineis/vista-do-quadro";
+import { t } from "@/lib/i18n/mestre";
 import { abrirNotaEm } from "@/lib/mestre/abrir-nota";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import {
@@ -367,21 +376,7 @@ function ZonasDeSplit({
 }) {
   const ordem = usePaineisStore((state) => state.ordem);
   const fracoes = usePaineisStore((state) => state.fracoes);
-  const caixa = useRef<HTMLDivElement | null>(null);
-  /** Onde o palco está dentro do painel do mapa, em pixel. */
-  const [palco, setPalco] = useState<{ left: number; width: number } | null>(null);
-
-  useLayoutEffect(() => {
-    if (painel !== "mapa") return;
-
-    const dono = caixa.current?.parentElement;
-    const principal = dono?.querySelector("main");
-    if (!dono || !principal) return;
-
-    const fora = dono.getBoundingClientRect();
-    const dentro = principal.getBoundingClientRect();
-    setPalco({ left: dentro.left - fora.left, width: dentro.width });
-  }, [painel]);
+  const { caixa, palco } = usePalcoDoPainel(painel);
 
   const estado = { ordem, fracoes };
   const cabe = (zona: Zona) =>
@@ -404,27 +399,146 @@ function ZonasDeSplit({
           { zona: "direita", left: "75%", width: "25%" },
         ];
 
+  const acesa = aceso?.painel === painel && cabe(aceso.zona) ? aceso.zona : null;
+
   return (
     <div ref={caixa} className="pointer-events-none absolute inset-0 z-40">
       {zonas
         .filter(({ zona }) => cabe(zona))
         .map(({ zona, left, width }) => {
-          const acesa = aceso?.painel === painel && aceso.zona === zona;
+          const Icone = ICONE_DA_ZONA[zona];
 
           return (
+            // O ALVO, e só ele ouve o ponteiro: é o que `zonaDeSplitSob` e o
+            // arrasto de peças leem. O desenho vai numa caixa por dentro, com
+            // respiro, para duas zonas vizinhas não colarem borda com borda.
+            //
+            // Com uma zona deste painel acesa, nenhuma se desenha: a prévia
+            // cobre o pedaço delas, e as bordas tracejadas atravessando o
+            // resultado o embaralhavam. Continuam alvo, e a mão que segue para
+            // a vizinha a acende do mesmo jeito.
             <div
               key={zona}
               data-zona-de-split=""
               data-painel={painel}
               data-zona={zona}
-              className={cn(
-                "pointer-events-auto absolute inset-y-0 rounded-sm border-2 border-dashed transition-colors",
-                acesa ? "border-primary bg-primary/25" : "border-primary/30 bg-primary/5",
-              )}
+              className="pointer-events-auto absolute inset-y-0"
               style={{ left, width }}
-            />
+            >
+              {acesa ? null : (
+                <div className="border-primary/25 bg-primary/5 absolute inset-1 grid place-items-center rounded-md border-2 border-dashed">
+                  <Icone aria-hidden className="text-primary/40 size-5" />
+                </div>
+              )}
+            </div>
           );
         })}
+
+      {acesa ? (
+        <PreviaDoSplit key={acesa} zona={acesa} palco={painel === "mapa" ? palco : null} />
+      ) : null}
+    </div>
+  );
+}
+
+/** O desenho de cada zona: um painel novo de um lado, ou uma aba em cima. */
+const ICONE_DA_ZONA: Record<Zona, typeof PanelLeft> = {
+  esquerda: PanelLeft,
+  direita: PanelRight,
+  centro: PanelTop,
+};
+
+/** Onde o palco está dentro do painel do mapa, em pixel. */
+type Palco = { left: number; width: number };
+
+/**
+ * O retângulo do palco dentro do painel do mapa, medido do `main` que ele
+ * contém. As zonas e a prévia se medem por ele, e não pelo painel: o `main`
+ * tem respiro em volta, e a metade do PAINEL cairia torta sobre o mapa.
+ *
+ * `null` nos painéis laterais, que se dividem pela própria caixa. A `caixa`
+ * vai na camada que se desenha sobre o painel: é pelo pai dela que se acha o
+ * `main`.
+ */
+function usePalcoDoPainel(painel: string) {
+  const caixa = useRef<HTMLDivElement | null>(null);
+  const [palco, setPalco] = useState<Palco | null>(null);
+
+  useLayoutEffect(() => {
+    if (painel !== "mapa") return;
+
+    const dono = caixa.current?.parentElement;
+    const principal = dono?.querySelector("main");
+    if (!dono || !principal) return;
+
+    const fora = dono.getBoundingClientRect();
+    const dentro = principal.getBoundingClientRect();
+    setPalco({ left: dentro.left - fora.left, width: dentro.width });
+  }, [painel]);
+
+  return { caixa, palco };
+}
+
+/**
+ * O que soltar ali FAZ, desenhado antes de soltar: o pedaço da tela que o
+ * arquivo vai ocupar.
+ *
+ * Era a própria zona acesa -- uma faixa tracejada na borda, um quarto do
+ * painel --, e ela dizia "aqui" sem dizer "o quê": uma borda que acende é o
+ * desenho de qualquer destino de arrasto. Agora a prévia toma a METADE do
+ * painel do lado em que o novo vai nascer, com a barra do divisor onde a tela
+ * vai se partir. É o desenho do resultado, e não do alvo, e é isso que o faz
+ * ler como split. No centro de um painel lateral ela cobre o painel inteiro:
+ * ali o arquivo entra como mais uma aba, e nada se divide.
+ *
+ * Sem ouvir o ponteiro: ela cobre mais do que a zona, e roubaria o
+ * `elementFromPoint` das zonas vizinhas.
+ */
+function PreviaDoSplit({ zona, palco }: { zona: Zona; palco: Palco | null }) {
+  const Icone = ICONE_DA_ZONA[zona];
+  const rotulo =
+    zona === "esquerda"
+      ? t.paineis.dividirAEsquerda
+      : zona === "direita"
+        ? t.paineis.dividirADireita
+        : t.paineis.abrirComoAba;
+
+  // A metade do lado da zona: do palco, no mapa, e do painel, nos laterais.
+  const base = palco?.left ?? 0;
+  const total = palco?.width;
+  const area =
+    zona === "centro"
+      ? { left: 0, width: "100%" }
+      : total === undefined
+        ? { left: zona === "esquerda" ? 0 : "50%", width: "50%" }
+        : {
+            left: zona === "esquerda" ? base : base + total / 2,
+            width: total / 2,
+          };
+
+  return (
+    <div
+      aria-hidden
+      className="animate-in fade-in-0 pointer-events-none absolute inset-y-0 duration-150 motion-reduce:animate-none"
+      style={area}
+    >
+      <div className="border-primary bg-primary/15 absolute inset-1.5 grid place-items-center rounded-lg border-2 shadow-[inset_0_0_32px_-8px] shadow-primary/40">
+        <div className="bg-primary text-primary-foreground flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs leading-tight font-medium shadow-lg">
+          <Icone className="size-4 shrink-0" />
+          <span>{rotulo}</span>
+        </div>
+      </div>
+
+      {/* A linha onde a tela vai se partir: o divisor que vai nascer entre o
+          novo e o que já estava. */}
+      {zona === "centro" ? null : (
+        <div
+          className={cn(
+            "bg-primary absolute inset-y-3 w-1 rounded-full",
+            zona === "esquerda" ? "right-0 translate-x-1/2" : "left-0 -translate-x-1/2",
+          )}
+        />
+      )}
     </div>
   );
 }
@@ -453,7 +567,7 @@ function DivisorDePaineis({
     <div className="flex" style={{ order: indice * 2 - 1 }}>
       <Splitter
         direcao="vertical"
-        rotulo="Largura dos painéis"
+        rotulo={t.paineis.largura}
         aoArrastar={(delta) => {
           const linha = document.querySelector<HTMLElement>("[data-fileira-de-paineis]");
           const noEsquerdo = linha?.querySelector<HTMLElement>(
@@ -498,21 +612,19 @@ function DivisorDePaineis({
   );
 }
 
-/** Onde o painel arrastado cairia, acendido sobre o painel sob o ponteiro. */
+/**
+ * Onde o painel arrastado cairia, acendido sobre o painel sob o ponteiro. A
+ * mesma prévia do arquivo que chega da lista -- ver `PreviaDoSplit` --: levar
+ * um painel para o lado do mapa é o mesmo split, com outra origem.
+ */
 function ZonasDoPainel({ painel, alvo }: { painel: string; alvo: Alvo | null }) {
+  const { caixa, palco } = usePalcoDoPainel(painel);
   const aqui = alvo?.painel === painel ? alvo.zona : null;
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-40">
+    <div ref={caixa} aria-hidden className="pointer-events-none absolute inset-0 z-40">
       {aqui ? (
-        <div
-          className={cn(
-            "bg-primary/20 border-primary absolute inset-y-0 border-2 border-dashed",
-            aqui === "esquerda" && "left-0 w-1/4",
-            aqui === "direita" && "right-0 w-1/4",
-            aqui === "centro" && "inset-x-0",
-          )}
-        />
+        <PreviaDoSplit key={aqui} zona={aqui} palco={painel === "mapa" ? palco : null} />
       ) : null}
     </div>
   );
@@ -542,9 +654,13 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
       case "livro":
         return aba.titulo;
       case "nota":
-        return notas?.find((nota) => nota.id === aba.notaId)?.titulo ?? "Nota";
+        return (
+          notas?.find((nota) => nota.id === aba.notaId)?.titulo ?? t.paineis.nota
+        );
       case "quadro":
-        return cenas?.find((cena) => cena.id === aba.sceneId)?.name ?? "Quadro";
+        return (
+          cenas?.find((cena) => cena.id === aba.sceneId)?.name ?? t.paineis.quadro
+        );
     }
   };
 
@@ -552,7 +668,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
     <section
       data-painel-lateral
       tabIndex={-1}
-      aria-label="Painel de notas, livros e quadros"
+      aria-label={t.paineis.painel}
       className="bg-background flex min-h-0 min-w-0 flex-1 flex-col border-x outline-none"
     >
       {/* A tira com o desenho das abas do dock -- ver `DockGroup` --, para o
@@ -565,7 +681,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
       <div className="flex items-end gap-1 px-1.5 pt-1.5">
         <div
           role="tablist"
-          aria-label="Abas do painel"
+          aria-label={t.paineis.abas}
           className="rolagem-limpa scroll-fade-x flex min-w-0 flex-1 cursor-grab items-end gap-px self-stretch overflow-x-auto"
           onPointerDown={(event) => {
             if (event.target !== event.currentTarget) return;
@@ -574,7 +690,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
               event,
               { tipo: "painel", painelId: painel.id },
               painel.abas.length > 1
-                ? `${painel.abas.length} abas`
+                ? t.paineis.contarAbas(painel.abas.length)
                 : tituloDe(painel.abas[0]!),
               () => {},
             );
@@ -640,7 +756,7 @@ function PainelDeAbas({ painel }: { painel: PainelLateral }) {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Fechar ${titulo}`}
+                  aria-label={t.paineis.fechar(titulo)}
                   className="hover:bg-foreground/10 hover:text-foreground focus-visible:ring-ring shrink-0 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/aba:opacity-100 group-focus-within/aba:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
                   // Para aqui: o toque no X não pode começar o arrasto da aba.
                   onPointerDown={(event) => event.stopPropagation()}

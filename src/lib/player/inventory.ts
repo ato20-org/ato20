@@ -1,7 +1,14 @@
 "use client";
 
+import { t } from "@/lib/i18n/jogador";
 import { authorized, fail } from "@/lib/player/session";
-import type { ItemInventario, NovoItem, PatchItem } from "@/types/inventory";
+import type {
+  ImagemItem,
+  ItemInventario,
+  NovoItem,
+  PatchItem,
+} from "@/types/inventory";
+import { chaveDaImagem } from "@/types/inventory";
 
 /**
  * O inventário, do lado do celular do jogador.
@@ -25,7 +32,7 @@ export async function myInventory(
     headers: authorized(codigo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível ler o inventário.");
+  if (!response.ok) throw await fail(response, t.erros.lerInventario);
 
   return (await response.json()) as ItemInventario[];
 }
@@ -49,15 +56,16 @@ export async function addItem(
     body: JSON.stringify(novo),
   });
 
-  if (!response.ok) throw await fail(response, "Não foi possível criar o item.");
+  if (!response.ok) throw await fail(response, t.erros.criarItem);
 
   return (await response.json()) as ItemInventario;
 }
 
 /**
- * Edita um item que o próprio jogador criou.
+ * Edita um item que o próprio jogador criou, por este personagem.
  *
- * O daemon recusa o item do mestre com 409. A tela não deveria nem oferecer os
+ * O daemon recusa o resto com 409: o item do mestre, e o que outro jogador
+ * criou e o mestre deu a este. A tela não deveria nem oferecer os
  * botões nesse caso — ver `meuItem` —, e a recusa existe porque a tela não é
  * onde uma permissão se decide.
  */
@@ -76,7 +84,7 @@ export async function updateItem(
     },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível salvar o item.");
+  if (!response.ok) throw await fail(response, t.erros.salvarItem);
 
   return (await response.json()) as ItemInventario;
 }
@@ -91,13 +99,13 @@ export async function removeItem(
     { method: "DELETE", headers: authorized(codigo) },
   );
 
-  if (!response.ok) throw await fail(response, "Não foi possível remover o item.");
+  if (!response.ok) throw await fail(response, t.erros.removerItem);
 }
 
 /**
  * Manda a foto do item.
  *
- * Vira ANEXO do personagem, e não asset: o acervo é do mestre, e abri-lo a uma
+ * Vira ANEXO deste personagem, e não asset: o acervo é do mestre, e abri-lo a uma
  * entrada vinda de um celular na rede faria a biblioteca da campanha crescer
  * com o que qualquer um subir. Como anexo a imagem ganha de graça o nome
  * saneado, o teto de 64 MB e a rota `/mini` — e alcança a mesa, quando o mestre
@@ -121,7 +129,51 @@ export async function uploadItemImage(
     { method: "PUT", headers: authorized(codigo), body },
   );
 
-  if (!response.ok) throw await fail(response, `Não foi possível enviar ${file.name}.`);
+  if (!response.ok) throw await fail(response, t.erros.enviar(file.name));
 
   return (await response.json()) as ItemInventario;
+}
+
+/**
+ * As fotos de item já baixadas, por item, foto e variante.
+ *
+ * A foto entra na chave: trocar a foto de um item tem de buscar a nova, e o id
+ * do item sozinho serviria a velha para sempre. Nunca revogadas, pela razão do
+ * `miniCache` dos anexos: são alguns KB cada, e revogar ao desmontar faria a
+ * grade rebuscar tudo a cada troca de aba.
+ */
+const fotoCache = new Map<string, string>();
+
+/**
+ * A foto de um item, pela rota do ITEM.
+ *
+ * Não pela rota do anexo: a foto mora na pasta do personagem por onde o item
+ * foi criado, e quem o carrega hoje pode ser outro — o mestre deu a lanterna do
+ * Edgar à Mira, e o celular da Mira não está ligado ao Edgar. O daemon confere
+ * que o item está NESTE inventário, e não escondido, e devolve a foto de onde
+ * ela estiver.
+ */
+export async function itemImageUrl(
+  codigo: string,
+  id: string,
+  itemId: string,
+  imagem: ImagemItem,
+  variante: "mini" | "tela" = "mini",
+): Promise<string> {
+  const chave = `${id}/${itemId}/${chaveDaImagem(imagem)}/${variante}`;
+
+  const cached = fotoCache.get(chave);
+  if (cached) return cached;
+
+  const response = await fetch(
+    `/eu/personagens/${encodeURIComponent(id)}/inventario/${encodeURIComponent(itemId)}/imagem/${variante}`,
+    { headers: authorized(codigo) },
+  );
+
+  if (!response.ok) throw await fail(response, t.erros.lerInventario);
+
+  const url = URL.createObjectURL(await response.blob());
+  fotoCache.set(chave, url);
+
+  return url;
 }

@@ -24,6 +24,7 @@ import {
   type LimitesDaMesa,
 } from "@/lib/geometry/dado";
 import type { Vec } from "@/lib/geometry/transform";
+import { t } from "@/lib/i18n/ferramentas";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import { useDadosDaMesa } from "@/hooks/use-dados-na-mesa";
@@ -888,11 +889,9 @@ function AlcanceDoDado({
         event.preventDefault();
         relancarNoLugar();
       }}
-      title={naMao ? `${tipo.nome} na mão` : `${tipo.nome}: ${valor}`}
+      title={naMao ? t.dado.naMao(tipo.nome) : `${tipo.nome}: ${valor}`}
       aria-label={
-        naMao
-          ? `${tipo.nome} na mão`
-          : `${tipo.nome}: ${valor}. Clique para jogar de novo, ou arraste para arremessar.`
+        naMao ? t.dado.naMao(tipo.nome) : t.dado.noPalco(tipo.nome, valor)
       }
       className="pointer-events-auto absolute cursor-grab rounded-full focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
       style={{

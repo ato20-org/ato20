@@ -612,6 +612,20 @@ export const METROS_DA_PAREDE_PADRAO = 2;
 export const UNIDADES_POR_METRO = ALTURA_DA_PAREDE / METROS_DA_PAREDE_PADRAO;
 
 /** A altura desta parede, em unidades de cena. */
+/**
+ * O menor lado a que a alça de tamanho deixa uma parede chegar, em unidades de
+ * cena.
+ *
+ * Não é o piso de item (`MIN_ITEM_SIZE`, 24): a parede cobre o que o mapa
+ * pintou, e o mapa pinta pilar, mureta e batente bem mais finos que um token.
+ * Um, e não zero, na parede fechada: de lado zero ela some e ninguém a pega de
+ * volta. A `linha` é zero por natureza num dos lados -- a reta deitada não tem
+ * altura --, e qualquer piso ali a entortaria.
+ */
+export function ladoMinimoDaParede(parede: Pick<Parede, "formato">): number {
+  return parede.formato === "linha" ? 0 : 1;
+}
+
 export function alturaDaParede(parede: FormaDaParede): number {
   // Pelo número e não só pela ausência: esta altura entra num `Math.max` de
   // todas as paredes do mapa, e ali um valor podre não fica na parede dele --
@@ -854,7 +868,39 @@ export function contornoDaParede(parede: FormaDaParede): string {
  * o que se queria não era uma borda grossa em volta do contorno, era o MIOLO
  * cheio.
  */
-const GROSSURA_DA_LINHA = 22;
+export const GROSSURA_DA_LINHA = 22;
+
+/**
+ * A faixa em volta de uma `linha`, um quadrilátero por segmento, com
+ * `grossura` de largura e o traço no meio.
+ *
+ * Separada do corpo porque o 2.5D ergue a MESMA faixa: as faces sobem das
+ * bordas dela e a laje a tampa, e as duas contas têm de concordar ou o teto sai
+ * mais largo que a parede. A porta passa a grossura dela, que é mais fina.
+ */
+export function faixaDaLinha(parede: FormaDaParede, grossura: number): Vec[][] {
+  return segmentosDaParede(parede).flatMap((segmento) => {
+    const dx = segmento.x2 - segmento.x1;
+    const dy = segmento.y2 - segmento.y1;
+    const comprimento = Math.hypot(dx, dy);
+    if (comprimento === 0) return [];
+
+    // A normal do segmento: o que sai dele para o lado, e é ela que dá a
+    // faixa.
+    const meia = grossura / 2;
+    const nx = (-dy / comprimento) * meia;
+    const ny = (dx / comprimento) * meia;
+
+    return [
+      [
+        { x: segmento.x1 + nx, y: segmento.y1 + ny },
+        { x: segmento.x2 + nx, y: segmento.y2 + ny },
+        { x: segmento.x2 - nx, y: segmento.y2 - ny },
+        { x: segmento.x1 - nx, y: segmento.y1 - ny },
+      ],
+    ];
+  });
+}
 
 /**
  * O CORPO de uma parede: a região preenchida, que é a pedra dela.
@@ -879,27 +925,7 @@ export function corpoDaParede(parede: FormaDaParede): string {
     return poligonoOrientado(pontos);
   }
 
-  return segmentosDaParede(parede)
-    .map((segmento) => {
-      const dx = segmento.x2 - segmento.x1;
-      const dy = segmento.y2 - segmento.y1;
-      const comprimento = Math.hypot(dx, dy);
-      if (comprimento === 0) return "";
-
-      // A normal do segmento: o que sai dele para o lado, e é ela que dá a
-      // faixa.
-      const meia = GROSSURA_DA_LINHA / 2;
-      const nx = (-dy / comprimento) * meia;
-      const ny = (dx / comprimento) * meia;
-
-      return poligonoOrientado([
-        { x: segmento.x1 + nx, y: segmento.y1 + ny },
-        { x: segmento.x2 + nx, y: segmento.y2 + ny },
-        { x: segmento.x2 - nx, y: segmento.y2 - ny },
-        { x: segmento.x1 - nx, y: segmento.y1 - ny },
-      ]);
-    })
-    .join("");
+  return faixaDaLinha(parede, GROSSURA_DA_LINHA).map(poligonoOrientado).join("");
 }
 
 /**

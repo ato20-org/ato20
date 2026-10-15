@@ -83,7 +83,24 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 6 é a atual: ela acrescentou os `efeitos` de condição
+mais do que ele tem.** A 11 é a atual: ela acrescentou os
+`estilosDeAtributos` e o `estiloDosAtributos` do sistema (ver
+[Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual)),
+que um ATO20 anterior ignoraria calado, com a ficha nos cartões sem dizer por
+quê. A 10 acrescentou as `fichasPdf` (ver
+[Ficha em PDF](#ficha-em-pdf-o-plugin-ensina-a-ler)) e os `sistemas` (ver
+[Sistema de jogo](#sistema-de-jogo-o-padrão-da-campanha)), que um ATO20
+anterior ignoraria calado, e o plugin instalado só para isso não faria nada. A 9
+acrescentou os atributos da ficha,
+o substituto `secao:atributos` e o campo `atributos` no personagem de
+`personagens.listar` (a sigla, o número e a descrição opcional: FOR 4). Um ATO20 anterior recusaria o
+substituto como alvo desconhecido. A 8 acrescentou aos `pontos` em camadas
+a `proporcao` e o `ate` (ver [Em camadas de imagem](#em-camadas-de-imagem)),
+que um ATO20 anterior ignoraria calado (a bala estreita sairia esticada num
+quadrado). A 7 deixou todo texto do manifesto vir por idioma e deu
+`api.idioma` ao código (ver
+[Texto em mais de um idioma](#texto-em-mais-de-um-idioma)); um ATO20 anterior
+recusaria o mapa como JSON ilegível. A 6 acrescentou os `efeitos` de condição
 (ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
 anterior aceitaria o plugin calado, e as condições que apontam para os efeitos
 dele mostrariam só o selo. A 5 acrescentou ao manifesto o estilo de
@@ -223,8 +240,8 @@ abertura desta versão, copiada para o arquivo e apagada.
 ataque que já dá o dano, aba de habilidades que rola e aplica. Nada disso
 existe de fábrica, e é de propósito — o que existe é o alcance.
 
-`api.personagens.listar()` devolve o personagem **inteiro**, medidores e
-condições incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
+`api.personagens.listar()` devolve o personagem **inteiro**, medidores,
+condições e atributos incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
 o que a mesa vê. `assinar` avisa a cada releitura do elenco.
 
 **Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
@@ -320,9 +337,9 @@ nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
 itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
-**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
-das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
-lembra que fechou. O corpo recebe `personagemId`.
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra na aba
+Ficha, depois das de fábrica e na largura toda da janela, com a moldura das de
+fábrica: fecha, lembra que fechou. O corpo recebe `personagemId`.
 
 **Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
 uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
@@ -332,6 +349,9 @@ que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
 nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
 O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
 `SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+`secao:campos` e `secao:nota` continuam valendo, mas deixaram de ser seções: o
+primeiro é o miolo do popover das miniaturas do cabeçalho, e o segundo o do
+botão de quem joga com o personagem.
 
 **Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
 `icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como
@@ -414,7 +434,19 @@ onde o conteúdo entra:
     tinta mais rala à direita da barra).
   - `pontos`: um ponto por unidade, numa linha que encolhe para caber. `cheio`
     e `vazio` são imagens; sem `vazio`, o vazio é o `cheio` apagado; sem
-    nenhuma, bolinhas na cor do medidor.
+    nenhuma, bolinhas na cor do medidor. `proporcao` é a largura do ponto em
+    fração da altura dele, de 0,1 a 4 (ausente é 1, o quadrado): a bala de pé
+    é estreita, desenhada numa tela da mesma proporção, e cabe o dobro antes de
+    encolher. `ate` é o teto: com o **máximo** acima dele, a fileira vira um
+    ponto e o número (`×11`), na cor e no contorno do `texto` se houver. Pelo
+    máximo e não pelo valor, para o pente de trinta não trocar de forma no
+    décimo tiro; `0` é sempre o número. Quem usa um dos dois pede
+    `apiVersao` 8.
+
+    ```json
+    "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
+                  "proporcao": 0.44, "ate": 12 }
+    ```
   - `sequencia`: `quadros`, de 2 a 16, do vazio ao cheio. O primeiro só
     aparece no zero; os outros dividem o resto em faixas iguais. É o coração
     que racha conforme a vida cai.
@@ -696,6 +728,196 @@ toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
 também. O total de quadros da base deve dividir o dos elementos: é o laço do
 fogo que dita o da folha.
 
+## Ficha em PDF: o plugin ensina a ler
+
+Na lista de Personagens, **Importar ficha em PDF** cria o personagem a partir de
+uma ficha editável preenchida: nome, atributos, medidores, detalhes, e o PDF
+anexado como a ficha dele. O aplicativo lê o formulário, mas não conhece
+ficha nenhuma: quem diz que `untitled13` é a AGI do Ordem é o plugin. Um
+plugin de ficha é só o manifesto, sem `principal`, e pede a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "fichasPdf": [{
+    "id": "jogo-do-ano",
+    "titulo": "Tormenta20 (Jogo do Ano)",
+    "reconhecer": ["NOME DO PERSONAGEM", "ModFor", "PMs Totais"],
+    "nome": "NOME DO PERSONAGEM",
+    "atributos": [{ "sigla": "FOR", "campo": "For" }],
+    "medidores": [{ "nome": "PV", "atual": "PVs Atuais", "maximo": "PVs Totais", "cor": "#ef4444" }],
+    "detalhes": [
+      { "grupo": "Identidade", "rotulo": "Classe", "campo": "CLASSE" },
+      { "grupo": "Identidade", "rotulo": "Nível", "campo": "Lv", "tipo": "numero" },
+      { "grupo": "Descrição", "rotulo": "Histórico", "descricao": { "juntar": ["Hist1", "Hist2"] } }
+    ],
+    "listas": [{
+      "grupo": "Habilidades",
+      "itens": [
+        { "nome": "Hab1", "campo": "Custo1", "descricao": "Desc1" },
+        { "nome": "Hab2", "campo": "Custo2", "descricao": "Desc2" }
+      ]
+    }]
+  }]
+}
+```
+
+- **`reconhecer`** são campos que o PDF tem de ter, TODOS, para ser esta
+  ficha. Escolha os que só ela tem: dois ou três bastam. Quando mais de uma
+  ficha reconhece o PDF, vence a que lista mais campos, e o mestre pode trocar
+  na prévia.
+- **O campo é o nome do campo do formulário**, como o PDF o guarda. Ele não
+  aparece na tela; para descobrir, abra a ficha num editor de formulário de
+  PDF, que mostra o nome de cada campo, ou leia as anotações com o pdf.js. Ficha que
+  usa nomes genéricos (`Campo de Texto15`, `untitled2`) também serve: o nome é
+  fixo naquele arquivo, e a tabela se monta uma vez, olhando a posição.
+- **Um valor sai de um campo, de caixas, ou de campos para juntar**:
+  `{ "caixas": ["FOR1", "FOR2", "FOR3"] }` vale quantas estão marcadas, que é
+  como fichas de bolinha guardam o atributo; `{ "juntar": [...] }` é o texto
+  escrito em várias linhas, um campo por linha. No valor, os pedaços ficam
+  numa linha só, separados por ` · ` (`+5 · 2d12`); na descrição, um por
+  linha. Juntado como número, vale o primeiro campo que tiver um.
+- **`listas` são as tabelas da ficha** (Habilidades & Rituais, Poderes,
+  Ataques): cada linha vira um detalhe do `grupo`, e o rótulo é o que o
+  jogador escreveu no campo `nome` ("Golpe Pesado"). Linha com o nome vazio
+  é linha que ele não usou, e fica de fora sem aviso.
+- **Número é o que começa com número**: `10`, `+2`, `-1`, `12/15` (o 12).
+  `1d8` não é número, de propósito.
+- **Casa com o que a campanha já tem.** O personagem nasce com os atributos,
+  medidores e detalhes de fábrica da campanha, e a ficha preenche em cima: a
+  mesma sigla, o mesmo nome de medidor, o mesmo grupo e rótulo de detalhe.
+  Só o que não tem par é criado. O PV da campanha continua com a cor e o
+  estilo que o mestre escolheu.
+- **`descricao` é o texto longo** do detalhe (o histórico, a habilidade). O
+  valor de texto é curto (80 letras); o que passar disso vai para a
+  descrição sozinho.
+- **Campo vazio não grava**, e a prévia diz o que veio em branco. Ficha com
+  o nome vazio é avisada como "em branco".
+
+O aplicativo recusa na instalação o que a gravação cortaria calada: sigla
+com mais de 6 letras, nome de medidor com mais de 24, mais atributos (12),
+medidores (6) ou detalhes (200, contando as linhas das listas) do que o
+personagem guarda, e a mesma sigla,
+medidor ou detalhe lidos duas vezes.
+
+Só ficha **editável** (com formulário). A impressa, a digitalizada e a
+chapada continuam entrando como anexo: ler texto pela posição na página
+seria adivinhar. E o plugin não leva o PDF da editora junto: a ficha é de
+quem a publicou, e o README do plugin aponta onde baixá-la.
+
+## Sistema de jogo: o padrão da campanha
+
+Um plugin de sistema traz o padrão de um jogo: os atributos, os medidores, o
+molde dos detalhes da ficha e o cardápio de condições. O mestre o **aplica**
+numa campanha, ao criá-la ("Sistema de jogo", na tela de nova campanha) ou
+depois, em Configuração da campanha, Sistema. Também é só o manifesto, e pede
+a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "sistemas": [{
+    "id": "ordem",
+    "titulo": "Ordem Paranormal",
+    "atributos": [{ "sigla": "AGI", "valor": 1, "descricao": "Agilidade" }],
+    "medidores": [{ "nome": "PV", "cor": "#ef4444", "estilo": "barra", "maximo": 20 }],
+    "detalhes": {
+      "grupos": [{ "nome": "Identidade" }, { "nome": "Habilidades e rituais", "exibicao": "lista" }],
+      "modelos": [
+        { "grupo": "Identidade", "rotulo": "Classe", "tipo": "escolha",
+          "opcoes": ["Combatente", "Especialista", "Ocultista"] },
+        { "grupo": "Identidade", "rotulo": "NEX", "tipo": "numero", "valor": 5 }
+      ]
+    },
+    "condicoes": [{ "nome": "Sangrando", "cor": "#ef4444", "icone": "sangue", "efeito": "sangrando" }]
+  }]
+}
+```
+
+- **Aplicar junta, nunca substitui.** O que a campanha já tem com o mesmo
+  nome (a sigla, o medidor, o grupo e rótulo do detalhe, a condição) fica como
+  o mestre deixou, e o que passa do teto da campanha fica de fora e é avisado.
+  Aplicar duas vezes não duplica nada.
+- **Nunca entra sozinho.** Plugin é ligado na máquina inteira, e a campanha de
+  D&D da mesma máquina não pode acordar com a AGI do Ordem. E a campanha não
+  guarda de onde o padrão veio: desinstalar o plugin não mexe nela.
+- **Os personagens que já existem** recebem o que faltava se o mestre marcar
+  a opção ao aplicar, pelo mesmo "Aplicar em todos" de cada lista.
+- **Os textos são dado**, e não `TextoDePlugin`: a sigla, o rótulo, a opção e
+  o nome da condição vão para a campanha como estão.
+- **`estiloExtensao`** no medidor pode apontar para o estilo de OUTRO plugin
+  (`ordem-segredo-na-floresta/pv`); sem ele instalado, a barra sai no `estilo`.
+- **`icone`** da condição é um nome da lista de ícones da tela, e **`efeito`**
+  é um efeito de fábrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+- **`estiloDosAtributos`** (API 11) é o desenho dos atributos,
+  `{plugin}/{estilo}`, do próprio plugin ou de outro. Aplicar o sistema põe a
+  campanha nesse desenho: ver
+  [Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual).
+- Os tetos são os da campanha: 12 atributos, 6 medidores, 16 grupos, 200
+  detalhes e 16 condições. Detalhe de `escolha` precisa de opções, e o grupo
+  de cada detalhe tem de estar declarado ao lado.
+
+Um plugin com sistema **e** ficha em PDF fecha o ciclo: use na ficha os mesmos
+grupos e rótulos do sistema, e o personagem importado cai certinho no molde.
+
+## Atributos desenhados pelo plugin: o ritual
+
+A seção de atributos pode sair de uma imagem do plugin, com o número de cada
+sigla no lugar dela: o ritual do Ordem, com AGI, FOR, INT, PRE e VIG nos cinco
+círculos. Declarativo, como o medidor em camadas, e pela mesma razão: o
+celular desenha igual ao Mestre sem uma linha do plugin rodar fora dele. Pede
+a **API 11**:
+
+```json
+"estilosDeAtributos": [{
+  "id": "ritual",
+  "titulo": "Ritual",
+  "imagem": "atributos/ritual.png",
+  "proporcao": 1,
+  "lugares": [
+    { "sigla": "AGI", "x": 0.501, "y": 0.164, "tamanho": 0.085 },
+    { "sigla": "FOR", "x": 0.194, "y": 0.382, "tamanho": 0.085 }
+  ],
+  "texto": { "cor": "#ffffff", "contorno": "#000000" }
+}]
+```
+
+- **A imagem traz o que não muda**: o desenho e o nome de cada atributo. A
+  ficha escreve só o número. Raster (png, webp, gif, jpg, avif), até 2 MB,
+  servida pelo daemon arquivo por arquivo, como as camadas do medidor.
+- **`proporcao`** é a altura da imagem em fração da largura, de 0,25 a 3: a
+  ficha reserva o lugar antes de a imagem chegar e não pula. Uma imagem que
+  não bate com ela estica junto com os lugares, e o número segue no círculo.
+- **Cada lugar** é o CENTRO do número, `x` e `y` em fração da imagem, e o
+  `tamanho` é o corpo do número em fração da LARGURA, de 0,02 a 0,4. Fração e
+  não pixel: a imagem escala com a coluna da ficha e com a tela do celular.
+  Até 12 lugares, sigla de até 6 letras, sem repetir.
+- **A sigla casa sem diferença de caixa.** Atributo da ficha sem lugar na
+  imagem (o SOR de uma mesa) fica num cartão logo abaixo; lugar sem atributo
+  fica vazio.
+- **`texto`** tem a cor e o contorno do número, só em hex. Ausente, branco com
+  contorno quase preto. A fonte é a do aplicativo.
+
+No Mestre, o número é um campo: clique e escreva, as setas sobem e descem. O
+botão direito no círculo troca a sigla, escreve a descrição ou apaga, e o
+hover mostra a descrição. No celular é só leitura, como o resto da ficha.
+
+**Quem escolhe é o sistema**, e não um seletor: campanha de Ordem é ritual.
+Aplicar um sistema que declara `estiloDosAtributos` põe a campanha nesse
+desenho; sistema sem desenho não mexe nele. A escolha fica no registro de
+configurações, em `ato20.ficha.estiloDosAtributos` (`""` são os cartões),
+oculta da lista de Ajustes, e viaja no zip. Com o plugin desligado ou a imagem
+fora da pasta, a ficha volta aos cartões, e a escolha espera no arquivo pela
+volta dele.
+
+No Mestre de desenvolvimento (`next dev`, a janela em `http://localhost:3000`)
+a imagem vem pelo daemon, como no celular: o WebKitGTK não pede `<img>` do
+protocolo `ato20-ext` a partir de página http. No release a janela é
+`tauri://`, e o protocolo serve.
+
+A escolha e os estilos viajam ao celular pelo `/sala/declarativo`, junto com
+os estilos de medidor.
+
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 
 A metade **pública** do que um plugin guarda no personagem pode virar uma
@@ -838,6 +1060,53 @@ O plugin OBS ([valb-mig/ato20.obs.plugin](https://github.com/valb-mig/ato20.obs.
 Transmissão e o filtro, `camera.html` com os dados e `retratos.html` com os
 retratos (o grupo no ar e o card de cada personagem de jogador).
 
+## Texto em mais de um idioma
+
+O ATO20 fala português e inglês, e da **API 7** em diante o plugin também pode
+falar. Todo texto que o manifesto declara para alguém ler (o `nome` e a
+`descricao` do plugin, o `titulo` de painel, comando, ferramenta, camada,
+item de menu, seção, página, estilo de medidor, efeito, ficha em PDF,
+sistema e configuração, a
+`descricao` da configuração, o
+`subtitulo`, o `grupo`, a `dica`, o `rotulo` e o `campo` das fontes de
+retrato) aceita uma string, como sempre, **ou um mapa por idioma**:
+
+```json
+"apiVersao": 7,
+"nome": { "pt-BR": "Iniciativa", "en": "Initiative" },
+"contribui": {
+  "comandos": [
+    { "id": "rolar", "titulo": { "pt-BR": "Rolar iniciativa", "en": "Roll initiative" } }
+  ]
+}
+```
+
+A tela escolhe na chegada: a chave exata do idioma dela (`pt-BR`, `en`),
+depois qualquer variante da mesma língua (`pt`, `en-US`), depois português,
+depois inglês, e por fim o primeiro que houver. Plugin escrito numa língua só
+não muda nada: a string vale para todos os idiomas. A chave do mapa é um
+código de idioma (`en`, `pt-BR`); outra coisa o Rust recusa na importação.
+
+A `escolha` de uma configuração ganhou `rotulos`: o que a tela mostra no lugar
+de cada opção. A opção continua sendo o valor gravado no arquivo, e não muda
+com o idioma; o rótulo muda.
+
+```json
+{ "chave": "meu-plugin.cor", "titulo": { "pt-BR": "Cor", "en": "Color" },
+  "tipo": "escolha", "padrao": "azul", "opcoes": ["azul", "rubi"],
+  "rotulos": { "azul": { "pt-BR": "Azul", "en": "Blue" }, "rubi": "Rubi" },
+  "escopo": "campanha" }
+```
+
+No código, `api.idioma` diz o idioma da tela (`"pt-BR"` ou `"en"`), para o
+plugin escolher o texto dos avisos, das linhas do chat e da seção do celular.
+Ele não muda enquanto o plugin vive: trocar de idioma recarrega a janela, e o
+plugin carrega de novo junto.
+
+O que o Mestre publica para a mesa (o título de um efeito, de um estilo de
+medidor) sai no idioma do Mestre. O celular e a janela do espectador recebem
+o texto já escolhido, e não o mapa.
+
 ## Atalho de plugin não rouba atalho do aplicativo
 
 A tabela de `atalhos.ts` é consultada em ordem e os do plugin entram **depois**.
@@ -872,12 +1141,53 @@ dentro da webview desta janela — que é também a razão de o código do plugi
 alcançar só o Mestre. A exceção decidida são as `paginas`: só as de quem as
 declara, e em sandbox. Ver "Páginas na rede".
 
+## Instalar pelo catálogo
+
+A aba Catálogo de Configurações → Plugins lista o `plugins.json` do site, e cada
+card tem **Instalar**. O Rust baixa o zip da branch principal do repositório
+(`codeload.github.com/{dono}/{repo}/zip/HEAD`, o mesmo do "Code → Download ZIP"),
+extrai numa pasta temporária e passa pelo mesmo `extensoes::importar` do botão
+Importar: a validação é a mesma. Ver `src-tauri/src/catalogo.rs`.
+
+- Só `https://github.com/{dono}/{repo}`. O endereço do zip é montado no Rust; a
+  tela nunca passa uma URL para baixar.
+- O manifesto pode estar na raiz do zip ou dentro da pasta única que o GitHub
+  põe em volta (`repo-HEAD/`).
+- O `id` do manifesto tem de ser o do card. Importar sobrescreve pelo id, e um
+  repositório que trouxesse o id de outro plugin apagaria o plugin errado.
+- Tetos: 50 MB de zip, 200 MB descompactado, 5 mil arquivos. Zip-slip e link
+  simbólico ficam de fora, como no import de campanha.
+- Plugin que executa código pede confirmação antes: quando o catálogo diz, ou
+  quando o `manifest.json` do repositório tem `principal`.
+
+Depois de instalado, o card lê o `manifest.json` do repositório
+(`raw.githubusercontent.com`) e mostra **Atualizar** quando a `versao` de lá
+passa da instalada. Atualizar é instalar de novo por cima, e o módulo velho é
+descarregado antes. Para o seu plugin oferecer atualização, suba a `versao` do
+manifesto a cada mudança na branch principal.
+
+Clicar no card abre a janela do plugin, como a página de uma extensão no VS
+Code: o ícone, a versão e Instalar em cima, e o `README.md` do repositório
+embaixo. A página do plugin no site (`/plugins/{id}`) mostra o mesmo README. É
+ali que o plugin se apresenta, então ponha imagens da tela e o passo a passo.
+
+- Com a tela em inglês, `README.en.md` vem antes do `README.md`.
+- Imagem e link relativos (`docs/tela.png`, `/docs/tela.png`) resolvem contra o
+  repositório, como no GitHub.
+- HTML cru (`<img width>`, `<p align>`) não é desenhado: o README vem da rede e
+  é mostrado dentro da janela do Mestre. Use a imagem do Markdown,
+  `![tela](docs/tela.png)`.
+- O ícone e a capa do card não vêm do repositório: são os do `plugins.json` do
+  site, em `public/plugins/{id}/`.
+
 ## Confiança
 
-Não há loja, não há revisão e não há sandbox. Quem instala um plugin de código
-está executando o código de quem o escreveu, com o alcance da janela. A tela
-avisa o que é tema e o que é funcionalidade, e mostra autor e repositório — o
-resto é a mesma confiança que se dá a uma extensão de editor.
+Não há loja, não há revisão e não há sandbox. O catálogo é uma lista, não um
+aval. Quem instala um plugin de código está executando o código de quem o
+escreveu, com o alcance da janela. A tela avisa o que é tema e o que é
+funcionalidade, mostra autor e repositório e, no catálogo, pede confirmação
+antes de instalar código; o resto é a mesma confiança que se dá a uma extensão
+de editor.
 
 As guardas que existem são contra plugin **malformado**, não contra plugin
 malicioso: travessia de caminho, link simbólico plantado na pasta, molde de URL

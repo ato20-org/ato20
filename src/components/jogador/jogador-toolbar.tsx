@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { SaquinhoJogador } from "@/components/jogador/saquinho-jogador";
+import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,12 +36,12 @@ export function JogadorToolbar({
 }) {
   return (
     <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] [@media(max-height:520px)]:px-2 [@media(max-height:520px)]:pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">
-      <nav className="bg-card flex h-16 items-center justify-between gap-1 rounded-3xl border px-2 shadow-lg select-none [@media(max-height:520px)]:h-14">
-        <div className="flex flex-1 justify-evenly">{esquerda}</div>
+      <nav className="bg-card flex h-16 items-center justify-between gap-1 rounded-3xl border px-2 shadow-lg select-none max-[400px]:gap-0.5 max-[400px]:px-1 [@media(max-height:520px)]:h-14">
+        <div className="flex min-w-0 flex-1 justify-evenly gap-1">{esquerda}</div>
 
         <SaquinhoJogador />
 
-        <div className="flex flex-1 justify-evenly">{direita}</div>
+        <div className="flex min-w-0 flex-1 justify-evenly gap-1">{direita}</div>
       </nav>
     </div>
   );
@@ -78,9 +79,14 @@ export function ToolbarItem({
       // `aria-current`, e não `role="tab"`: os painéis são trocados por estado,
       // sem as setas e o foco que um conjunto de abas de verdade promete.
       aria-current={ativo ? "page" : undefined}
-      aria-label={aviso ? `${rotulo}, há mensagem nova` : undefined}
+      aria-label={aviso ? t.barra.comAviso(rotulo) : undefined}
       className={cn(
-        "relative flex min-w-16 flex-col items-center gap-0.5 rounded-2xl px-3 py-1.5 text-[11px] font-medium transition-colors",
+        // Dividem o lado entre si, até 6rem cada, em vez de uma largura mínima:
+        // com dois itens de cada lado do saquinho, a mínima de 64px passava da
+        // tela de 360px e empurrava "Anotações" para fora. Abaixo de 400px a
+        // letra desce a 10px para "Personagem" caber inteiro; o que ainda não
+        // couber (320px) encurta com reticências, e o ícone continua inteiro.
+        "relative flex max-w-24 min-w-0 flex-1 flex-col items-center gap-0.5 rounded-2xl px-1 py-1.5 text-[11px] font-medium transition-colors max-[400px]:px-0 max-[400px]:text-[10px] max-[400px]:tracking-tight",
         "[&_svg]:size-5 [&_svg]:shrink-0",
         ativo
           ? "bg-accent text-accent-foreground"
@@ -88,7 +94,7 @@ export function ToolbarItem({
       )}
     >
       {icone}
-      {rotulo}
+      <span className="max-w-full truncate">{rotulo}</span>
       {aviso ? <PontoDeAviso className="top-1 right-4" /> : null}
     </button>
   );

@@ -17,6 +17,7 @@ import { useMemo } from "react";
 
 import { useTelas } from "@/components/mestre/dock/window-content";
 import { executarComando } from "@/lib/extensoes/carregar";
+import { t } from "@/lib/i18n/mestre";
 import type { ComandoDeclarado, Extensao } from "@/lib/extensoes/manifesto";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
@@ -72,10 +73,10 @@ export function PanelsMenu() {
             size="sm"
             // 24px de altura como o botão da campanha: a barra tem 32.
             className="text-muted-foreground h-6 gap-1 px-1.5 text-xs"
-            aria-label={`Abas (${quantas} de ${telas.length} abertas)`}
+            aria-label={t.abas.rotulo(quantas, telas.length)}
           >
             <PanelsTopLeft className="size-3.5" />
-            Abas
+            {t.abas.titulo}
             <ChevronDown className="size-3" />
           </Button>
         }
@@ -85,7 +86,7 @@ export function PanelsMenu() {
         {/* Tudo dentro de um `Group`: o rótulo é `Menu.GroupLabel` no Base UI, e
             fora de um grupo ele não acha o contexto e derruba a tela. */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Abas abertas</DropdownMenuLabel>
+          <DropdownMenuLabel>{t.abas.abertas}</DropdownMenuLabel>
           <DropdownMenuSeparator />
 
           {telas.map(({ conteudo, titulo }) => {
@@ -117,7 +118,7 @@ export function PanelsMenu() {
         {comandos.length > 0 ? (
           <DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Comandos</DropdownMenuLabel>
+            <DropdownMenuLabel>{t.abas.comandos}</DropdownMenuLabel>
             <DropdownMenuSeparator />
 
             {comandos.map(({ extensao, comando }) => (

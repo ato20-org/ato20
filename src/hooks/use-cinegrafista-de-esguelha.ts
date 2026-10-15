@@ -9,6 +9,7 @@ import {
   passoDoCinegrafista,
   TECLAS_DO_CINEGRAFISTA,
 } from "@/lib/geometry/cinegrafista";
+import { t } from "@/lib/i18n/ferramentas";
 import { useCameraLockStore } from "@/lib/store/use-camera-lock-store";
 import { useEsguelhaStore } from "@/lib/store/use-esguelha-store";
 import {
@@ -166,7 +167,7 @@ export function useCinegrafistaDeEsguelha(
       else if (travou) useEsguelhaStore.getState().sairDoCinegrafista();
     }
     function naoTravou() {
-      toast("Clique na mesa para prender o mouse e olhar em volta.");
+      toast(t.esguelha.prenderMouse);
     }
     // Sem a trava (recusada, ou solta e pedida de novo), um clique na mesa a
     // pede outra vez: o clique é o gesto que o navegador aceita.

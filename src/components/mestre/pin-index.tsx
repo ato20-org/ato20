@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Paperclip, Search } from "lucide-react";
+import {
+  MapPin,
+  Package,
+  Paperclip,
+  Search,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { t } from "@/lib/i18n/arquivos";
 import { usePinWindowStore } from "@/lib/store/use-pin-window-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { cn } from "@/lib/utils";
@@ -83,7 +89,9 @@ export function PinIndex({ scene }: { scene: Scene }) {
 
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
-      <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {/* Sem moldura: a moldura é a pílula do canto, que ele divide com as
+          áreas e os jogadores. Ver `MestreShell`. */}
+      <div className="flex items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -95,7 +103,7 @@ export function PinIndex({ scene }: { scene: Scene }) {
                     // Largura própria quando há contagem: o número ao lado do
                     // ícone diz que existem pontos sem precisar abrir a lista.
                     className={cn(total > 0 && "w-auto gap-1 px-2")}
-                    aria-label="Pontos de anotação"
+                    aria-label={t.pinIndex.titulo}
                   >
                     <MapPin />
                     {total > 0 ? (
@@ -107,10 +115,8 @@ export function PinIndex({ scene }: { scene: Scene }) {
             }
           />
           <TooltipContent>
-            <p className="font-medium">Pontos de anotação</p>
-            <p className="text-muted-foreground max-w-48">
-              A lista dos pontos desta cena. Escolher um leva a vista até ele.
-            </p>
+            <p className="font-medium">{t.pinIndex.titulo}</p>
+            <p className="text-muted-foreground max-w-48">{t.pinIndex.dica}</p>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -118,8 +124,7 @@ export function PinIndex({ scene }: { scene: Scene }) {
       <PopoverContent className="w-72 p-0" side="top" align="end">
         {total === 0 ? (
           <p className="text-muted-foreground p-3 text-xs leading-snug">
-            Nenhum ponto nesta cena. Escolha a ferramenta de ponto, no canto
-            oposto, e clique no mapa.
+            {t.pinIndex.vazio}
           </p>
         ) : (
           <>
@@ -132,15 +137,15 @@ export function PinIndex({ scene }: { scene: Scene }) {
                 autoFocus
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}
-                placeholder="Buscar por nome ou pela nota"
-                aria-label="Buscar ponto"
+                placeholder={t.pinIndex.buscarPlaceholder}
+                aria-label={t.pinIndex.buscarRotulo}
                 className="h-9 border-0 pl-8 text-sm shadow-none focus-visible:ring-0"
               />
             </div>
 
             {achados.length === 0 ? (
               <p className="text-muted-foreground p-3 text-xs">
-                Nada com esse texto.
+                {t.pinIndex.nadaComEsseTexto}
               </p>
             ) : (
               // Teto de altura, e não a lista inteira: com trinta pontos o
@@ -163,7 +168,7 @@ export function PinIndex({ scene }: { scene: Scene }) {
 
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-xs font-medium">
-                            {pin.title || `Ponto ${numero}`}
+                            {pin.title || t.nomesPadrao.ponto(numero)}
                           </span>
                           {/* Uma linha da nota, para distinguir dois pontos de
                               título parecido sem abrir os dois. */}
@@ -178,6 +183,16 @@ export function PinIndex({ scene }: { scene: Scene }) {
                           <span className="text-muted-foreground mt-0.5 flex shrink-0 items-center gap-0.5 text-[10px]">
                             <Paperclip className="size-3" aria-hidden />
                             {pin.attachments.length}
+                          </span>
+                        ) : null}
+
+                        {/* Os itens contam à parte, com a caixa: "este ponto
+                            tem coisa para o grupo achar" é outra pergunta que
+                            "tem uma imagem para mostrar". */}
+                        {pin.itens?.length ? (
+                          <span className="text-muted-foreground mt-0.5 flex shrink-0 items-center gap-0.5 text-[10px]">
+                            <Package className="size-3" aria-hidden />
+                            {pin.itens.length}
                           </span>
                         ) : null}
                       </button>

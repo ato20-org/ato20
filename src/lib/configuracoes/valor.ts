@@ -36,10 +36,23 @@ export type Definicao = {
   escopo: EscopoConfiguracao;
   /** As opções de uma `escolha`. */
   opcoes?: string[];
+  /**
+   * O que a tela mostra no lugar de cada opção. A opção é o valor gravado no
+   * arquivo e não muda com o idioma; o rótulo muda. Opção sem rótulo aparece
+   * crua.
+   */
+  rotulos?: Record<string, string>;
   /** O intervalo e o passo de um `numero`. */
   minimo?: number;
   maximo?: number;
   passo?: number;
+  /**
+   * Fora da lista de Ajustes: quem escreve é o próprio aplicativo, por um
+   * gesto com nome (aplicar um sistema), e um campo de texto cru na lista
+   * seria um segundo jeito, torto, de fazer o mesmo. Segue no arquivo, no zip
+   * e no editor de JSON.
+   */
+  oculta?: boolean;
   dono: string;
 };
 

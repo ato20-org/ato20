@@ -41,6 +41,8 @@ export function useEscopoDosAssets(pronto: boolean): void {
 
     for (const cena of board.scenes) {
       if (cena.backgroundAssetId) donos.set(cena.backgroundAssetId, "cena");
+      // O céu do 2.5D é da cena como o mapa. Ver `Scene.ceuAssetId`.
+      if (cena.ceuAssetId) donos.set(cena.ceuAssetId, "cena");
     }
 
     // Personagem depois da cena, e é escolha arbitrária: o mesmo arquivo servir
