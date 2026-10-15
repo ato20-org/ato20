@@ -39,6 +39,8 @@
       "icons/icon.ico"
     ],
     "category": "RolePlayingGame",
+    "license": "LicenseRef-PolyForm-Perimeter-1.0.0",
+    "licenseFile": "../LICENSE",
     "android": {
       "debugApplicationIdSuffix": ".debug"
     },

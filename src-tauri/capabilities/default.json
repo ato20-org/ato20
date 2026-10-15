@@ -23,6 +23,9 @@
         },
         {
           "url": "https://login.tailscale.com/*"
+        },
+        {
+          "url": "https://ato20.valbmig.com.br/*"
         }
       ]
     },

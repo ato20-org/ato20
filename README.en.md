@@ -9,7 +9,7 @@
 
 [Português](README.md) · **English**
 
-ATO20 is an open source VTT (*virtual tabletop*) built to make organizing and running
+ATO20 is a free VTT (*virtual tabletop*) built to make organizing and running
 tabletop RPG campaigns easier. At the table, advanced camera control brings real immersion to
 the players; away from it, the GM keeps the documents up to date and the story organized in
 one place.
@@ -170,10 +170,25 @@ Coming soon.
 
 ## License
 
-MIT. The text is in [LICENSE](LICENSE).
+[PolyForm Perimeter 1.0.0](LICENSE). ATO20 is free, and the code stays open to read, study,
+modify and redistribute, for any purpose but one: offering other people a product that
+competes with ATO20, whether sold or given away.
 
-Permissive on purpose. What a license would defend here is someone running the project as a
-closed service, and that scenario does not exist: the daemon listens on the home network of
-whoever runs it, and there is nothing to host. Copyleft would cost contributors and leave
-third-party plugins in the gray zone of derivative work, which is exactly what we want to
-see appear.
+- A GM who charges for their table, a live stream, a group that plays every week: allowed.
+- Writing plugins, and selling them: allowed. A plugin adds to ATO20 instead of replacing it,
+  and carries whatever license its author chooses.
+- Renaming ATO20 and offering it as another product: not allowed.
+
+The plugin documentation, [docs/extensoes.md](docs/extensoes.md) and
+[docs/en/plugins.md](docs/en/plugins.md), is MIT ([LICENSE-MIT](LICENSE-MIT)), so its examples
+can go into any plugin without asking.
+
+Up to v1.7.0, ATO20 was released under MIT, and those versions remain MIT. The change applies
+from the next version on, and with it the project stops calling itself open source: Perimeter
+is not an OSI-approved license.
+
+The reason for the change is the risk MIT left open: someone taking ATO20 and selling it to
+people who do not know it is free. Copyleft would not solve that, since it also allows selling,
+and it would leave third-party plugins in the gray zone of derivative work. Perimeter blocks the
+clone without touching plugins, and the app's start screen says it is free, so whoever bought a
+copy finds out where the original is.

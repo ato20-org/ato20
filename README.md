@@ -9,7 +9,7 @@
 
 **Português** · [English](README.en.md)
 
-O ATO20 é um VTT (*virtual tabletop*) open source, pensado para facilitar a organização e o
+O ATO20 é um VTT (*virtual tabletop*) gratuito, pensado para facilitar a organização e o
 gerenciamento de campanhas de RPG. Na mesa, o controle de câmera avançado traz imersão de
 verdade aos jogadores; fora dela, o mestre mantém os documentos atualizados e a história
 organizada no mesmo lugar.
@@ -160,9 +160,25 @@ Em breve.
 
 ## Licença
 
-MIT — o texto está em [LICENSE](LICENSE).
+[PolyForm Perimeter 1.0.0](LICENSE). O ATO20 é gratuito e o código continua aberto para ler,
+estudar, modificar e redistribuir, para qualquer fim, menos um: oferecer a outras pessoas um
+produto que concorra com o ATO20, vendido ou de graça.
 
-Permissiva de propósito. O que a licença defenderia aqui é o cenário de alguém rodar o
-projeto como serviço fechado, e ele não existe: o daemon escuta na rede da casa de quem
-opera, e não há o que hospedar. Copyleft custaria contribuidor e deixaria plugin de
-terceiro em zona cinzenta de obra derivada — justamente o que se quer que apareça.
+- Mestre que cobra pela mesa, transmissão ao vivo, grupo que joga toda semana: liberado.
+- Escrever plugin, e vender plugin: liberado. Plugin completa o ATO20 em vez de substituí-lo,
+  e leva a licença que o autor quiser.
+- Trocar o nome do ATO20 e oferecer como outro produto: não.
+
+A documentação de plugins, [docs/extensoes.md](docs/extensoes.md) e
+[docs/en/plugins.md](docs/en/plugins.md), é MIT ([LICENSE-MIT](LICENSE-MIT)), para os exemplos
+irem para dentro de qualquer plugin sem pergunta.
+
+Até a v1.7.0 o ATO20 saiu sob MIT, e essas versões continuam MIT. A troca vale da versão
+seguinte em diante, e com ela o projeto deixa de se chamar open source: a Perimeter não é uma
+licença aprovada pela OSI.
+
+O motivo da troca é o risco que a MIT deixava aberto: alguém pegar o ATO20 e vendê-lo a quem não
+sabe que ele é gratuito. Copyleft não resolveria, porque também permite vender, e deixaria plugin
+de terceiro em zona cinzenta de obra derivada. A Perimeter barra o clone sem tocar no plugin, e a
+porta do aplicativo diz que ele é gratuito, para quem comprou uma cópia descobrir onde está o
+original.
