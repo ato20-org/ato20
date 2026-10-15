@@ -107,7 +107,7 @@ export function IniciativaBody() {
         </TabsContent>
       </Tabs>
 
-      <Rodape noMapa={noMapa} porId={porId} />
+      <Rodape noMapa={noMapa} porId={porId} donos={donos} />
     </div>
   );
 }
@@ -408,9 +408,11 @@ function BotaoDaLinha({
 function Rodape({
   noMapa,
   porId,
+  donos,
 }: {
   noMapa: Personagem[];
   porId: Map<string, Personagem>;
+  donos: Donos;
 }) {
   const iniciativa = useIniciativaStore((state) => state.iniciativa);
   const iniciar = useIniciativaStore((state) => state.iniciar);
@@ -436,6 +438,7 @@ function Rodape({
   const vez = daVez(iniciativa);
   const personagem = vez ? porId.get(vez) : undefined;
   const nome = vez ? (personagem?.nome ?? t.iniciativa.personagemApagado) : null;
+  const quem = vez ? (donos.get(vez) ?? []).join(", ") : "";
   const rodada = iniciativa.rodadas.at(-1)?.numero ?? 1;
   const semNinguem = iniciativa.ordem.length === 0;
 
@@ -444,20 +447,27 @@ function Rodape({
       {/* A rodada em selo, e não numa linha miúda embaixo do nome: é o número
           que a mesa pergunta ("em que rodada estamos?") e o que conta a duração
           das magias, e tem de ser lido de longe. No lugar do retrato, que a
-          linha destacada da ordem já mostra. */}
+          linha destacada da ordem já mostra.
+
+          Quadrado de tamanho FIXO: a palavra miúda em cima esticava o selo
+          para os lados, e um selo que muda de largura com a língua parece
+          outro elemento a cada rodada. */}
       <div
         title={t.iniciativa.rodada(rodada)}
-        className="flex h-9 min-w-10 shrink-0 flex-col items-center justify-center rounded-md bg-amber-400 px-1.5 leading-none text-amber-950"
+        className="flex size-10 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-md bg-amber-400 leading-none text-amber-950"
       >
-        <span className="text-[9px] font-semibold uppercase">
+        <span className="text-[7.5px] font-semibold tracking-tight uppercase">
           {t.iniciativa.rotuloDaRodada}
         </span>
         <span className="text-base font-bold tabular-nums">{rodada}</span>
       </div>
 
-      <p className="min-w-0 flex-1 truncate text-sm font-medium">
-        {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {nome ? t.iniciativa.vezDe(nome) : t.iniciativa.ninguemNaVez}
+        </p>
+        {quem ? <p className="text-muted-foreground truncate text-xs">{quem}</p> : null}
+      </div>
 
       {/* Só ícone, como os controles de um tocador: voltar, parar e
           avançar se reconhecem pela forma, e o nome vai no `title`. O parar
