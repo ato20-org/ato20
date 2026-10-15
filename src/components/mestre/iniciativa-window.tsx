@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ChevronRight,
   Flame,
@@ -17,6 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCharacters } from "@/hooks/use-characters";
+import {
+  participanteAtivo,
+  participantesOrdenados,
+} from "@/lib/combate/iniciativa";
 import { novoId } from "@/lib/id";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
@@ -39,8 +43,11 @@ export function IniciativaBody() {
     (state) => state.puxarTokensDaCena,
   );
   const encerrar = useIniciativaStore((state) => state.encerrar);
-  const ordenados = useIniciativaStore((state) => state.ordenados());
-  const ativo = useIniciativaStore((state) => state.ativo());
+  // Derivados do `estado`, e não lidos do store por seletor: `ordenados()`
+  // monta uma lista nova a cada chamada, e um seletor que nunca devolve o mesmo
+  // valor faz o zustand renderizar de novo para sempre.
+  const ordenados = useMemo(() => participantesOrdenados(estado), [estado]);
+  const ativo = useMemo(() => participanteAtivo(estado), [estado]);
 
   const cena = useSceneStore(selectEditingScene);
   const { personagens } = useCharacters();
