@@ -99,7 +99,10 @@ export function NovoMapaDialog({
 
   return (
     <Dialog open={sceneId !== null} onOpenChange={(aberto) => !aberto && onFechar()}>
-      <DialogContent className="max-w-lg">
+      {/* O teto na variante `sm:`, e com `min`: a base do diálogo traz
+          `sm:max-w-sm`, que vence um `max-w-*` solto a partir de 640px -- as
+          três colunas ficavam espremidas em 384px. Ver `ConfiguracoesDialog`. */}
+      <DialogContent className="sm:max-w-[min(44rem,calc(100%-2rem))]">
         <DialogTitle>{t.novoMapaDialog.titulo}</DialogTitle>
         <DialogDescription>{t.novoMapaDialog.descricao}</DialogDescription>
 
