@@ -29,14 +29,14 @@ own phone.
 On Linux, the AppImage runs without installing anything:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.7.0/ato20_1.7.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.8.0/ato20_1.8.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 On Windows, from PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.7.0/ato20_1.7.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.8.0/ato20_1.8.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -184,7 +184,7 @@ The plugin documentation, [docs/extensoes.md](docs/extensoes.md) and
 can go into any plugin without asking.
 
 Up to v1.7.0, ATO20 was released under MIT, and those versions remain MIT. The change applies
-from the next version on, and with it the project stops calling itself open source: Perimeter
+from v1.8.0 on, and with it the project stops calling itself open source: Perimeter
 is not an OSI-approved license.
 
 The reason for the change is the risk MIT left open: someone taking ATO20 and selling it to

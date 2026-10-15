@@ -29,14 +29,14 @@ celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.7.0/ato20_1.7.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.8.0/ato20_1.8.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.7.0/ato20_1.7.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.8.0/ato20_1.8.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -173,8 +173,8 @@ A documentação de plugins, [docs/extensoes.md](docs/extensoes.md) e
 [docs/en/plugins.md](docs/en/plugins.md), é MIT ([LICENSE-MIT](LICENSE-MIT)), para os exemplos
 irem para dentro de qualquer plugin sem pergunta.
 
-Até a v1.7.0 o ATO20 saiu sob MIT, e essas versões continuam MIT. A troca vale da versão
-seguinte em diante, e com ela o projeto deixa de se chamar open source: a Perimeter não é uma
+Até a v1.7.0 o ATO20 saiu sob MIT, e essas versões continuam MIT. A troca vale a partir da
+v1.8.0, e com ela o projeto deixa de se chamar open source: a Perimeter não é uma
 licença aprovada pela OSI.
 
 O motivo da troca é o risco que a MIT deixava aberto: alguém pegar o ATO20 e vendê-lo a quem não

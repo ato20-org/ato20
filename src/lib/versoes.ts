@@ -71,6 +71,45 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.8.0",
+    data: "2026-10-15",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A aba Sobre, nas Configurações",
+          en: "An About tab in Settings",
+        },
+        detalhe: {
+          pt: "Em Configurações → Sobre ficam a versão, o site, o código e onde falar com o projeto: e-mail, X e Instagram. O e-mail tem um botão de copiar ao lado.",
+          en: "Settings → About has the version, the website, the code and where to reach the project: email, X and Instagram. The email has a copy button next to it.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O ATO20 diz que é gratuito, e onde apoiar",
+          en: "ATO20 says it's free, and where to support it",
+        },
+        detalhe: {
+          pt: "No pé da tela de campanhas, o ATO20 avisa que é gratuito e mostra o site, para quem pagou por ele achar o original. Embaixo vem o Ko-fi, para quem quiser apoiar o projeto. O Ko-fi também está no O que mudou, ao lado das releases no GitHub, e na aba Sobre.",
+          en: "At the bottom of the campaign screen, ATO20 says it's free and shows the website, so anyone who paid for it can find the original. Below that is Ko-fi, for anyone who'd like to support the project. Ko-fi is also in What's new, next to the GitHub releases, and in the About tab.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Uma licença nova: a PolyForm Perimeter",
+          en: "A new license: PolyForm Perimeter",
+        },
+        detalhe: {
+          pt: "O ATO20 continua gratuito, e o código continua aberto para ler, estudar e modificar. O que a licença nova proíbe é oferecer outro produto que concorra com o ATO20. Mestrar mesa paga e escrever ou vender plugin continuam liberados, a documentação de plugins segue MIT, e as versões até a 1.7.0 continuam MIT.",
+          en: "ATO20 is still free, and the code is still open to read, study and modify. What the new license forbids is offering another product that competes with ATO20. Running paid games and writing or selling plugins are still allowed, the plugin documentation stays MIT, and versions up to 1.7.0 remain MIT.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.7.0",
     data: "2026-10-14",
     mudancas: [

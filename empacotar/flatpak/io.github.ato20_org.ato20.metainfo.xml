@@ -100,6 +100,36 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.8.0" date="2026-10-15">
+      <description>
+        <p>
+          ATO20 1.8 adds an About tab, says it's free and where to support it,
+          and moves to a new license, PolyForm Perimeter.
+        </p>
+        <ul>
+          <li>
+            An About tab in Settings. Settings → About has the version, the
+            website, the code and where to reach the project: email, X and
+            Instagram. The email has a copy button next to it.
+          </li>
+          <li>
+            ATO20 says it's free, and where to support it. At the bottom of the
+            campaign screen, ATO20 says it's free and shows the website, so
+            anyone who paid for it can find the original. Below that is Ko-fi,
+            for anyone who'd like to support the project. Ko-fi is also in
+            What's new, next to the GitHub releases, and in the About tab.
+          </li>
+          <li>
+            A new license: PolyForm Perimeter. ATO20 is still free, and the code
+            is still open to read, study and modify. What the new license
+            forbids is offering another product that competes with ATO20.
+            Running paid games and writing or selling plugins are still
+            allowed, the plugin documentation stays MIT, and versions up to
+            1.7.0 remain MIT.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.0" date="2026-10-14">
       <description>
         <p>
