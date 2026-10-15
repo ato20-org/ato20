@@ -3,6 +3,9 @@
 This is the English version of [docs/extensoes.md](../extensoes.md). When the
 two disagree, the Portuguese one is the source.
 
+This document is MIT ([LICENSE-MIT](../../LICENSE-MIT)), unlike the rest of ATO20: its
+examples can go into any plugin.
+
 A plugin is a **folder with a `manifest.json` inside**. Installing one means
 copying it onto the machine, through Settings → Plugins. It is the same format
 you publish on GitHub: whoever clones the repository already has exactly what

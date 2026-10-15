@@ -2,7 +2,7 @@
   "name": "ato20",
   "version": "1.7.0",
   "private": true,
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "preinstall": "node scripts/exigir-pnpm.mjs",
     "dev": "next dev",
