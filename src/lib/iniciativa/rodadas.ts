@@ -96,6 +96,17 @@ export type Iniciativa = {
   rodadas: Rodada[];
 };
 
+/**
+ * O pedaço da iniciativa que sai desta máquina: de quem é a vez e a rodada.
+ *
+ * Só isso, e não a ordem inteira nem o histórico: o celular precisa saber se
+ * a vez é DELE, e a ordem dos PNJs que ainda vão agir é informação do mestre.
+ */
+export type VezNaMesa = {
+  vezDe: string | null;
+  rodada: number;
+};
+
 export const SEM_INICIATIVA: Iniciativa = {
   rodando: false,
   ordem: [],

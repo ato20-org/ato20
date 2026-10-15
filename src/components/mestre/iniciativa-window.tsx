@@ -23,6 +23,7 @@ import { DadoEstatico } from "@/components/mestre/saquinho-dados";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { useCharacterOwners } from "@/hooks/use-character-owners";
 import { useCharacters } from "@/hooks/use-characters";
 import { t } from "@/lib/i18n/mestre";
@@ -175,6 +176,7 @@ function AbaOrdem({
                 personagem={personagem}
                 id={personagem.id}
                 donos={donos}
+                apagada
                 acao={
                   <BotaoDaLinha
                     rotulo={t.iniciativa.por(personagem.nome)}
@@ -331,6 +333,13 @@ function MarcaDeQueda({ lado }: { lado: "cima" | "baixo" }) {
  *
  * PNJ não ganha segunda linha: "sem jogador" repetido em dez goblins é ruído,
  * e a falta do nome já diz a mesma coisa.
+ *
+ * Dois cliques abrem a ficha, como no mapa e na janela de Personagens: no meio
+ * do combate a pergunta seguinte a "de quem é a vez" é "o que ele tem".
+ *
+ * `apagada` é quem está no mapa mas fora da ordem: continua ali para entrar,
+ * mas não disputa o olho com quem está lutando. Volta ao normal sob o mouse,
+ * que é quando o mestre vai pô-lo na ordem.
  */
 function Linha({
   personagem,
@@ -338,6 +347,7 @@ function Linha({
   donos,
   daVez = false,
   arrastavel = false,
+  apagada = false,
   acao,
 }: {
   personagem: Personagem | undefined;
@@ -345,16 +355,22 @@ function Linha({
   donos: Donos;
   daVez?: boolean;
   arrastavel?: boolean;
+  apagada?: boolean;
   acao?: ReactNode;
 }) {
+  const abrirJanela = useAbrirJanela();
   const quem = (donos.get(id) ?? []).join(", ");
 
   return (
     <div
+      onDoubleClick={
+        personagem ? () => abrirJanela({ tipo: "personagem", personagemId: id }) : undefined
+      }
       className={cn(
-        "flex items-center gap-2 rounded-md border border-transparent px-1.5 py-1",
+        "flex items-center gap-2 rounded-md border border-transparent px-1.5 py-1 transition-opacity",
         arrastavel && "hover:bg-muted/50 cursor-grab active:cursor-grabbing",
         daVez && "border-primary/40 bg-primary/10 hover:bg-primary/10",
+        apagada && "opacity-50 hover:opacity-100",
       )}
     >
       {arrastavel ? (
