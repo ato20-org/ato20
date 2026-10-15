@@ -320,6 +320,12 @@ O chat e as rolagens são janelas diferentes no Mestre, e as duas são de fábri
 `janela:chat`/`janela:rolagens` servem de alvo de substituto. A de Rolagens é a do dado — é
 lá que um plugin de regras de rolagem se encaixa.
 
+A Galeria — toda imagem da campanha, inclusive o fundo de cena, o retrato e o anexo de
+personagem, que Arquivos não lista — também é de fábrica: `janelas.abrir({ tela: "galeria" })`
+a traz à vista, `janela:galeria` serve de alvo de substituto, e o botão direito de uma imagem
+do acervo nela recebe os itens de `linha.imagem`, com o mesmo contexto (`{ assetId }`). O
+anexo de personagem não recebe: ele não tem `assetId`.
+
 ## Encaixes: menus, seções, substitutos e ferramentas
 
 O pedido era que um plugin pudesse criar opções novas nos elementos e

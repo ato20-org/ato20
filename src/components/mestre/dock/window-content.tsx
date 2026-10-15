@@ -412,6 +412,7 @@ const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
   "chat",
   "cenas",
   "quadros",
+  "galeria",
   "retratos",
   "sons",
   "camadas",
