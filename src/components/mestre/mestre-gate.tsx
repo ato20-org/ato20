@@ -17,6 +17,7 @@ import {
   Tv,
   X,
 } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { toast } from "sonner";
 
@@ -52,6 +53,8 @@ import { Livro3D } from "@/components/mestre/livro-3d";
 import { abrirLivroNoSistema } from "@/lib/vault/estante";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
+import { rico } from "@/lib/i18n/rico";
+import { SITE_DO_ATO20 } from "@/lib/presenca";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { dataCurta, desde, duracao } from "@/lib/tempo";
 import { cn } from "@/lib/utils";
@@ -300,7 +303,44 @@ function CampaignDoor() {
         onAdicionar={() => void estante.importar()}
         onRemover={(id) => void estante.remover(id)}
       />
+
+      <Gratuito />
     </Porta>
+  );
+}
+
+/**
+ * O aviso de que o ATO20 é gratuito, no pé da porta.
+ *
+ * Contra quem revende o aplicativo a quem não sabe que ele é de graça. A
+ * licença barra o clone com outro nome; a cópia vendida sem mudança nenhuma
+ * leva esta linha junto, e a porta é a primeira tela que o comprador vê. Ver a
+ * seção Licença do README.
+ *
+ * O endereço é um botão que abre o site, e não texto para copiar: quem acabou
+ * de descobrir que pagou por algo gratuito quer ir ver.
+ */
+function Gratuito() {
+  const endereco = SITE_DO_ATO20.replace(/^https:\/\//, "");
+
+  return (
+    <p className="text-muted-foreground text-center text-xs">
+      {rico(t.porta.gratuito, {
+        site: (
+          <button
+            type="button"
+            className="hover:text-foreground underline underline-offset-2"
+            onClick={() =>
+              void openUrl(`${SITE_DO_ATO20}/`).catch(() =>
+                toast.error(t.convite.semNavegador),
+              )
+            }
+          >
+            {endereco}
+          </button>
+        ),
+      })}
+    </p>
   );
 }
 
