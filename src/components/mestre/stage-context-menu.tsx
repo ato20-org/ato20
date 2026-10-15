@@ -31,8 +31,11 @@ import {
   RectangleHorizontal,
   ScanSearch,
   Scissors,
+  Swords,
   Trash2,
   Ungroup,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 
 import { abrirItem } from "@/components/mestre/acoes-do-item";
@@ -90,7 +93,15 @@ import {
   useClipboardStore,
 } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { temCamera, temLuz, type CameraSalva, type Scene } from "@/types/scene";
+import {
+  temCamera,
+  temLuz,
+  type CameraSalva,
+  type CanvasItem,
+  type Scene,
+} from "@/types/scene";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { BlocoDaPorta } from "@/components/mestre/menu-da-porta";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
@@ -428,6 +439,7 @@ export function StageContextMenu({
             {deAlguem || comObjeto ? (
               <>
                 <SubmenuDeCondicoes itens={selectedItems} />
+                {deAlguem ? <BlocoDaIniciativa itens={selectedItems} /> : null}
                 <ContextMenuSeparator />
               </>
             ) : null}
@@ -833,6 +845,71 @@ function BlocoDaPecaDeItem({ itemId }: { itemId: string }) {
         {noAr ? textoDosItens.peca.tirar : textoDosItens.peca.transmitir}
       </ContextMenuItem>
       <ContextMenuSeparator />
+    </>
+  );
+}
+
+/**
+ * A iniciativa a partir da seleção: selecionar os tokens do combate no mapa e
+ * começar por eles, ou pôr e tirar quem chegou e quem saiu.
+ *
+ * Pelos PERSONAGENS da seleção, e não pelos tokens: dois goblins da mesma ficha
+ * são um só na ordem, como na janela. Token sem personagem não entra -- a ordem
+ * é de quem age, e o barril não age.
+ *
+ * Começar abre a janela de Iniciativa: é onde a ordem se arruma, e começar um
+ * combate sem ver a ordem deixaria o mestre procurando a janela no dock.
+ */
+function BlocoDaIniciativa({ itens }: { itens: CanvasItem[] }) {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const iniciar = useIniciativaStore((state) => state.iniciar);
+  const incluir = useIniciativaStore((state) => state.incluir);
+  const retirar = useIniciativaStore((state) => state.retirar);
+  const personagens = useCharactersStore((state) => state.personagens);
+  const abrirJanela = useAbrirJanela();
+
+  const ids = [
+    ...new Set(
+      itens.flatMap((item) =>
+        item.personagemId &&
+        personagens?.some((personagem) => personagem.id === item.personagemId)
+          ? [item.personagemId]
+          : [],
+      ),
+    ),
+  ];
+  if (ids.length === 0) return null;
+
+  if (!iniciativa.rodando)
+    return (
+      <ContextMenuItem
+        onClick={() => {
+          iniciar(ids);
+          abrirJanela({ tipo: "iniciativa" });
+        }}
+      >
+        <Swords />
+        {t.stageContextMenu.iniciarIniciativa(ids.length)}
+      </ContextMenuItem>
+    );
+
+  const fora = ids.filter((id) => !iniciativa.ordem.includes(id));
+  const dentro = ids.filter((id) => iniciativa.ordem.includes(id));
+
+  return (
+    <>
+      {fora.length > 0 ? (
+        <ContextMenuItem onClick={() => fora.forEach(incluir)}>
+          <UserPlus />
+          {t.stageContextMenu.porNaIniciativa(fora.length)}
+        </ContextMenuItem>
+      ) : null}
+      {dentro.length > 0 ? (
+        <ContextMenuItem onClick={() => dentro.forEach(retirar)}>
+          <UserMinus />
+          {t.stageContextMenu.tirarDaIniciativa(dentro.length)}
+        </ContextMenuItem>
+      ) : null}
     </>
   );
 }

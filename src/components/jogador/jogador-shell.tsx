@@ -40,6 +40,8 @@ import { t } from "@/lib/i18n/jogador";
 import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
+import { usePersonagensDoJogador } from "@/hooks/use-personagens-do-jogador";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
 import { useTelaCheiaDaPagina } from "@/hooks/use-tela-cheia-da-pagina";
@@ -141,6 +143,9 @@ export function JogadorShell({
 
   // A versão do elenco vai para um store, e não por prop: a ficha mora seis
   // camadas abaixo, em duas disposições de tela. Ver `useFichasVersaoStore`.
+  // A vez, para a marca nos retratos da cena. Ver `useVezDaMesaStore`.
+  useDefinirVezDaMesa(live.iniciativa?.vezDe ?? null);
+
   const definirFichasVersao = useFichasVersaoStore((state) => state.definir);
   useEffect(() => {
     definirFichasVersao(live.fichasVersao);
@@ -179,7 +184,7 @@ export function JogadorShell({
           falta e a faixa só precisa dizer as duas coisas. */}
       <header
         className={cn(
-          "flex shrink-0 items-center gap-2 border-b select-none",
+          "relative flex shrink-0 items-center gap-2 border-b select-none",
           tabbed ? "px-3 py-0.5" : "px-4 py-2",
         )}
       >
@@ -220,6 +225,14 @@ export function JogadorShell({
         {/* Quem joga, no canto da faixa — e o menu de trocar de nome ou sair.
             Some sozinho enquanto não há jogador. */}
         <PlayerMenu codigo={codigo} />
+
+        {dentro ? (
+          <IndicadorDaVez
+            codigo={codigo}
+            vezDe={live.iniciativa?.vezDe ?? null}
+            fina={tabbed}
+          />
+        ) : null}
       </header>
 
       {dentro ? (
@@ -277,6 +290,53 @@ export function JogadorShell({
   );
 }
 
+/**
+ * A vez do jogador: a moldura amarela na tela inteira e "Sua vez" no meio da
+ * faixa de cima.
+ *
+ * Amarelo, a cor que a rodada tem na janela do Mestre: é o mesmo aviso nas
+ * duas pontas. A moldura cobre a tela INTEIRA, e não só o mapa, porque o
+ * jogador pode estar na ficha ou no chat quando a vez chega -- e fica acima da
+ * imagem em evidência (`z-60`), que de outro modo a esconderia.
+ *
+ * A vez é dele quando o personagem da vez é um dos SEUS. Monta só com o
+ * jogador dentro da mesa: antes disso a lista de personagens nem pode ser
+ * lida.
+ */
+function IndicadorDaVez({
+  codigo,
+  vezDe,
+  fina,
+}: {
+  codigo: string;
+  vezDe: string | null;
+  /** A faixa fina, com o celular deitado. */
+  fina: boolean;
+}) {
+  const meus = usePersonagensDoJogador(codigo);
+  const minhaVez = vezDe !== null && (meus ?? []).some((personagem) => personagem.id === vezDe);
+
+  if (!minhaVez) return null;
+
+  return (
+    <>
+      <span
+        role="status"
+        className={cn(
+          "pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 font-semibold whitespace-nowrap text-amber-950 shadow",
+          fina ? "px-2 py-px text-[10px]" : "px-3 py-0.5 text-xs",
+        )}
+      >
+        {t.suaVez}
+      </span>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-70 border-4 border-amber-400"
+      />
+    </>
+  );
+}
+
 type LayoutProps = {
   codigo: string;
   live: Subscription;
@@ -308,6 +368,7 @@ function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: Layou
           fichas={live.fichas}
           efeitos={live.efeitos}
           rolagens={live.rolagens}
+          iniciativa={live.iniciativa}
           pings={live.pings}
           laser={live.laser}
           synced={live.synced}
@@ -348,6 +409,7 @@ function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutP
           fichas={live.fichas}
           efeitos={live.efeitos}
           rolagens={live.rolagens}
+          iniciativa={live.iniciativa}
           pings={live.pings}
           laser={live.laser}
           synced={live.synced}

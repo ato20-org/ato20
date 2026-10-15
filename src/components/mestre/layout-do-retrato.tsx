@@ -6,7 +6,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Dices, Gauge, RotateCcw, Sparkles, Type, User } from "lucide-react";
+import { Dices, Gauge, RotateCcw, Sparkles, Swords, Type, User } from "lucide-react";
 
 import { DadoParado } from "@/components/playground/dado-parado";
 import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
@@ -253,6 +253,15 @@ export function LayoutDoRetratoPainel({
           diverge={selecionado ? proprio.dados !== undefined : false}
           onTrocar={(dados) => trocar({ dados })}
           onSeguir={() => trocar({ dados: null })}
+        />
+        <Peca
+          icone={Swords}
+          nome={t.layoutDoRetrato.pecas.iniciativa}
+          nota={t.layoutDoRetrato.notas.iniciativa}
+          valor={efetivo.iniciativa}
+          diverge={selecionado ? proprio.iniciativa !== undefined : false}
+          onTrocar={(iniciativa) => trocar({ iniciativa })}
+          onSeguir={() => trocar({ iniciativa: null })}
         />
       </div>
 

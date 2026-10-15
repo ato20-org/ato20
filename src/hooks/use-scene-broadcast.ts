@@ -11,6 +11,7 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { seguirIdiomaDaMesa } from "@/lib/i18n/da-mesa";
 import { idioma } from "@/lib/i18n/idioma";
 import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
+import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -197,6 +198,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
       // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
       idioma,
       imagem: state.imagem,
+      iniciativa: state.iniciativa ?? null,
     };
 
     stateRef.current = paraMesa;
@@ -229,6 +231,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.rolagens,
     state.pings,
     state.imagem,
+    state.iniciativa,
   ]);
 
   useEffect(() => {
@@ -273,6 +276,8 @@ export type Subscription = {
   fichasVersao: number;
   /** O ajuste de imagem da campanha. `undefined` = neutro. Ver `LiveState.imagem`. */
   imagem: AjusteDeImagem | undefined;
+  /** De quem é a vez, com a iniciativa rodando. Ver `LiveState.iniciativa`. */
+  iniciativa: VezNaMesa | null;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
@@ -353,6 +358,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
     imagem: live.imagem,
+    iniciativa: live.iniciativa ?? null,
     synced,
     stalled,
   };

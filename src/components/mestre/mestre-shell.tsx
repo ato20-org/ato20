@@ -59,6 +59,9 @@ import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
+import { daVez } from "@/lib/iniciativa/rodadas";
 import { useSpacePan } from "@/hooks/use-space-pan";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
@@ -269,6 +272,19 @@ export function MestreShell() {
   // O ajuste de imagem da campanha, para a janela do espectador. O da cena
   // viaja dentro dela. Ver `LiveState.imagem`.
   const imagem = useImagemDaCampanha();
+  // De quem é a vez, para o celular de quem joga. Dois seletores de valor
+  // simples, e o objeto montado depois: um seletor que devolve objeto novo a
+  // cada leitura faz o zustand renderizar sem parar.
+  const vezDe = useIniciativaStore((state) => daVez(state.iniciativa));
+  const rodadaDaVez = useIniciativaStore((state) =>
+    state.iniciativa.rodando ? (state.iniciativa.rodadas.at(-1)?.numero ?? 1) : 0,
+  );
+  const iniciativa = useMemo(
+    () => (rodadaDaVez > 0 ? { vezDe, rodada: rodadaDaVez } : null),
+    [vezDe, rodadaDaVez],
+  );
+  // E para os retratos desta janela: o quadro da Retratos e a Janela Mesa.
+  useDefinirVezDaMesa(vezDe);
 
   // Depois da montagem, não na criação do store: o HTML pré-renderizado usa os
   // padrões, e ler `localStorage` antes disso divergiria na hidratação. Vale
@@ -321,6 +337,7 @@ export function MestreShell() {
       rolagens,
       pings,
       imagem,
+      iniciativa,
     },
     // `null` é "o índice de personagens ainda não foi lido", e não "a campanha
     // não tem personagem" -- ver `useCharactersStore`. A diferença importa

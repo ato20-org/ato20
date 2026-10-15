@@ -24,6 +24,7 @@ const pt = {
   retrato: {
     paginaViva: "Página viva",
     apareceNaMesa: "aparece na mesa",
+    vez: "Vez",
   },
 
   previaDaMencao: {
@@ -327,6 +328,7 @@ const en: typeof pt = {
   retrato: {
     paginaViva: "Live page",
     apareceNaMesa: "shows at the table",
+    vez: "Turn",
   },
 
   previaDaMencao: {
