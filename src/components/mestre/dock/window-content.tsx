@@ -5,6 +5,13 @@ import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { CompendioBody, CompendioDoAto20Body } from "@/components/mestre/compendio-window";
+import {
+  CondicaoBody,
+  FundoDaCondicao,
+  MudarDeListaNoTopo,
+  useRotuloDaCondicao,
+} from "@/components/mestre/condicao-window";
+import { EfeitoBody, FundoDoEfeito, useRotuloDoEfeito } from "@/components/mestre/efeito-window";
 import { FundoDoPersonagem } from "@/components/mestre/retrato-desfocado";
 import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
@@ -81,11 +88,22 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   // Depois dos dois: é de onde vêm o goblin que entra em Personagens e o item
   // que entra no catálogo.
   { conteudo: { tipo: "compendio" }, titulo: t.janelas.compendio },
-  { conteudo: { tipo: "compendio-ato20" }, titulo: t.janelas.compendioAto20 },
   { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
   { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
   { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
   { conteudo: { tipo: "miniplayer" }, titulo: t.janelas.mesa },
+];
+
+/**
+ * As telas que se acham pela BUSCA, e não pelos menus de abas.
+ *
+ * O Compêndio do ATO20 abre de dentro do Compêndio da campanha -- é o outro
+ * lado dele, o que esta máquina guarda --, e no menu "Abas abertas", entre as
+ * telas da mesa, ele parecia mais uma tela desta campanha. Na paleta ele fica:
+ * quem digita "ATO20" sabe o que procura.
+ */
+export const TELAS_SO_DA_BUSCA: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
+  { conteudo: { tipo: "compendio-ato20" }, titulo: t.janelas.compendioAto20 },
 ];
 
 /**
@@ -145,6 +163,15 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       ? state.moldes?.find((item) => item.id === conteudo.itemId)?.nome
       : undefined,
   );
+  // Sempre chamados, como os de cima: hook não se chama pela metade. Fora das
+  // janelas deles, recebem `undefined` e não acham nada.
+  const rotuloDoEfeito = useRotuloDoEfeito(
+    conteudo.tipo === "efeito" ? conteudo.efeitoId : undefined,
+  );
+  const rotuloDaCondicao = useRotuloDaCondicao(
+    conteudo.tipo === "condicao" ? conteudo.lugar : undefined,
+    conteudo.tipo === "condicao" ? conteudo.condicaoId : undefined,
+  );
 
   switch (conteudo.tipo) {
     case "personagens":
@@ -158,6 +185,10 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.compendio, subtitulo: t.janelas.compendioSub };
     case "compendio-ato20":
       return { titulo: t.janelas.compendioAto20, subtitulo: t.janelas.compendioAto20Sub };
+    case "efeito":
+      return rotuloDoEfeito;
+    case "condicao":
+      return rotuloDaCondicao;
     case "item": {
       const dono = conteudo.personagemId
         ? personagens?.find((atual) => atual.id === conteudo.personagemId)?.nome
@@ -268,6 +299,9 @@ export function AcoesDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
           <ApagarItemNoTopo itemId={conteudo.itemId} personagemId={conteudo.personagemId} />
         </>
       );
+    // O caminho para a outra lista: do Compêndio ao menu, e de volta.
+    case "condicao":
+      return <MudarDeListaNoTopo lugar={conteudo.lugar} condicaoId={conteudo.condicaoId} />;
     default:
       return null;
   }
@@ -287,6 +321,11 @@ export function FundoDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
       return <FundoDoItem itemId={conteudo.itemId} />;
     case "personagem":
       return <FundoDoPersonagem personagemId={conteudo.personagemId} />;
+    // Sem imagem: a cor, como o card deles no Compêndio.
+    case "efeito":
+      return <FundoDoEfeito efeitoId={conteudo.efeitoId} />;
+    case "condicao":
+      return <FundoDaCondicao lugar={conteudo.lugar} condicaoId={conteudo.condicaoId} />;
     default:
       return null;
   }
@@ -316,6 +355,11 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     case "compendio":
     case "compendio-ato20":
       return 480;
+    // O editor é comprido -- prévia e cinco camadas --, e crescer com ele
+    // tomaria o palco de cima a baixo. Rola por dentro.
+    case "efeito":
+    case "condicao":
+      return 600;
     default:
       return undefined;
   }
@@ -342,6 +386,12 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // estreita o bastante para caber ao lado da ficha de quem o carrega.
     case "item":
       return 400;
+    // Larga o bastante para o editor abrir em duas colunas: a prévia parada à
+    // esquerda, as camadas rolando à direita. Abaixo de 32rem ele empilha, e a
+    // prévia sai da vista assim que o mestre desce até a luz.
+    case "efeito":
+    case "condicao":
+      return 600;
     // Larga o bastante para as duas colunas da aba Ficha: as linhas de medidor
     // e de condição guardam lugar para o olho e a lixeira mesmo escondidos, e
     // abaixo disto o nome de cada uma virava duas letras.
@@ -386,6 +436,8 @@ export function larguraMinima(conteudo: ConteudoJanela): number {
       return 360;
     case "anexo":
     case "asset":
+    case "efeito":
+    case "condicao":
       return 320;
     // A barra do leitor envolve em vez de rolar, mas a página tem um piso: com
     // a tira de marcadores aberta, abaixo disto sobra uma faixa de folha de 60
@@ -456,6 +508,10 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
       return <CompendioDoAto20Body />;
     case "item":
       return <ItemBody itemId={conteudo.itemId} personagemId={conteudo.personagemId} />;
+    case "efeito":
+      return <EfeitoBody efeitoId={conteudo.efeitoId} />;
+    case "condicao":
+      return <CondicaoBody lugar={conteudo.lugar} condicaoId={conteudo.condicaoId} />;
     case "personagem":
       return <CharacterBody personagemId={conteudo.personagemId} />;
     case "anexo":

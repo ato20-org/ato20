@@ -14,10 +14,13 @@ import {
   assetIdDoArrasto,
   tamanhoDoArrasto,
   useTokenDragStore,
+  vaiNaPeca,
 } from "@/lib/store/use-token-drag-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { itensMudaram } from "@/lib/store/use-itens-store";
 import { itemEmJogo, porEmJogo } from "@/lib/vault/compendio";
+import { cn } from "@/lib/utils";
 import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
 
@@ -112,8 +115,31 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
         ]);
       };
 
-      // Mapa não entra no palco; só vira menção na nota. `aceita` já barra.
-      if (solto.fonte.tipo === "cena") return;
+      // Mapa não entra no palco; só vira menção na nota. A condição vai numa
+      // peça, e não no chão. `aceita` já barra os dois.
+      if (solto.fonte.tipo === "cena" || vaiNaPeca(solto.fonte)) return;
+
+      // O efeito de área do Compêndio vira uma área REDONDA de efeito, como a
+      // que a ferramenta desenha: só o mestre vê até ele a pôr na mesa. O efeito
+      // vai ao jogo antes -- a cópia do molde, ou o trazido do ATO20 --, e com
+      // os trinta e dois cheios a área não nasce: o store já disse por quê.
+      if (solto.fonte.tipo === "area") {
+        const { efeitoId, doAto20 } = solto.fonte;
+        const caixa = boxAround(centro, largura, altura);
+
+        void useEfeitosDaCampanhaStore
+          .getState()
+          .paraOJogo(efeitoId, doAto20)
+          .then((efeito) => {
+            if (!efeito) return;
+            const id = useSceneStore
+              .getState()
+              .addAreaDeEfeito(sceneId, { ...caixa, formato: "elipse", efeito });
+            useSelectionStore.getState().selectAreaDeEfeito(id);
+          });
+
+        return;
+      }
 
       // Nota: vira cartão de documento, centrado onde soltou. O tamanho é o
       // que a sombra mostrou, como o token.
@@ -220,6 +246,7 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
 
   const { largura, altura } = tamanhoDoArrasto(arrasto);
   const caixa = boxAround(toScene(arrasto.x, arrasto.y), largura, altura);
+  const area = arrasto.fonte.tipo === "area" ? arrasto.fonte : null;
 
   return (
     <div
@@ -233,11 +260,21 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       }}
     >
       <div
-        className="border-primary/80 absolute inset-0 border-dashed"
+        className={cn("border-primary/80 absolute inset-0 border-dashed", area && "rounded-full")}
         // Dividido pela escala como toda linha de interface desenhada dentro do
         // plano: em espessura fixa, o tracejado engrossaria junto com o zoom até
         // virar uma moldura que esconde o token.
-        style={{ borderWidth: 2 / scale }}
+        //
+        // A área é o círculo que vai nascer, na cor do efeito, e não uma caixa.
+        style={{
+          borderWidth: 2 / scale,
+          ...(area
+            ? {
+                borderColor: area.cor,
+                backgroundColor: `color-mix(in srgb, ${area.cor} 22%, transparent)`,
+              }
+            : {}),
+        }}
       />
 
       {arrasto.fonte.tipo === "nota" ? (

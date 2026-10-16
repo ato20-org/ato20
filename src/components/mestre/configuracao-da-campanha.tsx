@@ -27,7 +27,7 @@ import {
   useEfeitosEmAreaDaCampanha,
   useEfeitosEmAreaDosPlugins,
 } from "@/components/mestre/efeito-da-area";
-import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import { guardarNaBiblioteca } from "@/components/mestre/compendio-condicoes";
 import { SistemaDaCampanha } from "@/components/mestre/sistema-da-campanha";
 import {
   AtributosDaCampanha,
@@ -76,6 +76,8 @@ import {
   type TopicoDaCampanha,
 } from "@/lib/mestre/topicos-da-campanha";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
+import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
+import { chaveDe } from "@/lib/store/use-window-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
@@ -708,8 +710,6 @@ function EfeitosDaCampanha() {
 function CondicoesDaCampanha() {
   const { modelos, recarregar } = useCondicoesDaCampanha();
   const [ocupado, setOcupado] = useState(false);
-  /** A condição aberta na tela dela, pela engrenagem. `null` = a lista. */
-  const [configurando, setConfigurando] = useState<string | null>(null);
   /** A ordem depois de um arrasto, até o cardápio relido chegar. */
   const [arrastada, setArrastada] = useState<{
     de: Condicao[] | null;
@@ -780,22 +780,15 @@ function CondicoesDaCampanha() {
     }, t.configuracao.falhaAoCriarSugestoes);
   }
 
-  // A tela da condição, quando a engrenagem a abriu: o selo e o efeito dela.
-  const aberta = configurando ? lista.find((modelo) => modelo.id === configurando) : undefined;
-  if (aberta) {
-    return (
-      <TelaDaCondicao
-        modelo={aberta}
-        ocupado={ocupado}
-        onEditar={(patch) =>
-          void mexer(
-            () => editarCondicaoDaCampanha(aberta.id, patch),
-            t.configuracao.falhaAoGravar,
-          )
-        }
-        onVoltar={() => setConfigurando(null)}
-      />
-    );
+  /**
+   * Do menu para a biblioteca do Compêndio: abre o lugar no menu sem perder a
+   * condição. O efeito dela vai junto quando ninguém mais o usa -- ver
+   * `compendio::guardar_condicao`.
+   */
+  async function guardarNoCompendio(modelo: Condicao) {
+    setOcupado(true);
+    await guardarNaBiblioteca(modelo);
+    setOcupado(false);
   }
 
   return (
@@ -869,12 +862,21 @@ function CondicoesDaCampanha() {
                   t.configuracao.falhaAoGravar,
                 )
               }
-              onConfigurar={() => setConfigurando(modelo.id)}
+              // A engrenagem abre a janela da condição, ao lado, e a lista
+              // fica: o editor do efeito é comprido, e é o cardápio que o
+              // mestre está arrumando. Ver `CondicaoBody`.
+              onConfigurar={() =>
+                abrirJanela({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id })
+              }
+              guardar={{
+                rotulo: t.compendio.guardarNoCompendio,
+                onGuardar: () => void guardarNoCompendio(modelo),
+              }}
               onApagar={() =>
-                void mexer(
-                  () => removerCondicaoDaCampanha(modelo.id),
-                  t.configuracao.falhaAoApagarCondicao,
-                )
+                void mexer(async () => {
+                  await removerCondicaoDaCampanha(modelo.id);
+                  fecharJanela(chaveDe({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id }));
+                }, t.configuracao.falhaAoApagarCondicao)
               }
               dicaDoOlho={{
                 titulo: modelo.escondido

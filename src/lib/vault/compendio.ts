@@ -1,7 +1,8 @@
 "use client";
 
 import { call } from "@/lib/vault/bridge";
-import type { Personagem } from "@/types/character";
+import type { Condicao, MoldeDeCondicao, PatchCondicao, Personagem } from "@/types/character";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 import type { Item } from "@/types/inventory";
 
 /**
@@ -49,7 +50,22 @@ export function guardarItemNoCompendio(id: string): Promise<Item> {
 }
 
 /** O que o Compêndio do ATO20 tem. Serve a qualquer campanha desta máquina. */
-export type CompendioDaMaquina = { personagens: Personagem[]; itens: Item[] };
+export type CompendioDaMaquina = {
+  personagens: Personagem[];
+  itens: Item[];
+  condicoes: MoldeDeCondicao[];
+  efeitos: DefinicaoDeEfeito[];
+  /** As sugestões já entraram. Ver `semearCompendioDaMaquina`. */
+  semeado: boolean;
+};
+
+/** O que se traz, se guarda ou se apaga, de cada lista. Ausente = nenhum. */
+export type SelecaoDoCompendio = {
+  personagens?: string[];
+  itens?: string[];
+  condicoes?: string[];
+  efeitos?: string[];
+};
 
 export function listarCompendioDaMaquina(): Promise<CompendioDaMaquina> {
   return call<CompendioDaMaquina>("compendio_maquina");
@@ -68,20 +84,20 @@ export async function imagemDoCompendio(assetId: string): Promise<string> {
 }
 
 /** Quantos entraram do outro lado, e os ids novos dos personagens. */
-export type Copiados = { personagens: string[]; itens: number };
+export type Copiados = { personagens: string[]; itens: number; condicoes: number; efeitos: number };
 
-/** Do ATO20 para a campanha: personagens como moldes, itens no catálogo. */
-export function trazerDoCompendio(personagens: string[], itens: string[]): Promise<Copiados> {
-  return call<Copiados>("compendio_trazer", { personagens, itens });
+/** Do ATO20 para a campanha: tudo como molde, no Compêndio dela. */
+export function trazerDoCompendio(selecao: SelecaoDoCompendio): Promise<Copiados> {
+  return call<Copiados>("compendio_trazer", { selecao });
 }
 
 /** Da campanha para o ATO20. A campanha continua com o que tinha. */
-export function levarAoCompendio(personagens: string[], itens: string[]): Promise<Copiados> {
-  return call<Copiados>("compendio_levar", { personagens, itens });
+export function levarAoCompendio(selecao: SelecaoDoCompendio): Promise<Copiados> {
+  return call<Copiados>("compendio_levar", { selecao });
 }
 
 /** De que lista é a coisa que ganha tags. Espelho de `compendio::TipoDeMolde`. */
-export type TipoDeMolde = "personagem" | "item";
+export type TipoDeMolde = "personagem" | "item" | "condicao" | "efeito";
 
 /**
  * As tags de um molde ou de um item da campanha. Devolve como ficaram: o Rust
@@ -101,6 +117,72 @@ export function definirTagsNoAto20(
 }
 
 /** Tira do Compêndio do ATO20. As campanhas que já trouxeram ficam com a cópia. */
-export function removerDoCompendio(personagens: string[], itens: string[]): Promise<void> {
-  return call("compendio_maquina_remover", { personagens, itens });
+export function removerDoCompendio(selecao: SelecaoDoCompendio): Promise<void> {
+  return call("compendio_maquina_remover", { selecao });
+}
+
+/** Uma condição sugerida: sem id nem "escondido". Ver `SUGESTOES`. */
+export type CondicaoSugerida = Pick<Condicao, "nome" | "cor" | "icone" | "efeito">;
+
+/**
+ * Põe as sugestões no Compêndio do ATO20, UMA vez por máquina. Devolve se pôs
+ * agora. Ver `compendio::semear`.
+ */
+export function semearCompendioDaMaquina(
+  condicoes: CondicaoSugerida[],
+  efeitos: DefinicaoDeEfeito[],
+): Promise<boolean> {
+  return call<boolean>("compendio_maquina_semear", { condicoes, efeitos });
+}
+
+/** A biblioteca de condições da campanha: as que não estão no menu. */
+export function listarCondicoesDoCompendio(): Promise<MoldeDeCondicao[]> {
+  return call<MoldeDeCondicao[]>("compendio_condicoes");
+}
+
+export function criarCondicaoDoCompendio(
+  nome: string,
+  cor: string,
+  icone: string,
+): Promise<MoldeDeCondicao> {
+  return call<MoldeDeCondicao>("compendio_condicao_criar", { nome, cor, icone });
+}
+
+export function editarCondicaoDoCompendio(
+  id: string,
+  patch: PatchCondicao,
+): Promise<MoldeDeCondicao> {
+  return call<MoldeDeCondicao>("compendio_condicao_editar", { id, patch });
+}
+
+export function apagarCondicaoDoCompendio(id: string): Promise<void> {
+  return call("compendio_condicao_apagar", { id });
+}
+
+/**
+ * Da biblioteca para o menu do token. O efeito da campanha que ela usa entra em
+ * jogo junto. Recusa com o motivo quando o menu está cheio ou já tem o nome.
+ */
+export function condicaoNoMenu(id: string): Promise<Condicao> {
+  return call<Condicao>("compendio_condicao_no_menu", { id });
+}
+
+/** Do menu para a biblioteca. As fichas que já têm a condição ficam com ela. */
+export function guardarCondicaoNoCompendio(modeloId: string): Promise<MoldeDeCondicao> {
+  return call<MoldeDeCondicao>("compendio_condicao_guardar", { modeloId });
+}
+
+/** Um molde de efeito em branco. Quem pede põe a área, se for de área. */
+export function criarMoldeDeEfeito(): Promise<DefinicaoDeEfeito> {
+  return call<DefinicaoDeEfeito>("compendio_efeito_criar");
+}
+
+/** O molde de efeito entra em jogo. Recusa quando os 32 estão cheios. */
+export function efeitoEmJogo(id: string): Promise<DefinicaoDeEfeito> {
+  return call<DefinicaoDeEfeito>("compendio_efeito_em_jogo", { id });
+}
+
+/** O efeito em jogo volta ao Compêndio. Recusa se uma condição do menu o usa. */
+export function guardarEfeitoNoCompendio(id: string): Promise<DefinicaoDeEfeito> {
+  return call<DefinicaoDeEfeito>("compendio_efeito_guardar", { id });
 }

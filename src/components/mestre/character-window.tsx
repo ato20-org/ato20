@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   BookMarked,
   ChevronRight,
@@ -76,6 +76,8 @@ import {
   type AttachmentKind,
 } from "@/lib/attachments/kind";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { TagsNaFicha } from "@/components/mestre/editor-de-tags";
+import { tagsDaLista } from "@/lib/mestre/compendio";
 import { compendioDaMaquinaMudou } from "@/lib/store/use-compendio-store";
 import { levarAoCompendio, porEmJogo } from "@/lib/vault/compendio";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -578,6 +580,13 @@ function Cabecalho({
   onAbrirImagem: (assetId: string, nome: string) => void;
 }) {
   const retrato = useAssetUrl(personagem.retrato);
+  // As tags que os outros moldes já usam, para pôr com um clique: "morto-vivo"
+  // escrito duas vezes de jeitos diferentes seriam dois filtros no Compêndio.
+  const moldes = useCharactersStore((state) => state.moldes);
+  const sugestoesDeTags = useMemo(
+    () => tagsDaLista(moldes ?? [], (molde) => molde.tags ?? []).map((atual) => atual.tag),
+    [moldes],
+  );
 
   const [editando, setEditando] = useState(false);
   /** Saiu pelo Escape: o `blur` que vem em seguida não deve gravar. */
@@ -685,20 +694,29 @@ function Cabecalho({
             {/* Quem joga com ele, logo embaixo do nome: e a pergunta que se
                 faz olhando a ficha de longe -- "de quem e este?". No 👤 fica a
                 lista que se EDITA; aqui e so o que ela diz. O molde nao e de
-                ninguem: no lugar do dono, o que ele e, e as tags dele. */}
+                ninguem: no lugar do dono, o que ele e, e as tags dele -- que
+                se mudam aqui mesmo, sem voltar ao Compendio. */}
             {personagem.compendio ? (
-              <p className="text-muted-foreground flex min-w-0 items-center gap-1 overflow-hidden text-xs">
-                <BookMarked className="size-3 shrink-0" aria-hidden />
-                <span className="shrink-0">{t.ficha.moldeDoCompendio}</span>
-                {(personagem.tags ?? []).map((tag) => (
-                  <span
-                    key={tag}
-                    className="bg-muted inline-flex h-4 shrink-0 items-center rounded-full px-1.5 text-[10px]"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </p>
+              // As tags numa linha só delas, embaixo, e quebrando: na mesma
+              // linha do "Molde do Compêndio", cinco tags já empurravam o botão
+              // de mudá-las para fora da ficha.
+              <div className="text-muted-foreground flex min-w-0 flex-col gap-1 text-xs">
+                <span className="flex min-w-0 items-center gap-1">
+                  <BookMarked className="size-3 shrink-0" aria-hidden />
+                  <span className="truncate">{t.ficha.moldeDoCompendio}</span>
+                </span>
+                <TagsNaFicha
+                  edicao={{
+                    onde: "campanha",
+                    tipo: "personagem",
+                    id: personagem.id,
+                    nome: personagem.nome,
+                    tags: personagem.tags ?? [],
+                  }}
+                  sugestoes={sugestoesDeTags}
+                  onMudou={onChanged}
+                />
+              </div>
             ) : (
               <p className="text-muted-foreground truncate text-xs">
                 {donosNomes.length === 0 ? t.ficha.semDono : donosNomes.join(", ")}
@@ -976,7 +994,7 @@ function AcoesDoMolde({
               size="icon-sm"
               aria-label={texto.guardarNoAto20}
               onClick={() =>
-                void levarAoCompendio([personagem.id], []).then(() => {
+                void levarAoCompendio({ personagens: [personagem.id] }).then(() => {
                   compendioDaMaquinaMudou();
                   toast.success(texto.guardadoNoAto20(personagem.nome));
                 }, falhou)

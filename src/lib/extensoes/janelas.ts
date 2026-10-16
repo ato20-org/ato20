@@ -56,3 +56,28 @@ export function fecharJanela(chave: string): void {
   useWindowStore.getState().fechar(chave);
   useLayoutStore.getState().removerAba(chave);
 }
+
+/** A janela está aberta, atracada ou flutuando? */
+export function janelaAberta(chave: string): boolean {
+  const { layout } = useLayoutStore.getState();
+  const atracada = (["esquerda", "direita"] as const).some((lado) =>
+    layout[lado].grupos.some((grupo) => grupo.abas.some((aba) => chaveDe(aba) === chave)),
+  );
+
+  return atracada || useWindowStore.getState().janelas.some((janela) => janela.chave === chave);
+}
+
+/**
+ * A coisa mudou de identidade, e a janela dela segue: fecha a antiga e abre a
+ * nova, mas só se a antiga estava aberta. É a condição que vai do Compêndio ao
+ * menu -- outro arquivo, outro id --, com a janela dela à vista: ficar com uma
+ * janela dizendo "não está mais aqui" seria a tela contando o que o mestre
+ * acabou de fazer como se fosse um erro.
+ */
+export function trocarJanela(antiga: ConteudoJanela, nova: ConteudoJanela): void {
+  const chave = chaveDe(antiga);
+  if (!janelaAberta(chave)) return;
+
+  fecharJanela(chave);
+  abrirJanela(nova);
+}

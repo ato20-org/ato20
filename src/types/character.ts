@@ -362,6 +362,12 @@ export type PatchCondicao = {
 };
 
 /**
+ * Uma condição da biblioteca do Compêndio: a mesma do cardápio, e as tags. Mora
+ * em `compendio-condicoes.json`, e não no cardápio -- ver `compendio.rs`.
+ */
+export type MoldeDeCondicao = Condicao & { tags?: string[] };
+
+/**
  * Quantas condições cabem num personagem. Espelha `MAX_CONDICOES`.
  *
  * Limite de LAYOUT, como o dos medidores: os selos desenham numa fileira sobre

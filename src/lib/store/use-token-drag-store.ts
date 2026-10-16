@@ -3,6 +3,10 @@
 import { create } from "zustand";
 
 import { MIN_SCENE_ITEM_SIZE } from "@/lib/geometry/transform";
+import type { Condicao } from "@/types/character";
+
+/** A condição que uma peça ganha quando o arrasto cai nela. */
+export type CondicaoNaMao = Pick<Condicao, "nome" | "cor" | "icone" | "efeito">;
 
 /**
  * A imagem no ar: o que um painel já soltou da mão e o destino ainda não
@@ -87,6 +91,28 @@ export type FonteDoArrasto =
    * desenhada, pela razão de `item`: pode ser a foto do jogador.
    */
   | { tipo: "molde-item"; itemId: string; url?: string }
+  /**
+   * Uma condição da biblioteca do Compêndio. Solta num token, o personagem
+   * dele -- ou o objeto -- ganha uma cópia, e a biblioteca continua com a
+   * dela. Leva a condição inteira, e não só o id: a etiqueta no ar mostra o
+   * selo, e a cópia é feita dela.
+   */
+  | { tipo: "condicao"; condicaoId: string; condicao: CondicaoNaMao }
+  /**
+   * Um efeito de personagem do Compêndio. Efeito só aparece na figura por uma
+   * condição, então solto num token ele É uma: a condição que já o usa, ou uma
+   * com o nome dele. Ver `condicaoDoEfeito`.
+   *
+   * `doAto20` é o do Compêndio do ATO20, que não é da campanha: o id é de lá,
+   * e ele tem de ser trazido antes de ir ao token. Ver `doAto20EmJogo`.
+   */
+  | { tipo: "efeito"; efeitoId: string; condicao: CondicaoNaMao; doAto20?: boolean }
+  /**
+   * Um efeito de ÁREA do Compêndio. Solto no mapa, vira uma área redonda de
+   * efeito, onde a mão soltou e do tamanho que a roda escolheu. A cor é a da
+   * sombra; `doAto20` como no efeito de personagem.
+   */
+  | { tipo: "area"; efeitoId: string; cor: string; doAto20?: boolean }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -102,6 +128,11 @@ export type FonteDoArrasto =
  */
 export type DestinoDoArrasto =
   | { tipo: "palco" }
+  /**
+   * Uma peça no mapa, para o que vai NELA: a condição e o efeito. Para o resto
+   * ela é chão -- o token largado sobre outro cai no mapa. Ver `vaiNaPeca`.
+   */
+  | { tipo: "peca"; itemId: string }
   /** A grade de inventário de outro personagem. */
   | { tipo: "inventario"; personagemId: string }
   /**
@@ -156,9 +187,22 @@ export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
   return fonte.tipo === "item" ||
     fonte.tipo === "molde-item" ||
     fonte.tipo === "nota" ||
-    fonte.tipo === "cena"
+    fonte.tipo === "cena" ||
+    fonte.tipo === "area" ||
+    vaiNaPeca(fonte)
     ? undefined
     : fonte.assetId || undefined;
+}
+
+/**
+ * O que se solta numa peça, e não no mapa: a condição e o efeito, que não têm
+ * imagem nem tamanho -- não há sombra a desenhar no chão, nem tamanho para a
+ * roda escolher.
+ */
+export function vaiNaPeca(
+  fonte: FonteDoArrasto,
+): fonte is Extract<FonteDoArrasto, { tipo: "condicao" | "efeito" }> {
+  return fonte.tipo === "condicao" || fonte.tipo === "efeito";
 }
 
 /**
@@ -171,6 +215,8 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
   switch (destino.tipo) {
     case "palco":
       return "palco";
+    case "peca":
+      return "peca";
     case "inventario":
       return `inventario:${destino.personagemId}`;
     // Uma chave só para todas as linhas: quem recebe é a lista, que sabe dar o
@@ -225,11 +271,14 @@ export function aceita(
       // miniatura não tem peça para pôr ali.
       return (
         fonte.tipo !== "cena" &&
+        !vaiNaPeca(fonte) &&
         !(fonte.tipo === "personagem" && !fonte.assetId) &&
         !(fonte.tipo === "molde" && !fonte.assetId) &&
         !(fonte.tipo === "molde-item" && !fonte.url) &&
         !(fonte.tipo === "item" && !fonte.url)
       );
+    case "peca":
+      return vaiNaPeca(fonte);
     case "nota":
       // O que tem nome para ser mencionado: `/arquivo`, `@personagem`, `>mapa`.
       return (
@@ -292,7 +341,8 @@ type TokenDragStore = {
    * de arquivos do personagem que ela mudou.
    *
    * Quem registra cada um: `TokenFantasma` o palco, `AssetLibrary` o acervo,
-   * `InventarioPersonagem` a própria grade, `PinNote` o cartão do ponto.
+   * `InventarioPersonagem` a própria grade, `PinNote` o cartão do ponto,
+   * `ArrastoParaAPeca` as peças do mapa.
    */
   alvos: Record<string, AoSoltar | undefined>;
 

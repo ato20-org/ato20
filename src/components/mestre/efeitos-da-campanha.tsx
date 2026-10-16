@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { COR_DA_AREA, efeitosDeAreaProntos } from "@/lib/area-de-efeito";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/lib/efeitos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
+import { useCondicoesDoCompendioStore } from "@/lib/store/use-condicoes-do-compendio-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
@@ -43,6 +45,7 @@ import { t } from "@/lib/i18n/mestre";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
 import { vincularEfeitoDaCondicao } from "@/lib/vault/characters";
+import { editarCondicaoDoCompendio } from "@/lib/vault/compendio";
 import type { Condicao, PatchCondicao } from "@/types/character";
 import type {
   AnimacaoDoEfeito,
@@ -56,7 +59,10 @@ import type {
   QuadrosDoEfeito,
 } from "@/types/efeito";
 
-import amostra from "./amostra-da-figura.png";
+// O boneco do card de condição no Compêndio, e não uma foto de token: a
+// prévia mostra o EFEITO, e uma figura neutra, lisa e clara é onde a cor, o
+// cinza e a transparência dele se leem sem a imagem de ninguém competindo.
+import boneco from "./boneco-do-efeito.svg";
 
 /**
  * A tela de uma condição da campanha: o selo dela e o EFEITO dela, numa tela
@@ -77,13 +83,20 @@ export function TelaDaCondicao({
   ocupado,
   onEditar,
   onVoltar,
+  lugar = "menu",
 }: {
   modelo: Condicao;
   ocupado: boolean;
   onEditar: (patch: PatchCondicao) => void;
-  onVoltar: () => void;
+  /** Ausente = sem o "voltar": a tela é a janela da condição inteira. */
+  onVoltar?: () => void;
+  /**
+   * De que lista é a condição. A do Compêndio ganha o efeito próprio também no
+   * Compêndio, como molde, e não em jogo. Ver `useEfeitoDaCondicao`.
+   */
+  lugar?: "menu" | "compendio";
 }) {
-  const { efeito, mudar, renomear, temProprio } = useEfeitoDaCondicao(modelo);
+  const { efeito, mudar, renomear, temProprio } = useEfeitoDaCondicao(modelo, lugar);
   const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
 
   /** O efeito pronto como ponto de partida: a cópia dele, no lugar do atual. */
@@ -93,10 +106,16 @@ export function TelaDaCondicao({
 
   return (
     <div className="space-y-3">
-      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
-        <ArrowLeft />
-        {t.efeito.condicoes}
-      </Button>
+      {onVoltar ? (
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+          <ArrowLeft />
+          {t.efeito.condicoes}
+        </Button>
+      ) : null}
+
+      <FaixaDaPrevia>
+        <Previa efeito={efeito} cor={modelo.cor} />
+      </FaixaDaPrevia>
 
       <div className="flex items-center gap-2 rounded-md border p-2.5">
         <AparenciaDaCondicao condicao={modelo} ocupado={ocupado} onEditar={onEditar} comEfeito={false} />
@@ -148,7 +167,7 @@ export function TelaDaCondicao({
         ))}
       </div>
 
-      <EditorDeEfeito efeito={efeito} cor={modelo.cor} onMudar={mudar} />
+      <EditorDeEfeito efeito={efeito} onMudar={mudar} />
 
       <AlertDialog
         open={trocarPor !== null}
@@ -194,9 +213,13 @@ export function TelaDaCondicao({
 export function TelaDoEfeitoEmArea({
   efeito,
   onVoltar,
+  rotuloDeVolta = t.efeito.efeitosEmArea,
 }: {
   efeito: DefinicaoDeEfeito;
-  onVoltar: () => void;
+  /** Ausente = sem o "voltar": a tela é a janela do efeito inteira. */
+  onVoltar?: () => void;
+  /** Para onde o "voltar" leva. */
+  rotuloDeVolta?: string;
 }) {
   const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
   const deFora = useDeclarativoStore((state) => state.efeitos);
@@ -209,15 +232,21 @@ export function TelaDoEfeitoEmArea({
 
   function partirDe(pronto: DefinicaoDeEfeito) {
     const copia = copiaParaACampanha(pronto, efeito.id, efeito.titulo);
-    salvar({ ...copia, area: { ...copia.area, cor } });
+    salvar(com({ ...copia, area: { ...copia.area, cor } }, "tags", efeito.tags));
   }
 
   return (
     <div className="space-y-3">
-      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
-        <ArrowLeft />
-        {t.efeito.efeitosEmArea}
-      </Button>
+      {onVoltar ? (
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+          <ArrowLeft />
+          {rotuloDeVolta}
+        </Button>
+      ) : null}
+
+      <FaixaDaPrevia>
+        <PreviaDaArea efeito={efeito} />
+      </FaixaDaPrevia>
 
       <div className="flex items-center gap-2 rounded-md border p-2.5">
         <CorDoEfeito cor={cor} onMudar={(nova) => salvar({ ...efeito, area: { ...efeito.area, cor: nova } })} />
@@ -252,30 +281,51 @@ export function TelaDoEfeitoEmArea({
         ))}
       </div>
 
-      <div className="@container">
-        <div className="grid gap-3 @lg:grid-cols-[14rem_1fr]">
-          <div className="@lg:sticky @lg:top-0 @lg:self-start">
-            <PreviaDaArea efeito={efeito} />
-          </div>
-          <div className="space-y-3">
-            <SecaoDoChao base={efeito.base} onMudar={(base) => salvar(com(efeito, "base", base))} />
-            <SecaoDosElementos
-              area={efeito.area ?? {}}
-              onMudar={(area) => salvar({ ...efeito, area })}
-            />
-            <SecaoDasParticulas
-              particulas={efeito.particulas}
-              onMudar={(particulas) => salvar(com(efeito, "particulas", particulas))}
-              descricao={t.efeito.particulasDaArea}
-            />
-            <SecaoDaLuz
-              luz={efeito.luz}
-              onMudar={(luz) => salvar(com(efeito, "luz", luz))}
-              descricao={t.efeito.luzDaArea}
-            />
-          </div>
-        </div>
-      </div>
+      <AbasDasCamadas
+        abas={[
+          {
+            id: "chao",
+            titulo: t.efeito.chao,
+            ligada: efeito.base !== undefined,
+            conteudo: <SecaoDoChao base={efeito.base} onMudar={(base) => salvar(com(efeito, "base", base))} />,
+          },
+          {
+            id: "elementos",
+            titulo: t.efeito.elementos,
+            ligada: efeito.area?.foco !== undefined,
+            conteudo: (
+              <SecaoDosElementos
+                area={efeito.area ?? {}}
+                onMudar={(area) => salvar({ ...efeito, area })}
+              />
+            ),
+          },
+          {
+            id: "particulas",
+            titulo: t.efeito.particulas,
+            ligada: efeito.particulas !== undefined,
+            conteudo: (
+              <SecaoDasParticulas
+                particulas={efeito.particulas}
+                onMudar={(particulas) => salvar(com(efeito, "particulas", particulas))}
+                descricao={t.efeito.particulasDaArea}
+              />
+            ),
+          },
+          {
+            id: "luz",
+            titulo: t.efeito.luz,
+            ligada: efeito.luz !== undefined,
+            conteudo: (
+              <SecaoDaLuz
+                luz={efeito.luz}
+                onMudar={(luz) => salvar(com(efeito, "luz", luz))}
+                descricao={t.efeito.luzDaArea}
+              />
+            ),
+          },
+        ]}
+      />
 
       <AlertDialog
         open={trocarPor !== null}
@@ -290,6 +340,115 @@ export function TelaDoEfeitoEmArea({
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t.efeito.trocarNaArea(efeito.titulo)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (trocarPor) partirDe(trocarPor);
+                setTrocarPor(null);
+              }}
+            >
+              {t.efeito.trocar}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/**
+ * A tela de um EFEITO DE PERSONAGEM solto: o que acontece com a figura, sem
+ * condição em volta. Abre no Compêndio, onde o efeito é molde.
+ *
+ * O avesso da `TelaDaCondicao`: lá o efeito é da condição e leva o nome dela;
+ * aqui ele tem nome próprio, e é a condição que o escolhe depois. A prévia
+ * pinta na cor de quem o usa -- `cor` --, porque é nela que ele vai aparecer.
+ */
+export function TelaDoEfeitoDePersonagem({
+  efeito,
+  cor,
+  onVoltar,
+  rotuloDeVolta,
+}: {
+  efeito: DefinicaoDeEfeito;
+  cor: string;
+  /** Ausente = sem o "voltar": a tela é a janela do efeito inteira. */
+  onVoltar?: () => void;
+  rotuloDeVolta?: string;
+}) {
+  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
+  const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
+  const temCamadas = Boolean(
+    efeito.figura || efeito.externo || efeito.interno || efeito.particulas || efeito.luz,
+  );
+
+  function partirDe(pronto: DefinicaoDeEfeito) {
+    salvar(daFigura(com(copiaParaACampanha(pronto, efeito.id, efeito.titulo), "tags", efeito.tags)));
+  }
+
+  return (
+    <div className="space-y-3">
+      {onVoltar ? (
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+          <ArrowLeft />
+          {rotuloDeVolta}
+        </Button>
+      ) : null}
+
+      <FaixaDaPrevia>
+        <Previa efeito={efeito} cor={cor} />
+      </FaixaDaPrevia>
+
+      <div className="flex items-center gap-2 rounded-md border p-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-0.5">
+          <NomeDoMedidor
+            nome={efeito.titulo}
+            ocupado={false}
+            onGravar={(titulo) => salvar({ ...efeito, titulo })}
+            rotulos={{
+              campo: t.efeito.nomeDoEfeito,
+              lapis: t.efeito.renomearEfeito,
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground mr-1 text-[11px]">
+          {t.efeito.partirDePronto}
+        </span>
+        {EFEITOS_DE_FABRICA.map((pronto) => (
+          <Button
+            key={pronto.id}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            title={pronto.dica}
+            onClick={() => (temCamadas ? setTrocarPor(pronto) : partirDe(pronto))}
+          >
+            {pronto.titulo}
+          </Button>
+        ))}
+      </div>
+
+      <EditorDeEfeito efeito={efeito} onMudar={salvar} />
+
+      <AlertDialog
+        open={trocarPor !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setTrocarPor(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t.efeito.trocarPelo(trocarPor?.titulo ?? "")}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t.efeito.trocarNoEfeito(efeito.titulo)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -340,10 +499,14 @@ function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => 
 }
 
 /**
- * A prévia de um efeito em área: um pedaço de chão com uma área de três casas
- * por duas, desenhada como a mesa a vê. A definição é a DA TELA, por um
- * declarativo só dela, como na prévia da condição.
+ * A prévia de um efeito em área: um pedaço de chão de seis casas por três,
+ * com a área deitada na metade de baixo -- o mesmo enquadramento do card no
+ * Compêndio, em que a chama sobe inteira em vez de sair cortada pelo topo.
+ * Desenhada como a mesa a vê. A definição é a DA TELA, por um declarativo só
+ * dela, como na prévia da condição.
  */
+const MUNDO_DA_PREVIA = { largura: 576, altura: 288 };
+const AREA_DA_PREVIA = { x: 0, y: 144, width: 576, height: 144 };
 function PreviaDaArea({ efeito }: { efeito: DefinicaoDeEfeito }) {
   const declarativo = useMemo<Declarativo>(
     () => ({
@@ -353,17 +516,25 @@ function PreviaDaArea({ efeito }: { efeito: DefinicaoDeEfeito }) {
     [efeito],
   );
   const area = useMemo(
-    () => [{ id: "previa-da-area", x: 48, y: 72, width: 288, height: 192, efeito: efeito.id, naMesa: true }],
+    () => [{ id: "previa-da-area", ...AREA_DA_PREVIA, efeito: efeito.id, naMesa: true }],
     [efeito.id],
   );
-  // O chão de 384 por 288 unidades, na caixa da prévia.
-  const escala = 224 / 384;
 
   return (
-    <div className="relative h-[168px] w-full overflow-hidden rounded-md bg-neutral-900">
+    <div
+      className="relative w-full overflow-hidden rounded-md bg-neutral-900"
+      style={{ height: ALTURA_DA_PREVIA }}
+    >
+      {/* No meio da faixa, e na escala que põe o chão inteiro na altura dela.
+          A faixa mais larga que isso só mostra mais do escuro dos lados. */}
       <div
-        className="absolute top-0 left-0"
-        style={{ width: 384, height: 288, transform: `scale(${escala})`, transformOrigin: "0 0" }}
+        className="absolute top-0 left-1/2"
+        style={{
+          width: MUNDO_DA_PREVIA.largura,
+          height: MUNDO_DA_PREVIA.altura,
+          transform: `translateX(-50%) scale(${ALTURA_DA_PREVIA / MUNDO_DA_PREVIA.altura})`,
+          transformOrigin: "top center",
+        }}
       >
         <DeclarativoProvider valor={declarativo}>
           <AreaDeEfeitoLayer areas={area} grid={undefined} variant="mesa" />
@@ -384,10 +555,17 @@ const PENDENTE = "campanha/pendente";
  *   atual, copiado; a primeira mudança cria o efeito da campanha, liga à
  *   condição e às cópias nas fichas, e grava a mudança nele. As mudanças que
  *   chegam enquanto isso não termina ficam na última, que é a que vale.
+ *
+ * A condição do COMPÊNDIO faz o mesmo do lado de lá: o efeito novo nasce
+ * molde, fora dos trinta e dois, e a ligação é só na biblioteca -- nenhuma
+ * ficha está com uma condição que não está no menu. Ele entra em jogo junto
+ * com ela. Ver `compendio::condicao_no_menu`.
  */
-function useEfeitoDaCondicao(modelo: Condicao) {
+function useEfeitoDaCondicao(modelo: Condicao, lugar: "menu" | "compendio") {
   const efeitos = useEfeitosDaCampanhaStore((state) => state.efeitos);
+  const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
   const criar = useEfeitosDaCampanhaStore((state) => state.criar);
+  const criarMolde = useEfeitosDaCampanhaStore((state) => state.criarMolde);
   const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
   const deFora = useDeclarativoStore((state) => state.efeitos);
   const recarregarCondicoes = useCondicoesStore((state) => state.recarregar);
@@ -396,8 +574,11 @@ function useEfeitoDaCondicao(modelo: Condicao) {
   const criando = useRef<Promise<string | null> | null>(null);
   const ultimo = useRef<DefinicaoDeEfeito | null>(null);
 
+  // Nas duas listas: a condição do Compêndio pode apontar para um efeito em
+  // jogo, e a do menu, por um instante, para um que ainda não entrou.
   const proprio = modelo.efeito?.startsWith("campanha/")
-    ? efeitos?.find((efeito) => efeito.id === modelo.efeito)
+    ? (efeitos?.find((efeito) => efeito.id === modelo.efeito) ??
+      moldes?.find((efeito) => efeito.id === modelo.efeito))
     : undefined;
 
   const atual = useMemo<DefinicaoDeEfeito>(() => {
@@ -418,16 +599,24 @@ function useEfeitoDaCondicao(modelo: Condicao) {
     ultimo.current = novo;
     setRascunho(novo);
     criando.current ??= (async () => {
-      const criado = await criar();
+      const criado = lugar === "compendio" ? await criarMolde() : await criar();
       if (!criado) return null;
 
       try {
-        await vincularEfeitoDaCondicao(modelo.id, criado.id);
+        if (lugar === "compendio") {
+          await editarCondicaoDoCompendio(modelo.id, { efeito: criado.id });
+        } else {
+          await vincularEfeitoDaCondicao(modelo.id, criado.id);
+        }
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : t.efeito.falhaAoLigar);
       }
-      recarregarCondicoes();
-      recarregarPersonagens();
+      if (lugar === "compendio") {
+        useCondicoesDoCompendioStore.getState().recarregar();
+      } else {
+        recarregarCondicoes();
+        recarregarPersonagens();
+      }
       return criado.id;
     })();
 
@@ -451,7 +640,7 @@ function useEfeitoDaCondicao(modelo: Condicao) {
  * apareceria também na lista de efeitos em área da campanha, que são os que
  * declaram `area`. Ver `efeitosEmAreaDaCampanha`.
  */
-function daFigura(efeito: DefinicaoDeEfeito): DefinicaoDeEfeito {
+export function daFigura(efeito: DefinicaoDeEfeito): DefinicaoDeEfeito {
   const copia = { ...efeito };
   delete copia.area;
   delete copia.base;
@@ -466,14 +655,15 @@ function com<T extends object, K extends keyof T>(objeto: T, chave: K, valor: T[
   return novo;
 }
 
+/**
+ * As camadas de um efeito de figura, uma embaixo da outra. Sem a prévia: ela
+ * fica no alto da tela, presa enquanto as camadas rolam -- ver `FaixaDaPrevia`.
+ */
 function EditorDeEfeito({
   efeito,
-  cor,
   onMudar,
 }: {
   efeito: DefinicaoDeEfeito;
-  /** A cor da condição: é nela que a prévia pinta. */
-  cor: string;
   onMudar: (efeito: DefinicaoDeEfeito) => void;
 }) {
   const mudar = <K extends keyof DefinicaoDeEfeito>(chave: K, valor: DefinicaoDeEfeito[K] | undefined) =>
@@ -486,34 +676,49 @@ function EditorDeEfeito({
   };
 
   return (
-    <div className="@container">
-      <div className="grid gap-3 @lg:grid-cols-[14rem_1fr]">
-        <div className="@lg:sticky @lg:top-0 @lg:self-start">
-          <Previa efeito={efeito} cor={cor} />
-        </div>
-
-        <div className="space-y-3">
-          <Secao titulo={t.efeito.naFigura} descricao={t.efeito.naFiguraDescricao}>
-            <Interruptor rotulo={t.efeito.haloAtras} valor={Boolean(figura.halo)} onMudar={(v) => mudarFigura("halo", v || undefined)} />
-            <Interruptor
-              rotulo={t.efeito.corPorCima}
-              valor={typeof figura.tinta === "number"}
-              onMudar={(v) => mudarFigura("tinta", v ? 0.5 : undefined)}
-            />
-            {typeof figura.tinta === "number" ? (
-              <Faixa rotulo={t.efeito.forcaDaCor} valor={figura.tinta} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudarFigura("tinta", v)} />
-            ) : null}
-            <Interruptor rotulo={t.efeito.cinzaEEscura} valor={Boolean(figura.cinza)} onMudar={(v) => mudarFigura("cinza", v || undefined)} />
-            <Interruptor rotulo={t.efeito.meioTransparente} valor={Boolean(figura.translucido)} onMudar={(v) => mudarFigura("translucido", v || undefined)} />
-            <Interruptor rotulo={t.efeito.tremendo} valor={Boolean(figura.tremor)} onMudar={(v) => mudarFigura("tremor", v || undefined)} />
-          </Secao>
-
-          <SecaoDoExterno externo={efeito.externo} onMudar={(externo) => mudar("externo", externo)} />
-          <SecaoDasParticulas particulas={efeito.particulas} onMudar={(p) => mudar("particulas", p)} />
-          <SecaoDaLuz luz={efeito.luz} onMudar={(luz) => mudar("luz", luz)} />
-        </div>
-      </div>
-    </div>
+    <AbasDasCamadas
+      abas={[
+        {
+          id: "figura",
+          titulo: t.efeito.naFigura,
+          ligada: Object.keys(figura).length > 0,
+          conteudo: (
+            <Secao titulo={t.efeito.naFigura} descricao={t.efeito.naFiguraDescricao}>
+              <Interruptor rotulo={t.efeito.haloAtras} valor={Boolean(figura.halo)} onMudar={(v) => mudarFigura("halo", v || undefined)} />
+              <Interruptor
+                rotulo={t.efeito.corPorCima}
+                valor={typeof figura.tinta === "number"}
+                onMudar={(v) => mudarFigura("tinta", v ? 0.5 : undefined)}
+              />
+              {typeof figura.tinta === "number" ? (
+                <Faixa rotulo={t.efeito.forcaDaCor} valor={figura.tinta} min={0.05} max={1} passo={0.05} porcento onMudar={(v) => mudarFigura("tinta", v)} />
+              ) : null}
+              <Interruptor rotulo={t.efeito.cinzaEEscura} valor={Boolean(figura.cinza)} onMudar={(v) => mudarFigura("cinza", v || undefined)} />
+              <Interruptor rotulo={t.efeito.meioTransparente} valor={Boolean(figura.translucido)} onMudar={(v) => mudarFigura("translucido", v || undefined)} />
+              <Interruptor rotulo={t.efeito.tremendo} valor={Boolean(figura.tremor)} onMudar={(v) => mudarFigura("tremor", v || undefined)} />
+            </Secao>
+          ),
+        },
+        {
+          id: "externo",
+          titulo: t.efeito.imagemEmVolta,
+          ligada: efeito.externo !== undefined,
+          conteudo: <SecaoDoExterno externo={efeito.externo} onMudar={(externo) => mudar("externo", externo)} />,
+        },
+        {
+          id: "particulas",
+          titulo: t.efeito.particulas,
+          ligada: efeito.particulas !== undefined,
+          conteudo: <SecaoDasParticulas particulas={efeito.particulas} onMudar={(p) => mudar("particulas", p)} />,
+        },
+        {
+          id: "luz",
+          titulo: t.efeito.luz,
+          ligada: efeito.luz !== undefined,
+          conteudo: <SecaoDaLuz luz={efeito.luz} onMudar={(luz) => mudar("luz", luz)} />,
+        },
+      ]}
+    />
   );
 }
 
@@ -907,7 +1112,24 @@ function SecaoDaLuz({
 // --- a prévia ------------------------------------------------------------------
 
 /**
- * O efeito numa figura de amostra, sobre o escuro do mapa à noite. O mesmo
+ * A altura das duas prévias, a da figura e a da área: uma faixa, e não um
+ * quadrado. Era um quadrado numa coluna de lado, e embaixo dele sobrava um
+ * vazio do tamanho das camadas da outra coluna.
+ */
+const ALTURA_DA_PREVIA = 192;
+
+/**
+ * A prévia presa no alto da tela enquanto as camadas rolam: mexer na luz, lá
+ * embaixo, tem de mostrar a luz mudando. Opaca por conta própria -- a janela
+ * flutuante e a atracada têm fundos diferentes, e o que passa por baixo não
+ * pode aparecer.
+ */
+function FaixaDaPrevia({ children }: { children: ReactNode }) {
+  return <div className="sticky top-0 z-10 shadow-[0_6px_12px_-6px_rgb(0_0_0/0.6)]">{children}</div>;
+}
+
+/**
+ * O efeito no boneco de amostra, sobre o escuro do mapa à noite. O mesmo
  * `FiguraComEfeitos` do palco -- a prévia não mente sobre a mesa. A luz, que
  * lá é a camada da cena, aqui é um brilho na cor dela, do tamanho do alcance.
  */
@@ -928,7 +1150,10 @@ function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
   const raioDaLuz = luz ? Math.min(Math.max(luz.raio, 0.5), 10) * lado : 0;
 
   return (
-    <div className="relative h-60 w-full overflow-hidden rounded-md bg-neutral-950">
+    <div
+      className="relative w-full overflow-hidden rounded-md bg-neutral-950"
+      style={{ height: ALTURA_DA_PREVIA }}
+    >
       {luz ? (
         <div
           aria-hidden
@@ -944,19 +1169,24 @@ function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
         />
       ) : null}
       <div className="absolute left-1/2 -translate-x-1/2" style={{ bottom: 24, width: lado, height: lado }}>
+        {/* A sombra no chão, como no card: é ela que põe o boneco de pé. */}
+        <span
+          aria-hidden
+          className="absolute -bottom-1.5 left-1/2 h-3 w-4/5 -translate-x-1/2 rounded-full bg-black/45 blur-[3px]"
+        />
         {/* Um declarativo só com este efeito: é por ele que o
             `FiguraComEfeitos` acha a definição, como no palco. */}
         <DeclarativoProvider valor={declarativo}>
           <FiguraComEfeitos
             efeitos={pedidos}
-            url={amostra.src}
+            url={boneco.src}
             semente="previa-do-efeito"
             alcance={{ livre: true, largura: lado }}
           >
             {(fonte) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={fonte ?? amostra.src}
+                src={fonte ?? boneco.src}
                 alt=""
                 draggable={false}
                 className="absolute inset-0 size-full select-none"
@@ -971,6 +1201,49 @@ function Previa({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
 
 // --- os controles --------------------------------------------------------------
 
+/**
+ * As camadas do efeito em ABAS, deitadas: uma camada à vista por vez. Em pé,
+ * abertas, eram uma parede de deslizadores; em pé e fechadas, uma lista de
+ * gavetas que o mestre abria e fechava para achar a próxima. A aba diz se a
+ * camada está ligada -- o ponto ao lado do nome --, e é isso que responde, de
+ * relance, "que camadas este efeito tem?".
+ */
+function AbasDasCamadas({
+  abas,
+}: {
+  abas: Array<{ id: string; titulo: string; ligada: boolean; conteudo: ReactNode }>;
+}) {
+  const [ativa, setAtiva] = useState(abas[0]?.id ?? "");
+  const aberta = abas.find((aba) => aba.id === ativa) ?? abas[0];
+
+  return (
+    <div className="space-y-2">
+      <Tabs value={aberta?.id} onValueChange={(valor) => setAtiva(String(valor))}>
+        <TabsList variant="line" className="w-full">
+          {abas.map((aba) => (
+            <TabsTrigger key={aba.id} value={aba.id} className="min-w-0 flex-1 gap-1.5 px-1 text-xs">
+              <span className="truncate">{aba.titulo}</span>
+              <span
+                aria-hidden
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  aba.ligada ? "bg-emerald-500" : "bg-muted-foreground/30",
+                )}
+              />
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {aberta?.conteudo}
+    </div>
+  );
+}
+
+/**
+ * O painel de uma camada, dentro da aba dela: o que ela faz, o interruptor,
+ * e os controles quando ligada. O nome está na aba; aqui ele é só o rótulo do
+ * interruptor para o leitor de tela.
+ */
 function Secao({
   titulo,
   descricao,
@@ -980,25 +1253,22 @@ function Secao({
 }: {
   titulo: string;
   descricao: string;
-  /** Ausente = a seção sempre aberta, sem interruptor. */
+  /** Ausente = a camada sempre ligada, sem interruptor. */
   ligado?: boolean;
   onLigar?: (ligado: boolean) => void;
   children: ReactNode;
 }) {
-  const aberta = ligado ?? true;
+  const ligada = ligado ?? true;
 
   return (
     <section className="space-y-2 rounded-md border p-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-medium">{titulo}</p>
-          <p className="text-muted-foreground text-[11px] leading-snug">{descricao}</p>
-        </div>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-muted-foreground text-[11px] leading-snug">{descricao}</p>
         {onLigar ? (
-          <Switch size="sm" aria-label={titulo} checked={aberta} onCheckedChange={onLigar} />
+          <Switch size="sm" aria-label={titulo} checked={ligada} onCheckedChange={onLigar} />
         ) : null}
       </div>
-      {aberta ? <div className="space-y-2">{children}</div> : null}
+      {ligada ? <div className="space-y-2">{children}</div> : null}
     </section>
   );
 }

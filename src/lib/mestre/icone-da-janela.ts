@@ -1,4 +1,5 @@
 import {
+  Activity,
   BookCopy,
   BookMarked,
   BookOpen,
@@ -17,6 +18,7 @@ import {
   Puzzle,
   ScrollText,
   SlidersHorizontal,
+  Sparkles,
   SquareUser,
   Swords,
   Users,
@@ -80,6 +82,11 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     // As cópias: o que se guardou daqui para levar a outra mesa.
     case "compendio-ato20":
       return BookCopy;
+    // Os mesmos das abas do Compêndio, que é de onde as duas mais abrem.
+    case "efeito":
+      return Sparkles;
+    case "condicao":
+      return Activity;
     case "personagem":
       // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
       // ícone na mesma tira não distinguem nada.

@@ -19,7 +19,7 @@ import {
   Radio,
 } from "lucide-react";
 
-import { useTelas } from "@/components/mestre/dock/window-content";
+import { TELAS_SO_DA_BUSCA, useTelas } from "@/components/mestre/dock/window-content";
 import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import {
   Dialog,
@@ -333,7 +333,7 @@ function useComandos(consulta: string): Comando[] {
       }
     }
 
-    for (const tela of telas) {
+    for (const tela of [...telas, ...TELAS_SO_DA_BUSCA]) {
       if (!casa(t.paleta.buscaAbrir(tela.titulo))) continue;
       lista.push({
         id: `tela-${JSON.stringify(tela.conteudo)}`,
