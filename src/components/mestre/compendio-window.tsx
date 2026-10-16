@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import {
   BookCopy,
+  CloudRain,
   Crosshair,
   Download,
   FolderPlus,
@@ -57,12 +58,15 @@ import {
   tituloDoEfeito,
 } from "@/components/mestre/compendio-condicoes";
 import {
+  alternarNaCena,
   arrastoDoEfeito,
   corDoEfeito,
   DesenhoDoEfeito,
   efeitoNaMao,
   EfeitosNoCompendio,
   especieDoEfeito,
+  LISTA_DA_ESPECIE,
+  type EspecieDoCompendio,
 } from "@/components/mestre/compendio-efeitos";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { EditorDeTags } from "@/components/mestre/editor-de-tags";
@@ -79,6 +83,7 @@ import { chaveDe } from "@/lib/store/use-window-store";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { EFEITOS_DE_AMBIENTE } from "@/lib/ambiente";
 import { COR_DA_AREA, EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { EFEITOS_DE_DISPARO } from "@/lib/disparo-de-efeito";
 import { SUGESTOES } from "@/lib/condicao";
@@ -171,7 +176,7 @@ function selecaoDe(tipo: TipoDeMolde, id: string): SelecaoDoCompendio {
 /** Uma coisa por vez, e só um diálogo de apagar aberto. */
 type AApagar =
   | { onde: "campanha"; tipo: "personagem"; molde: Personagem }
-  | { onde: "campanha"; tipo: "condicao" | "efeito"; id: string; nome: string }
+  | { onde: "campanha"; tipo: "condicao" | "efeito"; id: string; nome: string; ambiente?: boolean }
   | { onde: "ato20"; tipo: TipoDeMolde; id: string; nome: string };
 
 /** O que o diálogo de apagar diz, por coisa. */
@@ -192,7 +197,8 @@ function textosDeApagar(alvo: AApagar | null): { titulo: string; item: string; r
     return {
       titulo: texto.apagarEfeitoTitulo(alvo.nome),
       item: texto.apagarEfeitoItem,
-      ressalva: texto.apagarEfeitoRessalva,
+      // O ambiente não tem condição: quem fica sem ele é a cena.
+      ressalva: alvo.ambiente ? texto.apagarAmbienteRessalva : texto.apagarEfeitoRessalva,
     };
   return {
     titulo: texto.apagarDoAto20Titulo(alvo?.nome ?? ""),
@@ -256,8 +262,8 @@ export function CompendioDoAto20Body() {
  */
 function PainelDoCompendio({ onde }: { onde: Onde }) {
   const [tipo, setTipo] = useState<Tipo>("bestiario");
-  // A aba de dentro de Efeitos: os de área ou os disparos.
-  const [especie, setEspecie] = useState<"area" | "disparo">("area");
+  // A aba de dentro de Efeitos: os de área, os disparos ou os ambientes.
+  const [especie, setEspecie] = useState<EspecieDoCompendio>("area");
   const [busca, setBusca] = useState("");
   const [tagsLigadas, setTagsLigadas] = useState<string[]>([]);
   const [aApagar, setAApagar] = useState<AApagar | null>(null);
@@ -302,8 +308,8 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     return tagsDaLista(coisas ?? [], (coisa) => coisa.tags ?? []);
   }, [lista, especie, onde, moldes, moldesDeItem, condicoes, moldesDeEfeito, maquina.dados]);
 
-  // Trocar entre área e disparo solta o filtro, pela razão da troca de lista.
-  function trocarEspecie(proxima: "area" | "disparo") {
+  // Trocar de espécie solta o filtro, pela razão da troca de lista.
+  function trocarEspecie(proxima: EspecieDoCompendio) {
     setEspecie(proxima);
     setTagsLigadas([]);
   }
@@ -361,6 +367,16 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     () => pastasDaLista(pastas ?? [], "compendio-disparos"),
     [pastas],
   );
+  const pastasDosAmbientes = useMemo(
+    () => pastasDaLista(pastas ?? [], "compendio-ambientes"),
+    [pastas],
+  );
+  const pastasDaEspecie: Pasta[] =
+    especie === "disparo"
+      ? pastasDosDisparos
+      : especie === "ambiente"
+        ? pastasDosAmbientes
+        : pastasDosEfeitos;
   // A lista de pastas da aba aberta, e de que árvore ela é.
   const daAba: [ListaDePastasDoCompendio, Pasta[]] =
     tipo === "bestiario"
@@ -369,9 +385,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         ? ["compendio-itens", pastasDosItens]
         : tipo === "condicoes"
           ? ["compendio-condicoes", pastasDasCondicoes]
-          : especie === "disparo"
-            ? ["compendio-disparos", pastasDosDisparos]
-            : ["compendio-efeitos", pastasDosEfeitos];
+          : [LISTA_DA_ESPECIE[especie], pastasDaEspecie];
 
   // A pasta aberta de cada aba, como num gerenciador de arquivos: voltar à aba
   // volta à pasta em que se estava. A que sumiu -- desfeita no menu -- é a raiz.
@@ -412,9 +426,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   // O nome da raiz na trilha: a aba, ou a de dentro de Efeitos.
   const raizDaTrilha =
     tipo === "efeitos"
-      ? especie === "disparo"
-        ? texto.disparos
-        : texto.deArea
+      ? { area: texto.deArea, disparo: texto.disparos, ambiente: texto.ambientes }[especie]
       : { bestiario: texto.bestiario, itens: texto.itens, condicoes: texto.condicoes }[tipo];
 
   async function criarNoBestiario(pastaId?: string) {
@@ -473,14 +485,18 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     const novo = await criarMoldeDeEfeito();
     if (!novo) return;
 
-    if (pastaId)
-      useSceneStore
-        .getState()
-        .moverNoCompendio(
-          novo.id,
-          especie === "disparo" ? "compendio-disparos" : "compendio-efeitos",
-          pastaId,
-        );
+    if (pastaId) useSceneStore.getState().moverNoCompendio(novo.id, LISTA_DA_ESPECIE[especie], pastaId);
+
+    // O ambiente nasce chovendo, e não vazio: sem camada ele não desenharia
+    // nada, e a janela dele é onde se troca a chuva pelo que se quer.
+    if (especie === "ambiente") {
+      const chuva = EFEITOS_DE_AMBIENTE.find((pronto) => pronto.id === "chuva") ?? EFEITOS_DE_AMBIENTE[0];
+      if (chuva) {
+        salvar({ ...copiaParaACampanha(chuva, novo.id, texto.novoAmbiente), dica: undefined });
+        abrir({ tipo: "efeito", efeitoId: novo.id });
+        return;
+      }
+    }
 
     const total = moldesDeEfeito?.length ?? 0;
     salvar({
@@ -511,7 +527,11 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     bestiario: texto.criarMolde,
     itens: texto.criarItem,
     condicoes: texto.criarCondicao,
-    efeitos: especie === "disparo" ? texto.criarDisparo : texto.criarEfeitoDeArea,
+    efeitos: {
+      area: texto.criarEfeitoDeArea,
+      disparo: texto.criarDisparo,
+      ambiente: texto.criarAmbiente,
+    }[especie],
   }[tipo];
 
   // A pasta nasce na árvore da aba aberta: a dos moldes de personagem, a dos
@@ -570,7 +590,13 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   );
   const apagarEfeito = useCallback(
     (efeito: DefinicaoDeEfeito) =>
-      setAApagar({ onde: "campanha", tipo: "efeito", id: efeito.id, nome: efeito.titulo }),
+      setAApagar({
+        onde: "campanha",
+        tipo: "efeito",
+        id: efeito.id,
+        nome: efeito.titulo,
+        ...(especieDoEfeito(efeito) === "ambiente" ? { ambiente: true } : {}),
+      }),
     [],
   );
 
@@ -608,13 +634,13 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         </TabsList>
       </Tabs>
 
-      {/* Dentro de Efeitos, as duas espécies que se guardam aqui: o chão e o
-          tiro. A fileira de baixo, sublinhada e menor, como Mapas e Fundos
-          dentro de Cenas. O de personagem mora na condição. */}
+      {/* Dentro de Efeitos, as três espécies que se guardam aqui: o chão, o
+          tiro e o clima. A fileira de baixo, sublinhada e menor, como Mapas e
+          Fundos dentro de Cenas. O de personagem mora na condição. */}
       {tipo === "efeitos" ? (
         <Tabs
           value={especie}
-          onValueChange={(valor) => trocarEspecie(valor as "area" | "disparo")}
+          onValueChange={(valor) => trocarEspecie(valor as EspecieDoCompendio)}
           className="shrink-0 gap-0"
         >
           <TabsList variant="line" className="h-auto justify-start gap-1 px-2 pt-1">
@@ -623,6 +649,9 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
             </TabsTrigger>
             <TabsTrigger value="disparo" className="flex-none text-xs">
               {texto.disparos}
+            </TabsTrigger>
+            <TabsTrigger value="ambiente" className="flex-none text-xs">
+              {texto.ambientes}
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -721,7 +750,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           <EfeitosNoCompendio
             especie={especie}
             filtro={filtro}
-            pastas={especie === "disparo" ? pastasDosDisparos : pastasDosEfeitos}
+            pastas={pastasDaEspecie}
             onCriarEm={(pastaId) => void criarEfeito(pastaId)}
             onAbrir={abrirEfeito}
             onGuardado={maquina.reler}
@@ -870,7 +899,7 @@ function useCompendioDaMaquina() {
  */
 function sugestoesDoAto20() {
   const condicoes = SUGESTOES.map(({ nome, cor, icone, efeito }) => ({ nome, cor, icone, efeito }));
-  const efeitos = [...EFEITOS_DE_AREA, ...EFEITOS_DE_DISPARO].map((pronto) =>
+  const efeitos = [...EFEITOS_DE_AREA, ...EFEITOS_DE_DISPARO, ...EFEITOS_DE_AMBIENTE].map((pronto) =>
     copiaParaACampanha(pronto, "campanha/sugestao", pronto.titulo),
   );
 
@@ -1344,8 +1373,8 @@ function DaMaquina({
   onEditarTags,
 }: {
   lista: Tipo;
-  /** Dentro de Efeitos: os de área ou os disparos. */
-  especie: "area" | "disparo";
+  /** Dentro de Efeitos: os de área, os disparos ou os ambientes. */
+  especie: EspecieDoCompendio;
   filtro: FiltroDoCompendio;
   dados: CompendioDaMaquina | null;
   onApagar: (id: string, nome: string) => void;
@@ -1415,8 +1444,12 @@ function DaMaquina({
       fundo: coisa.imagem ? <ImagemDaMaquina assetId={coisa.imagem} /> : undefined,
       tinta: coisa.tinta,
       naMao: coisa.id === naMao,
+      // O disparo e o ambiente do ATO20 não se arrastam: não vão ao mapa, e
+      // pasta daqui não os recebe.
       onPointerDown:
-        coisa.efeito && especieDoEfeito(coisa.efeito) !== "disparo"
+        coisa.efeito &&
+        especieDoEfeito(coisa.efeito) !== "disparo" &&
+        especieDoEfeito(coisa.efeito) !== "ambiente"
         ? (event: ReactPointerEvent) => {
             if (!daMaoNoCartao(event) || !coisa.efeito) return;
             // As condições de LÁ: os ids dos efeitos do ATO20 não são os daqui.
@@ -1455,6 +1488,14 @@ function DaMaquina({
             >
               <Crosshair />
               {texto.disparar}
+            </Item>
+          ) : null}
+          {/* O ambiente do ATO20 vem para o Compêndio da campanha e já cobre
+              a cena aberta. */}
+          {lista === "efeitos" && coisa.efeito && especieDoEfeito(coisa.efeito) === "ambiente" ? (
+            <Item onClick={() => void alternarNaCena(coisa.efeito!.id, coisa.nome, true)}>
+              <CloudRain />
+              {texto.porNaCena}
             </Item>
           ) : null}
           <Item
@@ -1510,7 +1551,7 @@ function coisasDaMaquina(
   lista: Tipo,
   dados: CompendioDaMaquina,
   deFora: Parameters<typeof tituloDoEfeito>[1],
-  especie: "area" | "disparo" = "area",
+  especie: EspecieDoCompendio = "area",
 ): CoisaDaMaquina[] {
   switch (lista) {
     case "bestiario":

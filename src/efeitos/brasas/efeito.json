@@ -1,0 +1,42 @@
+{
+  "id": "brasas",
+  "titulo": "Brasas",
+  "dica": "Fagulhas subindo no ar quente, como numa cidade em chamas.",
+  "ambiente": {
+    "cor": "#f97316",
+    "camadas": [
+      {
+        "imagem": "brasas-512.webp",
+        "mipmaps": {
+          "256": "brasas-256.webp",
+          "512": "brasas-512.webp",
+          "1024": "brasas-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.45,
+        "direcao": 275,
+        "velocidade": 0.12,
+        "opacidade": 0.8,
+        "balanco": 0.12
+      },
+      {
+        "imagem": "brasas-512.webp",
+        "mipmaps": {
+          "256": "brasas-256.webp",
+          "512": "brasas-512.webp",
+          "1024": "brasas-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.85,
+        "direcao": 265,
+        "velocidade": 0.2,
+        "opacidade": 0.9,
+        "balanco": 0.15
+      }
+    ],
+    "veu": {
+      "cor": "#7c2d12",
+      "opacidade": 0.08
+    }
+  }
+}

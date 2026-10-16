@@ -45,8 +45,9 @@ type EfeitosDaCampanhaStore = {
   /**
    * Os moldes de efeito do Compêndio: o mesmo `efeitos.json`, marcados com
    * `compendio`, lidos na mesma ida ao Rust e guardados à parte. Não vão à
-   * mesa. O editor os edita como edita os em jogo -- `salvar` acha o efeito
-   * na lista em que ele estiver.
+   * mesa -- menos os de AMBIENTE, que a cena aponta direto (ver `publicar`).
+   * O editor os edita como edita os em jogo -- `salvar` acha o efeito na
+   * lista em que ele estiver.
    */
   moldes: DefinicaoDeEfeito[] | null;
   pedido: number;
@@ -80,7 +81,8 @@ type EfeitosDaCampanhaStore = {
   /**
    * O id EM JOGO de um efeito arrastado do Compêndio até o mapa -- para a
    * condição de um token, ou para uma área nova: a cópia do molde da campanha,
-   * o trazido do ATO20, ou ele mesmo, quando já está em jogo ou é de fábrica.
+   * o trazido do ATO20, ou ele mesmo, quando já está em jogo, é de fábrica ou
+   * é um ambiente -- que a cena aponta no Compêndio, sem cópia.
    * `null` quando não deu, com o motivo já avisado.
    */
   paraOJogo: (id: string, doAto20?: boolean) => Promise<string | null>;
@@ -162,12 +164,12 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
 
       const efeitos = todos.filter((efeito) => !efeito.compendio);
       set({ efeitos, moldes: todos.filter((efeito) => efeito.compendio) });
-      publicar(efeitos);
+      publicar();
       void get().arrumarDisparos();
     } catch (cause) {
       if (get().pedido !== meu) return;
       set({ efeitos: [], moldes: [] });
-      publicar([]);
+      publicar();
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoLer);
     }
   },
@@ -176,7 +178,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
     for (const espera of gravacoes.values()) clearTimeout(espera);
     gravacoes.clear();
     set({ efeitos: null, moldes: null, pedido: get().pedido + 1 });
-    publicar([]);
+    publicar();
   },
 
   async criar() {
@@ -184,7 +186,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       const novo = await criarEfeitoDaCampanha();
       const efeitos = [...(get().efeitos ?? []), novo];
       set({ efeitos });
-      publicar(efeitos);
+      publicar();
       return novo;
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoCriar);
@@ -197,20 +199,26 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
     // estiver, e só a dos em jogo vai à mesa.
     // A marca vai junto: "partir de um pronto" troca o efeito por uma cópia
     // limpa, sem ela, e o molde viraria em jogo na próxima leitura da lista.
-    if (get().moldes?.some((atual) => atual.id === efeito.id)) {
+    const antes = get().moldes?.find((atual) => atual.id === efeito.id);
+    if (antes) {
       efeito = { ...efeito, compendio: true };
       const molde = efeito;
       set({
         moldes: (get().moldes ?? []).map((atual) => (atual.id === molde.id ? molde : atual)),
       });
+      // O ambiente vai à mesa do Compêndio mesmo: a chuva da TV anda com o
+      // controle, como a prévia. Ver `publicar`.
+      if (especieDoEfeito(antes) === "ambiente" || especieDoEfeito(molde) === "ambiente") {
+        publicar();
+      }
     } else {
       const efeitos = (get().efeitos ?? []).map((atual) => (atual.id === efeito.id ? efeito : atual));
       set({ efeitos });
-      publicar(efeitos);
+      publicar();
     }
 
-    const antes = gravacoes.get(efeito.id);
-    if (antes) clearTimeout(antes);
+    const esperando = gravacoes.get(efeito.id);
+    if (esperando) clearTimeout(esperando);
     gravacoes.set(
       efeito.id,
       setTimeout(() => {
@@ -236,7 +244,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       await apagarEfeitoDaCampanha(id);
       const efeitos = (get().efeitos ?? []).filter((efeito) => efeito.id !== id);
       set({ efeitos, moldes: (get().moldes ?? []).filter((efeito) => efeito.id !== id) });
-      publicar(efeitos);
+      publicar();
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoApagar);
       return;
@@ -267,7 +275,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       const posto = await efeitoEmJogo(id);
       const efeitos = [...(get().efeitos ?? []), posto];
       set({ efeitos, moldes: (get().moldes ?? []).filter((efeito) => efeito.id !== id) });
-      publicar(efeitos);
+      publicar();
       return true;
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar);
@@ -303,7 +311,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
           atual.id === gravada.id ? gravada : atual,
         );
         set({ efeitos });
-        publicar(efeitos);
+        publicar();
         return gravada;
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar);
@@ -325,6 +333,8 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
     // usa a cópia de passagem dele.
     const guardado = get().moldes?.find((efeito) => efeito.ato20 === idNoAto20);
     if (guardado && especieDoEfeito(guardado) === "disparo") return get().disparoEmJogo(guardado.id);
+    // O ambiente não tem cópia: a cena aponta para o molde. Ver `publicar`.
+    if (guardado && especieDoEfeito(guardado) === "ambiente") return Promise.resolve(guardado);
 
     const emJogo = get().efeitos?.find((efeito) => efeito.ato20 === idNoAto20);
     if (emJogo) return Promise.resolve(emJogo);
@@ -360,6 +370,13 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
         return get().disparoEmJogo(trazido.id);
       }
 
+      // O ambiente trazido também fica, e é ele mesmo que a cena aponta.
+      if (especieDoEfeito(trazido) === "ambiente") {
+        const marcado = { ...trazido, ato20: idNoAto20 };
+        get().salvar(marcado);
+        return marcado;
+      }
+
       // Com os trinta e dois cheios, ele fica no Compêndio da campanha, e o
       // store já disse por quê. A marca vai nos dois casos.
       const entrou = await get().porEmJogo(trazido.id);
@@ -378,6 +395,8 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
   async paraOJogo(id, doAto20) {
     if (doAto20) return (await get().doAto20EmJogo(id))?.id ?? null;
     const molde = get().moldes?.find((atual) => atual.id === id);
+    // O ambiente vai à cena como está no Compêndio: ver `publicar`.
+    if (molde && especieDoEfeito(molde) === "ambiente") return id;
     if (molde) {
       const copia =
         especieDoEfeito(molde) === "disparo"
@@ -413,7 +432,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
           atual.id === gravada.id ? gravada : atual,
         );
         set({ efeitos });
-        publicar(efeitos);
+        publicar();
         return gravada;
       } catch (cause) {
         toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar);
@@ -461,7 +480,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       const guardado = await guardarEfeitoNoCompendio(id);
       const efeitos = (get().efeitos ?? []).filter((efeito) => efeito.id !== id);
       set({ efeitos, moldes: [...(get().moldes ?? []), guardado] });
-      publicar(efeitos);
+      publicar();
       return true;
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar);
@@ -470,8 +489,19 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
   },
 }));
 
-function publicar(efeitos: DefinicaoDeEfeito[]): void {
-  useDeclarativoStore.getState().definirEfeitosDaCampanha(efeitos);
+/**
+ * O que vai à mesa: os efeitos em jogo, e os moldes de AMBIENTE -- a cena
+ * aponta para o molde do Compêndio, sem cópia em jogo, e a TV precisa dele
+ * para chover. Lido do store, depois do `set` de quem chama.
+ */
+function publicar(): void {
+  const { efeitos, moldes } = useEfeitosDaCampanhaStore.getState();
+  useDeclarativoStore
+    .getState()
+    .definirEfeitosDaCampanha([
+      ...(efeitos ?? []),
+      ...(moldes ?? []).filter((molde) => especieDoEfeito(molde) === "ambiente"),
+    ]);
 }
 
 /** A campanha passou a ser outra. O gêmeo de `esquecerCondicoes`. */

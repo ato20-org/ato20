@@ -46,6 +46,11 @@ export type DefinicaoDeEfeito = {
    */
   disparo?: DisparoDoEfeito;
   /**
+   * O efeito que cobre a CENA inteira: a chuva, a neve, a neblina. Ausente =
+   * não é de ambiente. Ver `AmbienteDoEfeito`.
+   */
+  ambiente?: AmbienteDoEfeito;
+  /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
    * URL. Ausente = sem imagem; um externo sem origem não desenha.
@@ -371,6 +376,92 @@ export type DisparoDoEfeito = {
 export type ProjetilDoDisparo = Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores"> & {
   /** Em graus, no sentido horário: `0`, `90`, `-90` ou `180`. Ausente = 0. */
   giro?: number;
+};
+
+/**
+ * O efeito de AMBIENTE: o clima que cobre a cena inteira -- a chuva, a neve,
+ * a neblina, a cinza que cai. É a quarta ESPÉCIE de efeito, ao lado do de
+ * personagem, do de área e do disparo: o efeito que declara este bloco é um
+ * ambiente, e não serve a figura, a chão nem a tiro. A cena aponta para um
+ * (`Scene.ambiente`), com a intensidade e o vento dela.
+ *
+ * Desenha NA LENTE: por cima da tela, e não no chão do mapa. A chuva cai de
+ * cima para baixo no 2D e no 2.5D, não amplia com o zoom e não anda com a
+ * câmera -- é o vidro por onde a mesa olha. Por isso também passa por cima da
+ * névoa e do escuro: não chove só onde a mesa já viu.
+ *
+ * Cada camada é uma textura EMENDÁVEL que desliza em laço, animada só por
+ * `transform` -- o compositor a move sem repintar nada. Duas ou três camadas
+ * de tamanhos e velocidades diferentes dão a profundidade: a gota fina e lenta
+ * lá atrás, a grossa e rápida na frente. Ver `planoDaCamada`.
+ */
+export type AmbienteDoEfeito = {
+  /**
+   * A cor do ambiente: a das camadas com `cores: "condicao"`, e a do véu
+   * quando ele não diz a sua. Ausente = um cinza azulado.
+   */
+  cor?: string;
+  /** As camadas, de TRÁS para a frente: de uma a quatro. Ver `CamadaDoAmbiente`. */
+  camadas: CamadaDoAmbiente[];
+  /**
+   * Uma cor sobre a tela inteira: o cinza da tempestade, o branco da nevasca.
+   * Ausente = sem véu.
+   */
+  veu?: VeuDoAmbiente;
+  /** O clarão do relâmpago. Ausente = sem. Ver `RelampagoDoAmbiente`. */
+  relampago?: RelampagoDoAmbiente;
+};
+
+/**
+ * Uma camada do ambiente: a textura, e como ela desliza.
+ *
+ * As medidas são em ALTURAS DA TELA, e não em pixels nem em casas: o ambiente
+ * não está no mapa, e a mesma chuva tem de ler igual na TV e no celular.
+ *
+ * A imagem tem os campos de imagem da base, menos os quadros: a camada anda
+ * deslizando, e uma folha de quadros pediria repintar a tela inteira a cada
+ * degrau.
+ */
+export type CamadaDoAmbiente = Pick<BaseDoEfeito, "imagem" | "mipmaps" | "cores"> & {
+  /** O lado do ladrilho, de 0,1 a 2 alturas da tela. Ausente = 0,5. */
+  escala?: number;
+  /**
+   * Para onde vai, em graus, no sentido horário a partir da direita -- o mesmo
+   * das partículas: 90 desce, 270 sobe, 0 vai para a direita. Fora dos eixos
+   * a textura inclina junto, como a chuva com vento. Ausente = 90.
+   */
+  direcao?: number;
+  /** Em alturas da tela por segundo, de 0 a 3. Zero = parada. Ausente = 1. */
+  velocidade?: number;
+  /** De 0 a 1. Ausente = 1. */
+  opacidade?: number;
+  /**
+   * O quanto ela balança de um lado para o outro enquanto cai, em vezes o
+   * ladrilho, de 0 a 0,5: o floco que dança. Ausente = 0.
+   */
+  balanco?: number;
+};
+
+/** O véu: uma cor parada sobre a tela inteira. */
+export type VeuDoAmbiente = {
+  /** Ausente = a cor do ambiente. */
+  cor?: string;
+  /** De 0 a 0,8: mais que isso apagaria a cena. */
+  opacidade: number;
+};
+
+/**
+ * O relâmpago: a tela clareia de repente, duas vezes seguidas, e apaga. Dois
+ * relógios de ritmos diferentes, para o clarão não cair sempre no mesmo
+ * compasso. Ver `RelampagoNaLente`.
+ */
+export type RelampagoDoAmbiente = {
+  /** Os segundos entre um clarão e outro, de 3 a 60. Ausente = 12. */
+  intervalo?: number;
+  /** Ausente = um branco azulado. */
+  cor?: string;
+  /** O quanto clareia, de 0 a 1. Ausente = 0,6. */
+  forca?: number;
 };
 
 /**

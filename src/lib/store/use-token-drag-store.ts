@@ -120,6 +120,13 @@ export type FonteDoArrasto =
    * `aceita`.
    */
   | { tipo: "disparo"; efeitoId: string }
+  /**
+   * Um AMBIENTE do Compêndio. Como o disparo, só se arrasta para uma pasta da
+   * aba dele: a cena o recebe pelo card ("Pôr nesta cena") ou pela
+   * configuração do mapa. Solto no mapa, a sombra seria uma caixa de tamanho
+   * nenhum -- a chuva não tem onde, ela cobre a tela.
+   */
+  | { tipo: "ambiente"; efeitoId: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -204,6 +211,7 @@ export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
     fonte.tipo === "cena" ||
     fonte.tipo === "area" ||
     fonte.tipo === "disparo" ||
+    fonte.tipo === "ambiente" ||
     vaiNaPeca(fonte)
     ? undefined
     : fonte.assetId || undefined;
@@ -233,6 +241,8 @@ export function membroDaPasta(
       return fonte.tipo === "area" && !fonte.doAto20 ? fonte.efeitoId : undefined;
     case "compendio-disparos":
       return fonte.tipo === "disparo" ? fonte.efeitoId : undefined;
+    case "compendio-ambientes":
+      return fonte.tipo === "ambiente" ? fonte.efeitoId : undefined;
   }
 }
 
@@ -313,6 +323,7 @@ export function aceita(
       return (
         fonte.tipo !== "cena" &&
         fonte.tipo !== "disparo" &&
+        fonte.tipo !== "ambiente" &&
         !vaiNaPeca(fonte) &&
         !(fonte.tipo === "personagem" && !fonte.assetId) &&
         !(fonte.tipo === "molde" && !fonte.assetId) &&

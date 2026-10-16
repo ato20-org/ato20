@@ -668,6 +668,7 @@ const FORMATO_DA_PASTA: Record<ListaDePastasDoCompendio, { area: string; icone: 
   "compendio-condicoes": { area: "aspect-[2/1]", icone: "w-1/3" },
   "compendio-efeitos": { area: "aspect-[2/1]", icone: "w-1/3" },
   "compendio-disparos": { area: "aspect-[2/1]", icone: "w-1/3" },
+  "compendio-ambientes": { area: "aspect-[2/1]", icone: "w-1/3" },
 };
 
 /**

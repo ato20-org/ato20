@@ -116,9 +116,14 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       };
 
       // Mapa não entra no palco; só vira menção na nota. A condição vai numa
-      // peça, e não no chão; o disparo só vai a uma pasta. `aceita` já barra
-      // os três.
-      if (solto.fonte.tipo === "cena" || solto.fonte.tipo === "disparo" || vaiNaPeca(solto.fonte))
+      // peça, e não no chão; o disparo e o ambiente só vão a uma pasta.
+      // `aceita` já barra os quatro.
+      if (
+        solto.fonte.tipo === "cena" ||
+        solto.fonte.tipo === "disparo" ||
+        solto.fonte.tipo === "ambiente" ||
+        vaiNaPeca(solto.fonte)
+      )
         return;
 
       // O efeito de área do Compêndio vira uma área REDONDA de efeito, como a

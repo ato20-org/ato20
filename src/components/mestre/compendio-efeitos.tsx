@@ -2,7 +2,16 @@
 
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
-import { Crosshair, Maximize2, Tags, Trash2, Upload, WandSparkles } from "lucide-react";
+import {
+  CloudOff,
+  CloudRain,
+  Crosshair,
+  Maximize2,
+  Tags,
+  Trash2,
+  Upload,
+  WandSparkles,
+} from "lucide-react";
 
 import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import {
@@ -18,6 +27,7 @@ import {
   type EdicaoDeTags,
 } from "@/components/mestre/compendio-cartao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { AmbienteNaLente } from "@/components/playground/ambiente-na-lente";
 import { TiroEmLaco } from "@/components/playground/tiro-em-laco";
 import { Button } from "@/components/ui/button";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
@@ -25,6 +35,7 @@ import { DeclarativoProvider, useDeclarativo } from "@/components/playground/dec
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import type { Kit } from "@/components/ui/menu-kit";
 import { useTokenDrag, type TokenParaArrastar } from "@/hooks/use-token-drag";
+import { ambienteDaCena, EFEITOS_DE_AMBIENTE } from "@/lib/ambiente";
 import { COR_DA_AREA, ladoDaCasa } from "@/lib/area-de-efeito";
 import { SUGESTOES } from "@/lib/condicao";
 import { EFEITOS_DE_DISPARO } from "@/lib/disparo-de-efeito";
@@ -67,6 +78,7 @@ export { especieDoEfeito, type EspecieDeEfeito } from "@/lib/efeitos";
  */
 export function corDoEfeito(efeito: DefinicaoDeEfeito, corDeQuemUsa?: string): string {
   return (
+    efeito.ambiente?.cor ??
     efeito.area?.cor ??
     corDeQuemUsa ??
     efeito.luz?.cor ??
@@ -168,8 +180,8 @@ export function arrastoDoEfeito(
 
 /** O efeito na mão, quando ele é do Compêndio pedido: o card dele esmaece. */
 export function efeitoNaMao(fonte: FonteDoArrasto | undefined, doAto20: boolean): string | null {
-  // O disparo só se arrasta da campanha: é para uma pasta dela.
-  if (fonte?.tipo === "disparo") return doAto20 ? null : fonte.efeitoId;
+  // O disparo e o ambiente só se arrastam da campanha: é para uma pasta dela.
+  if (fonte?.tipo === "disparo" || fonte?.tipo === "ambiente") return doAto20 ? null : fonte.efeitoId;
   return (fonte?.tipo === "efeito" || fonte?.tipo === "area") && Boolean(fonte.doAto20) === doAto20
     ? fonte.efeitoId
     : null;
@@ -178,14 +190,59 @@ export function efeitoNaMao(fonte: FonteDoArrasto | undefined, doAto20: boolean)
 /**
  * O desenho do card de um efeito: o de área, a varinha, que com a mão sobre o
  * card dá lugar ao chão pegando fogo; o disparo, a mira, que dá lugar ao tiro
- * voando. O de personagem anima no card da condição dele -- ver
- * `DesenhoDaCondicao`.
+ * voando; o ambiente, a nuvem, que dá lugar à chuva. O de personagem anima no
+ * card da condição dele -- ver `DesenhoDaCondicao`.
  */
 export function DesenhoDoEfeito({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
-  return especieDoEfeito(efeito) === "disparo" ? (
+  const especie = especieDoEfeito(efeito);
+  return especie === "disparo" ? (
     <TiroDoEfeito efeito={efeito} cor={cor} />
+  ) : especie === "ambiente" ? (
+    <ClimaDoEfeito efeito={efeito} cor={cor} />
   ) : (
     <ChaoDoEfeito efeito={efeito} cor={cor} />
+  );
+}
+
+/**
+ * O ambiente no card. Parado, a nuvem; com a mão sobre o card, a chuva cai na
+ * faixa dele -- a mesma lente da mesa, na escala do card --, e a nuvem some.
+ * Só o card sob a mão monta a chuva, pela razão do chão: cada camada é um
+ * forno e uma superfície a mais.
+ */
+function ClimaDoEfeito({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
+  const emCima = useEmCimaDoCartao();
+
+  return (
+    <>
+      {emCima ? <ClimaNoCartao efeito={efeito} /> : null}
+      <span
+        className={cn(
+          "relative grid size-11 place-items-center rounded-full transition-opacity duration-500",
+          emCima && "opacity-0",
+        )}
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.45)", boxShadow: `inset 0 0 0 3px ${cor}` }}
+      >
+        <CloudRain className="size-5" style={{ color: cor }} aria-hidden />
+      </span>
+    </>
+  );
+}
+
+export function ClimaNoCartao({ efeito }: { efeito: DefinicaoDeEfeito }) {
+  // Um catálogo só com este efeito, como o chão do card: o molde do Compêndio
+  // e o do ATO20 não estão no declarativo do Mestre.
+  const ambiente = useMemo(
+    () =>
+      ambienteDaCena({ efeito: efeito.id }, { [efeito.id]: { ...efeito, origem: { acervo: true } } }),
+    [efeito],
+  );
+  if (!ambiente) return null;
+
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden bg-black/50">
+      <AmbienteNaLente ambiente={ambiente} />
+    </span>
   );
 }
 
@@ -437,6 +494,16 @@ function ImagemDoBoneco({ fonte }: { fonte: string | null }) {
  * num token, que é onde ele aparece. Um botão que só o tirava daqui, sem pôr
  * em lugar nenhum que se visse, fazia parecer que ele tinha sumido.
  */
+/** As abas de dentro de Efeitos, no Compêndio: uma por espécie que se guarda lá. */
+export type EspecieDoCompendio = "area" | "disparo" | "ambiente";
+
+/** A árvore de pastas de cada aba. Ver `ListaDePastas`. */
+export const LISTA_DA_ESPECIE: Readonly<Record<EspecieDoCompendio, ListaDoCompendio>> = {
+  area: "compendio-efeitos",
+  disparo: "compendio-disparos",
+  ambiente: "compendio-ambientes",
+};
+
 export function EfeitosNoCompendio({
   especie = "area",
   filtro,
@@ -447,8 +514,8 @@ export function EfeitosNoCompendio({
   onApagar,
   onEditarTags,
 }: {
-  /** A aba de dentro: os de área ou os disparos. */
-  especie?: "area" | "disparo";
+  /** A aba de dentro: os de área, os disparos ou os ambientes. */
+  especie?: EspecieDoCompendio;
   filtro: FiltroDoCompendio;
   /** As pastas da aba aberta: a dos efeitos de área, ou a dos disparos. */
   pastas: Pasta[];
@@ -469,14 +536,15 @@ export function EfeitosNoCompendio({
   );
 
   /**
-   * Os disparos de fábrica, guardados no Compêndio como moldes da campanha: o
-   * ponto de partida de quem nunca fez um. Só com a lista vazia, como as
-   * sugestões de condição -- no meio de uma lista montada, duplicaria o fogo.
+   * Os disparos (ou os ambientes) de fábrica, guardados no Compêndio como
+   * moldes da campanha: o ponto de partida de quem nunca fez um. Só com a
+   * lista vazia, como as sugestões de condição -- no meio de uma lista
+   * montada, duplicaria o fogo.
    */
   async function trazerOsProntos() {
     setTrazendo(true);
     const { criarMolde, salvar } = useEfeitosDaCampanhaStore.getState();
-    for (const pronto of EFEITOS_DE_DISPARO) {
+    for (const pronto of especie === "ambiente" ? EFEITOS_DE_AMBIENTE : EFEITOS_DE_DISPARO) {
       const novo = await criarMolde();
       if (novo) salvar({ ...copiaParaACampanha(pronto, novo.id, pronto.titulo), compendio: true });
     }
@@ -502,9 +570,11 @@ export function EfeitosNoCompendio({
 
   if (achados === null) return <Lendo />;
   if (lista?.length === 0 && pastas.length === 0)
-    return especie === "disparo" ? (
+    return especie !== "area" ? (
       <div className="space-y-2 p-2">
-        <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioDisparos}</PainelVazio>
+        <PainelVazio conteudo={{ tipo: "compendio" }}>
+          {especie === "ambiente" ? texto.vazioAmbientes : texto.vazioDisparos}
+        </PainelVazio>
         <Button
           variant="outline"
           size="sm"
@@ -512,7 +582,7 @@ export function EfeitosNoCompendio({
           disabled={trazendo}
           onClick={() => void trazerOsProntos()}
         >
-          {texto.trazerDisparosProntos}
+          {especie === "ambiente" ? texto.trazerAmbientesProntos : texto.trazerDisparosProntos}
         </Button>
       </div>
     ) : (
@@ -527,7 +597,13 @@ export function EfeitosNoCompendio({
       achados={achados}
       pastas={pastas}
       buscando={buscando}
-      rotuloCriarAqui={especie === "disparo" ? texto.criarDisparoAqui : texto.criarEfeitoAqui}
+      rotuloCriarAqui={
+        especie === "disparo"
+          ? texto.criarDisparoAqui
+          : especie === "ambiente"
+            ? texto.criarAmbienteAqui
+            : texto.criarEfeitoAqui
+      }
       onCriarEm={onCriarEm}
       linha={(efeito, _depth, caminho) => (
         <CartaoDoEfeito
@@ -535,7 +611,7 @@ export function EfeitosNoCompendio({
           efeito={efeito}
           caminho={caminho}
           pastas={pastas}
-          lista={especie === "disparo" ? "compendio-disparos" : "compendio-efeitos"}
+          lista={LISTA_DA_ESPECIE[especie]}
           cor={corDoEfeito(efeito, cores.get(efeito.id))}
           onAbrir={onAbrir}
           onGuardarNoAto20={guardarNoAto20}
@@ -579,8 +655,17 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
   // na hora em que o tiro sai, e não agora -- largar a mira não deixa cópia
   // nenhuma para trás. Ver `disparar`. Só o disparo atira; o de área, que se
   // solta no chão, se arrasta.
-  const ehDisparo = especieDoEfeito(efeito) === "disparo";
+  const especie = especieDoEfeito(efeito);
+  const ehDisparo = especie === "disparo";
   const disparar = () => useToolStore.getState().armarDisparo({ id: efeito.id });
+
+  // O ambiente vai à cena aberta pelo card: a cena aponta para o molde, sem
+  // cópia. Ver `alternarNaCena`.
+  const ehAmbiente = especie === "ambiente";
+  const naCena = useSceneStore(
+    (state) => ehAmbiente && selectEditingScene(state)?.ambiente?.efeito === efeito.id,
+  );
+  const alternar = () => alternarNaCena(efeito.id, efeito.titulo);
 
   const itens = (kit: Kit) => {
     const { Item, Separator } = kit;
@@ -595,6 +680,12 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
         <Item onClick={disparar}>
           <Crosshair />
           {texto.disparar}
+        </Item>
+      ) : null}
+      {ehAmbiente ? (
+        <Item onClick={alternar}>
+          {naCena ? <CloudOff /> : <CloudRain />}
+          {naCena ? texto.tirarDaCena : texto.porNaCena}
         </Item>
       ) : null}
       <Item onClick={() => onGuardarNoAto20(efeito)}>
@@ -643,13 +734,16 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
       naMao={naMao}
       onPointerDown={(event) => {
         if (!daMaoNoCartao(event)) return;
-        // O disparo não tem o que fazer no mapa -- ele sai pela mira --, e o
-        // arrasto dele só leva a uma pasta. Ver `aceita`.
+        // O disparo não tem o que fazer no mapa -- ele sai pela mira --, nem o
+        // ambiente, que vai à cena pelo card: o arrasto dos dois só leva a uma
+        // pasta. Ver `aceita`.
         arrastar(
           event,
           ehDisparo
             ? { fonte: { tipo: "disparo", efeitoId: efeito.id }, largura: 0, altura: 0 }
-            : arrastoDoEfeito(efeito, cor),
+            : ehAmbiente
+              ? { fonte: { tipo: "ambiente", efeitoId: efeito.id }, largura: 0, altura: 0 }
+              : arrastoDoEfeito(efeito, cor),
         );
       }}
       acao={
@@ -657,9 +751,47 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
           <AcaoDaLinha rotulo={texto.dispararDica} onClick={disparar}>
             <Crosshair />
           </AcaoDaLinha>
+        ) : ehAmbiente ? (
+          <AcaoDaLinha
+            rotulo={naCena ? texto.tirarDaCenaDica : texto.porNaCenaDica}
+            onClick={alternar}
+          >
+            {naCena ? <CloudOff /> : <CloudRain />}
+          </AcaoDaLinha>
         ) : null
       }
       itens={itens}
     />
   );
 });
+
+/**
+ * Põe o ambiente na cena aberta, ou o tira se é ele que está lá. A troca de um
+ * ambiente por outro guarda a intensidade e o vento: o mestre ajustou o vento
+ * DESTA cena, e a garoa que vira tempestade continua soprando para o mesmo lado.
+ *
+ * `paraOJogo` primeiro: o do ATO20 tem de vir para a campanha antes -- e o da
+ * campanha volta ele mesmo, que o ambiente não tem cópia.
+ */
+export async function alternarNaCena(
+  efeitoId: string,
+  titulo: string,
+  doAto20?: boolean,
+): Promise<void> {
+  const cena = selectEditingScene(useSceneStore.getState());
+  if (!cena) {
+    toast(texto.semCenaAberta);
+    return;
+  }
+
+  const { setAmbiente } = useSceneStore.getState();
+  if (!doAto20 && cena.ambiente?.efeito === efeitoId) {
+    setAmbiente(cena.id, undefined);
+    return;
+  }
+
+  const id = await useEfeitosDaCampanhaStore.getState().paraOJogo(efeitoId, doAto20);
+  if (!id) return;
+  setAmbiente(cena.id, { ...cena.ambiente, efeito: id });
+  toast.success(texto.naCena(titulo));
+}

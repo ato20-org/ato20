@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { AmbienteNaLente } from "@/components/playground/ambiente-na-lente";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
 import { CeuPanoramico } from "@/components/playground/ceu-panoramico";
@@ -40,6 +41,8 @@ import {
   type EfeitoPedido,
   type EfeitosDoPersonagem,
 } from "@/lib/condicao";
+import { useDeclarativo } from "@/components/playground/declarativo";
+import { AMBIENTE_DO_MESTRE, ambienteDaCena } from "@/lib/ambiente";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
@@ -244,6 +247,22 @@ type SceneLayerProps = {
    * que há algo sobre o piso, e não pintado nele.
    */
   semItens?: boolean | ((item: CanvasItem) => boolean);
+  /**
+   * O ambiente na metade, como o Mestre o vê (ver `AMBIENTE_DO_MESTRE`).
+   * Ausente = o do `variant`: só o Mestre de prumo passa `"mestre"`, e o de
+   * esguelha monta esta camada como `"mesa"` -- a névoa e o escuro de lá são
+   * os da mesa --, e diz isto à parte.
+   */
+  ambienteFraco?: boolean;
+  /**
+   * O ambiente sai da tela por um instante, sem desmontar: é o Mestre durante
+   * um arrasto. Medido na webview, arrastando a moldura com sessenta tokens, a
+   * chuva levava o palco de 56 a 50 quadros por segundo -- duas superfícies de
+   * tela inteira a mais por quadro do gesto --, e escondida, 56. O que o
+   * mestre olha no arrasto é para onde a coisa vai, como na pausa dos efeitos
+   * (ver `animarSo`).
+   */
+  ambienteEscondido?: boolean;
 };
 
 /**
@@ -288,6 +307,8 @@ export function SceneLayer({
   palco,
   esguelha,
   semItens,
+  ambienteFraco,
+  ambienteEscondido,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
   // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
@@ -363,7 +384,19 @@ export function SceneLayer({
    * Sem o nó -- primeiro paint -- desenha onde está. É um quadro, e o quadro
    * seguinte já vai para o lugar certo.
    */
-  const { planoDeConteudo, fundoDoPalco } = useSceneScale();
+  const { planoDeConteudo, fundoDoPalco, planoDoAmbiente } = useSceneScale();
+  const { efeitos: deFora } = useDeclarativo();
+  const fraco = ambienteFraco ?? variant === "mestre";
+  // Fora da prévia: trinta cenas chovendo num quadrado de 56x32 é textura que
+  // ninguém olha. E só onde há lente -- o palco sem ela não tem onde chover.
+  const ambiente = useMemo(() => {
+    if (variante === "mini" || !planoDoAmbiente) return null;
+    const resolvido = ambienteDaCena(scene.ambiente, deFora, fraco ? AMBIENTE_DO_MESTRE : 1);
+    // O clarão é da mesa. No Mestre, era a tela de quem monta a cena piscando,
+    // e medido na webview com sessenta tokens, a tempestade parada perdia 15%
+    // dos quadros com ele, e 7% sem ele -- o mesmo que a chuva.
+    return fraco && resolvido?.relampago ? { ...resolvido, relampago: undefined } : resolvido;
+  }, [variante, planoDoAmbiente, scene.ambiente, deFora, fraco]);
 
   /**
    * Anuncia o chão enquanto esta camada estiver deitada, e o apaga ao sair.
@@ -763,6 +796,13 @@ export function SceneLayer({
     <>
       {fundo}
       {planoDeConteudo ? createPortal(deitado, planoDeConteudo) : deitado}
+      {/* O ambiente vai à LENTE, fora dos planos: ver `planoDoAmbiente`. */}
+      {ambiente && planoDoAmbiente
+        ? createPortal(
+            <AmbienteNaLente ambiente={ambiente} escondido={ambienteEscondido} />,
+            planoDoAmbiente,
+          )
+        : null}
     </>
   );
 }

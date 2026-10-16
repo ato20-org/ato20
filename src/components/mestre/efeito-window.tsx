@@ -2,6 +2,7 @@
 
 import { corDoEfeito, useCoresPelasCondicoes } from "@/components/mestre/compendio-efeitos";
 import {
+  TelaDoAmbiente,
   TelaDoDisparo,
   TelaDoEfeitoDePersonagem,
   TelaDoEfeitoEmArea,
@@ -28,8 +29,8 @@ export function useEfeitoDaCampanha(efeitoId: string): DefinicaoDeEfeito | undef
 
 /**
  * A janela de um efeito: o editor inteiro, como a ficha é a janela do
- * personagem. O disparo, o de área ou o de personagem, em jogo ou guardado no
- * Compêndio.
+ * personagem. O ambiente, o disparo, o de área ou o de personagem, em jogo ou
+ * guardado no Compêndio.
  *
  * Janela, e não a tela que trocava a lista do Compêndio pelo editor: o editor
  * é comprido, tem prévia animada, e o mestre quer olhar a lista enquanto ajusta
@@ -54,7 +55,9 @@ export function EfeitoBody({ efeitoId }: { efeitoId: string }) {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="p-3">
-        {especieDoEfeito(efeito) === "disparo" ? (
+        {especieDoEfeito(efeito) === "ambiente" ? (
+          <TelaDoAmbiente efeito={efeito} />
+        ) : especieDoEfeito(efeito) === "disparo" ? (
           <TelaDoDisparo efeito={efeito} />
         ) : efeito.area ? (
           <TelaDoEfeitoEmArea efeito={efeito} />
@@ -107,7 +110,10 @@ export function useRotuloDoEfeito(efeitoId: string | undefined): { titulo: strin
     // aba pular, como na ficha.
     titulo: efeito?.titulo ?? t.janelas.efeito,
     subtitulo:
-      efeito && especieDoEfeito(efeito) === "disparo"
+      // O ambiente só existe no Compêndio: a cena aponta para o molde.
+      efeito && especieDoEfeito(efeito) === "ambiente"
+        ? t.janelas.ambienteNoCompendio
+        : efeito && especieDoEfeito(efeito) === "disparo"
         ? guardado
           ? t.janelas.disparoNoCompendio
           : t.janelas.disparoEmJogo

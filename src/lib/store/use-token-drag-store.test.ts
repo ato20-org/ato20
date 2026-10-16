@@ -91,6 +91,7 @@ describe("o card arrastado até uma pasta do Compêndio", () => {
     expect(membroDaPasta({ tipo: "condicao", condicaoId: "c1", condicao: envenenado }, "compendio-condicoes")).toBe("c1");
     expect(membroDaPasta({ tipo: "area", efeitoId: "e1", cor: "#f00" }, "compendio-efeitos")).toBe("e1");
     expect(membroDaPasta({ tipo: "disparo", efeitoId: "d1" }, "compendio-disparos")).toBe("d1");
+    expect(membroDaPasta({ tipo: "ambiente", efeitoId: "a1" }, "compendio-ambientes")).toBe("a1");
   });
 
   it("a pasta de outra aba recusa, e a do ATO20 não entra na campanha", () => {
@@ -103,5 +104,12 @@ describe("o card arrastado até uma pasta do Compêndio", () => {
   it("o disparo não cai no mapa: ele sai pela mira", () => {
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, { tipo: "palco" })).toBe(false);
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-disparos"))).toBe(true);
+  });
+
+  it("o ambiente não cai no mapa, e só a pasta dele o recebe", () => {
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, { tipo: "palco" })).toBe(false);
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, pasta("compendio-ambientes"))).toBe(true);
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00" }, pasta("compendio-ambientes"))).toBe(false);
   });
 });

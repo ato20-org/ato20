@@ -3363,6 +3363,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             panMode || aiming ? undefined : onAreaDeEfeitoPointerDown
           }
           animarSo={efeitosAnimados}
+          // No arrasto, a chuva sai da frente: ver `ambienteEscondido`.
+          ambienteEscondido={emGesto}
           medidorSelecionadoId={selectedMedidorId}
           onMedidorPointerDown={
             panMode || aiming ? undefined : onMedidorPointerDown

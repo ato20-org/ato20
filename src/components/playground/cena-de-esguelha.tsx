@@ -343,6 +343,8 @@ export function CenaDeEsguelha({
         esguelha={camera}
         animarSo={animarSo}
         naMao={naMao}
+        // Com o olhar do Mestre, é o Mestre: o ambiente na metade.
+        ambienteFraco={Boolean(olhar)}
         // Os em pé sobem no chão inclinado; o deitado fica no piso, ou sai
         // dele para a tela no Mestre. Ver `DeitadosNaTela`.
         semItens={deitadoNaTela ? true : emPe}
