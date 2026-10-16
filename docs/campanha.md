@@ -17,7 +17,7 @@ minha-campanha/
   assets.json          nome, tipo, medidas e pasta de cada arquivo
   documentos/
     rumores.md         os cartões de Markdown dos quadros
-  personagens.json     o elenco, com medidores e condições de cada um
+  personagens.json     o elenco, com medidores e condições de cada um, e os moldes do Compêndio
   itens.json           o catálogo de itens da campanha
   personagens/
     c4d5.../
@@ -29,9 +29,10 @@ minha-campanha/
         mestre/        o que o mestre anexou à ficha
         jogador/       o que o jogador anexou à ficha
   medidores.json       os modelos de medidor da campanha
-  condicoes.json       o cardápio de condições
+  condicoes.json       o cardápio de condições: o menu do token
+  compendio-condicoes.json  as condições guardadas no Compêndio, fora do menu
   detalhes.json        o molde da ficha: grupos e detalhes de fábrica
-  efeitos.json         os efeitos da campanha, de condição e de área
+  efeitos.json         os efeitos da campanha, de condição e de área, e os do Compêndio
   retratos.json        quem está no ar, em que canto, de que tamanho
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
@@ -216,10 +217,108 @@ dos inventários, e rodar de novo não duplica nada. Um mesmo id em dois persona
 personagem importado de pacote na mesma campanha copiava os ids) vira um item só se as
 cópias forem iguais, e dois se divergiram.
 
+## O Compêndio
+
+Fichas, itens, condições e efeitos prontos, fora do jogo: o goblin preparado, o NPC que
+ainda não apareceu, o "Possuído" que esta sessão não vai usar. Dois lugares, e a diferença
+entre eles é a que mesa o molde serve.
+
+- **Da campanha.** O molde de personagem mora no próprio `personagens.json`, com
+  `"compendio": true`. É a mesma ficha, e se edita na mesma janela; quem lista é que
+  separa — o `useCharactersStore` guarda os moldes à parte, e as telas que leem
+  `personagens` (a lista, os retratos, a ordem da rodada, a mesa) não os veem. O daemon
+  não os vê porque molde não se liga a jogador: `character_link` recusa. O molde de
+  item é igual: mora em `itens.json` com `"compendio": true`, fora da janela de Itens,
+  e `inventory::dar` recusa pô-lo numa mochila. As pastas são do Compêndio (`compendio`
+  e `compendio-itens`), não as de Personagens e Itens.
+- **Do ATO20.** O que serve a qualquer campanha desta máquina mora em
+  `{dados do app}/compendio/`, ao lado da estante, numa pasta com o desenho de uma
+  campanha, e se vê numa janela própria, "Compêndio do ATO20" -- como a Estante é outra
+  janela que Arquivos. Aberto numa campanha, o Compêndio é sempre o dela. É esse desenho que deixa trazer e guardar serem a importação de pacote:
+  id novo, imagens e efeitos junto, os itens do inventário no catálogo de lá, nada
+  sobrescrito. Ver `compendio.rs`.
+
+Entre os dois é sempre **cópia**, como os moldes de medidor: a campanha continua abrindo
+sozinha noutra máquina, e corrigir o goblin do ATO20 não mexe na campanha antiga.
+
+**Tags** (`tags` no personagem e no item) organizam o Compêndio para filtrar: "morto-vivo",
+"chefe", "arma". Moram no próprio registro, e não no board como as pastas, para viajar com
+o molde para o ATO20 e de volta — e por isso filtram também lá, onde são a única coisa que
+se edita sem trazer. O Rust as limpa (`compendio::normalizar_tags`): sem espaço sobrando,
+sem repetida pela caixa, até 16 de até 32 letras.
+
+**A ficha do molde** é a mesma janela, com o que não cabe num molde tirado: sem a aba
+Arquivos (anexo é de um personagem que existe), sem Condições (são estado de quem está em
+jogo, e cada cópia nasceria com elas), sem dono nem a ficha em PDF. No lugar do dono, o
+cabeçalho diz "Molde do Compêndio", mostra as tags e traz "Pôr em jogo" e "Guardar no
+ATO20". O Inventário vira Equipamento: é o que cada cópia leva ao entrar em jogo.
+
+**Pôr em jogo** copia o molde num personagem da lista, pelo botão ou soltando o molde no
+mapa. Cada goblin vira uma ficha, "Goblin", "Goblin 2", com a vida dele: a vida mora no
+personagem, e quatro peças do mesmo personagem dividiriam a mesma. A cópia leva a pasta
+inteira (anexos, detalhes, inventário, dados de plugin) e divide as imagens com o molde.
+O molde de item entra no catálogo do mesmo jeito ("Espada", "Espada 2"), e solto no mapa
+já vira peça. Ver `compendio::duplicar` e `compendio::duplicar_item`.
+
+### Condições e efeitos
+
+O menu do token tem 16 condições, e a campanha tem 32 efeitos em jogo. O Compêndio é a
+biblioteca de onde o mestre escolhe o que entra neles — o sistema inteiro guardado, e só o
+que esta sessão precisa à mão. Entre a biblioteca e o jogo, condição e efeito **mudam de
+lugar**, e não se copiam: são definições, e não fichas. Não há "quatro venenos", e o menu
+reconhece as fichas pelo nome, que duas cópias confundiriam.
+
+- **A condição** do Compêndio mora em `compendio-condicoes.json`, e não com uma marca no
+  `condicoes.json`: o cardápio lê, muda e grava a lista inteira em várias funções, todas
+  contando o teto e comparando nomes, e uma biblioteca misturada ali seria apagada no
+  primeiro descuido. O card mostra o selo, e com a mão em cima anima o efeito dela num
+  boneco, como num token. "Pôr no menu" recusa com o motivo quando o menu está cheio ou já
+  tem o nome (`compendio::condicao_no_menu`). "Guardar no Compêndio", na linha do cardápio,
+  faz o caminho de volta, e as fichas que já estão com ela continuam.
+- **O efeito** do Compêndio mora no próprio `efeitos.json`, com `"compendio": true`, porque
+  o editor de efeitos grava lá: é o mesmo editor, aberto no Compêndio. O
+  `useEfeitosDaCampanhaStore` o guarda à parte (`moldes`), e só os em jogo vão à mesa. A
+  marca é só de `efeitos::marcar`, que confere o teto: `efeitos::salvar` mantém sempre a do
+  disco, e a gravação atrasada do editor não desfaz a ida ao jogo. O card do efeito não
+  tem botão de "Pôr em jogo": o efeito vai ao jogo pelo arrasto, para o mapa ou para um
+  token, que é onde ele se vê — um botão que só o tirava do Compêndio parecia apagá-lo.
+- **De área ou de personagem.** Os dois têm o mesmo formato; o de área é o que declara
+  `area`, e pinta o chão de uma região do mapa. O de personagem pinta a figura de quem está
+  com uma condição. A aba Efeitos do Compêndio só tem os de área: o de personagem só chega à
+  figura pela condição, e é na condição que ele se vê e se edita. Uma lista dele à parte era
+  a mesma coisa em dois lugares.
+
+**Janelas próprias.** O efeito e a condição abrem cada um na sua janela, como o item e a
+ficha (`{ tipo: "efeito" }` e `{ tipo: "condicao", lugar }`). A do efeito é o editor
+inteiro; a da condição, o selo, o nome, se a mesa vê, e o editor do efeito dela. Abrem do
+card no Compêndio e da engrenagem na Configuração, e a lista fica à vista ao lado. A
+condição mora em dois arquivos, então a janela leva o `lugar` (`menu` ou `compendio`), e
+quando ela muda de lista, com outro id, a janela vai junto (`trocarJanela`). A condição do
+Compêndio que ganha efeito próprio na janela o ganha também guardado, e não em jogo.
+
+Os dois andam juntos: a condição que vai ao menu leva para o jogo o efeito guardado que ela
+usa, e a que volta ao Compêndio leva o dela quando ninguém mais o usa — nem outra condição
+do menu, nem uma ficha. O efeito que uma condição do menu usa não sai do jogo sozinho:
+sumiria da figura de quem está com ela.
+
+O **arrasto até um token** é a exceção, e copia, como o molde do Bestiário: a condição ou o
+efeito soltos numa peça do mapa ficam no Compêndio. A ficha (ou o objeto) leva uma cópia da
+condição, e o efeito guardado vai ao jogo como uma cópia que lembra de onde veio (`molde`, no
+efeito). O próximo token reaproveita essa cópia enquanto ela desenhar igual ao molde, e por
+isso quatro goblins envenenados continuam sendo um veneno só. O molde mexido depois ganha
+uma cópia nova, e quem estava com a antiga não muda (`copiaEmJogo`).
+
+O **Compêndio do ATO20** nasce com as sugestões: as condições que o cardápio sugere, cada
+uma com o efeito de fábrica dela, e os efeitos de fábrica que têm chão, como efeitos de
+área. Entram uma vez por máquina, na primeira vez que
+a janela abre (`compendio::semear` e a marca `semeado.json`), e o mestre que apaga "Molhado"
+não o vê voltar. Trazer uma condição de lá traz o efeito da campanha que ela usa, com as
+imagens; o de fábrica e o de plugin viajam pelo id.
+
 ## Pastas dos painéis
 
-Arquivos, Mapas, Fundos e as duas seções de Personagens (Players e NPCs) têm pastas
-próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
+Arquivos, Mapas, Fundos, as duas seções de Personagens (Players e NPCs), Itens e as duas
+listas do Compêndio (Bestiário e Itens) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
 sem `lista` é do Arquivos, que é a forma da pasta gravada antes das outras listas. O Rust
 guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança lá.
 

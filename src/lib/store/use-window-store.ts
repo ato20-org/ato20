@@ -28,6 +28,22 @@ export type ConteudoJanela =
   // mochila ele foi aberto: os medidores e a quantidade de lá. Sem ele, o item
   // como a campanha o define.
   | { tipo: "item"; itemId: string; personagemId?: string }
+  // Os moldes de personagem e de item, da campanha e do ATO20. Sem campo, como
+  // o catálogo de itens: um Compêndio só. O molde abre na ficha de sempre --
+  // ele é personagem do índice, só marcado. Ver `CompendioBody`.
+  | { tipo: "compendio" }
+  // O Compêndio do ATO20: o que a MÁQUINA guarda para qualquer campanha. Janela
+  // à parte, como a Estante, e sem campo -- só há um.
+  | { tipo: "compendio-ato20" }
+  // Um efeito da campanha no editor dele: o de área ou o de personagem, em jogo
+  // ou guardado no Compêndio -- a mesma lista, `useEfeitosDaCampanhaStore`.
+  // Pelo id, como o item: o título é rótulo, e renomear o fogo não pode abrir
+  // uma segunda janela do mesmo fogo.
+  | { tipo: "efeito"; efeitoId: string }
+  // Uma condição: a do menu do token (`menu`) ou a da biblioteca do Compêndio
+  // (`compendio`). São duas listas em dois arquivos, e o id de uma não acha
+  // nada na outra -- por isso o lugar vai junto. Ver `compendio-condicoes.json`.
+  | { tipo: "condicao"; condicaoId: string; lugar: "menu" | "compendio" }
   | { tipo: "anexo"; personagemId: string; anexo: AnexoPersonagem }
   | { tipo: "asset"; assetId: string; nome: string }
   // Os cinco painéis de sempre, agora janelas como as outras. Eram markup fixo
@@ -108,6 +124,14 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return "personagens";
     case "itens":
       return "itens";
+    case "compendio":
+      return "compendio";
+    case "compendio-ato20":
+      return "compendio-ato20";
+    case "efeito":
+      return `efeito:${conteudo.efeitoId}`;
+    case "condicao":
+      return `condicao:${conteudo.lugar}/${conteudo.condicaoId}`;
     // O mesmo item aberto de duas mochilas são duas janelas: a espada do Edgar
     // em 7/10 e a da Mira em 10/10 são o mesmo item em estados diferentes.
     case "item":

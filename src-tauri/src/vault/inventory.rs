@@ -401,6 +401,15 @@ pub fn dar(
         .find(|item| item.id == item_id)
         .ok_or_else(|| itens::nao_existe(item_id))?;
 
+    // O molde nao e de ninguem: na mochila, ele seria o item do jogador, e
+    // preparar a espada no Compendio mexeria na espada de quem a carrega.
+    if item.compendio {
+        return Err(AppError::Recusado(crate::texto!(
+            "Um molde do Compêndio não vai para a mochila. Ponha em jogo antes de dar.",
+            "A Compendium template can't go in a backpack. Put it in play before giving it."
+        )));
+    }
+
     let mais = quantidade_valida(quantidade.unwrap_or(1));
     let mut entradas = load(vault, personagem)?;
 

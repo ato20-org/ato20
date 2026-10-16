@@ -95,6 +95,14 @@ export type Personagem = {
    * vazio.
    */
   atributos?: Atributo[];
+  /**
+   * Um molde do Compêndio, e não um personagem em jogo: o goblin preparado, o
+   * NPC que ainda não apareceu. Fica fora da lista de Personagens, da mesa e
+   * dos celulares; pôr em jogo copia a ficha. Espelho de `Personagem::compendio`.
+   */
+  compendio?: boolean;
+  /** As tags do Compêndio, para filtrar o bestiário. Espelho de `Personagem::tags`. */
+  tags?: string[];
   criadoEm: number;
 };
 
@@ -352,6 +360,12 @@ export type PatchCondicao = {
   efeito?: string | null;
   escondido?: boolean;
 };
+
+/**
+ * Uma condição da biblioteca do Compêndio: a mesma do cardápio, e as tags. Mora
+ * em `compendio-condicoes.json`, e não no cardápio -- ver `compendio.rs`.
+ */
+export type MoldeDeCondicao = Condicao & { tags?: string[] };
 
 /**
  * Quantas condições cabem num personagem. Espelha `MAX_CONDICOES`.

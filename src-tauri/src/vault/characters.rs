@@ -127,6 +127,30 @@ pub struct Personagem {
     /// o campo so chega ao arquivo na primeira vez que alguem cria um.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub atributos: Vec<Atributo>,
+    /// Um MOLDE do Compendio, e nao um personagem em jogo.
+    ///
+    /// O goblin preparado, o NPC da cidade que ainda nao apareceu: a ficha
+    /// inteira, pronta, mas fora da lista de Personagens, da mesa e dos
+    /// celulares. Por em jogo copia o molde num personagem de verdade -- ver
+    /// `compendio::duplicar` --, e o molde fica para o proximo goblin.
+    ///
+    /// No mesmo indice, e nao num arquivo a parte, e de proposito: a ficha
+    /// inteira (medidores, atributos, detalhes, anexos, aparencias) ja sabe
+    /// ler e gravar um personagem deste indice, e o molde se edita com ela sem
+    /// um comando novo. Quem lista separa -- a tela no `useCharactersStore`, e
+    /// o daemon nunca o ve porque molde nao se liga a jogador
+    /// (`character_link` recusa).
+    ///
+    /// Ausente e `false`: toda campanha anterior a ele so tem personagens em
+    /// jogo, e le sem migracao.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub compendio: bool,
+    /// As tags do Compendio: "morto-vivo", "chefe", "cidade". Organizacao do
+    /// mestre, para filtrar o bestiario. No personagem, e nao numa pasta do
+    /// board, porque viajam com o molde para o ATO20 e de volta. Ver
+    /// `compendio::normalizar_tags`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -477,6 +501,39 @@ pub(crate) fn exige(vault: &Vault, id: &str) -> AppResult<()> {
     })
 }
 
+/// Troca as tags do personagem. Quem normaliza e quem chama -- ver
+/// `compendio::definir_tags`.
+pub fn set_tags(vault: &Vault, id: &str, tags: Vec<String>) -> AppResult<()> {
+    let mut personagens = load(vault)?;
+
+    personagens
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("personagem {id} nao existe"),
+        })?
+        .tags = tags;
+
+    save(vault, &personagens)
+}
+
+/// Marca ou desmarca personagens como molde do Compendio. Ver `compendio`.
+///
+/// Id que nao existe e ignorado: quem chama acabou de criar ou importar os
+/// personagens, e um que tenha ficado de fora no caminho nao e erro aqui.
+pub fn marcar_compendio(vault: &Vault, ids: &[String], compendio: bool) -> AppResult<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut personagens = load(vault)?;
+    for personagem in personagens.iter_mut().filter(|p| ids.contains(&p.id)) {
+        personagem.compendio = compendio;
+    }
+    save(vault, &personagens)
+}
+
 /// Acrescenta personagens que vieram de um pacote, ja com id novo e com a
 /// pasta copiada por quem chamou. Ver `vault::pacote`.
 pub fn adotar(vault: &Vault, novos: Vec<Personagem>) -> AppResult<()> {
@@ -520,6 +577,8 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         medidores: Vec::new(),
         condicoes: Vec::new(),
         atributos: Vec::new(),
+        compendio: false,
+        tags: Vec::new(),
         criado_em: now_ms(),
     };
 

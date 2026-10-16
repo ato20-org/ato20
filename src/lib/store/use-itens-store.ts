@@ -8,8 +8,20 @@ import { listItens, listPortadores } from "@/lib/vault/itens";
 import type { Item, Portador } from "@/types/inventory";
 
 type ItensStore = {
-  /** `null` é "ainda não leu", e não um catálogo vazio. */
+  /**
+   * O catálogo da campanha. `null` é "ainda não leu", e não um catálogo vazio.
+   *
+   * Sem os moldes do Compêndio: a janela de Itens, as mochilas, o "dar a" e
+   * o ponto do mapa leem esta lista, e nenhum deles deveria oferecer a espada
+   * que ainda não entrou no jogo. Ver `moldes`.
+   */
   itens: Item[] | null;
+  /**
+   * Os moldes de item do Compêndio: o mesmo `itens.json`, marcados com
+   * `compendio`, lidos na mesma ida ao Rust e guardados à parte. Quem os quer
+   * é o Compêndio e a janela do item, que edita um molde como edita um item.
+   */
+  moldes: Item[] | null;
   /** Quem carrega o quê. Lido junto com o catálogo, e pela mesma razão. */
   portadores: Portador[];
   /** Número do pedido mais novo. Ver `buscar`. */
@@ -38,6 +50,7 @@ type ItensStore = {
  */
 export const useItensStore = create<ItensStore>((set, get) => ({
   itens: null,
+  moldes: null,
   portadores: [],
   pedido: 0,
   emVoo: false,
@@ -62,6 +75,7 @@ export const useItensStore = create<ItensStore>((set, get) => ({
     // anterior que ainda esteja a caminho. Mesma conta do `useAssetsStore`.
     set({
       itens: null,
+      moldes: null,
       portadores: [],
       pedido: get().pedido + 1,
       emVoo: false,
@@ -87,14 +101,19 @@ function buscar(set: Set, get: Get) {
     ([itens, portadores]) => {
       if (get().pedido !== meu) return;
 
-      set({ itens, portadores, emVoo: false });
+      set({
+        itens: itens.filter((item) => !item.compendio),
+        moldes: itens.filter((item) => item.compendio),
+        portadores,
+        emVoo: false,
+      });
     },
     () => {
       // Sem campanha aberta o catálogo é vazio, não quebrado. Ver
       // `useAssetsStore`, que faz a mesma escolha.
       if (get().pedido !== meu) return;
 
-      set({ itens: [], portadores: [], emVoo: false });
+      set({ itens: [], moldes: [], portadores: [], emVoo: false });
     },
   );
 }
@@ -119,8 +138,23 @@ export function useItens(): Item[] | null {
  */
 export function useItemDaCampanha(id: string | undefined): Item | undefined {
   const itens = useItens();
+  // O molde do Compêndio abre na mesma janela, e é lá que se prepara a espada.
+  const moldes = useItensStore((state) => state.moldes);
 
-  return id ? itens?.find((item) => item.id === id) : undefined;
+  return id
+    ? (itens?.find((item) => item.id === id) ?? moldes?.find((item) => item.id === id))
+    : undefined;
+}
+
+/** Os moldes de item do Compêndio, garantidos. `null` enquanto lê. */
+export function useMoldesDeItem(): Item[] | null {
+  const moldes = useItensStore((state) => state.moldes);
+
+  useEffect(() => {
+    useItensStore.getState().garantir();
+  }, []);
+
+  return moldes;
 }
 
 /**

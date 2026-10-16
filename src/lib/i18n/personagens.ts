@@ -74,6 +74,8 @@ const pt = {
     apagarEste: "Apagar este personagem",
     desejaApagar: (nome: string) => `Deseja apagar ${nome}?`,
     semDono: "Sem dono",
+    moldeDoCompendio: "Molde do Compêndio",
+    equipamento: "Equipamento",
     arquivos: "Arquivos",
     nadaAlemDosCampos:
       "Nada além dos campos. O que entrar aqui o jogador vinculado também lê.",
@@ -643,6 +645,8 @@ const en: typeof pt = {
     apagarEste: "Delete this character",
     desejaApagar: (nome) => `Delete ${nome}?`,
     semDono: "No owner",
+    moldeDoCompendio: "Compendium template",
+    equipamento: "Gear",
     arquivos: "Files",
     nadaAlemDosCampos:
       "Nothing beyond the fields. Whatever goes here, the linked player can read too.",

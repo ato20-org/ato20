@@ -229,6 +229,11 @@ pub struct Importado {
     pub ambientes: BTreeMap<String, Value>,
     /// Quantos personagens entraram. Eles ja estao no disco; a tela so rele.
     pub personagens: usize,
+    /// Os ids NOVOS desses personagens, na ordem da escolha. Fica fora do JSON:
+    /// a tela do pacote so rele a lista, e quem precisa do id e o Compendio,
+    /// que marca como molde o que acabou de trazer. Ver `compendio::copiar_personagens`.
+    #[serde(skip)]
+    pub ids_dos_personagens: Vec<String>,
     /// Quantos itens da campanha entraram, ja no catalogo. As cenas que os
     /// citam voltam com o id novo.
     pub itens: usize,
@@ -279,7 +284,7 @@ fn cada_texto<'a>(valor: &'a Value, visitar: &mut impl FnMut(&'a str)) {
 }
 
 /// Troca cada texto que `trocar` reconhece.
-fn trocar_textos(valor: &mut Value, trocar: &impl Fn(&str) -> Option<String>) {
+pub(crate) fn trocar_textos(valor: &mut Value, trocar: &impl Fn(&str) -> Option<String>) {
     match valor {
         Value::String(texto) => {
             if let Some(novo) = trocar(texto) {
@@ -297,7 +302,11 @@ fn trocar_textos(valor: &mut Value, trocar: &impl Fn(&str) -> Option<String>) {
 }
 
 /// Os ids de asset que o valor cita, entre os que o acervo `conhecidos` tem.
-fn assets_citados(valor: &Value, conhecidos: &HashSet<&str>, achados: &mut BTreeSet<String>) {
+pub(crate) fn assets_citados(
+    valor: &Value,
+    conhecidos: &HashSet<&str>,
+    achados: &mut BTreeSet<String>,
+) {
     cada_texto(valor, &mut |texto| {
         if conhecidos.contains(texto) {
             achados.insert(texto.to_string());
@@ -804,7 +813,7 @@ fn nome_simples(nome: &str) -> bool {
 }
 
 /// Copia uma pasta, pulando link simbolico, arquivo oculto e os nomes de `fora`.
-fn copiar_pasta(origem: &Path, destino: &Path, fora: &[&str]) -> AppResult<()> {
+pub(crate) fn copiar_pasta(origem: &Path, destino: &Path, fora: &[&str]) -> AppResult<()> {
     if !origem.is_dir() {
         return Ok(());
     }
@@ -1490,7 +1499,9 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
     let mut efeitos_fora = HashSet::new();
     let mut destino_do_efeito: HashMap<String, String> = HashMap::new();
     let mut novos_efeitos: Vec<Value> = Vec::new();
-    let mut vagas = efeitos::MAX_EFEITOS.saturating_sub(existentes.len());
+    // As vagas sao as dos em jogo: o molde do Compendio nao conta, e o que
+    // chega como molde nao gasta. Ver `efeitos::eh_molde`.
+    let mut vagas = efeitos::MAX_EFEITOS.saturating_sub(efeitos::em_jogo(&existentes));
 
     for id in &citados {
         let Some(efeito) = fonte.efeito(id) else {
@@ -1506,23 +1517,27 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
             efeitos_fora.insert(id.clone());
             continue;
         }
-        if let Some(igual) = existentes
-            .iter()
-            .find(|atual| titulo(atual) == titulo(efeito))
-        {
+        // O mesmo nome, no mesmo lugar: a cena que cita o fogo nao pode passar
+        // a apontar para o fogo guardado no Compendio, que nao vai a mesa.
+        let molde = efeitos::eh_molde(efeito);
+        if let Some(igual) = existentes.iter().find(|atual| {
+            efeitos::eh_molde(atual) == molde && titulo(atual) == titulo(efeito)
+        }) {
             if let Some(alvo) = igual.get("id").and_then(Value::as_str) {
                 destino_do_efeito.insert(id.clone(), alvo.to_string());
                 pulados.push(pulado("efeitoJaExiste", &nome));
                 continue;
             }
         }
-        if vagas == 0 {
+        if !molde && vagas == 0 {
             efeitos_fora.insert(id.clone());
             pulados.push(pulado("efeitosNoMaximo", &nome));
             continue;
         }
 
-        vagas -= 1;
+        if !molde {
+            vagas -= 1;
+        }
         let novo = efeitos::id_novo(&existentes, &novos_efeitos);
         destino_do_efeito.insert(id.clone(), novo.clone());
         let mut copia = efeito.clone();
@@ -1870,6 +1885,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
     let quantos_itens = itens::adotar(vault, novos_itens)?;
 
     let quantos_personagens = fichas.len();
+    let ids_dos_personagens = fichas.iter().map(|ficha| ficha.id.clone()).collect();
     characters::adotar(vault, fichas)?;
 
     let mut pastas: Vec<Value> = Vec::new();
@@ -1886,6 +1902,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         pastas,
         ambientes,
         personagens: quantos_personagens,
+        ids_dos_personagens,
         itens: quantos_itens,
         efeitos: quantos_efeitos,
         condicoes: quantas_condicoes,
@@ -2146,6 +2163,40 @@ mod tests {
         );
         assert_eq!(efeitos::load(&destino).expect("efeitos").len(), 1);
         assert_eq!(importado.pulados.len(), 1);
+    }
+
+    #[test]
+    fn o_molde_de_mesmo_nome_nao_rouba_a_cena_nem_a_vaga() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault = origem(dir.path());
+        let (extraido, _) = exportar_e_abrir(dir.path(), &vault);
+
+        // A "Névoa" guardada no Compêndio, e os 32 em jogo menos um.
+        let destino = Vault::create(dir.path().join("destino"), "Outra").expect("destino");
+        let mut existentes = vec![json!({
+            "id": "campanha/00000001", "titulo": "Névoa", "compendio": true
+        })];
+        for n in 0..efeitos::MAX_EFEITOS - 1 {
+            existentes.push(json!({ "id": format!("campanha/1{n:07}"), "titulo": format!("E{n}") }));
+        }
+        write_json(&destino.root.join("efeitos.json"), &existentes).expect("efeitos");
+
+        let escolha = EscolhaDeImportacao {
+            cenas: vec!["s1".into()],
+            remover_plugins: vec![],
+            ..Default::default()
+        };
+        let importado = importar(&destino, &extraido, &escolha).expect("importar");
+
+        // A névoa da cena entra em jogo, na vaga que o molde não ocupa.
+        let efeito = importado.cenas[0]["areasDeEfeito"][0]["efeito"]
+            .as_str()
+            .expect("efeito");
+        assert_ne!(efeito, "campanha/00000001");
+        assert!(importado.pulados.is_empty());
+        let lidos = efeitos::load(&destino).expect("efeitos");
+        assert_eq!(lidos.len(), efeitos::MAX_EFEITOS + 1);
+        assert!(lidos.iter().any(|lido| lido["id"] == efeito && !efeitos::eh_molde(lido)));
     }
 
     #[test]

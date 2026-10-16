@@ -9,8 +9,23 @@ import { listPlayers, type Player } from "@/lib/vault/players";
 import type { Personagem } from "@/types/character";
 
 type CharactersStore = {
-  /** `null` é "ainda não leu", e não uma lista vazia. */
+  /**
+   * Os personagens EM JOGO. `null` é "ainda não leu", e não uma lista vazia.
+   *
+   * Sem os moldes do Compêndio, de propósito: trinta telas leem esta lista --
+   * a de Personagens, os retratos, a ordem da rodada, as menções, o que vai à
+   * mesa -- e nenhuma delas deveria ver o goblin que ainda não entrou em jogo.
+   * Separar aqui, na única leitura, é o que poupa cada uma de filtrar. Ver
+   * `moldes`.
+   */
   personagens: Personagem[] | null;
+  /**
+   * Os moldes do Compêndio da campanha: a mesma ficha, marcada com
+   * `compendio`. Lidos na mesma ida ao Rust que os personagens -- é o mesmo
+   * índice --, e guardados à parte. Quem os quer é o Compêndio e a ficha, que
+   * edita um molde como edita um personagem.
+   */
+  moldes: Personagem[] | null;
   jogadores: Player[];
   /**
    * Contador de leituras, para quem deriva algo do vínculo.
@@ -77,6 +92,7 @@ type CharactersStore = {
  */
 export const useCharactersStore = create<CharactersStore>((set, get) => ({
   personagens: null,
+  moldes: null,
   jogadores: [],
   versao: 0,
   pedido: 0,
@@ -117,6 +133,7 @@ export const useCharactersStore = create<CharactersStore>((set, get) => ({
     // mostrando quem jogava o quê na campanha que acabou de fechar.
     set({
       personagens: null,
+      moldes: null,
       jogadores: [],
       pedido: get().pedido + 1,
       emVoo: false,
@@ -176,7 +193,8 @@ function buscar(set: Set, get: Get): Promise<void> {
       if (get().pedido !== meu) return;
 
       set({
-        personagens: lista,
+        personagens: lista.filter((personagem) => !personagem.compendio),
+        moldes: lista.filter((personagem) => personagem.compendio),
         jogadores: mesa,
         versao: get().versao + 1,
         emVoo: false,
@@ -187,7 +205,7 @@ function buscar(set: Set, get: Get): Promise<void> {
 
       // Lista vazia, e não `null`: `null` faria cada tela mostrar "Lendo…" para
       // sempre. Vazio é um estado que elas sabem desenhar.
-      set({ personagens: [], versao: get().versao + 1, emVoo: false });
+      set({ personagens: [], moldes: [], versao: get().versao + 1, emVoo: false });
       toast.error(cause instanceof Error ? cause.message : t.stores.falhaAoLerPersonagens);
     },
   );

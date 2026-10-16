@@ -241,7 +241,12 @@ const pt = {
     outraCor: "Outra cor",
     nasceDinamica: "Nasce dinâmica",
     nasceDinamicaDica: "A lanterna de cada token abre a área por onde ilumina.",
-    valemParaAProxima: "Vale para os próximos. O que já está no mapa se ajusta no gizmo.",
+    valemParaAProxima: "Vale para os próximos. Clique num elemento do mapa para mudar só ele.",
+    painelDoSelecionado: "Elemento selecionado",
+    dinamica: "Dinâmica",
+    ajustaOSelecionado: "Muda o que está selecionado. Ctrl+Z desfaz.",
+    travado: "Travado: destrave para trocar o formato ou o tipo.",
+    tipoDeUmPorVez: "Com várias formas selecionadas, o tipo troca uma por vez.",
   },
 
   regua: {
@@ -445,7 +450,14 @@ const pt = {
 
   fantasma: {
     naoDeuItem: "Não deu para pôr o item na mesa.",
+    naoDeuMolde: "Não deu para pôr o molde em jogo.",
     naGrade: (largura: string, altura: string) => `${largura} × ${altura} na grade`,
+    naoDeuCondicao: "Não deu para pôr a condição.",
+    naPeca: (quem: string) => `em ${quem}`,
+    noObjeto: "no objeto",
+    oObjeto: "O objeto",
+    jaTem: (quem: string, condicao: string) => `${quem} já tem ${condicao}.`,
+    cheio: (quem: string) => `${quem} já tem o máximo de condições.`,
   },
 
   nomes: {
@@ -704,7 +716,12 @@ const en: typeof pt = {
     outraCor: "Other color",
     nasceDinamica: "Starts dynamic",
     nasceDinamicaDica: "Each token's lantern opens the area wherever it shines.",
-    valemParaAProxima: "Applies to the next ones. What's already on the map is adjusted in its gizmo.",
+    valemParaAProxima: "Applies to the next ones. Click an element on the map to change just it.",
+    painelDoSelecionado: "Selected element",
+    dinamica: "Dynamic",
+    ajustaOSelecionado: "Changes what is selected. Ctrl+Z undoes.",
+    travado: "Locked: unlock it to change its shape or type.",
+    tipoDeUmPorVez: "With several shapes selected, the type changes one at a time.",
   },
 
   regua: {
@@ -909,7 +926,14 @@ const en: typeof pt = {
 
   fantasma: {
     naoDeuItem: "Couldn't put the item on the table.",
+    naoDeuMolde: "Couldn't put the template in play.",
     naGrade: (largura, altura) => `${largura} × ${altura} on the grid`,
+    naoDeuCondicao: "Couldn't add the condition.",
+    naPeca: (quem) => `on ${quem}`,
+    noObjeto: "on the object",
+    oObjeto: "The object",
+    jaTem: (quem, condicao) => `${quem} already has ${condicao}.`,
+    cheio: (quem) => `${quem} already has the most conditions allowed.`,
   },
 
   nomes: {

@@ -323,6 +323,8 @@ pub(crate) fn converter_inventario(
                 // item so saia dali pelas maos do mestre: o dono do inventario
                 // e por onde ele nasceu.
                 criado_por: (antigo.autor == Autor::Jogador).then(|| personagem.to_string()),
+                tags: Vec::new(),
+                compendio: false,
                 criado_em: antigo.criado_em,
             };
 

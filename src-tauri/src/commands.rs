@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::compendio;
 use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
@@ -19,7 +20,7 @@ use crate::serve::{self, DaemonAddr, Endereco, Evidence, SharedEvidence, SharedV
 use crate::vault::assets::AssetMeta;
 use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
-use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
+use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Condicao, PatchCondicao, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, NoInventario};
 use crate::vault::itens::{self, Item, Portador};
@@ -45,6 +46,8 @@ pub struct AppState {
     /// O diretorio de configuracao do app: o `ato20.db` e o
     /// `configuracoes.json` da maquina.
     pub config_dir: PathBuf,
+    /// Onde o Compendio do ATO20 mora. Ver `compendio::dir`.
+    pub compendio: PathBuf,
 }
 
 impl AppState {
@@ -1193,43 +1196,324 @@ pub fn characters_list(state: State<'_, AppState>) -> AppResult<Vec<Personagem>>
 
 #[tauri::command]
 pub fn character_create(state: State<'_, AppState>, nome: String) -> AppResult<Personagem> {
+    state.with_vault(|vault| criar_personagem(vault, &nome))
+}
+
+/// Cria o personagem ja com o que a campanha poe em toda ficha. O comum entre
+/// `character_create` e `compendio_criar`: o molde do goblin nasce com os
+/// mesmos medidores e atributos que o personagem em jogo.
+fn criar_personagem(vault: &Vault, nome: &str) -> AppResult<Personagem> {
+    let personagem = characters::create(vault, nome)?;
+
+    // Nasce com os medidores de fabrica da campanha. Aqui e nao dentro de
+    // `characters::create` para o vault de personagens seguir ignorando que
+    // modelo existe -- a dependencia anda num sentido so, e o zip e os
+    // testes de `characters` nao precisam de um `medidores.json` na pasta.
+    let lista = modelos::load(vault)?;
+    if !lista.is_empty() {
+        let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+        characters::acrescentar_medidores(vault, &personagem.id, novos)?;
+    }
+
+    // E com os atributos dela, pelo mesmo caminho e pela mesma razao.
+    let lista = atributos::load(vault)?;
+    if !lista.is_empty() {
+        let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
+        characters::acrescentar_atributos(vault, &personagem.id, novos)?;
+    }
+
+    // E com os detalhes do molde: Identidade, Pericias, o que a campanha
+    // montou.
+    let molde = detalhes::molde(vault)?;
+    if !molde.modelos.is_empty() {
+        detalhes::acrescentar(vault, &personagem.id, detalhes::materializar_molde(&molde))?;
+    }
+
+    // Relido, e nao o `personagem` de cima: a tela desenha a ficha com o que
+    // volta daqui, e o de cima ainda esta sem medidor nem atributo.
+    characters::load(vault)?
+        .into_iter()
+        .find(|p| p.id == personagem.id)
+        .ok_or_else(|| crate::error::AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: "o personagem recem-criado sumiu".into(),
+        })
+}
+
+// --- compendio ---------------------------------------------------------------
+
+/// Um molde novo no Compendio da campanha. Ver `compendio`.
+#[tauri::command]
+pub fn compendio_criar(state: State<'_, AppState>, nome: String) -> AppResult<Personagem> {
     state.with_vault(|vault| {
-        let personagem = characters::create(vault, &nome)?;
+        let personagem = criar_personagem(vault, &nome)?;
+        characters::marcar_compendio(vault, std::slice::from_ref(&personagem.id), true)?;
 
-        // Nasce com os medidores de fabrica da campanha. Aqui e nao dentro de
-        // `characters::create` para o vault de personagens seguir ignorando que
-        // modelo existe -- a dependencia anda num sentido so, e o zip e os
-        // testes de `characters` nao precisam de um `medidores.json` na pasta.
-        let lista = modelos::load(vault)?;
-        if !lista.is_empty() {
-            let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
-            characters::acrescentar_medidores(vault, &personagem.id, novos)?;
-        }
-
-        // E com os atributos dela, pelo mesmo caminho e pela mesma razao.
-        let lista = atributos::load(vault)?;
-        if !lista.is_empty() {
-            let novos = lista.iter().map(|modelo| modelo.materializar()).collect();
-            characters::acrescentar_atributos(vault, &personagem.id, novos)?;
-        }
-
-        // E com os detalhes do molde: Identidade, Pericias, o que a campanha
-        // montou.
-        let molde = detalhes::molde(vault)?;
-        if !molde.modelos.is_empty() {
-            detalhes::acrescentar(vault, &personagem.id, detalhes::materializar_molde(&molde))?;
-        }
-
-        // Relido, e nao o `personagem` de cima: a tela desenha a ficha com o que
-        // volta daqui, e o de cima ainda esta sem medidor nem atributo.
-        characters::load(vault)?
-            .into_iter()
-            .find(|p| p.id == personagem.id)
-            .ok_or_else(|| crate::error::AppError::Malformed {
-                file: "personagens.json".into(),
-                cause: "o personagem recem-criado sumiu".into(),
-            })
+        Ok(Personagem {
+            compendio: true,
+            ..personagem
+        })
     })
+}
+
+/// O molde entra em jogo: uma ficha nova na lista de Personagens, com nome
+/// numerado se o nome ja estiver em uso. Ver `compendio::duplicar`.
+#[tauri::command]
+pub fn compendio_por_em_jogo(state: State<'_, AppState>, id: String) -> AppResult<Personagem> {
+    state.with_vault(|vault| compendio::duplicar(vault, &id, false))
+}
+
+/// Um molde de item novo no Compendio da campanha.
+#[tauri::command]
+pub fn compendio_criar_item(state: State<'_, AppState>, nome: String) -> AppResult<Item> {
+    state.with_vault(|vault| {
+        let item = itens::criar(
+            vault,
+            Autor::Mestre,
+            None,
+            itens::Novo {
+                nome,
+                ..itens::Novo::default()
+            },
+        )?;
+        itens::marcar_compendio(vault, std::slice::from_ref(&item.id), true)?;
+
+        Ok(Item {
+            compendio: true,
+            ..item
+        })
+    })
+}
+
+/// O molde de item entra no catalogo da campanha. Ver `compendio::duplicar_item`.
+#[tauri::command]
+pub fn compendio_item_em_jogo(state: State<'_, AppState>, id: String) -> AppResult<Item> {
+    state.with_vault(|vault| compendio::duplicar_item(vault, &id, false))
+}
+
+/// O item do catalogo vira molde do Compendio, por copia.
+#[tauri::command]
+pub fn compendio_guardar_item(state: State<'_, AppState>, id: String) -> AppResult<Item> {
+    state.with_vault(|vault| compendio::duplicar_item(vault, &id, true))
+}
+
+/// O personagem em jogo vira um molde do Compendio da campanha, por copia: o
+/// que esta em jogo continua como esta.
+#[tauri::command]
+pub fn compendio_guardar(state: State<'_, AppState>, id: String) -> AppResult<Personagem> {
+    state.with_vault(|vault| compendio::duplicar(vault, &id, true))
+}
+
+/// As tags de um molde ou de um item da campanha. Devolve como ficaram.
+#[tauri::command]
+pub fn compendio_tags(
+    state: State<'_, AppState>,
+    tipo: compendio::TipoDeMolde,
+    id: String,
+    tags: Vec<String>,
+) -> AppResult<Vec<String>> {
+    state.with_vault(|vault| compendio::definir_tags(vault, tipo, &id, tags))
+}
+
+/// As tags de uma ficha ou de um item do Compendio do ATO20. Tag e
+/// organizacao, e nao conteudo: e a unica coisa que se mexe la sem trazer.
+#[tauri::command]
+pub async fn compendio_maquina_tags(
+    state: State<'_, AppState>,
+    tipo: compendio::TipoDeMolde,
+    id: String,
+    tags: Vec<String>,
+) -> AppResult<Vec<String>> {
+    let dir = state.compendio.clone();
+
+    em_segundo_plano(move || {
+        compendio::com_a_maquina(&dir, |maquina| compendio::definir_tags(maquina, tipo, &id, tags))
+    })
+    .await
+}
+
+/// O que o Compendio do ATO20 tem. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn compendio_maquina(state: State<'_, AppState>) -> AppResult<compendio::DaMaquina> {
+    let dir = state.compendio.clone();
+
+    em_segundo_plano(move || compendio::com_a_maquina(&dir, compendio::listar)).await
+}
+
+/// A miniatura de uma imagem do Compendio do ATO20, pelo canal binario.
+#[tauri::command]
+pub async fn compendio_maquina_imagem(
+    state: State<'_, AppState>,
+    asset_id: String,
+) -> AppResult<tauri::ipc::Response> {
+    let dir = state.compendio.clone();
+
+    let bytes = em_segundo_plano(move || {
+        compendio::com_a_maquina(&dir, |maquina| compendio::miniatura(maquina, &asset_id))
+    })
+    .await?;
+
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// O que entrou do outro lado, de cada lista.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Copiados {
+    /// Os ids novos dos personagens, do lado de quem recebeu.
+    pub personagens: Vec<String>,
+    pub itens: usize,
+    pub condicoes: usize,
+    pub efeitos: usize,
+}
+
+/// Copia a selecao de uma pasta para a outra. As condicoes levam junto os
+/// efeitos da campanha que usam; os efeitos pedidos que ja foram com elas nao
+/// vao duas vezes.
+fn copiar_selecao(
+    origem: &Vault,
+    destino: &Vault,
+    selecao: &compendio::Selecao,
+) -> AppResult<Copiados> {
+    Ok(Copiados {
+        personagens: compendio::copiar_personagens(&origem.root, destino, &selecao.personagens)?,
+        itens: compendio::copiar_itens(origem, destino, &selecao.itens)?,
+        condicoes: compendio::copiar_condicoes(origem, destino, &selecao.condicoes)?,
+        efeitos: compendio::copiar_efeitos(origem, destino, &selecao.efeitos)?.len(),
+    })
+}
+
+/// Do ATO20 para a campanha: tudo como molde, no Compendio dela.
+#[tauri::command]
+pub async fn compendio_trazer(
+    state: State<'_, AppState>,
+    selecao: compendio::Selecao,
+) -> AppResult<Copiados> {
+    let (shared, dir) = (state.vault.clone(), state.compendio.clone());
+
+    em_segundo_plano(move || {
+        com_vault(&shared, |campanha| {
+            compendio::com_a_maquina(&dir, |maquina| copiar_selecao(maquina, campanha, &selecao))
+        })
+    })
+    .await
+}
+
+/// Da campanha para o ATO20: passa a servir a qualquer mesa desta maquina.
+#[tauri::command]
+pub async fn compendio_levar(
+    state: State<'_, AppState>,
+    selecao: compendio::Selecao,
+) -> AppResult<Copiados> {
+    let (shared, dir) = (state.vault.clone(), state.compendio.clone());
+
+    em_segundo_plano(move || {
+        com_vault(&shared, |campanha| {
+            compendio::com_a_maquina(&dir, |maquina| copiar_selecao(campanha, maquina, &selecao))
+        })
+    })
+    .await
+}
+
+/// Tira do Compendio do ATO20. A campanha que ja trouxe continua com a copia.
+#[tauri::command]
+pub async fn compendio_maquina_remover(
+    state: State<'_, AppState>,
+    selecao: compendio::Selecao,
+) -> AppResult<()> {
+    let dir = state.compendio.clone();
+
+    em_segundo_plano(move || {
+        compendio::com_a_maquina(&dir, |maquina| compendio::remover(maquina, &selecao))
+    })
+    .await
+}
+
+/// As sugestoes de condicao e de efeito no Compendio do ATO20, uma vez por
+/// maquina. Ver `compendio::semear`.
+#[tauri::command]
+pub async fn compendio_maquina_semear(
+    state: State<'_, AppState>,
+    condicoes: Vec<compendio::CondicaoSugerida>,
+    efeitos: Vec<serde_json::Value>,
+) -> AppResult<bool> {
+    let dir = state.compendio.clone();
+
+    em_segundo_plano(move || {
+        compendio::com_a_maquina(&dir, |maquina| compendio::semear(maquina, condicoes, efeitos))
+    })
+    .await
+}
+
+/// A biblioteca de condicoes da campanha. Ver `compendio::condicoes_do_compendio`.
+#[tauri::command]
+pub fn compendio_condicoes(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<compendio::MoldeDeCondicao>> {
+    state.with_vault(compendio::condicoes_do_compendio)
+}
+
+#[tauri::command]
+pub fn compendio_condicao_criar(
+    state: State<'_, AppState>,
+    nome: String,
+    cor: String,
+    icone: String,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::criar_condicao(vault, &nome, &cor, &icone, None))
+}
+
+#[tauri::command]
+pub fn compendio_condicao_editar(
+    state: State<'_, AppState>,
+    id: String,
+    patch: PatchCondicao,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::editar_condicao(vault, &id, patch))
+}
+
+#[tauri::command]
+pub fn compendio_condicao_apagar(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| compendio::apagar_condicao(vault, &id))
+}
+
+/// Da biblioteca para o menu do token. Ver `compendio::condicao_no_menu`.
+#[tauri::command]
+pub fn compendio_condicao_no_menu(state: State<'_, AppState>, id: String) -> AppResult<Condicao> {
+    state.with_vault(|vault| compendio::condicao_no_menu(vault, &id))
+}
+
+/// Do menu do token para a biblioteca. Ver `compendio::guardar_condicao`.
+#[tauri::command]
+pub fn compendio_condicao_guardar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::guardar_condicao(vault, &modeloId))
+}
+
+/// Um molde de efeito em branco. A tela poe a area, quando e de area.
+#[tauri::command]
+pub fn compendio_efeito_criar(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    state.with_vault(efeitos::criar_molde)
+}
+
+/// O molde de efeito entra em jogo: no seletor, no cardapio, na mesa.
+#[tauri::command]
+pub fn compendio_efeito_em_jogo(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| efeitos::marcar(vault, &id, false))
+}
+
+/// O efeito em jogo volta ao Compendio. Ver `compendio::guardar_efeito`.
+#[tauri::command]
+pub fn compendio_efeito_guardar(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| compendio::guardar_efeito(vault, &id))
 }
 
 #[tauri::command]
@@ -2213,7 +2497,19 @@ pub fn character_link(
     #[allow(non_snake_case)] jogadorId: String,
     id: String,
 ) -> AppResult<()> {
-    state.with_vault(|vault| players::link(vault, &jogadorId, &id))
+    state.with_vault(|vault| {
+        // O molde nao e de ninguem: entregue a um jogador, ele apareceria no
+        // celular dele como personagem, e editar o goblin preparado mexeria na
+        // ficha de quem joga. Quem quer entregar poe em jogo antes.
+        if characters::load(vault)?.iter().any(|p| p.id == id && p.compendio) {
+            return Err(AppError::Recusado(crate::texto!(
+                "Um molde do Compêndio não vai para jogador. Ponha em jogo antes de entregar.",
+                "A Compendium template can't go to a player. Put it in play before handing it over."
+            )));
+        }
+
+        players::link(vault, &jogadorId, &id)
+    })
 }
 
 #[tauri::command]

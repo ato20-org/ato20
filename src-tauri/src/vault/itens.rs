@@ -233,6 +233,19 @@ pub struct Item {
     /// viaja no zip, e o personagem e o que continua o mesmo do outro lado.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub criado_por: Option<String>,
+    /// As tags do Compendio: "arma", "magico", "consumivel". Organizacao do
+    /// mestre, para filtrar -- ver `compendio::normalizar_tags`. No item, e
+    /// nao numa pasta do board, porque viajam com ele para o ATO20 e de volta.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Um MOLDE do Compendio, e nao um item da campanha: a espada preparada
+    /// que ainda nao entrou no jogo. Fica no mesmo `itens.json`, e por isso se
+    /// edita na mesma janela; quem lista separa -- o `useItensStore` guarda os
+    /// moldes a parte, e a janela de Itens e as mochilas nao os veem. Nao vai
+    /// para mochila nenhuma: `inventory::dar` recusa. Por em jogo copia o
+    /// molde no catalogo -- ver `compendio::duplicar_item`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub compendio: bool,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -403,6 +416,8 @@ pub(crate) fn montar(
             Autor::Jogador => criado_por.map(str::to_string),
             Autor::Mestre => None,
         },
+        tags: Vec::new(),
+        compendio: false,
         criado_em: now_ms(),
     };
 
@@ -556,6 +571,36 @@ pub fn editar(vault: &Vault, id: &str, patch: Patch) -> AppResult<Item> {
 pub fn remover(vault: &Vault, id: &str) -> AppResult<()> {
     let _vez = travar();
     remover_destravado(vault, id)
+}
+
+/// Marca ou desmarca itens como molde do Compendio. Id que nao existe e
+/// ignorado, como em `characters::marcar_compendio`.
+pub fn marcar_compendio(vault: &Vault, ids: &[String], compendio: bool) -> AppResult<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+
+    let _vez = travar();
+    let mut itens = load(vault)?;
+    for item in itens.iter_mut().filter(|item| ids.contains(&item.id)) {
+        item.compendio = compendio;
+    }
+    save(vault, &itens)
+}
+
+/// Troca as tags do item. Quem normaliza e quem chama -- ver
+/// `compendio::definir_tags`.
+pub fn set_tags(vault: &Vault, id: &str, tags: Vec<String>) -> AppResult<()> {
+    let _vez = travar();
+    let mut itens = load(vault)?;
+
+    itens
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| nao_existe(id))?
+        .tags = tags;
+
+    save(vault, &itens)
 }
 
 pub(crate) fn remover_destravado(vault: &Vault, id: &str) -> AppResult<()> {
@@ -1365,6 +1410,8 @@ mod tests {
                 medidores: Vec::new(),
                 autor: Autor::Mestre,
                 criado_por: None,
+                tags: Vec::new(),
+                compendio: false,
                 criado_em: n as i64,
             })
             .collect();

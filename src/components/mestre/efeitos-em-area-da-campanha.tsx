@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Puzzle, Settings2, Trash2, WandSparkles } from "lucide-react";
+import { BookMarked, Plus, Puzzle, Settings2, Trash2, WandSparkles } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   useEfeitosEmAreaDaCampanha,
   useEfeitosEmAreaDosPlugins,
 } from "@/components/mestre/efeito-da-area";
-import { TelaDoEfeitoEmArea } from "@/components/mestre/efeitos-da-campanha";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import {
   AlertDialog,
@@ -23,10 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { COR_DA_AREA, EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
 import { copiaParaACampanha } from "@/lib/efeitos";
+import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
+import { chaveDe } from "@/lib/store/use-window-store";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 /** O teto de efeitos da campanha, os das condições e os em área juntos. Espelho de `MAX_EFEITOS`. */
@@ -55,13 +57,15 @@ export function EfeitosEmAreaDaCampanha() {
   const criar = useEfeitosDaCampanhaStore((state) => state.criar);
   const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
   const apagar = useEfeitosDaCampanhaStore((state) => state.apagar);
+  const guardar = useEfeitosDaCampanhaStore((state) => state.guardar);
   const [ocupado, setOcupado] = useState(false);
-  /** O efeito aberto na tela dele, pela engrenagem. `null` = a lista. */
-  const [configurando, setConfigurando] = useState<string | null>(null);
   const [apagando, setApagando] = useState<DefinicaoDeEfeito | null>(null);
   const cheio = (efeitos?.length ?? 0) >= MAX_EFEITOS;
 
-  /** Um efeito em área novo, EM BRANCO como o efeito novo sempre foi, e já aberto. */
+  /**
+   * Um efeito em área novo, EM BRANCO como o efeito novo sempre foi, e já
+   * aberto na janela dele, ao lado da lista. Ver `EfeitoBody`.
+   */
   async function novo() {
     setOcupado(true);
     const criado = await criar();
@@ -73,7 +77,7 @@ export function EfeitosEmAreaDaCampanha() {
       titulo: t.efeitosEmArea.novo,
       area: { cor: CORES_LAPIS[lista.length % 6] ?? COR_DA_AREA },
     });
-    setConfigurando(criado.id);
+    abrirJanela({ tipo: "efeito", efeitoId: criado.id });
   }
 
   /**
@@ -88,11 +92,6 @@ export function EfeitosEmAreaDaCampanha() {
       if (criado) salvar(copiaParaACampanha(pronto, criado.id, pronto.titulo));
     }
     setOcupado(false);
-  }
-
-  const aberto = configurando ? lista.find((efeito) => efeito.id === configurando) : undefined;
-  if (aberto) {
-    return <TelaDoEfeitoEmArea efeito={aberto} onVoltar={() => setConfigurando(null)} />;
   }
 
   return (
@@ -167,10 +166,32 @@ export function EfeitosEmAreaDaCampanha() {
                 variant="ghost"
                 size="icon-xs"
                 aria-label={t.efeitosEmArea.configurar(efeito.titulo)}
-                onClick={() => setConfigurando(efeito.id)}
+                onClick={() => abrirJanela({ tipo: "efeito", efeitoId: efeito.id })}
               >
                 <Settings2 />
               </Button>
+              {/* Fora do jogo, e não apagado: o gizmo deixa de oferecer, e o
+                  lugar nos trinta e dois se abre. Volta pelo Compêndio. */}
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t.compendio.guardarNoCompendio}
+                      disabled={ocupado}
+                      onClick={() =>
+                        void guardar(efeito.id).then((guardado) => {
+                          if (guardado) toast.success(t.compendio.guardadoNoCompendio(efeito.titulo));
+                        })
+                      }
+                    >
+                      <BookMarked />
+                    </Button>
+                  }
+                />
+                <TooltipContent>{t.compendio.guardarNoCompendio}</TooltipContent>
+              </Tooltip>
               <Button
                 variant="ghost"
                 size="icon-xs"
@@ -231,7 +252,14 @@ export function EfeitosEmAreaDaCampanha() {
             <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (apagando) void apagar(apagando.id);
+                if (apagando) {
+                  const id = apagando.id;
+                  void apagar(id).then(() => {
+                    const { efeitos: depois } = useEfeitosDaCampanhaStore.getState();
+                    if (!depois?.some((efeito) => efeito.id === id))
+                      fecharJanela(chaveDe({ tipo: "efeito", efeitoId: id }));
+                  });
+                }
                 setApagando(null);
               }}
             >

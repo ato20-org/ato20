@@ -2641,7 +2641,16 @@ export type TipoDeCena = "quadro" | "fundo";
  * pela mesma razão: são as duas seções da lista de personagens. Itens têm a
  * árvore deles, na janela de Itens.
  */
-export type ListaDePastas = "mapas" | "fundos" | "players" | "npcs" | "itens";
+export type ListaDePastas =
+  | "mapas"
+  | "fundos"
+  | "players"
+  | "npcs"
+  | "itens"
+  | "compendio"
+  // Os moldes de item do Compêndio: um espaço próprio, como o dos moldes de
+  // personagem, e não as pastas da janela de Itens.
+  | "compendio-itens";
 
 /**
  * Uma pasta de um dos painéis: quadros e notas no Arquivos, mapas, fundos e

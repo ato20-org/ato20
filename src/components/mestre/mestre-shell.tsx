@@ -6,6 +6,7 @@ import Image from "next/image";
 import logo from "@/assets/logo-white.png";
 
 import { AbrirEspectador } from "@/components/mestre/abrir-espectador";
+import { ArrastoParaAPeca } from "@/components/mestre/arrasto-para-a-peca";
 import { AlternarColuna } from "@/components/mestre/dock/alternar-coluna";
 import { BotaoDeEsguelha } from "@/components/mestre/botao-de-esguelha";
 import { ConfiguracoesDoMapa } from "@/components/mestre/configuracoes-do-mapa";
@@ -674,6 +675,10 @@ function StageBoundary({
              palco. */
           <PalcoVazio carregando={status !== "ready"} />
         )}
+
+        {/* A condição arrastada do Compêndio até um token: do palco e do 2.5D,
+            que mostram as mesmas peças. Desenha num portal, fora dos dois. */}
+        {scene && !notaAberta ? <ArrastoParaAPeca /> : null}
 
         {/* Fora do gatilho do menu de contexto: botão direito sobre os controles
             não deve abrir o menu da cena.

@@ -79,6 +79,9 @@ pub enum AppError {
     /// A pasta escolhida para importar nao serve: nao e pasta, ou e grande
     /// demais para ser o que se quer importar. Ver `importar::ler_pasta`.
     PastaInvalida(Texto),
+    /// O pedido faz sentido, mas nao neste estado: ligar um molde do
+    /// Compendio a um jogador, por exemplo. A mensagem diz o que fazer.
+    Recusado(Texto),
 }
 
 impl std::fmt::Display for AppError {
@@ -113,6 +116,7 @@ impl std::fmt::Display for AppError {
                 write!(f, "Nao foi possivel baixar o plugin: {}.", motivo.pt)
             }
             Self::PastaInvalida(motivo) => write!(f, "{}", motivo.pt),
+            Self::Recusado(motivo) => write!(f, "{}", motivo.pt),
         }
     }
 }
@@ -137,6 +141,7 @@ impl AppError {
                 format!("Could not download the plugin: {}.", motivo.en)
             }
             Self::PastaInvalida(motivo) => motivo.en.clone(),
+            Self::Recusado(motivo) => motivo.en.clone(),
         }
     }
 }
@@ -173,6 +178,7 @@ impl Serialize for AppError {
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
             Self::DownloadFalhou(_) => "download",
             Self::PastaInvalida(_) => "pasta-invalida",
+            Self::Recusado(_) => "recusado",
         };
 
         let mut out = serializer.serialize_struct("AppError", 3)?;

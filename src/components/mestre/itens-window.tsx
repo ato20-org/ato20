@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  BookMarked,
   FolderPlus,
   Gift,
   MoreVertical,
@@ -56,6 +57,7 @@ import { useTokenDrag } from "@/hooks/use-token-drag";
 import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
 import { fitInitialSize } from "@/lib/geometry/transform";
 import { t } from "@/lib/i18n/itens";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
 import {
   achatarArvore,
   caminhoDaPasta,
@@ -67,6 +69,7 @@ import { itensMudaram, useItens, useItensStore } from "@/lib/store/use-itens-sto
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
+import { guardarItemNoCompendio } from "@/lib/vault/compendio";
 import { criarItem } from "@/lib/vault/itens";
 import type { Item } from "@/types/inventory";
 import type { Pasta } from "@/types/scene";
@@ -415,6 +418,26 @@ function LinhaDoItem({
             <OpcoesDeDar item={item} Item={Linha} />
           </SubContent>
         </Sub>
+
+        {/* Uma CÓPIA vira molde do Compêndio: o item do catálogo continua onde
+            está, nas mochilas que o têm. */}
+        <Linha
+          onClick={() =>
+            void guardarItemNoCompendio(item.id).then(
+              (molde) => {
+                itensMudaram([]);
+                toast.success(textoDoMestre.compendio.guardadoNoCompendio(molde.nome));
+              },
+              (cause: unknown) =>
+                toast.error(
+                  cause instanceof Error ? cause.message : textoDoMestre.compendio.falhou,
+                ),
+            )
+          }
+        >
+          <BookMarked />
+          {textoDoMestre.compendio.guardarNoCompendio}
+        </Linha>
 
         <ItensDeMover
           kit={kit}

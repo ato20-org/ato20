@@ -46,6 +46,26 @@ export type DefinicaoDeEfeito = {
    * URL. Ausente = sem imagem; um externo sem origem não desenha.
    */
   origem?: OrigemDoEfeito;
+  /**
+   * Um molde do Compêndio, e não um efeito em jogo: fora do seletor, do
+   * cardápio e da mesa. Espelho da marca em `efeitos.json` -- ver
+   * `efeitos::eh_molde`.
+   */
+  compendio?: boolean;
+  /** As tags do Compêndio, para filtrar. */
+  tags?: string[];
+  /**
+   * O molde do Compêndio de que este efeito em jogo é a cópia. O molde
+   * arrastado até um token vai ao jogo copiado, e o próximo token reaproveita
+   * a mesma cópia enquanto ela for igual ao molde. Ver `copiaEmJogo`.
+   */
+  molde?: string;
+  /**
+   * O efeito do Compêndio do ATO20 que o arrasto até um token trouxe para cá.
+   * O segundo token acha o que o primeiro trouxe, em vez de trazer de novo --
+   * o "Trazer" sempre dá id novo. Ver `doAto20EmJogo`.
+   */
+  ato20?: string;
 };
 
 /**

@@ -7,6 +7,7 @@ import {
   chaveDoAlvo,
   PASSO_DA_RODA,
   useTokenDragStore,
+  vaiNaPeca,
   type DestinoDoArrasto,
   type FonteDoArrasto,
 } from "@/lib/store/use-token-drag-store";
@@ -131,10 +132,14 @@ export function useTokenDrag() {
     const levantar = (native: PointerEvent) => {
       pegou = true;
       alvo.setPointerCapture(pointerId);
-      window.addEventListener("wheel", handleWheel, {
-        capture: true,
-        passive: false,
-      });
+      // A condição não tem tamanho a escolher: a roda continua sendo o zoom do
+      // palco, que é o que ajuda a mirar o token pequeno no meio da horda.
+      if (!vaiNaPeca(token.fonte)) {
+        window.addEventListener("wheel", handleWheel, {
+          capture: true,
+          passive: false,
+        });
+      }
       window.addEventListener("keydown", handleKey, true);
       pegar({
         ...token,
@@ -252,7 +257,7 @@ function destinoSob(
   const sob = document.elementFromPoint(native.clientX, native.clientY);
   if (!sob) return null;
 
-  const destino = ler(sob);
+  const destino = ler(sob, fonte);
   if (!destino || !aceita(fonte, destino)) return null;
 
   // Ninguém registrado para receber é o mesmo que alvo nenhum: a ficha pode ter
@@ -263,7 +268,7 @@ function destinoSob(
     : null;
 }
 
-function ler(sob: Element): DestinoDoArrasto | null {
+function ler(sob: Element, fonte: FonteDoArrasto): DestinoDoArrasto | null {
   // A área de split antes de tudo: ela só existe no meio do gesto, e fica POR
   // CIMA do que está embaixo dela -- quem a vê acesa espera que soltar ali
   // divida. Ver `ZonasDeSplit`.
@@ -325,6 +330,15 @@ function ler(sob: Element): DestinoDoArrasto | null {
       tipo: "inventario",
       personagemId: inventario.dataset.personagemId,
     };
+  }
+
+  // A peça, só para o que vai nela: para o resto ela é chão, e o token largado
+  // sobre outro token tem de cair no mapa. `data-peca` é a figura de pé do
+  // 2.5D, e o id dela é o do item -- ver `MestreDeEsguelha`.
+  if (vaiNaPeca(fonte)) {
+    const peca = sob.closest<HTMLElement>("[data-peca], [data-item-id]");
+    const itemId = peca?.dataset.peca ?? peca?.dataset.itemId;
+    if (itemId) return { tipo: "peca", itemId };
   }
 
   return sob.closest("[data-palco]") ? { tipo: "palco" } : null;
