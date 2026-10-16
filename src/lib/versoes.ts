@@ -71,6 +71,78 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.9.0",
+    data: "2026-10-16",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A iniciativa: a ordem da rodada, de quem é a vez e o que aconteceu em cada rodada",
+          en: "Initiative: the turn order, whose turn it is and what happened in each round",
+        },
+        detalhe: {
+          pt: "A janela Iniciativa mostra quem tem token no mapa da mesa. Iniciar iniciativa põe todos na ordem, jogadores primeiro, e a ordem se arruma arrastando: não há número de iniciativa, a ordem é a que você arrumar. Pelo botão direito no mapa, os tokens selecionados começam a iniciativa, entram nela ou saem. Na vez de alguém, só o token dele anda pelo celular, o retrato ganha a moldura amarela e o selo VEZ, e o celular de quem joga mostra Sua vez. A aba Rodadas guarda o que aconteceu em cada uma: as rolagens, os medidores e as condições. Por enquanto a ordem não fica gravada, e fechar o ATO20 encerra o combate.",
+          en: "The Initiative window shows everyone with a token on the table's map. Start initiative puts them all in order, players first, and you rearrange the order by dragging: there are no initiative numbers, the order is the one you set. Right-clicking the map lets the selected tokens start initiative, join it or leave it. On someone's turn, only their token moves from the phone, their portrait gets a yellow frame and the TURN badge, and the player's phone shows Your turn. The Rounds tab keeps what happened in each round: the rolls, the meters and the conditions. For now the order isn't saved, and closing ATO20 ends the combat.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O Compêndio: monstros, NPCs, itens, condições e efeitos prontos para usar",
+          en: "The Compendium: monsters, NPCs, items, conditions and effects ready to use",
+        },
+        detalhe: {
+          pt: "A janela Compêndio guarda o que a campanha tem preparado e ainda não entrou no jogo, em cards com imagem e tags: o Bestiário, os Itens, as Condições e os Efeitos. Soltar um card no mapa, ou Pôr em jogo, cria a ficha ou o item, e Guardar no Compêndio, no menu de Personagens e de Itens, faz o caminho de volta. Cada aba tem pastas, que se abrem como num gerenciador de arquivos, e o card muda de pasta arrastado até ela. O Compêndio do ATO20 é outra janela, com o que vale para todas as campanhas do computador.",
+          en: "The Compendium window keeps what the campaign has prepared and hasn't brought into play yet, as cards with images and tags: the Bestiary, Items, Conditions and Effects. Dropping a card on the map, or Put in play, creates the sheet or the item, and Save to the Compendium, in the Characters and Items menus, goes the other way. Every tab has folders that open like in a file manager, and you move a card by dragging it onto a folder. The ATO20 Compendium is a separate window, with what applies to every campaign on this computer.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Disparar efeitos: a bola de fogo, o raio, o sopro do dragão",
+          en: "Fire effects: the fireball, the ray, the dragon's breath",
+        },
+        detalhe: {
+          pt: "O botão Disparo, logo abaixo da Luz, atira um efeito de um ponto a outro: dois cliques no mapa, ou segurar e arrastar. Clicar num personagem faz o tiro sair dele, e Shift trava o ângulo. Pelo botão direito no token, Disparar atira para onde ele olha. O tiro vai reto, estoura no alvo ou abre em cone, e aparece na tela da mesa e no celular dos jogadores. Os disparos se criam e se editam no Compêndio, em Efeitos, Disparo, e cinco vêm prontos: Bola de fogo, Raio de gelo, Jato d'água, Sopro de fogo e Nuvem venenosa.",
+          en: "The Shot button, right below Light, fires an effect from one point to another: two clicks on the map, or press and drag. Clicking a character fires from it, and Shift locks the angle. Right-click a token and choose Fire to shoot where it's facing. A shot goes straight, bursts on the target or spreads in a cone, and it shows in the spectator window and on the players' phones. Shots are created and edited in the Compendium, under Effects, Shot, and five come ready: Fireball, Ray of frost, Water jet, Fire breath and Poison cloud.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Mapas do Dungeondraft e do Dungeon Alchemist, com paredes, portas e luzes",
+          en: "Maps from Dungeondraft and Dungeon Alchemist, with walls, doors and lights",
+        },
+        detalhe: {
+          pt: "O Novo mapa ganha a opção Universal VTT, que abre arquivos .dd2vtt e .uvtt. O mapa entra com a imagem, a grade no tamanho certo, as paredes, as portas fechadas e as luzes, e com a escuridão quando a luz não está desenhada na própria imagem.",
+          en: "New map gets a Universal VTT option that opens .dd2vtt and .uvtt files. The map comes in with its image, the grid at the right size, the walls, the closed doors and the lights, plus darkness when the lighting isn't already painted into the image.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A Galeria, com toda imagem da campanha",
+          en: "The Gallery, with every image in the campaign",
+        },
+        detalhe: {
+          pt: "A janela Galeria junta as imagens do acervo e as que pertencem a alguma coisa, como o fundo de uma cena, um retrato ou a foto que o jogador mandou, da mais nova para a mais antiga. A busca é pelo nome do arquivo. Clicar abre, arrastar põe no mapa, e o botão direito tem Mostrar na mesa, Abrir com outro programa, Mostrar na pasta e as Propriedades, com onde a imagem é usada.",
+          en: "The Gallery window gathers the images in the library and the ones that belong to something, like a scene's backdrop, a portrait or a photo a player sent, newest first. Search goes by file name. Clicking opens, dragging puts it on the map, and right-click has Show to the table, Open with another program, Show in folder and Properties, including where the image is used.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O painel de Elementos muda o que está selecionado no mapa",
+          en: "The Elements panel changes what's selected on the map",
+        },
+        detalhe: {
+          pt: "Com uma parede, área escondida, forma ou efeito em área selecionado, o painel do canto passa a falar dele: troca o formato entre quadrado, círculo e traço livre, troca o tipo no mesmo lugar, como a forma que vira efeito em área, e muda os ajustes de cada um, como o efeito da área e a altura da parede.",
+          en: "With a wall, fog area, shape or area effect selected, the corner panel works on it: switch its shape between rectangle, circle and freeform, change its type in place, like a shape that becomes an area effect, and adjust each one's settings, like the area's effect and the wall's height.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.8.0",
     data: "2026-10-15",
     mudancas: [
