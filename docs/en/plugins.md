@@ -897,6 +897,104 @@ limits above, the `giro` (`0`, `90`, `-90` or `180`) and the projectile image
 like the others (raster, inside the folder, a full grid). The block alone draws
 nothing: the shot needs an image layer -- the projectile is enough.
 
+## Weather effect
+
+The fourth way an effect shows up: it covers the WHOLE scene -- the rain, the
+snow, the fog, the falling ash, the rising embers. It is a SPECIES of its own:
+the effect that declares `ambiente` (weather) is weather, and it doesn't show up
+among the area effects, the shots or a condition's picker. It has its own list
+(the Weather tab inside Effects, in the Compendium) and its own editing window.
+
+It draws ON THE LENS: over the screen, not on the map's floor. The rain falls
+top to bottom in 2D and in 2.5D, doesn't zoom and doesn't move with the camera
+-- it's the glass the table looks through. That's why it goes over the darkness
+and the fog: it doesn't rain only where the table has already seen. It stays
+under the portraits, the letterbox bars and the cut curtain, which are HUD.
+
+```json
+{ "id": "chuva-de-sangue", "titulo": "Blood rain",
+  "ambiente": {
+    "cor": "#991b1b",
+    "camadas": [
+      { "imagem": "fx/chuva-fina.webp", "cores": "condicao",
+        "escala": 0.3, "direcao": 95, "velocidade": 1.5, "opacidade": 0.6 },
+      { "imagem": "fx/chuva-grossa.webp", "cores": "condicao",
+        "escala": 0.7, "direcao": 95, "velocidade": 2.4 } ],
+    "veu": { "cor": "#1c0505", "opacidade": 0.25 },
+    "relampago": { "intervalo": 15, "forca": 0.5 } } }
+```
+
+- **`cor`** (color): the weather's color -- the one for layers with
+  `cores: "condicao"` (here "condition" means the weather, which has no
+  condition), and the veil's when it has none of its own. Default, a bluish
+  gray.
+- **`camadas`** (layers): BACK to front, one to four. Each is a texture that
+  TILES on all four edges and slides in a loop: it moves one tile and starts
+  over, and the seam hides the jump. The base's image fields -- `imagem`,
+  `mipmaps` (by the tile's side), `cores` -- minus `quadros`: the layer moves by
+  sliding, and a frame grid would repaint the whole screen at every step.
+  Grayscale art gets its color from the ramp, like the fire. Measures are in
+  SCREEN HEIGHTS, not in squares: the weather isn't on the map, and the same
+  rain reads the same on the TV and on a phone.
+  - **`escala`** (scale): the tile's side, from `0.1` to `2` heights (default
+    `0.5`).
+  - **`direcao`** (direction): where it goes, in degrees, clockwise from the
+    right: `90` falls, `270` rises, `0` goes right (default `90`). Off the axes,
+    the texture slants along, like rain in the wind: the axis is the nearest
+    one, and the rest becomes slant, up to 45 degrees.
+  - **`velocidade`** (speed): in screen heights per second, from `0` to `3`
+    (default `1`). Zero stands still.
+  - **`opacidade`** (opacity): from `0` to `1` (default `1`).
+  - **`balanco`** (sway): how much it swings side to side as it moves, in
+    tiles, from `0` to `0.5` (default `0`): the dancing snowflake.
+- **`veu`** (veil): a still color over the whole screen -- the storm's gray,
+  the blizzard's white. `opacidade` from `0` to `0.8`; with no `cor`, the
+  weather's.
+- **`relampago`** (lightning): the screen suddenly lights up, twice, and goes
+  dark. `intervalo`, the seconds between flashes, from `3` to `60` (default
+  `12`); `forca` (strength) from `0` to `1` (default `0.6`); with no `cor`, a
+  bluish white. Two clocks, the second weaker and on a rhythm that never lines
+  up with the first, both taken from the system time: the TV and the phones
+  flash together. Whoever asked the system for less motion doesn't see the
+  flash, and neither does the GM.
+
+The SCENE picks the weather and tunes it (`Scene.ambiente`): the effect's id,
+the `intensidade` (intensity, from `0.1` to `1`) and the `vento` (wind, from
+`-1`, to the left, to `1`). Intensity drops the FRONT layers first -- drizzle
+is the rain's fine layer -- and fades the rest, the veil and the flash. Wind
+slants what falls, up to 25 degrees, and pushes what goes sideways, even
+turning it around. The GM picks it in the map settings, or from the card in the
+Compendium ("Put in this scene").
+
+The scene points to the effect with no copy: the built-in and the plugin ones
+by id, and the campaign's by its Compendium template, which goes to the table
+along with the effects in play. Changing the template changes the TV's rain as
+the control moves.
+
+ATO20 ships six ready-made ones -- Rain, Storm (slanted rain, dark sky and
+lightning), Snow, Fog, Ash and Embers --, built-in packs in `src/efeitos/`.
+Storm uses Rain's art through `../chuva/chuva-longe-512.webp`.
+
+The cost was measured in the app's webview, with a hundred tokens changing ten
+times a second and the TV at 1920x1080: without weather, 2 to 3.5% dropped
+frames (runs differ by about two points); Snow and Embers, nearly the same;
+Rain, 4 to 6.5%; Fog and Storm, the most expensive, up to 8.5%. Each layer is
+ONE screen-sized surface for the compositor, and that is what weighs -- hence
+the cap of four, and the veil, which as its own element cost more than both
+rain layers, is painted as one layer's background. The flash only exists for
+the compositor while it lights up.
+
+The GM sees the weather at half strength and without the flash -- the screen of
+whoever is building the scene flashing weighed twice the rain --, and it hides
+while the GM drags something: dragging the camera frame with sixty tokens, the
+rain took the stage from 56 to 50 frames per second.
+
+Rust checks at import the layers (up to four, a raster image inside the folder,
+no `quadros`, every number within the limits above), the veil, the lightning
+and the `#rrggbb` colors. The block draws with a layer, a veil or lightning --
+the veil alone is already weather, the pitch black of a scene with no light at
+all.
+
 ## PDF sheet: the plugin teaches the reading
 
 In the Characters list, **Import PDF sheet** builds a character from a filled-in

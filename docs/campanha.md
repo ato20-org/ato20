@@ -284,8 +284,8 @@ reconhece as fichas pelo nome, que duas cópias confundiriam.
   token, que é onde ele se vê — um botão que só o tirava do Compêndio parecia apagá-lo.
 - **De área ou de personagem.** Os dois têm o mesmo formato; o de área é o que declara
   `area`, e pinta o chão de uma região do mapa. O de personagem pinta a figura de quem está
-  com uma condição. A aba Efeitos do Compêndio tem os de área e os disparos, numa fileira de
-  dentro: o de personagem só chega à figura pela condição, e é na condição que ele se vê e se
+  com uma condição. A aba Efeitos do Compêndio tem os de área, os disparos e os ambientes, numa
+  fileira de dentro: o de personagem só chega à figura pela condição, e é na condição que ele se vê e se
   edita. Uma lista dele à parte era a mesma coisa em dois lugares.
 - **Disparo.** A terceira espécie: o efeito que sai de um ponto e vai até outro -- a bola de
   fogo, o sopro do dragão. É o que declara `disparo`, e só ele dispara; não aparece entre os de
@@ -298,6 +298,17 @@ reconhece as fichas pelo nome, que duas cópias confundiriam.
   lista nenhuma. Com a aba
   vazia, "Trazer os disparos prontos" traz os cinco de fábrica. O tiro em si não grava nada --
   é evento, como o ping. Ver [Efeito disparado](extensoes.md#efeito-disparado).
+- **Ambiente.** A quarta espécie: o clima que cobre a cena inteira -- a chuva, a neve, a
+  neblina --, desenhado por cima da tela da mesa, e não no chão do mapa. É o que declara
+  `ambiente`. Mora só aqui, na aba própria dentro de Efeitos, com janela própria: as camadas de
+  textura que deslizam (até quatro), o véu e o relâmpago. O card tem "Pôr nesta cena", que põe
+  na cena aberta ou a tira dela; as configurações do mapa escolhem também, entre os do
+  Compêndio e os prontos, com a intensidade e o vento da cena. Ao contrário do disparo, o
+  ambiente não tem cópia em jogo: a cena aponta para o molde, e os moldes de ambiente vão à
+  mesa junto com os efeitos em jogo -- mexer nele muda a chuva da TV na hora. Apagado o molde,
+  a cena que o usava volta ao tempo bom. Com a aba vazia, "Trazer os ambientes prontos" traz os
+  seis de fábrica, e o "+" cria um que já nasce chovendo. Ver
+  [Efeito de ambiente](extensoes.md#efeito-de-ambiente).
 
 **Janelas próprias.** O efeito e a condição abrem cada um na sua janela, como o item e a
 ficha (`{ tipo: "efeito" }` e `{ tipo: "condicao", lugar }`). A do efeito é o editor
@@ -321,18 +332,18 @@ uma cópia nova, e quem estava com a antiga não muda (`copiaEmJogo`).
 
 O **Compêndio do ATO20** nasce com as sugestões: as condições que o cardápio sugere, cada
 uma com o efeito de fábrica dela, os efeitos de fábrica que têm chão, como efeitos de
-área, e os disparos de fábrica. Entram uma vez por máquina, na primeira vez que
+área, os disparos e os ambientes de fábrica. Entram uma vez por máquina, na primeira vez que
 a janela abre (`compendio::semear` e a marca `semeado.json`), e o mestre que apaga "Molhado"
 não o vê voltar. Trazer uma condição de lá traz o efeito da campanha que ela usa, com as
 imagens; o de fábrica e o de plugin viajam pelo id. A máquina que recebeu as sugestões antes de os disparos
 existirem não os recebe por aí -- a marca é uma só --, e é o "Trazer os disparos prontos" da
-aba Disparo que os traz.
+aba Disparo que os traz; o mesmo vale para os ambientes, pelo "Trazer os ambientes prontos".
 
 ## Pastas dos painéis
 
 Arquivos, Mapas, Fundos, as duas seções de Personagens (Players e NPCs), Itens e as abas do
-Compêndio (Bestiário, Itens, Condições, e Efeitos com uma árvore para os de área e outra para os
-disparos) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
+Compêndio (Bestiário, Itens, Condições, e Efeitos com uma árvore para os de área, uma para os
+disparos e uma para os ambientes) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
 sem `lista` é do Arquivos, que é a forma da pasta gravada antes das outras listas. O Rust
 guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança lá.
 
