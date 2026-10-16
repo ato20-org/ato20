@@ -17,7 +17,7 @@ minha-campanha/
   assets.json          nome, tipo, medidas e pasta de cada arquivo
   documentos/
     rumores.md         os cartões de Markdown dos quadros
-  personagens.json     o elenco, com medidores e condições de cada um
+  personagens.json     o elenco, com medidores e condições de cada um, e os moldes do Compêndio
   itens.json           o catálogo de itens da campanha
   personagens/
     c4d5.../
@@ -216,10 +216,52 @@ dos inventários, e rodar de novo não duplica nada. Um mesmo id em dois persona
 personagem importado de pacote na mesma campanha copiava os ids) vira um item só se as
 cópias forem iguais, e dois se divergiram.
 
+## O Compêndio
+
+Fichas e itens prontos, fora do jogo: o goblin preparado, o NPC que ainda não apareceu.
+Dois lugares, e a diferença entre eles é a que mesa o molde serve.
+
+- **Da campanha.** O molde de personagem mora no próprio `personagens.json`, com
+  `"compendio": true`. É a mesma ficha, e se edita na mesma janela; quem lista é que
+  separa — o `useCharactersStore` guarda os moldes à parte, e as telas que leem
+  `personagens` (a lista, os retratos, a ordem da rodada, a mesa) não os veem. O daemon
+  não os vê porque molde não se liga a jogador: `character_link` recusa. O molde de
+  item é igual: mora em `itens.json` com `"compendio": true`, fora da janela de Itens,
+  e `inventory::dar` recusa pô-lo numa mochila. As pastas são do Compêndio (`compendio`
+  e `compendio-itens`), não as de Personagens e Itens.
+- **Do ATO20.** O que serve a qualquer campanha desta máquina mora em
+  `{dados do app}/compendio/`, ao lado da estante, numa pasta com o desenho de uma
+  campanha, e se vê numa janela própria, "Compêndio do ATO20" -- como a Estante é outra
+  janela que Arquivos. Aberto numa campanha, o Compêndio é sempre o dela. É esse desenho que deixa trazer e guardar serem a importação de pacote:
+  id novo, imagens e efeitos junto, os itens do inventário no catálogo de lá, nada
+  sobrescrito. Ver `compendio.rs`.
+
+Entre os dois é sempre **cópia**, como os moldes de medidor: a campanha continua abrindo
+sozinha noutra máquina, e corrigir o goblin do ATO20 não mexe na campanha antiga.
+
+**Tags** (`tags` no personagem e no item) organizam o Compêndio para filtrar: "morto-vivo",
+"chefe", "arma". Moram no próprio registro, e não no board como as pastas, para viajar com
+o molde para o ATO20 e de volta — e por isso filtram também lá, onde são a única coisa que
+se edita sem trazer. O Rust as limpa (`compendio::normalizar_tags`): sem espaço sobrando,
+sem repetida pela caixa, até 16 de até 32 letras.
+
+**A ficha do molde** é a mesma janela, com o que não cabe num molde tirado: sem a aba
+Arquivos (anexo é de um personagem que existe), sem Condições (são estado de quem está em
+jogo, e cada cópia nasceria com elas), sem dono nem a ficha em PDF. No lugar do dono, o
+cabeçalho diz "Molde do Compêndio", mostra as tags e traz "Pôr em jogo" e "Guardar no
+ATO20". O Inventário vira Equipamento: é o que cada cópia leva ao entrar em jogo.
+
+**Pôr em jogo** copia o molde num personagem da lista, pelo botão ou soltando o molde no
+mapa. Cada goblin vira uma ficha, "Goblin", "Goblin 2", com a vida dele: a vida mora no
+personagem, e quatro peças do mesmo personagem dividiriam a mesma. A cópia leva a pasta
+inteira (anexos, detalhes, inventário, dados de plugin) e divide as imagens com o molde.
+O molde de item entra no catálogo do mesmo jeito ("Espada", "Espada 2"), e solto no mapa
+já vira peça. Ver `compendio::duplicar` e `compendio::duplicar_item`.
+
 ## Pastas dos painéis
 
-Arquivos, Mapas, Fundos e as duas seções de Personagens (Players e NPCs) têm pastas
-próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
+Arquivos, Mapas, Fundos, as duas seções de Personagens (Players e NPCs), Itens e as duas
+listas do Compêndio (Bestiário e Itens) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
 sem `lista` é do Arquivos, que é a forma da pasta gravada antes das outras listas. O Rust
 guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança lá.
 
