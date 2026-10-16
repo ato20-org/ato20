@@ -26,17 +26,20 @@
 //! cada um com a sua vida -- a vida mora no personagem, e quatro tokens do
 //! mesmo personagem dividiriam a mesma.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::error::{AppError, AppResult};
-use crate::vault::atomic::write_json;
-use crate::vault::characters::{self, Personagem};
+use crate::vault::atomic::{read_json, write_json};
+use crate::vault::characters::{self, chave_do_nome, Condicao, PatchCondicao, Personagem};
 use crate::vault::itens::{self, Imagem, Item};
-use crate::vault::{assets, migrar, now_ms, pacote, variantes, Vault, VAULT_VERSION};
+use crate::vault::{
+    assets, board, condicoes, efeitos, migrar, now_ms, pacote, variantes, Vault, VAULT_VERSION,
+};
 
 /// Onde o Compendio do ATO20 mora: ao lado da estante, nos DADOS do app.
 pub fn dir(dados: &Path) -> PathBuf {
@@ -268,6 +271,8 @@ pub fn copiar_itens(origem: &Vault, destino: &Vault, ids: &[String]) -> AppResul
 pub enum TipoDeMolde {
     Personagem,
     Item,
+    Condicao,
+    Efeito,
 }
 
 /// Quantas tags uma coisa leva, e de que tamanho.
@@ -316,9 +321,464 @@ pub fn definir_tags(
     match tipo {
         TipoDeMolde::Personagem => characters::set_tags(vault, id, tags.clone())?,
         TipoDeMolde::Item => itens::set_tags(vault, id, tags.clone())?,
+        TipoDeMolde::Condicao => {
+            let mut lista = condicoes_do_compendio(vault)?;
+            lista
+                .iter_mut()
+                .find(|molde| molde.condicao.id == id)
+                .ok_or_else(|| sem_condicao(id))?
+                .tags = tags.clone();
+            gravar_condicoes(vault, &lista)?;
+        }
+        TipoDeMolde::Efeito => efeitos::set_tags(vault, id, tags.clone())?,
     }
 
     Ok(tags)
+}
+
+// --- condicoes e efeitos -----------------------------------------------------
+//
+// O cardapio de condicoes e o MENU do token, com dezesseis no maximo, e o
+// Compendio e a biblioteca de onde se escolhe o que entra nele. Os dois vivem
+// em arquivos diferentes, e nao com uma marca no mesmo: o cardapio le, muda e
+// grava a lista inteira em oito funcoes, todas contando o teto e comparando
+// nomes, e uma biblioteca misturada nele seria apagada no primeiro descuido.
+//
+// Entre biblioteca e menu a condicao MUDA de lugar, e nao se copia: ela e uma
+// definicao, e nao uma ficha -- nao ha "quatro goblins" --, e o menu reconhece
+// as fichas pelo nome, que duas copias confundiriam.
+//
+// O efeito e o contrario: fica em `efeitos.json` com a marca `compendio`,
+// porque o editor de efeitos grava la, e o modulo e uma lista generica. Ver
+// `efeitos::eh_molde`.
+
+/// A biblioteca de condicoes da campanha (e a do ATO20, no mesmo nome).
+const CONDICOES_DO_COMPENDIO: &str = "compendio-condicoes.json";
+
+/// Quantas condicoes a biblioteca guarda. Folgado: o teto que importa e o do
+/// menu.
+pub const MAX_CONDICOES_NO_COMPENDIO: usize = 500;
+
+/// Uma condicao da biblioteca: a mesma condicao do cardapio, e as tags.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoldeDeCondicao {
+    #[serde(flatten)]
+    pub condicao: Condicao,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+}
+
+fn sem_condicao(id: &str) -> AppError {
+    AppError::Malformed {
+        file: CONDICOES_DO_COMPENDIO.into(),
+        cause: format!("o Compendio nao tem a condicao {id}"),
+    }
+}
+
+pub fn condicoes_do_compendio(vault: &Vault) -> AppResult<Vec<MoldeDeCondicao>> {
+    Ok(read_json(&vault.root.join(CONDICOES_DO_COMPENDIO))?.unwrap_or_default())
+}
+
+fn gravar_condicoes(vault: &Vault, lista: &[MoldeDeCondicao]) -> AppResult<()> {
+    write_json(&vault.root.join(CONDICOES_DO_COMPENDIO), &lista)
+}
+
+/// Uma condicao nova na biblioteca.
+pub fn criar_condicao(
+    vault: &Vault,
+    nome: &str,
+    cor: &str,
+    icone: &str,
+    efeito: Option<String>,
+) -> AppResult<MoldeDeCondicao> {
+    let mut lista = condicoes_do_compendio(vault)?;
+    if lista.len() >= MAX_CONDICOES_NO_COMPENDIO {
+        return Err(AppError::Malformed {
+            file: CONDICOES_DO_COMPENDIO.into(),
+            cause: format!("o Compendio ja tem {MAX_CONDICOES_NO_COMPENDIO} condicoes"),
+        });
+    }
+
+    let mut condicao = Condicao {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: nome.to_string(),
+        cor: cor.to_string(),
+        icone: icone.to_string(),
+        efeito,
+        escondido: false,
+    };
+    characters::ajustar_condicao(&mut condicao);
+
+    let molde = MoldeDeCondicao {
+        condicao,
+        tags: Vec::new(),
+    };
+    lista.push(molde.clone());
+    gravar_condicoes(vault, &lista)?;
+
+    Ok(molde)
+}
+
+pub fn editar_condicao(vault: &Vault, id: &str, patch: PatchCondicao) -> AppResult<MoldeDeCondicao> {
+    let mut lista = condicoes_do_compendio(vault)?;
+    let molde = lista
+        .iter_mut()
+        .find(|molde| molde.condicao.id == id)
+        .ok_or_else(|| sem_condicao(id))?;
+
+    patch.aplicar(&mut molde.condicao);
+    let saida = molde.clone();
+    gravar_condicoes(vault, &lista)?;
+
+    Ok(saida)
+}
+
+pub fn apagar_condicao(vault: &Vault, id: &str) -> AppResult<()> {
+    let lista = condicoes_do_compendio(vault)?;
+    if !lista.iter().any(|molde| molde.condicao.id == id) {
+        return Err(sem_condicao(id));
+    }
+
+    gravar_condicoes(
+        vault,
+        &lista
+            .into_iter()
+            .filter(|molde| molde.condicao.id != id)
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// A condicao sai da biblioteca e entra no menu do token.
+///
+/// Recusa com o motivo quando o menu esta cheio ou ja tem uma com o mesmo
+/// nome. O efeito da campanha que ela usa, se estava guardado no Compendio,
+/// entra em jogo junto: no menu, a condicao sem o efeito dela mostraria so o
+/// selo. Ele e conferido ANTES de a condicao mudar de lugar -- um efeito que
+/// nao cabe nos trinta e dois deixa tudo como estava.
+pub fn condicao_no_menu(vault: &Vault, id: &str) -> AppResult<Condicao> {
+    let mut lista = condicoes_do_compendio(vault)?;
+    let lugar = lista
+        .iter()
+        .position(|molde| molde.condicao.id == id)
+        .ok_or_else(|| sem_condicao(id))?;
+    let molde = lista[lugar].clone();
+
+    let menu = condicoes::load(vault)?;
+    if menu.len() >= condicoes::MAX_MODELOS {
+        return Err(AppError::Recusado(crate::texto!(
+            "O menu já tem {} condições. Guarde uma no Compêndio antes.",
+            "The menu already has {} conditions. Put one in the Compendium first.",
+            condicoes::MAX_MODELOS
+        )));
+    }
+    let chave = chave_do_nome(&molde.condicao.nome);
+    if menu.iter().any(|modelo| chave_do_nome(&modelo.nome) == chave) {
+        return Err(AppError::Recusado(crate::texto!(
+            "O menu já tem uma condição chamada {}.",
+            "The menu already has a condition called {}.",
+            molde.condicao.nome
+        )));
+    }
+
+    if let Some(efeito) = &molde.condicao.efeito {
+        let guardado = efeitos::load(vault)?.iter().any(|atual| {
+            atual.get("id").and_then(Value::as_str) == Some(efeito.as_str())
+                && efeitos::eh_molde(atual)
+        });
+        if guardado {
+            efeitos::marcar(vault, efeito, false)?;
+        }
+    }
+
+    let nova = condicoes::criar(
+        vault,
+        &molde.condicao.nome,
+        &molde.condicao.cor,
+        &molde.condicao.icone,
+        molde.condicao.efeito.clone(),
+    )?;
+    let nova = if molde.condicao.escondido {
+        condicoes::editar(
+            vault,
+            &nova.id,
+            PatchCondicao {
+                escondido: Some(true),
+                ..PatchCondicao::default()
+            },
+        )?
+    } else {
+        nova
+    };
+
+    lista.remove(lugar);
+    gravar_condicoes(vault, &lista)?;
+
+    Ok(nova)
+}
+
+/// A condicao sai do menu e volta para a biblioteca. As copias nas fichas
+/// ficam -- o goblin continua envenenado --, como em `condicoes::remover`.
+///
+/// O efeito da campanha dela vai junto para o Compendio quando ninguem mais o
+/// usa: nem outra condicao do menu, nem uma ficha. Ficando em jogo, ele
+/// contaria nos trinta e dois sem tela nenhuma que o mostrasse -- o efeito de
+/// figura so aparece pela condicao. O de area fica: quem o usa e a area do
+/// mapa, que esta conta nao enxerga.
+pub fn guardar_condicao(vault: &Vault, modelo_id: &str) -> AppResult<MoldeDeCondicao> {
+    let modelo = condicoes::buscar(vault, modelo_id)?;
+
+    let mut lista = condicoes_do_compendio(vault)?;
+    if lista.len() >= MAX_CONDICOES_NO_COMPENDIO {
+        return Err(AppError::Malformed {
+            file: CONDICOES_DO_COMPENDIO.into(),
+            cause: format!("o Compendio ja tem {MAX_CONDICOES_NO_COMPENDIO} condicoes"),
+        });
+    }
+
+    let molde = MoldeDeCondicao {
+        condicao: Condicao {
+            id: uuid::Uuid::new_v4().to_string(),
+            ..modelo
+        },
+        tags: Vec::new(),
+    };
+    lista.push(molde.clone());
+    gravar_condicoes(vault, &lista)?;
+    condicoes::remover(vault, modelo_id)?;
+
+    if let Some(efeito) = molde.condicao.efeito.as_deref() {
+        if efeito_sem_uso(vault, efeito)? {
+            efeitos::marcar(vault, efeito, true)?;
+        }
+    }
+
+    Ok(molde)
+}
+
+/// O efeito da campanha, de figura e em jogo, que nenhuma condicao do menu e
+/// nenhuma ficha usa. Ver `guardar_condicao`.
+fn efeito_sem_uso(vault: &Vault, id: &str) -> AppResult<bool> {
+    let Some(efeito) = efeitos::load(vault)?
+        .into_iter()
+        .find(|atual| atual.get("id").and_then(Value::as_str) == Some(id))
+    else {
+        return Ok(false);
+    };
+    if efeitos::eh_molde(&efeito) || efeito.get("area").is_some() {
+        return Ok(false);
+    }
+
+    let no_menu = condicoes::load(vault)?
+        .iter()
+        .any(|modelo| modelo.efeito.as_deref() == Some(id));
+    let numa_ficha = characters::load(vault)?.iter().any(|personagem| {
+        personagem
+            .condicoes
+            .iter()
+            .any(|condicao| condicao.efeito.as_deref() == Some(id))
+    });
+
+    Ok(!no_menu && !numa_ficha)
+}
+
+/// O efeito sai do jogo e vai para o Compendio. Recusa se uma condicao do menu
+/// ou uma area de alguma cena o usa: guardado, ele sumiria da figura de quem
+/// esta com a condicao, ou do chao que esta pegando fogo.
+pub fn guardar_efeito(vault: &Vault, id: &str) -> AppResult<Value> {
+    if let Some(quem) = condicoes::load(vault)?
+        .into_iter()
+        .find(|modelo| modelo.efeito.as_deref() == Some(id))
+    {
+        return Err(AppError::Recusado(crate::texto!(
+            "{} usa este efeito no menu. Tire a condição do menu antes.",
+            "{} uses this effect in the menu. Take the condition off the menu first.",
+            quem.nome
+        )));
+    }
+
+    if let Some(cena) = board::load(vault)?
+        .map(|board| board.scenes)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|cena| area_usa(cena, id))
+    {
+        let nome = cena.get("name").and_then(Value::as_str).unwrap_or("?").to_string();
+        return Err(AppError::Recusado(crate::texto!(
+            "Uma área da cena {} usa este efeito. Troque o efeito da área antes.",
+            "An area in the scene {} uses this effect. Change the area's effect first.",
+            nome
+        )));
+    }
+
+    efeitos::marcar(vault, id, true)
+}
+
+/// A cena tem uma area de efeito com este efeito.
+fn area_usa(cena: &Value, id: &str) -> bool {
+    cena.get("areasDeEfeito")
+        .and_then(Value::as_array)
+        .is_some_and(|areas| {
+            areas
+                .iter()
+                .any(|area| area.get("efeito").and_then(Value::as_str) == Some(id))
+        })
+}
+
+/// Copia efeitos da campanha de uma pasta para outra, como MOLDES, com as
+/// imagens que eles citam. Devolve id antigo -> novo.
+///
+/// As imagens sao achadas por varredura, como no pacote: todo texto do efeito
+/// igual a um id do acervo de origem e uma imagem dele, e vai junto com id
+/// novo. A arte de fabrica e de plugin (`fabrica:…`, `plugin:…`) nao e do
+/// acervo e viaja como esta.
+pub fn copiar_efeitos(
+    origem: &Vault,
+    destino: &Vault,
+    ids: &[String],
+) -> AppResult<HashMap<String, String>> {
+    let mut mapa = HashMap::new();
+    if ids.is_empty() {
+        return Ok(mapa);
+    }
+
+    let escolhidos: Vec<Value> = efeitos::load(origem)?
+        .into_iter()
+        .filter(|efeito| {
+            efeito
+                .get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| ids.iter().any(|pedido| pedido == id))
+        })
+        .collect();
+
+    let acervo = assets::index(origem)?;
+    let conhecidos: HashSet<&str> = acervo.iter().map(|asset| asset.id.as_str()).collect();
+    let mut citados = BTreeSet::new();
+    for efeito in &escolhidos {
+        pacote::assets_citados(efeito, &conhecidos, &mut citados);
+    }
+    let entradas: Vec<(PathBuf, assets::AssetMeta)> = acervo
+        .iter()
+        .filter(|asset| citados.contains(&asset.id))
+        .map(|asset| (assets::asset_path(origem, asset), asset.clone()))
+        .collect();
+    let imagens = assets::adotar(destino, &entradas)?;
+
+    let existentes = efeitos::load(destino)?;
+    let mut novos: Vec<Value> = Vec::with_capacity(escolhidos.len());
+    for mut efeito in escolhidos {
+        let antigo = efeito.get("id").and_then(Value::as_str).unwrap_or_default().to_string();
+        let novo = efeitos::id_novo(&existentes, &novos);
+
+        pacote::trocar_textos(&mut efeito, &|texto| imagens.get(texto).cloned());
+        if let Value::Object(campos) = &mut efeito {
+            campos.insert("id".into(), Value::String(novo.clone()));
+        }
+
+        mapa.insert(antigo, novo);
+        novos.push(efeito);
+    }
+
+    efeitos::acrescentar_moldes(destino, novos)?;
+
+    Ok(mapa)
+}
+
+/// Copia condicoes da biblioteca de uma pasta para a de outra, e com elas os
+/// efeitos da campanha que usam -- uma condicao "Possuido" sem a nevoa dela
+/// chegaria do outro lado so com o selo.
+///
+/// O efeito de fabrica e o de plugin viajam pelo id: estao em toda mesa (o de
+/// plugin, onde o plugin estiver instalado). O da campanha que nao existe na
+/// origem cai -- apontaria para o nada do outro lado.
+pub fn copiar_condicoes(origem: &Vault, destino: &Vault, ids: &[String]) -> AppResult<usize> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let escolhidas: Vec<MoldeDeCondicao> = condicoes_do_compendio(origem)?
+        .into_iter()
+        .filter(|molde| ids.contains(&molde.condicao.id))
+        .collect();
+
+    let da_campanha: Vec<String> = escolhidas
+        .iter()
+        .filter_map(|molde| molde.condicao.efeito.clone())
+        .filter(|efeito| efeito.starts_with("campanha/"))
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let efeitos_novos = copiar_efeitos(origem, destino, &da_campanha)?;
+
+    let mut lista = condicoes_do_compendio(destino)?;
+    let mut entraram = 0;
+    for mut molde in escolhidas {
+        if lista.len() >= MAX_CONDICOES_NO_COMPENDIO {
+            break;
+        }
+        molde.condicao.id = uuid::Uuid::new_v4().to_string();
+        if let Some(efeito) = molde.condicao.efeito.clone() {
+            if efeito.starts_with("campanha/") {
+                molde.condicao.efeito = efeitos_novos.get(&efeito).cloned();
+            }
+        }
+        lista.push(molde);
+        entraram += 1;
+    }
+    gravar_condicoes(destino, &lista)?;
+
+    Ok(entraram)
+}
+
+/// Uma condicao sugerida, como a tela a manda: sem id, sem "escondido".
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondicaoSugerida {
+    pub nome: String,
+    pub cor: String,
+    pub icone: String,
+    #[serde(default)]
+    pub efeito: Option<String>,
+}
+
+/// A marca de que o Compendio do ATO20 ja recebeu as sugestoes.
+const SEMEADO: &str = "semeado.json";
+
+/// Poe as sugestoes no Compendio do ATO20, UMA vez por maquina.
+///
+/// As sugestoes sao da tela -- as condicoes de `SUGESTOES` e os efeitos de
+/// fabrica, com titulo no idioma de quem abriu --, e por isso chegam de la. A
+/// marca e o que impede de voltarem: o mestre que apagou "Molhado" nao quer
+/// ve-lo de novo na proxima abertura. Devolve se semeou agora.
+pub fn semear(
+    maquina: &Vault,
+    sugeridas: Vec<CondicaoSugerida>,
+    efeitos_sugeridos: Vec<Value>,
+) -> AppResult<bool> {
+    let marca = maquina.root.join(SEMEADO);
+    if marca.exists() {
+        return Ok(false);
+    }
+
+    for sugerida in sugeridas {
+        criar_condicao(maquina, &sugerida.nome, &sugerida.cor, &sugerida.icone, sugerida.efeito)?;
+    }
+
+    let existentes = efeitos::load(maquina)?;
+    let mut novos: Vec<Value> = Vec::with_capacity(efeitos_sugeridos.len());
+    for mut efeito in efeitos_sugeridos {
+        let id = efeitos::id_novo(&existentes, &novos);
+        if let Value::Object(campos) = &mut efeito {
+            campos.insert("id".into(), Value::String(id));
+            novos.push(efeito);
+        }
+    }
+    efeitos::acrescentar_moldes(maquina, novos)?;
+
+    write_json(&marca, &serde_json::json!({ "versao": 1, "em": now_ms() }))?;
+
+    Ok(true)
 }
 
 /// O que o Compendio do ATO20 tem.
@@ -327,22 +787,49 @@ pub fn definir_tags(
 pub struct DaMaquina {
     pub personagens: Vec<Personagem>,
     pub itens: Vec<Item>,
+    pub condicoes: Vec<MoldeDeCondicao>,
+    pub efeitos: Vec<Value>,
+    /// As sugestoes ja entraram. Ver `semear`.
+    pub semeado: bool,
 }
 
 pub fn listar(maquina: &Vault) -> AppResult<DaMaquina> {
     Ok(DaMaquina {
         personagens: characters::load(maquina)?,
         itens: itens::load(maquina)?,
+        condicoes: condicoes_do_compendio(maquina)?,
+        efeitos: efeitos::load(maquina)?,
+        semeado: maquina.root.join(SEMEADO).exists(),
     })
 }
 
+/// O que se tira do Compendio da maquina, de cada lista.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Selecao {
+    #[serde(default)]
+    pub personagens: Vec<String>,
+    #[serde(default)]
+    pub itens: Vec<String>,
+    #[serde(default)]
+    pub condicoes: Vec<String>,
+    #[serde(default)]
+    pub efeitos: Vec<String>,
+}
+
 /// Tira do Compendio da maquina, e com eles as imagens que ficaram sem dono.
-pub fn remover(maquina: &Vault, personagens: &[String], itens_: &[String]) -> AppResult<()> {
-    for id in personagens {
+pub fn remover(maquina: &Vault, selecao: &Selecao) -> AppResult<()> {
+    for id in &selecao.personagens {
         characters::remove(maquina, id)?;
     }
-    for id in itens_ {
+    for id in &selecao.itens {
         itens::remover(maquina, id)?;
+    }
+    for id in &selecao.condicoes {
+        apagar_condicao(maquina, id)?;
+    }
+    for id in &selecao.efeitos {
+        efeitos::apagar(maquina, id)?;
     }
 
     faxina(maquina)
@@ -421,6 +908,205 @@ mod tests {
 
     fn usados(nomes: &[&str]) -> HashSet<String> {
         nomes.iter().map(|nome| nome.to_string()).collect()
+    }
+
+    #[test]
+    fn a_condicao_vai_ao_menu_com_o_efeito_e_volta_sem_ele() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        let efeito = efeitos::criar_molde(&vault).unwrap();
+        let id_do_efeito = efeito["id"].as_str().unwrap().to_string();
+        let possuido = criar_condicao(&vault, "Possuído", "#7c3aed", "olho", Some(id_do_efeito.clone()))
+            .unwrap();
+
+        // Para o menu: a condição muda de lugar, e o efeito entra em jogo junto.
+        let no_menu = condicao_no_menu(&vault, &possuido.condicao.id).unwrap();
+        assert_eq!(no_menu.nome, "Possuído");
+        assert!(condicoes_do_compendio(&vault).unwrap().is_empty());
+        assert_eq!(condicoes::load(&vault).unwrap().len(), 1);
+        let em_jogo = efeitos::load(&vault).unwrap();
+        assert!(!efeitos::eh_molde(&em_jogo[0]));
+
+        // O efeito não volta ao Compêndio enquanto o menu o usa.
+        assert!(guardar_efeito(&vault, &id_do_efeito).is_err());
+
+        // De volta à biblioteca: o menu fica vazio, e o efeito, que ninguém
+        // mais usa, volta junto.
+        guardar_condicao(&vault, &no_menu.id).unwrap();
+        assert!(condicoes::load(&vault).unwrap().is_empty());
+        assert_eq!(condicoes_do_compendio(&vault).unwrap().len(), 1);
+        assert!(efeitos::eh_molde(&efeitos::load(&vault).unwrap()[0]));
+    }
+
+    #[test]
+    fn o_efeito_de_uma_area_no_mapa_nao_sai_do_jogo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        let efeito = efeitos::criar(&vault).unwrap();
+        let id = efeito["id"].as_str().unwrap().to_string();
+        std::fs::create_dir_all(vault.scenes_dir()).unwrap();
+        write_json(
+            &vault.scenes_dir().join("ponte.json"),
+            &serde_json::json!({ "id": "s1", "name": "Ponte", "areasDeEfeito": [{ "efeito": id }] }),
+        )
+        .unwrap();
+        write_json(
+            &vault.root.join("ordem.json"),
+            &serde_json::json!({
+                "versao": VAULT_VERSION,
+                "cenas": [{ "id": "s1", "arquivo": "ponte.json" }],
+            }),
+        )
+        .unwrap();
+
+        // A ponte está pegando fogo: guardar o fogo o apagaria da mesa.
+        assert!(guardar_efeito(&vault, &id).is_err());
+        assert!(!efeitos::eh_molde(&efeitos::load(&vault).unwrap()[0]));
+    }
+
+    #[test]
+    fn o_efeito_que_uma_ficha_usa_fica_em_jogo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        let efeito = efeitos::criar(&vault).unwrap();
+        let id_do_efeito = efeito["id"].as_str().unwrap().to_string();
+        let modelo =
+            condicoes::criar(&vault, "Em chamas", "#f00", "chama", Some(id_do_efeito.clone()))
+                .unwrap();
+        let goblin = characters::create(&vault, "Goblin").unwrap();
+        characters::criar_condicao(
+            &vault,
+            &goblin.id,
+            &modelo.nome,
+            &modelo.cor,
+            &modelo.icone,
+            modelo.efeito.clone(),
+        )
+        .unwrap();
+
+        // O goblin continua em chamas: o fogo dele não pode sair da mesa.
+        guardar_condicao(&vault, &modelo.id).unwrap();
+        assert!(!efeitos::eh_molde(&efeitos::load(&vault).unwrap()[0]));
+    }
+
+    #[test]
+    fn o_menu_cheio_ou_com_o_mesmo_nome_recusa() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        condicoes::criar(&vault, "Caído", "#000", "circulo", None).unwrap();
+        let outra = criar_condicao(&vault, "caído", "#fff", "circulo", None).unwrap();
+        assert!(condicao_no_menu(&vault, &outra.condicao.id).is_err());
+        // Recusada, ela continua na biblioteca.
+        assert_eq!(condicoes_do_compendio(&vault).unwrap().len(), 1);
+
+        for n in 1..condicoes::MAX_MODELOS {
+            condicoes::criar(&vault, &format!("C{n}"), "#000", "circulo", None).unwrap();
+        }
+        let ultima = criar_condicao(&vault, "Sobrando", "#000", "circulo", None).unwrap();
+        assert!(condicao_no_menu(&vault, &ultima.condicao.id).is_err());
+    }
+
+    #[test]
+    fn o_teto_de_efeitos_conta_so_os_em_jogo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        for _ in 0..efeitos::MAX_EFEITOS {
+            efeitos::criar(&vault).unwrap();
+        }
+        assert!(efeitos::criar(&vault).is_err());
+
+        // O molde entra mesmo com os 32 em jogo, mas não entra em jogo.
+        let molde = efeitos::criar_molde(&vault).unwrap();
+        let id = molde["id"].as_str().unwrap();
+        assert!(efeitos::marcar(&vault, id, false).is_err());
+
+        // E salvar pelo editor, sem a marca, não o põe em jogo.
+        let sem_marca = serde_json::json!({ "id": id, "titulo": "Névoa" });
+        let salvo = efeitos::salvar(&vault, sem_marca).unwrap();
+        assert!(efeitos::eh_molde(&salvo));
+
+        // Nem o contrário: a gravação atrasada do editor, com a marca, não
+        // devolve ao Compêndio o efeito que acabou de entrar em jogo.
+        let em_jogo = efeitos::load(&vault).unwrap()[0]["id"].as_str().unwrap().to_string();
+        let com_marca = serde_json::json!({ "id": em_jogo, "titulo": "Fogo", "compendio": true });
+        assert!(!efeitos::eh_molde(&efeitos::salvar(&vault, com_marca).unwrap()));
+    }
+
+    #[test]
+    fn a_condicao_viaja_ao_ato20_com_o_efeito_e_a_imagem() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+        let dir_da_maquina = dir(&tmp.path().join("dados"));
+
+        let arquivo = tmp.path().join("nevoa.png");
+        std::fs::write(&arquivo, png()).unwrap();
+        let (aceitos, _) = assets::import(&vault, &[arquivo], Some("efeito")).unwrap();
+        let imagem = aceitos[0].id.clone();
+
+        let efeito = efeitos::criar_molde(&vault).unwrap();
+        let id_do_efeito = efeito["id"].as_str().unwrap().to_string();
+        efeitos::salvar(
+            &vault,
+            serde_json::json!({ "id": id_do_efeito, "titulo": "Névoa", "externo": { "imagem": imagem } }),
+        )
+        .unwrap();
+        let possuido =
+            criar_condicao(&vault, "Possuído", "#7c3aed", "olho", Some(id_do_efeito.clone())).unwrap();
+
+        let la = com_a_maquina(&dir_da_maquina, |maquina| {
+            copiar_condicoes(&vault, maquina, &[possuido.condicao.id.clone()])?;
+            listar(maquina)
+        })
+        .unwrap();
+
+        assert_eq!(la.condicoes.len(), 1);
+        assert_eq!(la.efeitos.len(), 1);
+        let novo_efeito = la.efeitos[0]["id"].as_str().unwrap();
+        assert_eq!(la.condicoes[0].condicao.efeito.as_deref(), Some(novo_efeito));
+        // A imagem foi junto, com id novo, e o efeito aponta para ela.
+        let nova_imagem = la.efeitos[0]["externo"]["imagem"].as_str().unwrap().to_string();
+        assert_ne!(nova_imagem, imagem);
+        com_a_maquina(&dir_da_maquina, |maquina| {
+            assert!(assets::find(maquina, &nova_imagem)?.is_some());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn as_sugestoes_entram_uma_vez_so() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir_da_maquina = dir(&tmp.path().join("dados"));
+        let sugestao = || CondicaoSugerida {
+            nome: "Em chamas".into(),
+            cor: "#f59e0b".into(),
+            icone: "chama".into(),
+            efeito: Some("chamas".into()),
+        };
+        let efeito = || serde_json::json!({ "titulo": "Chamas" });
+
+        let primeira = com_a_maquina(&dir_da_maquina, |maquina| {
+            semear(maquina, vec![sugestao()], vec![efeito()])
+        })
+        .unwrap();
+        let segunda = com_a_maquina(&dir_da_maquina, |maquina| {
+            semear(maquina, vec![sugestao()], vec![efeito()])
+        })
+        .unwrap();
+        let la = com_a_maquina(&dir_da_maquina, listar).unwrap();
+
+        assert!(primeira);
+        assert!(!segunda);
+        assert!(la.semeado);
+        assert_eq!(la.condicoes.len(), 1);
+        assert_eq!(la.condicoes[0].condicao.efeito.as_deref(), Some("chamas"));
+        assert_eq!(la.efeitos.len(), 1);
+        assert!(efeitos::eh_molde(&la.efeitos[0]));
     }
 
     #[test]
@@ -651,7 +1337,13 @@ mod tests {
 
         com_a_maquina(&dir_da_maquina, |maquina| {
             assert_eq!(assets::index(maquina)?.len(), 1);
-            remover(maquina, &guardados, &[])?;
+            remover(
+                maquina,
+                &Selecao {
+                    personagens: guardados.clone(),
+                    ..Selecao::default()
+                },
+            )?;
             assert!(characters::load(maquina)?.is_empty());
             assert!(assets::index(maquina)?.is_empty());
             Ok(())

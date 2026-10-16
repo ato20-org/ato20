@@ -19,7 +19,7 @@ use crate::serve::{self, DaemonAddr, Endereco, Evidence, SharedEvidence, SharedV
 use crate::vault::assets::AssetMeta;
 use crate::vault::board::{Board, BoardPatch};
 use crate::vault::session::Json;
-use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Personagem};
+use crate::vault::characters::{Anexo, Aparencia, Autor, Campo, Condicao, PatchCondicao, Personagem};
 use crate::vault::players::{Attachment, Player};
 use crate::vault::inventory::{self, NoInventario};
 use crate::vault::itens::{self, Item, Portador};
@@ -1264,54 +1264,60 @@ pub async fn compendio_maquina_imagem(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
-/// Do ATO20 para a campanha: os personagens como moldes, os itens no catalogo.
+/// O que entrou do outro lado, de cada lista.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Copiados {
     /// Os ids novos dos personagens, do lado de quem recebeu.
     pub personagens: Vec<String>,
     pub itens: usize,
+    pub condicoes: usize,
+    pub efeitos: usize,
 }
 
+/// Copia a selecao de uma pasta para a outra. As condicoes levam junto os
+/// efeitos da campanha que usam; os efeitos pedidos que ja foram com elas nao
+/// vao duas vezes.
+fn copiar_selecao(
+    origem: &Vault,
+    destino: &Vault,
+    selecao: &compendio::Selecao,
+) -> AppResult<Copiados> {
+    Ok(Copiados {
+        personagens: compendio::copiar_personagens(&origem.root, destino, &selecao.personagens)?,
+        itens: compendio::copiar_itens(origem, destino, &selecao.itens)?,
+        condicoes: compendio::copiar_condicoes(origem, destino, &selecao.condicoes)?,
+        efeitos: compendio::copiar_efeitos(origem, destino, &selecao.efeitos)?.len(),
+    })
+}
+
+/// Do ATO20 para a campanha: tudo como molde, no Compendio dela.
 #[tauri::command]
 pub async fn compendio_trazer(
     state: State<'_, AppState>,
-    personagens: Vec<String>,
-    itens: Vec<String>,
+    selecao: compendio::Selecao,
 ) -> AppResult<Copiados> {
     let (shared, dir) = (state.vault.clone(), state.compendio.clone());
 
     em_segundo_plano(move || {
         com_vault(&shared, |campanha| {
-            compendio::com_a_maquina(&dir, |maquina| {
-                Ok(Copiados {
-                    personagens: compendio::copiar_personagens(&maquina.root, campanha, &personagens)?,
-                    itens: compendio::copiar_itens(maquina, campanha, &itens)?,
-                })
-            })
+            compendio::com_a_maquina(&dir, |maquina| copiar_selecao(maquina, campanha, &selecao))
         })
     })
     .await
 }
 
-/// Da campanha para o ATO20: o molde ou o personagem, e o item, passam a
-/// servir a qualquer mesa desta maquina.
+/// Da campanha para o ATO20: passa a servir a qualquer mesa desta maquina.
 #[tauri::command]
 pub async fn compendio_levar(
     state: State<'_, AppState>,
-    personagens: Vec<String>,
-    itens: Vec<String>,
+    selecao: compendio::Selecao,
 ) -> AppResult<Copiados> {
     let (shared, dir) = (state.vault.clone(), state.compendio.clone());
 
     em_segundo_plano(move || {
         com_vault(&shared, |campanha| {
-            compendio::com_a_maquina(&dir, |maquina| {
-                Ok(Copiados {
-                    personagens: compendio::copiar_personagens(&campanha.root, maquina, &personagens)?,
-                    itens: compendio::copiar_itens(campanha, maquina, &itens)?,
-                })
-            })
+            compendio::com_a_maquina(&dir, |maquina| copiar_selecao(campanha, maquina, &selecao))
         })
     })
     .await
@@ -1321,15 +1327,101 @@ pub async fn compendio_levar(
 #[tauri::command]
 pub async fn compendio_maquina_remover(
     state: State<'_, AppState>,
-    personagens: Vec<String>,
-    itens: Vec<String>,
+    selecao: compendio::Selecao,
 ) -> AppResult<()> {
     let dir = state.compendio.clone();
 
     em_segundo_plano(move || {
-        compendio::com_a_maquina(&dir, |maquina| compendio::remover(maquina, &personagens, &itens))
+        compendio::com_a_maquina(&dir, |maquina| compendio::remover(maquina, &selecao))
     })
     .await
+}
+
+/// As sugestoes de condicao e de efeito no Compendio do ATO20, uma vez por
+/// maquina. Ver `compendio::semear`.
+#[tauri::command]
+pub async fn compendio_maquina_semear(
+    state: State<'_, AppState>,
+    condicoes: Vec<compendio::CondicaoSugerida>,
+    efeitos: Vec<serde_json::Value>,
+) -> AppResult<bool> {
+    let dir = state.compendio.clone();
+
+    em_segundo_plano(move || {
+        compendio::com_a_maquina(&dir, |maquina| compendio::semear(maquina, condicoes, efeitos))
+    })
+    .await
+}
+
+/// A biblioteca de condicoes da campanha. Ver `compendio::condicoes_do_compendio`.
+#[tauri::command]
+pub fn compendio_condicoes(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<compendio::MoldeDeCondicao>> {
+    state.with_vault(compendio::condicoes_do_compendio)
+}
+
+#[tauri::command]
+pub fn compendio_condicao_criar(
+    state: State<'_, AppState>,
+    nome: String,
+    cor: String,
+    icone: String,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::criar_condicao(vault, &nome, &cor, &icone, None))
+}
+
+#[tauri::command]
+pub fn compendio_condicao_editar(
+    state: State<'_, AppState>,
+    id: String,
+    patch: PatchCondicao,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::editar_condicao(vault, &id, patch))
+}
+
+#[tauri::command]
+pub fn compendio_condicao_apagar(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.with_vault(|vault| compendio::apagar_condicao(vault, &id))
+}
+
+/// Da biblioteca para o menu do token. Ver `compendio::condicao_no_menu`.
+#[tauri::command]
+pub fn compendio_condicao_no_menu(state: State<'_, AppState>, id: String) -> AppResult<Condicao> {
+    state.with_vault(|vault| compendio::condicao_no_menu(vault, &id))
+}
+
+/// Do menu do token para a biblioteca. Ver `compendio::guardar_condicao`.
+#[tauri::command]
+pub fn compendio_condicao_guardar(
+    state: State<'_, AppState>,
+    #[allow(non_snake_case)] modeloId: String,
+) -> AppResult<compendio::MoldeDeCondicao> {
+    state.with_vault(|vault| compendio::guardar_condicao(vault, &modeloId))
+}
+
+/// Um molde de efeito em branco. A tela poe a area, quando e de area.
+#[tauri::command]
+pub fn compendio_efeito_criar(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    state.with_vault(efeitos::criar_molde)
+}
+
+/// O molde de efeito entra em jogo: no seletor, no cardapio, na mesa.
+#[tauri::command]
+pub fn compendio_efeito_em_jogo(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| efeitos::marcar(vault, &id, false))
+}
+
+/// O efeito em jogo volta ao Compendio. Ver `compendio::guardar_efeito`.
+#[tauri::command]
+pub fn compendio_efeito_guardar(
+    state: State<'_, AppState>,
+    id: String,
+) -> AppResult<serde_json::Value> {
+    state.with_vault(|vault| compendio::guardar_efeito(vault, &id))
 }
 
 #[tauri::command]
