@@ -104,6 +104,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     spotlight,
     rolagens,
     pings,
+    disparados,
     laser,
     declarativoVersao,
     imagem,
@@ -160,6 +161,7 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
               fichas={fichas}
               rolagens={rolagens}
               pings={pings}
+              disparados={disparados}
               laser={laser}
               variante="tela"
               smooth

@@ -41,6 +41,11 @@ export type DefinicaoDeEfeito = {
   /** O chão do efeito: a textura deitada que marca a área. Ver `BaseDoEfeito`. */
   base?: BaseDoEfeito;
   /**
+   * Como o efeito DISPARA: em linha, como a bola de fogo, ou em cone, como o
+   * sopro do dragão. Ausente = em linha, com os padrões. Ver `DisparoDoEfeito`.
+   */
+  disparo?: DisparoDoEfeito;
+  /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
    * URL. Ausente = sem imagem; um externo sem origem não desenha.
@@ -305,6 +310,67 @@ export type AreaDoEfeito = {
    * macio. Os mesmos campos de imagem da base.
    */
   foco?: Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores">;
+};
+
+/**
+ * O efeito DISPARADO: sai de um ponto e vai até outro -- a bola de fogo, o raio
+ * de gelo, o jato d'água, o sopro do dragão. É a terceira ESPÉCIE de efeito, ao
+ * lado do de personagem (a figura de quem tem a condição) e do de área (o
+ * chão): o efeito que declara este bloco é um disparo, e só ele dispara. Tem
+ * janela própria e listas próprias -- ver `especieDoEfeito`.
+ *
+ * Desenha com as camadas de sempre, que no disparo têm outro papel: o
+ * `projetil` (ou, sem ele, o elemento da área) é o que voa; as `particulas`
+ * são o rastro e o que o cone solta; o chão (`base`) e os elementos
+ * (`area.foco`) fazem o cone e o estouro no fim da linha. O `area.cor` é a cor
+ * do tiro.
+ *
+ * Quem decide a forma é o efeito, e não quem dispara: o mestre escolhe a "Bola
+ * de fogo", e ela sabe que vai reta e estoura. Os números são em CASAS da
+ * grade, como o mapa as mede. Ver `disparoDoEfeito`, que prende cada um.
+ */
+export type DisparoDoEfeito = {
+  /**
+   * `linha`: o projétil voa de A até B -- e estoura lá, se tiver `impacto`.
+   * `cone`: o leque se abre de A até a distância de B, na direção dele.
+   */
+  forma: "linha" | "cone";
+  /** A abertura do cone, em graus, de 10 a 160. Ausente = 60. */
+  abertura?: number;
+  /** Em casas por segundo, de 3 a 60. Ausente = 15. */
+  velocidade?: number;
+  /**
+   * Até onde vai, em casas, quando sai de um token para onde ele olha -- o
+   * disparo pelo botão direito, que não tem ponto B. De 1 a 30. Ausente = 6.
+   */
+  alcance?: number;
+  /** O lado do projétil da linha, em casas, de 0,3 a 3. Ausente = 1. */
+  tamanho?: number;
+  /**
+   * O raio do estouro no fim da linha, em casas, de 0 a 4. Zero = sem
+   * estouro: a flecha que só chega. Ausente = 1.
+   */
+  impacto?: number;
+  /**
+   * O que VOA na linha: uma imagem, com os campos de imagem da base. Ausente =
+   * o elemento da área (`area.foco`), ou o `externo`, deitado com o topo para
+   * trás -- a chama que vira cauda.
+   */
+  projetil?: ProjetilDoDisparo;
+  /** A faixa da cor do tiro, de A até o projétil. Ausente = sim. */
+  rastro?: boolean;
+  /** O brilho redondo em volta do projétil. Ausente = sim. */
+  brilho?: boolean;
+};
+
+/**
+ * A imagem do projétil. Desenhada como veio, ela voa para a DIREITA da imagem;
+ * o `giro` vira a imagem antes do voo -- `90` põe o topo na frente (o
+ * estilhaço que fura), `-90` o põe para trás (a chama que vira cauda).
+ */
+export type ProjetilDoDisparo = Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores"> & {
+  /** Em graus, no sentido horário: `0`, `90`, `-90` ou `180`. Ausente = 0. */
+  giro?: number;
 };
 
 /**

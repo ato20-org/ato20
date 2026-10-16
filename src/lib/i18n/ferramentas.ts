@@ -384,6 +384,20 @@ const pt = {
       "A campanha ainda não tem efeitos em área. Eles se criam na Configuração da campanha, em Efeitos, Efeito em área.",
   },
 
+  disparo: {
+    titulo: "Disparar um efeito",
+    comoMirar: "Clique na origem e no alvo, ou arraste. Shift trava o ângulo.",
+    linha: "Em linha",
+    cone: "Em cone",
+    semEfeitos: "Nenhum disparo no Compêndio ainda.",
+    buscar: "Buscar disparo",
+    nadaAchado: "Nenhum disparo com esse nome.",
+    configurar: (titulo: string) => `Configurar ${titulo}`,
+    abrirCompendio: "Abrir o Compêndio",
+    disparar: "Disparar",
+    paraOndeOlha: "Sai para onde o token olha.",
+  },
+
   seta: {
     rotulo: "Rótulo da seta",
     rotuloPlaceholder: "o que esta seta diz",
@@ -859,6 +873,20 @@ const en: typeof pt = {
     nenhum: "None",
     semEfeitos:
       "The campaign has no area effects yet. Create them in Campaign settings, under Effects, Area effect.",
+  },
+
+  disparo: {
+    titulo: "Fire an effect",
+    comoMirar: "Click the origin and the target, or drag. Shift locks the angle.",
+    linha: "Line",
+    cone: "Cone",
+    semEfeitos: "No shots in the Compendium yet.",
+    buscar: "Search shots",
+    nadaAchado: "No shot by that name.",
+    configurar: (titulo) => `Set up ${titulo}`,
+    abrirCompendio: "Open the Compendium",
+    disparar: "Fire",
+    paraOndeOlha: "Goes where the token is looking.",
   },
 
   seta: {

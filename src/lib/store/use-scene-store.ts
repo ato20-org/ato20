@@ -95,6 +95,7 @@ import {
   type Sol,
   type NewTexto,
   type ListaDePastas,
+  type ListaDoCompendio,
   type Pasta,
   type PontaDeLigacao,
   type Texto,
@@ -243,6 +244,12 @@ type SceneStore = {
     // `compendio-itens` é a árvore dos moldes de item, no Compêndio.
     lista?: "itens" | "compendio-itens",
   ) => void;
+  /**
+   * Leva uma condição, um efeito de área ou um disparo do Compêndio para uma
+   * pasta da aba dele. `undefined` é a raiz. O mesmo desenho do item: a coisa
+   * mora num arquivo do vault, e a pasta guarda o id dela em `membros`.
+   */
+  moverNoCompendio: (id: string, lista: ListaDoCompendio, pastaId: string | undefined) => void;
 
   /**
    * As notas `.md`. O arquivo já existe quando a nota entra -- quem o cria é
@@ -810,7 +817,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
    */
   function moverMembro(
     membroId: string,
-    lista: "players" | "npcs" | "itens" | "compendio" | "compendio-itens",
+    lista: "players" | "npcs" | "itens" | "compendio" | "compendio-itens" | ListaDoCompendio,
     pastaId: string | undefined,
   ) {
     const { board } = get();
@@ -1225,6 +1232,10 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
     moverItemParaPasta(itemId, pastaId, lista = "itens") {
       moverMembro(itemId, lista, pastaId);
+    },
+
+    moverNoCompendio(id, lista, pastaId) {
+      moverMembro(id, lista, pastaId);
     },
 
     addNota(nota) {

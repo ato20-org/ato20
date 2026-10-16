@@ -1,22 +1,25 @@
 "use client";
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
-import { Maximize2, Tags, Trash2, Upload, WandSparkles } from "lucide-react";
+import { Crosshair, Maximize2, Tags, Trash2, Upload, WandSparkles } from "lucide-react";
 
+import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import {
+  AcaoDaLinha,
+  ArvoreDoCompendio,
   Cartao,
   daMaoNoCartao,
   falhou,
   filtrando,
-  GradeDeCartoes,
   Lendo,
   NadaCom,
-  useAosPoucos,
   useEmCimaDoCartao,
   type EdicaoDeTags,
 } from "@/components/mestre/compendio-cartao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { TiroEmLaco } from "@/components/playground/tiro-em-laco";
+import { Button } from "@/components/ui/button";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { DeclarativoProvider, useDeclarativo } from "@/components/playground/declarativo";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
@@ -24,14 +27,16 @@ import type { Kit } from "@/components/ui/menu-kit";
 import { useTokenDrag, type TokenParaArrastar } from "@/hooks/use-token-drag";
 import { COR_DA_AREA, ladoDaCasa } from "@/lib/area-de-efeito";
 import { SUGESTOES } from "@/lib/condicao";
-import { EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import { EFEITOS_DE_DISPARO } from "@/lib/disparo-de-efeito";
+import { copiaParaACampanha, EFEITOS_DE_FABRICA, especieDoEfeito } from "@/lib/efeitos";
 import { t } from "@/lib/i18n/mestre";
 import { filtrarNoCompendio, type FiltroDoCompendio } from "@/lib/mestre/compendio";
 import { useCondicoesStore } from "@/lib/store/use-condicoes-store";
 import { useCondicoesDoCompendioStore } from "@/lib/store/use-condicoes-do-compendio-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
+import { pastaDoMembro } from "@/lib/mestre/arvore-de-pastas";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
-import { CORES_LAPIS } from "@/lib/store/use-tool-store";
+import { CORES_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
 import {
   useTokenDragStore,
   type CondicaoNaMao,
@@ -41,24 +46,13 @@ import { DECLARATIVO_VAZIO, type Declarativo } from "@/lib/sync/declarativo";
 import { cn } from "@/lib/utils";
 import { levarAoCompendio } from "@/lib/vault/compendio";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
-import type { AreaDeEfeito } from "@/types/scene";
+import type { AreaDeEfeito, ListaDoCompendio, Pasta } from "@/types/scene";
 
 import boneco from "./boneco-do-efeito.svg";
 
 const texto = t.compendio;
 
-/**
- * As duas espécies de efeito: o de ÁREA, que pinta o chão de uma região do
- * mapa, e o de PERSONAGEM, que pinta a figura de quem está com uma condição.
- * Moram no mesmo arquivo e têm o mesmo formato -- o de área é o que declara
- * `area` --, mas um não serve no lugar do outro, e por isso o Compêndio os
- * mostra separados.
- */
-export type EspecieDeEfeito = "area" | "personagem";
-
-export function especieDoEfeito(efeito: Pick<DefinicaoDeEfeito, "area">): EspecieDeEfeito {
-  return efeito.area ? "area" : "personagem";
-}
+export { especieDoEfeito, type EspecieDeEfeito } from "@/lib/efeitos";
 
 /**
  * A cor em que o efeito aparece no card e na prévia: a do chão, no de área; no
@@ -174,18 +168,96 @@ export function arrastoDoEfeito(
 
 /** O efeito na mão, quando ele é do Compêndio pedido: o card dele esmaece. */
 export function efeitoNaMao(fonte: FonteDoArrasto | undefined, doAto20: boolean): string | null {
+  // O disparo só se arrasta da campanha: é para uma pasta dela.
+  if (fonte?.tipo === "disparo") return doAto20 ? null : fonte.efeitoId;
   return (fonte?.tipo === "efeito" || fonte?.tipo === "area") && Boolean(fonte.doAto20) === doAto20
     ? fonte.efeitoId
     : null;
 }
 
 /**
- * O desenho do card de um efeito de área: a varinha, que com a mão sobre o
- * card dá lugar ao chão pegando fogo. O de personagem anima no card da
- * condição dele -- ver `DesenhoDaCondicao`.
+ * O desenho do card de um efeito: o de área, a varinha, que com a mão sobre o
+ * card dá lugar ao chão pegando fogo; o disparo, a mira, que dá lugar ao tiro
+ * voando. O de personagem anima no card da condição dele -- ver
+ * `DesenhoDaCondicao`.
  */
 export function DesenhoDoEfeito({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
-  return <ChaoDoEfeito efeito={efeito} cor={cor} />;
+  return especieDoEfeito(efeito) === "disparo" ? (
+    <TiroDoEfeito efeito={efeito} cor={cor} />
+  ) : (
+    <ChaoDoEfeito efeito={efeito} cor={cor} />
+  );
+}
+
+/**
+ * O tiro de um disparo, no card. Parado, a mira; com a mão sobre o card, o
+ * tiro voa (ou o leque abre) em laço, e a mira some. Só o card sob a mão monta
+ * o tiro, pela razão do chão: cada um é um forno.
+ */
+function TiroDoEfeito({ efeito, cor }: { efeito: DefinicaoDeEfeito; cor: string }) {
+  const emCima = useEmCimaDoCartao();
+
+  return (
+    <>
+      {emCima ? <TiroNoCartao efeito={efeito} /> : null}
+      <span
+        className={cn(
+          "relative grid size-11 place-items-center rounded-full transition-opacity duration-500",
+          emCima && "opacity-0",
+        )}
+        style={{ backgroundColor: "rgba(0, 0, 0, 0.45)", boxShadow: `inset 0 0 0 3px ${cor}` }}
+      >
+        <Crosshair className="size-5" style={{ color: cor }} aria-hidden />
+      </span>
+    </>
+  );
+}
+
+/** Os pontos do tiro no pedaço de mapa do card: a linha de ponta a ponta, o cone da esquerda. */
+// O alvo longe da borda direita: o estouro da bola de fogo tem três casas.
+const LINHA_DO_CARTAO = { de: { x: 40, y: 170 }, para: { x: 380, y: 170 } };
+const CONE_DO_CARTAO = { de: { x: 40, y: 150 }, para: { x: 420, y: 150 } };
+
+function TiroNoCartao({ efeito }: { efeito: DefinicaoDeEfeito }) {
+  const [caixa, largura] = useLarguraDoCartao();
+
+  return (
+    <span ref={caixa} aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      {largura > 0 ? (
+        <span
+          className="absolute top-0 left-0"
+          style={{
+            width: MUNDO_DO_CARTAO.largura,
+            height: MUNDO_DO_CARTAO.altura,
+            transform: `scale(${largura / MUNDO_DO_CARTAO.largura})`,
+            transformOrigin: "0 0",
+          }}
+        >
+          <TiroEmLaco efeito={efeito} linha={LINHA_DO_CARTAO} cone={CONE_DO_CARTAO} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A largura do card, que muda com a janela: duas colunas na de 320, três na de 480. */
+function useLarguraDoCartao(): [RefObject<HTMLSpanElement | null>, number] {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [px, setPx] = useState(0);
+
+  useLayoutEffect(() => {
+    const aqui = ref.current;
+    if (!aqui) return;
+
+    setPx(aqui.clientWidth);
+    const observador = new ResizeObserver(([entrada]) => {
+      if (entrada) setPx(entrada.contentRect.width);
+    });
+    observador.observe(aqui);
+    return () => observador.disconnect();
+  }, []);
+
+  return [ref, px];
 }
 
 /**
@@ -366,13 +438,21 @@ function ImagemDoBoneco({ fonte }: { fonte: string | null }) {
  * em lugar nenhum que se visse, fazia parecer que ele tinha sumido.
  */
 export function EfeitosNoCompendio({
+  especie = "area",
   filtro,
+  pastas,
+  onCriarEm,
   onAbrir,
   onGuardado,
   onApagar,
   onEditarTags,
 }: {
+  /** A aba de dentro: os de área ou os disparos. */
+  especie?: "area" | "disparo";
   filtro: FiltroDoCompendio;
+  /** As pastas da aba aberta: a dos efeitos de área, ou a dos disparos. */
+  pastas: Pasta[];
+  onCriarEm: (pastaId: string) => void;
   onAbrir: (id: string) => void;
   onGuardado: () => void;
   onApagar: (efeito: DefinicaoDeEfeito) => void;
@@ -381,11 +461,27 @@ export function EfeitosNoCompendio({
   const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
   const cores = useCoresPelasCondicoes();
   const buscando = filtrando(filtro);
+  const [trazendo, setTrazendo] = useState(false);
 
   const lista = useMemo(
-    () => moldes?.filter((efeito) => especieDoEfeito(efeito) === "area") ?? null,
-    [moldes],
+    () => moldes?.filter((efeito) => especieDoEfeito(efeito) === especie) ?? null,
+    [moldes, especie],
   );
+
+  /**
+   * Os disparos de fábrica, guardados no Compêndio como moldes da campanha: o
+   * ponto de partida de quem nunca fez um. Só com a lista vazia, como as
+   * sugestões de condição -- no meio de uma lista montada, duplicaria o fogo.
+   */
+  async function trazerOsProntos() {
+    setTrazendo(true);
+    const { criarMolde, salvar } = useEfeitosDaCampanhaStore.getState();
+    for (const pronto of EFEITOS_DE_DISPARO) {
+      const novo = await criarMolde();
+      if (novo) salvar({ ...copiaParaACampanha(pronto, novo.id, pronto.titulo), compendio: true });
+    }
+    setTrazendo(false);
+  }
   const achados = useMemo(
     () =>
       lista
@@ -393,7 +489,6 @@ export function EfeitosNoCompendio({
         : null,
     [lista, filtro],
   );
-  const { limite, fim } = useAosPoucos(achados, achados?.length ?? 0);
 
   const guardarNoAto20 = useCallback(
     (efeito: DefinicaoDeEfeito) => {
@@ -406,8 +501,21 @@ export function EfeitosNoCompendio({
   );
 
   if (achados === null) return <Lendo />;
-  if (lista?.length === 0)
-    return (
+  if (lista?.length === 0 && pastas.length === 0)
+    return especie === "disparo" ? (
+      <div className="space-y-2 p-2">
+        <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioDisparos}</PainelVazio>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={trazendo}
+          onClick={() => void trazerOsProntos()}
+        >
+          {texto.trazerDisparosProntos}
+        </Button>
+      </div>
+    ) : (
       <PainelVazio conteudo={{ tipo: "compendio" }}>
         {texto.vazioEfeitosDeArea}
       </PainelVazio>
@@ -415,27 +523,35 @@ export function EfeitosNoCompendio({
   if (buscando && achados.length === 0) return <NadaCom filtro={filtro} />;
 
   return (
-    <>
-      <GradeDeCartoes>
-        {achados.slice(0, limite).map((efeito) => (
-          <CartaoDoEfeito
-            key={efeito.id}
-            efeito={efeito}
-            cor={corDoEfeito(efeito, cores.get(efeito.id))}
-            onAbrir={onAbrir}
-            onGuardarNoAto20={guardarNoAto20}
-            onApagar={onApagar}
-            onEditarTags={onEditarTags}
-          />
-        ))}
-      </GradeDeCartoes>
-      {fim}
-    </>
+    <ArvoreDoCompendio
+      achados={achados}
+      pastas={pastas}
+      buscando={buscando}
+      rotuloCriarAqui={especie === "disparo" ? texto.criarDisparoAqui : texto.criarEfeitoAqui}
+      onCriarEm={onCriarEm}
+      linha={(efeito, _depth, caminho) => (
+        <CartaoDoEfeito
+          key={efeito.id}
+          efeito={efeito}
+          caminho={caminho}
+          pastas={pastas}
+          lista={especie === "disparo" ? "compendio-disparos" : "compendio-efeitos"}
+          cor={corDoEfeito(efeito, cores.get(efeito.id))}
+          onAbrir={onAbrir}
+          onGuardarNoAto20={guardarNoAto20}
+          onApagar={onApagar}
+          onEditarTags={onEditarTags}
+        />
+      )}
+    />
   );
 }
 
 const CartaoDoEfeito = memo(function CartaoDoEfeito({
   efeito,
+  caminho,
+  pastas,
+  lista,
   cor,
   onAbrir,
   onGuardarNoAto20,
@@ -443,6 +559,11 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
   onEditarTags,
 }: {
   efeito: DefinicaoDeEfeito;
+  /** A pasta dele, na busca: a lista plana não mostra onde cada um mora. */
+  caminho?: string;
+  pastas: Pasta[];
+  /** De que árvore são as pastas: a dos efeitos de área ou a dos disparos. */
+  lista: ListaDoCompendio;
   cor: string;
   onAbrir: (id: string) => void;
   onGuardarNoAto20: (efeito: DefinicaoDeEfeito) => void;
@@ -454,12 +575,28 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
     (state) => efeitoNaMao(state.arrasto?.fonte, false) === efeito.id,
   );
 
-  const itens = ({ Item, Separator }: Kit) => (
+  // O tiro sai do Compêndio como o arrasto: o molde vai ao jogo como cópia,
+  // na hora em que o tiro sai, e não agora -- largar a mira não deixa cópia
+  // nenhuma para trás. Ver `disparar`. Só o disparo atira; o de área, que se
+  // solta no chão, se arrasta.
+  const ehDisparo = especieDoEfeito(efeito) === "disparo";
+  const disparar = () => useToolStore.getState().armarDisparo({ id: efeito.id });
+
+  const itens = (kit: Kit) => {
+    const { Item, Separator } = kit;
+
+    return (
     <>
       <Item onClick={() => onAbrir(efeito.id)}>
         <Maximize2 />
         {texto.editar}
       </Item>
+      {ehDisparo ? (
+        <Item onClick={disparar}>
+          <Crosshair />
+          {texto.disparar}
+        </Item>
+      ) : null}
       <Item onClick={() => onGuardarNoAto20(efeito)}>
         <Upload />
         {texto.guardarNoAto20}
@@ -478,18 +615,25 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
         <Tags />
         {texto.tagsNoMenu}
       </Item>
+      <ItensDeMover
+        kit={kit}
+        atual={pastaDoMembro(pastas, efeito.id)}
+        destinos={pastas}
+        onMover={(destino) => useSceneStore.getState().moverNoCompendio(efeito.id, lista, destino)}
+      />
       <Separator />
       <Item variant="destructive" onClick={() => onApagar(efeito)}>
         <Trash2 />
         {texto.apagar}
       </Item>
     </>
-  );
+    );
+  };
 
   return (
     <Cartao
       nome={efeito.titulo}
-      detalhe={efeito.dica}
+      detalhe={caminho || efeito.dica}
       tags={efeito.tags}
       faixa
       tinta={cor}
@@ -498,9 +642,23 @@ const CartaoDoEfeito = memo(function CartaoDoEfeito({
       onAbrir={() => onAbrir(efeito.id)}
       naMao={naMao}
       onPointerDown={(event) => {
-        if (daMaoNoCartao(event)) arrastar(event, arrastoDoEfeito(efeito, cor));
+        if (!daMaoNoCartao(event)) return;
+        // O disparo não tem o que fazer no mapa -- ele sai pela mira --, e o
+        // arrasto dele só leva a uma pasta. Ver `aceita`.
+        arrastar(
+          event,
+          ehDisparo
+            ? { fonte: { tipo: "disparo", efeitoId: efeito.id }, largura: 0, altura: 0 }
+            : arrastoDoEfeito(efeito, cor),
+        );
       }}
-      acao={null}
+      acao={
+        ehDisparo ? (
+          <AcaoDaLinha rotulo={texto.dispararDica} onClick={disparar}>
+            <Crosshair />
+          </AcaoDaLinha>
+        ) : null
+      }
       itens={itens}
     />
   );

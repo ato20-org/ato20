@@ -2,11 +2,13 @@
 
 import { corDoEfeito, useCoresPelasCondicoes } from "@/components/mestre/compendio-efeitos";
 import {
+  TelaDoDisparo,
   TelaDoEfeitoDePersonagem,
   TelaDoEfeitoEmArea,
 } from "@/components/mestre/efeitos-da-campanha";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { especieDoEfeito } from "@/lib/efeitos";
 import { t } from "@/lib/i18n/mestre";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
@@ -26,7 +28,8 @@ export function useEfeitoDaCampanha(efeitoId: string): DefinicaoDeEfeito | undef
 
 /**
  * A janela de um efeito: o editor inteiro, como a ficha é a janela do
- * personagem. O de área ou o de personagem, em jogo ou guardado no Compêndio.
+ * personagem. O disparo, o de área ou o de personagem, em jogo ou guardado no
+ * Compêndio.
  *
  * Janela, e não a tela que trocava a lista do Compêndio pelo editor: o editor
  * é comprido, tem prévia animada, e o mestre quer olhar a lista enquanto ajusta
@@ -51,7 +54,9 @@ export function EfeitoBody({ efeitoId }: { efeitoId: string }) {
   return (
     <ScrollArea className="min-h-0 flex-1">
       <div className="p-3">
-        {efeito.area ? (
+        {especieDoEfeito(efeito) === "disparo" ? (
+          <TelaDoDisparo efeito={efeito} />
+        ) : efeito.area ? (
           <TelaDoEfeitoEmArea efeito={efeito} />
         ) : (
           <TelaDoEfeitoDePersonagem efeito={efeito} cor={corDoEfeito(efeito, cores.get(efeito.id))} />
@@ -101,7 +106,12 @@ export function useRotuloDoEfeito(efeitoId: string | undefined): { titulo: strin
     // "Efeito" enquanto a lista não chegou: título que aparece depois faz a
     // aba pular, como na ficha.
     titulo: efeito?.titulo ?? t.janelas.efeito,
-    subtitulo: efeito?.area
+    subtitulo:
+      efeito && especieDoEfeito(efeito) === "disparo"
+        ? guardado
+          ? t.janelas.disparoNoCompendio
+          : t.janelas.disparoEmJogo
+        : efeito?.area
       ? guardado
         ? t.janelas.efeitoDeAreaNoCompendio
         : t.janelas.efeitoDeAreaEmJogo

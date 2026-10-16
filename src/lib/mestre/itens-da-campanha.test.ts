@@ -166,6 +166,33 @@ describe("moverItemParaPasta", () => {
   });
 });
 
+describe("moverNoCompendio", () => {
+  it("cada aba do Compêndio guarda os seus, e a pasta de outra aba recusa", () => {
+    montar(
+      [cena("m1")],
+      [
+        { id: "c", nome: "Venenos", lista: "compendio-condicoes" },
+        { id: "e", nome: "Chão", lista: "compendio-efeitos" },
+        { id: "d", nome: "Magias", lista: "compendio-disparos" },
+      ],
+    );
+    const membros = (id: string) =>
+      store().board!.pastas!.find((pasta) => pasta.id === id)?.membros;
+
+    // O disparo não entra na pasta dos efeitos de área.
+    store().moverNoCompendio("bola", "compendio-disparos", "e");
+    expect(membros("e")).toBeUndefined();
+
+    store().moverNoCompendio("bola", "compendio-disparos", "d");
+    store().moverNoCompendio("envenenado", "compendio-condicoes", "c");
+    expect(membros("d")).toEqual(["bola"]);
+    expect(membros("c")).toEqual(["envenenado"]);
+
+    store().moverNoCompendio("bola", "compendio-disparos", undefined);
+    expect(membros("d")).toBeUndefined();
+  });
+});
+
 describe("trocarImagemDoItem", () => {
   it("troca a imagem das peças do item em todas as cenas, e só delas", () => {
     const peca = (id: string, extra: object) => ({

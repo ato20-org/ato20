@@ -17,6 +17,7 @@ import {
 import { createElement, useEffect, useMemo } from "react";
 
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
+import { BotaoDoDisparo } from "@/components/mestre/disparo-control";
 import { BotaoDeElementos } from "@/components/mestre/pilula-de-desenho";
 import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
@@ -160,8 +161,9 @@ const FERRAMENTA_LUZ: Ferramenta = {
 /**
  * A porta: traça a folha da dobradiça até a ponta.
  *
- * Embaixo da luz porque é a luz que ela deixa passar: o mestre acende a sala,
- * fecha a porta e confere o escuro do outro lado, sem atravessar a barra.
+ * Perto da luz -- só o disparo entre as duas -- porque é a luz que ela deixa
+ * passar: o mestre acende a sala, fecha a porta e confere o escuro do outro
+ * lado, sem atravessar a barra.
  */
 const FERRAMENTA_PORTA: Ferramenta = {
   tool: "porta",
@@ -418,6 +420,10 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
       {temLuz(scene) ? (
         <BotaoDeFerramenta ferramenta={FERRAMENTA_LUZ} dica="left" />
       ) : null}
+      {/* Logo abaixo da luz: as duas acendem o mapa, uma que fica e outra que
+          passa. O botão abre o menu do efeito, e não pega a ferramenta direto:
+          sem efeito não há o que atirar. Ver `BotaoDoDisparo`. */}
+      {temAreaDeEfeito(scene) ? <BotaoDoDisparo lado="left" /> : null}
       {temSol(scene) ? (
         <BotaoDeFerramenta ferramenta={FERRAMENTA_PORTA} dica="left" />
       ) : null}
@@ -538,6 +544,7 @@ export function MestreToolbar({ scene }: { scene: Scene }) {
     // Parede é do chão, e o chão que a tem é o do mapa: ver `Tool`.
     if (tool === "parede" && !temSol(scene)) setTool("select");
     if (tool === "luz" && !temLuz(scene)) setTool("select");
+    if (tool === "disparo" && !temAreaDeEfeito(scene)) setTool("select");
     if (tool === "porta" && !temSol(scene)) setTool("select");
     if (tool === "pin" && !temAnotacao(scene)) setTool("select");
     // A letra e a forma atravessam a troca de cena porque valem nos três --

@@ -98,6 +98,9 @@ const pt = {
     postitDica: "Cola um papel com texto à vista. Só você vê.",
     luz: "Luz",
     luzDica: "Crava uma luz. Acende o escuro em volta dela.",
+    disparo: "Disparo",
+    disparoDica:
+      "Atira um efeito de um ponto a outro, em linha ou em cone: a bola de fogo, o sopro do dragão.",
     porta: "Porta",
     portaDica:
       "Arraste da dobradiça até a outra ponta. Depois, a ponta abre e fecha.",
@@ -287,6 +290,9 @@ const en: typeof pt = {
     postitDica: "Sticks a note with text in plain view. Only you see it.",
     luz: "Light",
     luzDica: "Drops a light. It lights up the dark around it.",
+    disparo: "Shot",
+    disparoDica:
+      "Fires an effect from one point to another, in a line or a cone: the fireball, the dragon's breath.",
     porta: "Door",
     portaDica:
       "Drag from the hinge to the other end. Then drag the end to open and close it.",

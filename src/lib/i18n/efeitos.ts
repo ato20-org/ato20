@@ -29,6 +29,27 @@ const pt = {
     titulo: "Sangrando",
     dica: "Talhos abertos na figura, o sangue pingando dela e a poça aos pés.",
   },
+  // Os disparos: saem de um ponto e vão até outro.
+  "bola-de-fogo": {
+    titulo: "Bola de fogo",
+    dica: "Voa em linha até o alvo e estoura em chamas em volta dele.",
+  },
+  "raio-de-gelo": {
+    titulo: "Raio de gelo",
+    dica: "Um estilhaço de gelo reto e rápido, sem estouro: chega e pronto.",
+  },
+  "jato-de-agua": {
+    titulo: "Jato d'água",
+    dica: "Uma gota em linha que se espalha num respingo onde cai.",
+  },
+  "sopro-de-fogo": {
+    titulo: "Sopro de fogo",
+    dica: "Um leque de chamas que se abre de quem sopra: o hálito do dragão.",
+  },
+  "nuvem-venenosa": {
+    titulo: "Nuvem venenosa",
+    dica: "Um cone de névoa tóxica que se espalha de quem a solta.",
+  },
 };
 
 const en: typeof pt = {
@@ -51,6 +72,26 @@ const en: typeof pt = {
   sangrando: {
     titulo: "Bleeding",
     dica: "Open gashes on the figure, blood dripping from it into a pool at its feet.",
+  },
+  "bola-de-fogo": {
+    titulo: "Fireball",
+    dica: "Flies in a line to the target and bursts into flames around it.",
+  },
+  "raio-de-gelo": {
+    titulo: "Ray of frost",
+    dica: "A straight, fast shard of ice with no burst: it hits and that's it.",
+  },
+  "jato-de-agua": {
+    titulo: "Water jet",
+    dica: "A drop in a line that spreads into a splash where it lands.",
+  },
+  "sopro-de-fogo": {
+    titulo: "Fire breath",
+    dica: "A fan of flames opening from whoever breathes it: the dragon's breath.",
+  },
+  "nuvem-venenosa": {
+    titulo: "Poison cloud",
+    dica: "A cone of toxic mist spreading from whoever releases it.",
   },
 };
 

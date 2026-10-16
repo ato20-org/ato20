@@ -92,10 +92,13 @@ export function CampoDeNome({
 export function TresPontos({
   rotulo,
   aoFechar,
+  focoFinal,
   itens,
 }: {
   rotulo: string;
   aoFechar: (aberto: boolean) => void;
+  /** Para onde o foco vai ao fechar. Ver `useRenomearPeloMenu`. */
+  focoFinal?: () => boolean;
   itens: (kit: Kit) => ReactNode;
 }) {
   return (
@@ -113,7 +116,7 @@ export function TresPontos({
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-52" finalFocus={focoFinal}>
         {itens(KIT_TRES_PONTOS)}
       </DropdownMenuContent>
     </DropdownMenu>

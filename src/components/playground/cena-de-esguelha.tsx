@@ -26,6 +26,7 @@ import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import {
   itensVisiveis,
@@ -127,6 +128,7 @@ export function CenaDeEsguelha({
   efeitos,
   rolagens,
   pings,
+  disparados,
   laser,
   variante,
   smooth,
@@ -143,6 +145,8 @@ export function CenaDeEsguelha({
   efeitos?: EfeitosDoPersonagem[];
   rolagens?: RolagemDaMesa[];
   pings?: Ping[];
+  /** Os efeitos disparados. Ver `SceneLayer`. */
+  disparados?: EfeitoDisparado[];
   /** O laser do mestre. Ver `SceneLayer`. */
   laser?: LaserNaMesa | null;
   variante?: Variante;
@@ -314,6 +318,7 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
         laser={laser}
         variante={variante}
         smooth={smooth}
@@ -331,6 +336,7 @@ export function CenaDeEsguelha({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
         laser={laser}
         variante={variante}
         smooth={smooth}

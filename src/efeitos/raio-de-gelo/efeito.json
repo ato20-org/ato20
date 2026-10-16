@@ -1,0 +1,74 @@
+{
+  "id": "raio-de-gelo",
+  "titulo": "Raio de gelo",
+  "dica": "Um estilhaço de gelo reto e rápido, sem estouro: chega e pronto.",
+  "disparo": {
+    "forma": "linha",
+    "velocidade": 26,
+    "tamanho": 0.8,
+    "impacto": 0,
+    "projetil": {
+      "imagem": "../congelado/cristal.png",
+      "quadros": {
+        "colunas": 4,
+        "total": 4,
+        "fps": 8
+      },
+      "giro": 90
+    }
+  },
+  "area": {
+    "cor": "#3b82f6",
+    "divisoes": 1,
+    "escala": 1,
+    "foco": {
+      "imagem": "../congelado/cristal-128.webp",
+      "mipmaps": {
+        "64": "../congelado/cristal-64.webp",
+        "128": "../congelado/cristal-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 8
+      },
+      "cores": "condicao"
+    },
+    "densidade": 3
+  },
+  "base": {
+    "imagem": "../congelado/gelo-128.webp",
+    "mipmaps": {
+      "64": "../congelado/gelo-64.webp",
+      "128": "../congelado/gelo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 8
+    },
+    "cores": "condicao",
+    "escala": 3
+  },
+  "particulas": {
+    "quantidade": 8,
+    "imagem": "../congelado/cristal.png",
+    "quadros": {
+      "colunas": 4,
+      "total": 4,
+      "fps": 8
+    },
+    "tamanho": 0.16,
+    "variacao": 0.5,
+    "giro": 60,
+    "direcao": 270,
+    "abertura": 140,
+    "velocidade": 0.3,
+    "vida": 2.4,
+    "emissor": {
+      "largura": 1,
+      "altura": 0.9,
+      "ancora": "centro"
+    }
+  }
+}

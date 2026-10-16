@@ -12,6 +12,7 @@ import {
   densidadeDoEfeito,
   divisoesDoEfeito,
   ESCALA_DO_FOCO,
+  LADO_DO_QUADRO_DE_PASSAGEM,
   planoDaArea,
   type PlanoDaArea,
 } from "@/lib/area-de-efeito";
@@ -31,6 +32,7 @@ import {
   assarArea,
   faixaDaFolha,
   fonteAssada,
+  soltarArea,
   type PedidoDeAreaAssada,
   type PedidoDeExterno,
 } from "@/lib/externo-assado";
@@ -127,6 +129,76 @@ const AreaDeEfeitoView = memo(function AreaDeEfeitoView({
   soBase: boolean;
   onPointerDown?: (event: ReactPointerEvent, area: AreaDeEfeito) => void;
 }) {
+  const assada = useAreaAssada(area, grid, soBase);
+
+  return (
+    <>
+      {assada ? (
+        <div
+          aria-hidden
+          data-efeito-parado={parada ? "" : undefined}
+          className="pointer-events-none absolute top-0 left-0 select-none"
+          style={{
+            transform: `translate(${assada.plano.caixa.x}px, ${assada.plano.caixa.y}px)`,
+            width: assada.plano.caixa.width,
+            height: assada.plano.caixa.height,
+            zIndex: AREA_Z,
+            opacity: operador && !area.naMesa ? APAGADA : undefined,
+          }}
+        >
+          <FolhaDaArea area={area} assada={assada} />
+        </div>
+      ) : null}
+
+      {operador ? <ContornoDaArea area={area} onPointerDown={onPointerDown} /> : null}
+    </>
+  );
+});
+
+/** A área assada: o plano dela, a folha pronta e o laço que a folha toca. */
+export type AreaAssada = {
+  plano: PlanoDaArea;
+  folha: { url: string; grade: Grade };
+  quadros: { colunas: number; total: number; fps: number };
+};
+
+/**
+ * A folha tocando, do tamanho da caixa de quem a monta -- a do plano da área.
+ * À parte do envelope, para o tiro do cone e o estouro no fim da linha
+ * (`DisparoLayer`) porem o deles, que anima.
+ */
+export function FolhaDaArea({ area, assada }: { area: Pick<AreaDeEfeito, "id">; assada: AreaAssada }) {
+  const { folha, quadros } = assada;
+
+  return (
+    <QuadrosAnimados
+      fonte={folha.url}
+      colunas={folha.grade.colunas}
+      linhas={folha.grade.linhas}
+      fps={quadros.fps}
+      fase={faseDaFigura(area.id, folha.grade.total / quadros.fps)}
+    />
+  );
+}
+
+/**
+ * O plano e a folha de uma área, assada nos fornos -- ou `null` enquanto o
+ * forno não entrega, e para a área sem efeito ou sem o que desenhar.
+ *
+ * O miolo da `AreaDeEfeitoView`, à parte para o tiro: o cone de um disparo e o
+ * estouro no fim da linha são áreas que ninguém pôs na cena, e desenham com o
+ * mesmo motor -- o mesmo chão, os mesmos elementos, a mesma folha por área.
+ */
+export function useAreaAssada(
+  area: AreaDeEfeito,
+  grid: SceneGrid | undefined,
+  soBase = false,
+  /**
+   * A área é DE PASSAGEM: o cone de um tiro, o estouro. A folha sai menor
+   * (`LADO_DO_QUADRO_DE_PASSAGEM`) e é solta quando a área sai da tela.
+   */
+  passageira = false,
+): AreaAssada | null {
   const { efeitos: deFora } = useDeclarativo();
   const definicao = area.efeito ? definicaoDoEfeito(area.efeito, deFora) : undefined;
   const escala = escalaDoFoco(definicao?.area?.escala);
@@ -160,40 +232,19 @@ const AreaDeEfeitoView = memo(function AreaDeEfeitoView({
         fps: quadros.fps,
         ...(base ? { escalaDaBase: base.escala } : {}),
         ...(particulas ? { particulas } : {}),
+        ...(passageira ? { ladoMaximoDoQuadro: LADO_DO_QUADRO_DE_PASSAGEM } : {}),
       }),
-    [area, grid, escala, divisoes, densidade, quadros.total, quadros.fps, base, particulas],
+    [area, grid, escala, divisoes, densidade, quadros.total, quadros.fps, base, particulas, passageira],
   );
-  const folha = useFolhaDaArea(plano, { fogo, base, particulas, quadros });
+  const folha = useFolhaDaArea(plano, { fogo, base, particulas, quadros }, passageira);
 
-  return (
-    <>
-      {plano && folha ? (
-        <div
-          aria-hidden
-          data-efeito-parado={parada ? "" : undefined}
-          className="pointer-events-none absolute top-0 left-0 select-none"
-          style={{
-            transform: `translate(${plano.caixa.x}px, ${plano.caixa.y}px)`,
-            width: plano.caixa.width,
-            height: plano.caixa.height,
-            zIndex: AREA_Z,
-            opacity: operador && !area.naMesa ? APAGADA : undefined,
-          }}
-        >
-          <QuadrosAnimados
-            fonte={folha.url}
-            colunas={folha.grade.colunas}
-            linhas={folha.grade.linhas}
-            fps={quadros.fps}
-            fase={faseDaFigura(area.id, folha.grade.total / quadros.fps)}
-          />
-        </div>
-      ) : null}
-
-      {operador ? <ContornoDaArea area={area} onPointerDown={onPointerDown} /> : null}
-    </>
+  // O laço junto, num objeto estável: quem monta a folha a guarda num `memo`.
+  const { colunas, total, fps } = quadros;
+  return useMemo(
+    () => (plano && folha ? { plano, folha, quadros: { colunas, total, fps } } : null),
+    [plano, folha, colunas, total, fps],
   );
-});
+}
 
 /** A escala do foco que o efeito declarou, presa. */
 function escalaDoFoco(escala: number | undefined): number {
@@ -315,6 +366,8 @@ function useFolhaDaArea(
     particulas: ParticulasResolvidas | undefined;
     quadros: { colunas: number; total: number; fps: number };
   },
+  /** Solta a folha ao sair: ninguém mais a pede. Ver `soltarArea`. */
+  passageira = false,
 ): { url: string; grade: Grade } | null {
   const { fogo: externo, base, particulas, quadros } = efeito;
   const pedido = useMemo<PedidoDaFolha | null>(() => {
@@ -395,6 +448,7 @@ function useFolhaDaArea(
     if (!chave || !pedido) return;
 
     let ativo = true;
+    let assada: PedidoDeAreaAssada | null = null;
     const espera = setTimeout(
       () => {
         void (async () => {
@@ -405,11 +459,12 @@ function useFolhaDaArea(
           if (!ativo) return;
 
           const { area } = pedido;
-          const url = await assarArea({
+          assada = {
             ...area,
             ...(area.fogo && fogo ? { fogo: { ...area.fogo, fonte: fogo } } : { fogo: undefined }),
             ...(area.base && chao ? { base: { ...area.base, fonte: chao } } : { base: undefined }),
-          });
+          };
+          const url = await assarArea(assada);
           if (ativo && url) setPronta({ url, grade: area.grade });
         })();
       },
@@ -419,6 +474,7 @@ function useFolhaDaArea(
     return () => {
       ativo = false;
       clearTimeout(espera);
+      if (passageira && assada) soltarArea(assada);
     };
     // A chave diz tudo o que os fornos recebem. Ver `useExternoAssado`.
     // eslint-disable-next-line react-hooks/exhaustive-deps

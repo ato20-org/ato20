@@ -2,16 +2,31 @@
 
 import {
   createContext,
+  Fragment,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
+import {
+  ArrowLeft,
+  ChevronRight,
+  FolderOpen,
+  FolderPlus,
+  Plus,
+  TextCursorInput,
+  Ungroup,
+} from "lucide-react";
 
-import { TresPontos } from "@/components/mestre/arvore-de-pastas";
+import {
+  CampoDeNome,
+  ItensDeMover,
+  TresPontos,
+} from "@/components/mestre/arvore-de-pastas";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -21,11 +36,23 @@ import {
 import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { t } from "@/lib/i18n/mestre";
+import { aoApertarF2, useRenomearPeloMenu } from "@/hooks/use-renomear-pelo-menu";
+import { t as textoDasPastas } from "@/lib/i18n/arquivos";
+import {
+  caminhoDaPasta,
+  conteudoDaPasta,
+  descendentes,
+  pastaDoMembro,
+  trilhaDaPasta,
+} from "@/lib/mestre/arvore-de-pastas";
+import { useSceneStore } from "@/lib/store/use-scene-store";
+import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import type { FiltroDoCompendio } from "@/lib/mestre/compendio";
 import { MINIATURA } from "@/lib/miniatura";
 import { cn } from "@/lib/utils";
 import { imagemDoCompendio, type TipoDeMolde } from "@/lib/vault/compendio";
 import type { Medidor } from "@/types/character";
+import type { ListaDePastasDoCompendio, Pasta } from "@/types/scene";
 
 /**
  * As peças das listas do Compêndio: o card, a grade, a montagem aos poucos e
@@ -494,5 +521,408 @@ export function Etiqueta({ children, className }: { children: ReactNode; classNa
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * A pasta aberta em cada aba do Compêndio, e como ir a outra. Quem guarda é a
+ * janela -- o "+" e a "Nova pasta" criam DENTRO da pasta aberta --, e quem lê
+ * é a lista da aba e a trilha. Contexto, e não prop, porque são quatro listas
+ * e uma janela entre as duas pontas.
+ */
+type NavegacaoDoCompendio = {
+  /** A árvore da aba aberta: é o que a pasta diz ao arrasto. Ausente = sem pastas. */
+  lista: ListaDePastasDoCompendio | undefined;
+  /** Ausente = a raiz da aba. */
+  pastaAberta: string | undefined;
+  abrirPasta: (pastaId: string | undefined) => void;
+};
+
+const NavegacaoDoCompendioContext = createContext<NavegacaoDoCompendio>({
+  lista: undefined,
+  pastaAberta: undefined,
+  abrirPasta: () => {},
+});
+
+/**
+ * Os atributos que fazem um elemento ser PASTA para o arrasto de um card: o
+ * card da pasta, ou um passo da trilha (`undefined` é a raiz). Ver `ler` em
+ * `useTokenDrag`.
+ */
+function alvoDaPasta(
+  lista: ListaDePastasDoCompendio | undefined,
+  pastaId: string | undefined,
+): Record<`data-${string}`, string> {
+  return lista ? { "data-pasta-compendio": lista, "data-pasta-id": pastaId ?? "" } : {};
+}
+
+/** A mão está sobre esta pasta, com algo que entra nela? Para ela acender. */
+function useSoltandoNaPasta(pastaId: string | undefined): boolean {
+  return useTokenDragStore(
+    (state) =>
+      state.arrasto?.destino?.tipo === "pasta-compendio" &&
+      state.arrasto.destino.pastaId === pastaId,
+  );
+}
+
+export const NavegacaoDoCompendioProvider = NavegacaoDoCompendioContext.Provider;
+
+function useNavegacaoDoCompendio(): NavegacaoDoCompendio {
+  return useContext(NavegacaoDoCompendioContext);
+}
+
+/**
+ * O que há numa lista da campanha, como num gerenciador de arquivos: a pasta
+ * aberta, com as subpastas dela em ícone de pasta, primeiro, e os cards que
+ * moram nela, depois. Clicar na pasta entra; a trilha (`TrilhaDoCompendio`)
+ * volta. Era uma árvore, com cada pasta um cabeçalho e o que tinha dentro
+ * logo embaixo, e cinquenta goblins numa pasta empurravam a próxima para fora
+ * da janela.
+ *
+ * A mesma para os moldes, os itens, as condições, os efeitos e os disparos --
+ * só muda a linha e de que lista são as pastas. Na busca, a lista plana com a
+ * pasta de cada um embaixo do nome: entrar numa pasta esconderia o que foi
+ * achado nas outras.
+ *
+ * Soltar o card arrastado numa pasta -- ou num passo da trilha -- o põe lá: é
+ * o mesmo arrasto que o leva ao mapa, e quem recebe é a janela (ver o alvo
+ * `compendio` no `PainelDoCompendio`). O "Mover para" do menu continua. A
+ * pasta em si não se arrasta.
+ */
+export function ArvoreDoCompendio<T extends { id: string }>({
+  achados,
+  pastas,
+  buscando,
+  rotuloCriarAqui,
+  onCriarEm,
+  linha,
+}: {
+  achados: T[];
+  pastas: Pasta[];
+  buscando: boolean;
+  rotuloCriarAqui: string;
+  onCriarEm: (pastaId: string) => void;
+  linha: (coisa: T, depth: number, caminho?: string) => ReactNode;
+}) {
+  const { pastaAberta, abrirPasta } = useNavegacaoDoCompendio();
+  const dentro = useMemo(
+    () =>
+      buscando
+        ? null
+        : conteudoDaPasta(achados, pastas, (coisa) => pastaDoMembro(pastas, coisa.id), pastaAberta),
+    [achados, buscando, pastas, pastaAberta],
+  );
+  // Outra pasta é outra lista: volta ao primeiro lote.
+  const { limite, fim } = useAosPoucos(dentro ? `${pastaAberta}` : achados, (dentro?.itens ?? achados).length);
+
+  // Na busca, uma grade só, com a pasta de cada um no card.
+  if (dentro === null) {
+    return (
+      <>
+        <GradeDeCartoes>
+          {achados
+            .slice(0, limite)
+            .map((coisa) =>
+              linha(coisa, 0, caminhoDaPasta(pastas, pastaDoMembro(pastas, coisa.id))),
+            )}
+        </GradeDeCartoes>
+        {fim}
+      </>
+    );
+  }
+
+  if (dentro.pastas.length === 0 && dentro.itens.length === 0)
+    return <p className="text-muted-foreground px-3 py-6 text-center text-xs">{texto.pastaVazia}</p>;
+
+  return (
+    <>
+      <GradeDeCartoes>
+        {dentro.pastas.map(({ pasta, total }) => (
+          <CartaoDaPasta
+            key={pasta.id}
+            pasta={pasta}
+            pastas={pastas}
+            total={total}
+            onAbrir={() => abrirPasta(pasta.id)}
+            rotuloCriarAqui={rotuloCriarAqui}
+            onCriarAqui={() => onCriarEm(pasta.id)}
+          />
+        ))}
+        {dentro.itens.slice(0, limite).map((coisa) => linha(coisa, 0))}
+      </GradeDeCartoes>
+      {fim}
+    </>
+  );
+}
+
+/**
+ * A área de imagem dos cards de cada aba, para a pasta ter a mesma: em pé no
+ * bestiário, quadrada nos itens, deitada nas condições e nos efeitos. Ver
+ * `Cartao`. O ícone sempre pela LARGURA: a altura da área sai do
+ * `aspect-ratio`, e um `h-3/5` dentro dela não tem do que ser três quintos --
+ * o SVG cai na altura padrão e estica a área.
+ */
+const FORMATO_DA_PASTA: Record<ListaDePastasDoCompendio, { area: string; icone: string }> = {
+  compendio: { area: "aspect-[4/5]", icone: "w-3/5" },
+  "compendio-itens": { area: "aspect-square", icone: "w-3/5" },
+  "compendio-condicoes": { area: "aspect-[2/1]", icone: "w-1/3" },
+  "compendio-efeitos": { area: "aspect-[2/1]", icone: "w-1/3" },
+  "compendio-disparos": { area: "aspect-[2/1]", icone: "w-1/3" },
+};
+
+/**
+ * A pasta como num gerenciador de arquivos, do tamanho dos cards ao lado: a
+ * mesma moldura e a mesma área de imagem, com o ícone de pasta no lugar do
+ * retrato, e o nome e quanto tem dentro onde o card tem o nome. Um ícone solto
+ * de cem pixels ao lado de um card de duzentos e tantos parecia outra coisa.
+ *
+ * Um clique entra. O menu -- botão direito ou os três pontos -- tem o que a
+ * linha da pasta tinha: criar aqui, subpasta, renomear, mover e desfazer.
+ * Renomear é no lugar, no próprio nome.
+ */
+function CartaoDaPasta({
+  pasta,
+  pastas,
+  total,
+  onAbrir,
+  rotuloCriarAqui,
+  onCriarAqui,
+}: {
+  pasta: Pasta;
+  /** As da mesma lista: os destinos do "Mover para" e o número da subpasta. */
+  pastas: Pasta[];
+  total: number;
+  onAbrir: () => void;
+  rotuloCriarAqui: string;
+  onCriarAqui: () => void;
+}) {
+  const [renomeando, setRenomeando] = useState(false);
+  const renomear = useRenomearPeloMenu(() => setRenomeando(true));
+  const store = () => useSceneStore.getState();
+  const { lista } = useNavegacaoDoCompendio();
+  const formato = FORMATO_DA_PASTA[lista ?? "compendio"];
+  const soltando = useSoltandoNaPasta(pasta.id);
+
+  // Destinos válidos: nem ela, nem descendente dela.
+  const proibidos = new Set(descendentes(pastas, pasta.id));
+  const destinos = pastas.filter((outra) => !proibidos.has(outra.id));
+
+  const itens = (kit: Kit) => {
+    const { Item, Separator } = kit;
+    return (
+      <>
+        <Item onClick={onAbrir}>
+          <FolderOpen />
+          {texto.abrir}
+        </Item>
+        <Item onClick={onCriarAqui}>
+          <Plus />
+          {rotuloCriarAqui}
+        </Item>
+        <Item onClick={() => store().criarPasta(textoDasPastas.nomesPadrao.pasta(pastas.length + 1), pasta.id)}>
+          <FolderPlus />
+          {textoDasPastas.geral.novaSubpasta}
+        </Item>
+        <Separator />
+        <Item onClick={renomear.pedir}>
+          <TextCursorInput />
+          {textoDasPastas.geral.renomear}
+        </Item>
+        <ItensDeMover
+          kit={kit}
+          atual={pasta.parentId}
+          destinos={destinos}
+          onMover={(destino) => store().moverPasta(pasta.id, destino)}
+        />
+        <Separator />
+        {/* Desfazer solta o que há dentro um nível acima. Nunca apaga o que
+            está dentro: é organização, não remoção. */}
+        <Item onClick={() => store().removerPasta(pasta.id)}>
+          <Ungroup />
+          {textoDasPastas.arvoreDePastas.desfazerPasta}
+        </Item>
+      </>
+    );
+  };
+
+  return (
+    <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
+      <ContextMenuTrigger
+        render={
+          <li
+            {...alvoDaPasta(lista, pasta.id)}
+            className={cn(
+              "group bg-card hover:border-foreground/25 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors select-none",
+              // Com um card na mão por cima: é aqui que ele cai.
+              soltando && "border-primary ring-primary ring-2",
+            )}
+          />
+        }
+      >
+        <button
+          type="button"
+          className={cn(
+            "bg-muted/60 focus-visible:ring-ring flex w-full items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-inset",
+            formato.area,
+          )}
+          title={texto.abrirPasta(pasta.nome)}
+          onClick={onAbrir}
+          onKeyDown={aoApertarF2(() => setRenomeando(true))}
+        >
+          <IconeDePasta vazia={total === 0} className={formato.icone} />
+        </button>
+
+        <span className="flex min-w-0 flex-col gap-0.5 p-2">
+          {renomeando ? (
+            <CampoDeNome
+              valor={pasta.nome}
+              rotulo={textoDasPastas.geral.nomeDaPasta}
+              onConfirmar={(nome) => {
+                const limpo = nome.trim();
+                if (limpo && limpo !== pasta.nome) store().atualizarPasta(pasta.id, { nome: limpo });
+                setRenomeando(false);
+              }}
+              onCancelar={() => setRenomeando(false)}
+            />
+          ) : (
+            <span className="truncate text-xs font-medium" title={pasta.nome}>
+              {pasta.nome}
+            </span>
+          )}
+          <span className="text-muted-foreground text-[10px] tabular-nums">{texto.naPasta(total)}</span>
+        </span>
+
+        <span className="absolute top-1 right-1">
+          <TresPontos
+            rotulo={pasta.nome}
+            aoFechar={renomear.aoFechar}
+            focoFinal={renomear.focoFinal}
+            itens={itens}
+          />
+        </span>
+      </ContextMenuTrigger>
+
+      <ContextMenuContent className="w-52" finalFocus={renomear.focoFinal}>
+        {itens(KIT_CONTEXTO)}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/**
+ * O ícone de pasta, desenhado como o do sistema: a aba de trás mais escura e a
+ * frente clara por cima. Desenhado, e não o traço do lucide, para ler de longe
+ * como PASTA, e não como mais um botão. A vazia fica apagada.
+ *
+ * Cinza, o dos textos de apoio: a cor do Compêndio é a dos cards -- a da
+ * condição, a do efeito --, e uma pasta azul disputava com eles. Do tema, e
+ * não um cinza fixo, para continuar cinza no claro e no escuro.
+ */
+function IconeDePasta({ vazia, className }: { vazia: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 64 52"
+      aria-hidden
+      className={cn("text-muted-foreground aspect-64/52 drop-shadow-sm", vazia && "opacity-50", className)}
+    >
+      <path
+        d="M4 7a5 5 0 0 1 5-5h13.6a5 5 0 0 1 3.7 1.6L30 7.5h25a5 5 0 0 1 5 5V45a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"
+        fill="currentColor"
+        fillOpacity={0.55}
+      />
+      <path
+        d="M4 16a5 5 0 0 1 5-5h46a5 5 0 0 1 5 5v29a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+/**
+ * A TRILHA da pasta aberta, em cima da lista: a aba e cada pasta do caminho,
+ * para voltar a qualquer uma num clique, e a seta que sobe um nível. Fora da
+ * área que rola, como o filtro: é controle da lista, e fica à vista no fundo
+ * de uma pasta comprida.
+ */
+export function TrilhaDoCompendio({ raiz, pastas }: { raiz: string; pastas: Pasta[] }) {
+  const { lista, pastaAberta, abrirPasta } = useNavegacaoDoCompendio();
+  const trilha = trilhaDaPasta(pastas, pastaAberta);
+  const mae = trilha.at(-2)?.id;
+
+  return (
+    <nav aria-label={texto.trilha} className="flex min-w-0 shrink-0 items-center gap-0.5 px-2 pb-1.5">
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={texto.voltar}
+        title={texto.voltar}
+        disabled={trilha.length === 0}
+        onClick={() => abrirPasta(mae)}
+      >
+        <ArrowLeft />
+      </Button>
+      {/* Cada passo de cima também recebe o card arrastado: soltar na raiz
+          tira da pasta, como num gerenciador de arquivos. A pasta aberta,
+          não -- o card já está nela. */}
+      <PassoDaTrilha
+        alvo={trilha.length > 0 ? alvoDaPasta(lista, undefined) : {}}
+        pastaId={undefined}
+        atual={trilha.length === 0}
+        onClick={() => abrirPasta(undefined)}
+      >
+        {raiz}
+      </PassoDaTrilha>
+      {trilha.map((pasta, indice) => {
+        const ultima = indice === trilha.length - 1;
+        return (
+          <Fragment key={pasta.id}>
+            <ChevronRight className="text-muted-foreground size-3 shrink-0" aria-hidden />
+            <PassoDaTrilha
+              alvo={ultima ? {} : alvoDaPasta(lista, pasta.id)}
+              pastaId={pasta.id}
+              atual={ultima}
+              onClick={() => abrirPasta(pasta.id)}
+            >
+              {pasta.nome}
+            </PassoDaTrilha>
+          </Fragment>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Um passo da trilha: volta para lá no clique, e recebe o card arrastado. */
+function PassoDaTrilha({
+  alvo,
+  pastaId,
+  atual,
+  onClick,
+  children,
+}: {
+  alvo: Record<`data-${string}`, string>;
+  pastaId: string | undefined;
+  /** A pasta aberta: nem clique, nem alvo. */
+  atual: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const soltando = useSoltandoNaPasta(pastaId) && !atual;
+
+  return (
+    <button
+      type="button"
+      {...alvo}
+      className={cn(
+        "hover:bg-accent min-w-0 shrink-0 truncate rounded px-1.5 py-0.5 text-xs",
+        atual ? "font-medium" : "text-muted-foreground",
+        soltando && "bg-accent ring-primary ring-2",
+      )}
+      disabled={atual}
+      aria-current={atual ? "page" : undefined}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }

@@ -1,0 +1,73 @@
+{
+  "id": "jato-de-agua",
+  "titulo": "Jato d'água",
+  "dica": "Uma gota em linha que se espalha num respingo onde cai.",
+  "disparo": {
+    "forma": "linha",
+    "velocidade": 18,
+    "tamanho": 0.7,
+    "impacto": 1,
+    "projetil": {
+      "imagem": "../molhado/pingo.png",
+      "quadros": {
+        "colunas": 4,
+        "total": 4,
+        "fps": 8
+      },
+      "giro": -90
+    }
+  },
+  "area": {
+    "cor": "#0ea5e9",
+    "divisoes": 1,
+    "escala": 1,
+    "foco": {
+      "imagem": "../molhado/respingo-128.webp",
+      "mipmaps": {
+        "64": "../molhado/respingo-64.webp",
+        "128": "../molhado/respingo-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 12
+      },
+      "cores": "condicao"
+    },
+    "densidade": 3
+  },
+  "base": {
+    "imagem": "../molhado/agua-128.webp",
+    "mipmaps": {
+      "64": "../molhado/agua-64.webp",
+      "128": "../molhado/agua-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 12
+    },
+    "cores": "condicao",
+    "escala": 3,
+    "escurece": 0.45
+  },
+  "particulas": {
+    "quantidade": 5,
+    "imagem": "../molhado/pingo.png",
+    "quadros": {
+      "colunas": 4,
+      "total": 4
+    },
+    "tamanho": 0.11,
+    "variacao": 0.4,
+    "direcao": 90,
+    "abertura": 10,
+    "velocidade": 0.45,
+    "vida": 1.1,
+    "emissor": {
+      "largura": 0.7,
+      "altura": 0.5,
+      "ancora": "centro"
+    }
+  }
+}

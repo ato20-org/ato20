@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { MIN_SCENE_ITEM_SIZE } from "@/lib/geometry/transform";
 import type { Condicao } from "@/types/character";
+import type { ListaDePastasDoCompendio } from "@/types/scene";
 
 /** A condição que uma peça ganha quando o arrasto cai nela. */
 export type CondicaoNaMao = Pick<Condicao, "nome" | "cor" | "icone" | "efeito">;
@@ -113,6 +114,12 @@ export type FonteDoArrasto =
    * sombra; `doAto20` como no efeito de personagem.
    */
   | { tipo: "area"; efeitoId: string; cor: string; doAto20?: boolean }
+  /**
+   * Um DISPARO do Compêndio. Não tem o que fazer no mapa nem num token -- ele
+   * se dispara pela mira --, e só se arrasta para uma pasta da aba dele. Ver
+   * `aceita`.
+   */
+  | { tipo: "disparo"; efeitoId: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -157,6 +164,13 @@ export type DestinoDoArrasto =
       lista: "mapas" | "fundos";
       pastaId: string | undefined;
     }
+  // Uma pasta do Compêndio da campanha, de uma das abas -- o card de pasta, ou
+  // um passo da trilha. `undefined` é a raiz da aba.
+  | {
+      tipo: "pasta-compendio";
+      lista: ListaDePastasDoCompendio;
+      pastaId: string | undefined;
+    }
   // Uma pasta de uma seção da lista de personagens. `undefined` é a raiz dela.
   | {
       tipo: "pasta-personagens";
@@ -189,6 +203,7 @@ export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
     fonte.tipo === "nota" ||
     fonte.tipo === "cena" ||
     fonte.tipo === "area" ||
+    fonte.tipo === "disparo" ||
     vaiNaPeca(fonte)
     ? undefined
     : fonte.assetId || undefined;
@@ -199,6 +214,28 @@ export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
  * imagem nem tamanho -- não há sombra a desenhar no chão, nem tamanho para a
  * roda escolher.
  */
+/**
+ * O id que a pasta do Compêndio guarda em `membros` para o que está na mão, se
+ * ele é daquela aba. `undefined` = não entra nessa árvore.
+ */
+export function membroDaPasta(
+  fonte: FonteDoArrasto,
+  lista: ListaDePastasDoCompendio,
+): string | undefined {
+  switch (lista) {
+    case "compendio":
+      return fonte.tipo === "molde" ? fonte.personagemId : undefined;
+    case "compendio-itens":
+      return fonte.tipo === "molde-item" ? fonte.itemId : undefined;
+    case "compendio-condicoes":
+      return fonte.tipo === "condicao" ? fonte.condicaoId : undefined;
+    case "compendio-efeitos":
+      return fonte.tipo === "area" && !fonte.doAto20 ? fonte.efeitoId : undefined;
+    case "compendio-disparos":
+      return fonte.tipo === "disparo" ? fonte.efeitoId : undefined;
+  }
+}
+
 export function vaiNaPeca(
   fonte: FonteDoArrasto,
 ): fonte is Extract<FonteDoArrasto, { tipo: "condicao" | "efeito" }> {
@@ -234,6 +271,10 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return "arquivos";
     case "pasta-personagens":
       return "personagens";
+    // Uma para as abas todas: quem recebe é a janela do Compêndio, que sabe
+    // mover em qualquer árvore -- e só uma aba está aberta por vez.
+    case "pasta-compendio":
+      return "compendio";
     case "pasta-cenas":
       // Uma por aba: Mapas e Fundos registram cada uma o seu alvo, e uma chave
       // só faria a aba que desmonta apagar o alvo da outra.
@@ -271,6 +312,7 @@ export function aceita(
       // miniatura não tem peça para pôr ali.
       return (
         fonte.tipo !== "cena" &&
+        fonte.tipo !== "disparo" &&
         !vaiNaPeca(fonte) &&
         !(fonte.tipo === "personagem" && !fonte.assetId) &&
         !(fonte.tipo === "molde" && !fonte.assetId) &&
@@ -303,6 +345,11 @@ export function aceita(
       // Da mesma seção: a seção é DERIVADA do vínculo com um jogador, e um
       // Player largado numa pasta de NPCs continuaria aparecendo em Players.
       return fonte.tipo === "personagem" && fonte.secao === destino.lista;
+    case "pasta-compendio":
+      // Cada aba recebe o que é dela: a ficha no Bestiário, o efeito de área
+      // em Área. O do Compêndio do ATO20 não tem pasta aqui -- é de outra
+      // biblioteca.
+      return membroDaPasta(fonte, destino.lista) !== undefined;
     case "inventario":
     case "personagem":
       return (

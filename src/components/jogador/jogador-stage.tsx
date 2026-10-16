@@ -17,6 +17,7 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import type { FichaNaCena, Portrait, Scene } from "@/types/scene";
 
@@ -54,6 +55,7 @@ export function JogadorStage({
   rolagens,
   iniciativa,
   pings,
+  disparados,
   laser,
   synced,
   stalled,
@@ -80,6 +82,8 @@ export function JogadorStage({
   iniciativa: VezNaMesa | null;
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** Os efeitos disparados. Ver `LiveState.disparados`. */
+  disparados: EfeitoDisparado[];
   /** O laser do mestre. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
   synced: boolean;
@@ -147,6 +151,7 @@ export function JogadorStage({
                 rolagens={rolagens}
                 iniciativa={iniciativa}
                 pings={pings}
+                disparados={disparados}
                 laser={laser}
                 tripe={tripe}
                 corte={corte}

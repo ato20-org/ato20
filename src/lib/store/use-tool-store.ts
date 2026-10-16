@@ -4,6 +4,7 @@ import { create } from "zustand";
 
 import { RAIO_DA_BORRACHA_DOS_RISCOS_PADRAO } from "@/lib/geometry/pincel";
 import { METROS_DA_PAREDE_PADRAO } from "@/lib/geometry/sombra";
+import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 import {
   CORES_POSTIT,
@@ -74,6 +75,10 @@ export type Tool =
   // `porta` traça a folha no arrasto, da dobradiça à ponta. Só do mapa, como
   // a parede de que ela é um pedaço. Ver `Porta`.
   | "porta"
+  // `disparo` atira o efeito de `efeitoDoDisparo` de um ponto a outro: dois
+  // cliques, ou segurar no A e soltar no B. Nada entra na cena -- o tiro voa e
+  // some. Só do mapa. Ver `EfeitoDisparado`.
+  | "disparo"
   // `efeito` desenha uma ÁREA DE EFEITO -- o chão em chamas --, com as mesmas
   // três geometrias da área escondida. Só do mapa. Ver `AreaDeEfeito`.
   | "efeito"
@@ -105,6 +110,9 @@ export function ferramentaDeExtensao(
 
   return extensaoId && ferramentaId ? { extensaoId, ferramentaId } : null;
 }
+
+/** O efeito do próximo tiro. Ver `ToolStore.efeitoDoDisparo`. */
+export type EfeitoDoDisparo = { id: string; doAto20?: boolean; definicao?: DefinicaoDeEfeito };
 
 /** O que o painel de texto escolhe para o próximo texto. Ver `textoNovo`. */
 export type TextoNovo = Pick<
@@ -294,6 +302,18 @@ type ToolStore = {
   setEfeitoDaArea: (efeito: string | undefined) => void;
 
   /**
+   * O efeito que o PRÓXIMO tiro leva. Fica depois do tiro, como o efeito da
+   * próxima área: a ferramenta se larga, e o mestre que volta a ela acha o
+   * mesmo fogo marcado. `doAto20` é o do Compêndio do ATO20, que vai ao jogo
+   * na hora do tiro -- ver `paraOJogo` --, e por isso leva a `definicao`: a
+   * mira desenha a forma dele antes de ele existir na campanha. Ausente =
+   * nenhum escolhido ainda.
+   */
+  efeitoDoDisparo?: EfeitoDoDisparo;
+  /** Escolhe o efeito e já põe o Disparo na mão: o cursor vira mira. */
+  armarDisparo: (efeito: EfeitoDoDisparo) => void;
+
+  /**
    * Com que a PRÓXIMA parede nasce: a altura, em metros como no gizmo, se tem
    * teto, e a cor da face no mapa de esguelha (ausente = lida do mapa). Cada
    * parede guarda a cópia: mudar aqui não mexe nas que já estão no mapa.
@@ -387,6 +407,9 @@ export const useToolStore = create<ToolStore>((set) => ({
 
   efeitoDaArea: undefined,
   setEfeitoDaArea: (efeitoDaArea) => set({ efeitoDaArea }),
+
+  efeitoDoDisparo: undefined,
+  armarDisparo: (efeitoDoDisparo) => set({ efeitoDoDisparo, tool: "disparo" }),
 
   paredeNova: { metros: METROS_DA_PAREDE_PADRAO, comTeto: true },
   setParedeNova: ({ cor, ...resto }) =>

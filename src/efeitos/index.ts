@@ -58,11 +58,23 @@ function partes(caminho: string): [string, string] {
   return [pasta, arquivo];
 }
 
+/**
+ * As imagens de todas as pastas, pelo nome que um pack usa para a de OUTRO:
+ * `../chamas/chama-128.webp`. É o que deixa a "Bola de fogo" usar a chama de
+ * "Em chamas" sem uma segunda cópia do arquivo no bundle.
+ */
+const DE_OUTRA_PASTA: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(IMAGENS).map(([imagem, endereco]) => {
+    const [pasta, arquivo] = partes(imagem);
+    return [`../${pasta}/${arquivo}`, typeof endereco === "string" ? endereco : endereco.src];
+  }),
+);
+
 export const PACKS_DE_FABRICA: ReadonlyArray<PackDeFabrica> = Object.entries(JSONS).map(
   ([caminho, modulo]) => {
     const [pasta] = partes(caminho);
     const definicao = jsonDoModulo(modulo);
-    const arquivos: Record<string, string> = {};
+    const arquivos: Record<string, string> = { ...DE_OUTRA_PASTA };
 
     for (const [imagem, endereco] of Object.entries(IMAGENS)) {
       const [dela, arquivo] = partes(imagem);

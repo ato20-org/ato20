@@ -25,6 +25,7 @@ import {
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
 import { LaserLayer } from "@/components/playground/laser-layer";
+import { DisparoLayer } from "@/components/playground/disparo-layer";
 import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
@@ -46,6 +47,7 @@ import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
@@ -135,6 +137,11 @@ type SceneLayerProps = {
    * `Ping.cenaId`.
    */
   pings?: Ping[];
+  /**
+   * Os efeitos disparados no ar, de TODAS as cenas -- filtrados aqui, como os
+   * pings. Ver `EfeitoDisparado`.
+   */
+  disparados?: EfeitoDisparado[];
   /**
    * O laser do mestre, como chegou no quadro. Filtrado aqui pela cena, como os
    * pings.
@@ -265,6 +272,7 @@ export function SceneLayer({
   portraits,
   rolagens,
   pings,
+  disparados,
   laser,
   fichas,
   efeitos,
@@ -320,6 +328,10 @@ export function SceneLayer({
   const pingsDaCena = useMemo(
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
+  );
+  const disparadosDaCena = useMemo(
+    () => (disparados ?? []).filter((disparo) => disparo.cenaId === scene.id),
+    [disparados, scene.id],
   );
 
 
@@ -537,6 +549,13 @@ export function SceneLayer({
           grid={scene.grid}
           animarSo={animarSo}
         />
+      )}
+
+      {/* Os tiros: por cima do escuro, que eles brilham, e embaixo da névoa,
+          que esconde o que a mesa não viu. Fora da prévia: tiro é evento, e a
+          miniatura nem os recebe. Ver `DisparoLayer`. */}
+      {variante === "mini" ? null : (
+        <DisparoLayer disparos={disparadosDaCena} grid={scene.grid} soBase={Boolean(esguelha)} />
       )}
 
       {/* As lanternas abrem a névoa dinâmica, e as paredes e portas param a

@@ -4,16 +4,16 @@ import { memo, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { ListPlus, Maximize2, Tags, Trash2, Upload } from "lucide-react";
 
+import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import {
   AcaoDaLinha,
+  ArvoreDoCompendio,
   Cartao,
   daMaoNoCartao,
   falhou,
   filtrando,
-  GradeDeCartoes,
   Lendo,
   NadaCom,
-  useAosPoucos,
   useEmCimaDoCartao,
   type EdicaoDeTags,
 } from "@/components/mestre/compendio-cartao";
@@ -22,7 +22,7 @@ import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import type { Kit } from "@/components/ui/menu-kit";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { definicaoDoEfeito, type EfeitosDeFora } from "@/lib/efeitos";
+import { definicaoDoEfeito, especieDoEfeito, type EfeitosDeFora } from "@/lib/efeitos";
 import { abrirJanela, trocarJanela } from "@/lib/extensoes/janelas";
 import { t } from "@/lib/i18n/mestre";
 import { filtrarNoCompendio, type FiltroDoCompendio } from "@/lib/mestre/compendio";
@@ -41,8 +41,11 @@ import {
   guardarCondicaoNoCompendio,
   levarAoCompendio,
 } from "@/lib/vault/compendio";
+import { pastaDoMembro } from "@/lib/mestre/arvore-de-pastas";
+import { useSceneStore } from "@/lib/store/use-scene-store";
 import type { Condicao, MoldeDeCondicao, PatchCondicao } from "@/types/character";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
+import type { Pasta } from "@/types/scene";
 
 const texto = t.compendio;
 
@@ -59,7 +62,7 @@ export function useEfeitosDePersonagemDaCampanha(): DefinicaoDeEfeito[] {
   const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
 
   return useMemo(
-    () => [...(efeitos ?? []), ...(moldes ?? [])].filter((efeito) => !efeito.area),
+    () => [...(efeitos ?? []), ...(moldes ?? [])].filter((efeito) => especieDoEfeito(efeito) === "personagem"),
     [efeitos, moldes],
   );
 }
@@ -130,11 +133,16 @@ export function DesenhoDaCondicao({
  */
 export function CondicoesNoCompendio({
   filtro,
+  pastas,
+  onCriarEm,
   onGuardado,
   onApagar,
   onEditarTags,
 }: {
   filtro: FiltroDoCompendio;
+  /** As pastas da aba, as do mestre. Ver `ListaDoCompendio`. */
+  pastas: Pasta[];
+  onCriarEm: (pastaId: string) => void;
   onGuardado: () => void;
   onApagar: (condicao: MoldeDeCondicao) => void;
   onEditarTags: (edicao: EdicaoDeTags) => void;
@@ -150,7 +158,6 @@ export function CondicoesNoCompendio({
         : null,
     [lista, filtro],
   );
-  const { limite, fim } = useAosPoucos(achados, achados?.length ?? 0);
 
   const guardarNoAto20 = useCallback(
     (condicao: MoldeDeCondicao) => {
@@ -163,27 +170,31 @@ export function CondicoesNoCompendio({
   );
 
   if (achados === null) return <Lendo />;
-  if (lista?.length === 0)
+  if (lista?.length === 0 && pastas.length === 0)
     return <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioCondicoes}</PainelVazio>;
   if (buscando && achados.length === 0) return <NadaCom filtro={filtro} />;
 
   return (
-    <>
-      <GradeDeCartoes>
-        {achados.slice(0, limite).map((condicao) => (
-          <CartaoDaCondicao
-            key={condicao.id}
-            condicao={condicao}
-            efeitos={efeitos}
-            onPorNoMenu={porNoMenu}
-            onGuardarNoAto20={guardarNoAto20}
-            onApagar={onApagar}
-            onEditarTags={onEditarTags}
-          />
-        ))}
-      </GradeDeCartoes>
-      {fim}
-    </>
+    <ArvoreDoCompendio
+      achados={achados}
+      pastas={pastas}
+      buscando={buscando}
+      rotuloCriarAqui={texto.criarCondicaoAqui}
+      onCriarEm={onCriarEm}
+      linha={(condicao, _depth, caminho) => (
+        <CartaoDaCondicao
+          key={condicao.id}
+          condicao={condicao}
+          caminho={caminho}
+          pastas={pastas}
+          efeitos={efeitos}
+          onPorNoMenu={porNoMenu}
+          onGuardarNoAto20={guardarNoAto20}
+          onApagar={onApagar}
+          onEditarTags={onEditarTags}
+        />
+      )}
+    />
   );
 }
 
@@ -277,6 +288,8 @@ function aplicar(condicao: MoldeDeCondicao, patch: PatchCondicao): MoldeDeCondic
  */
 const CartaoDaCondicao = memo(function CartaoDaCondicao({
   condicao,
+  caminho,
+  pastas,
   efeitos,
   onPorNoMenu,
   onGuardarNoAto20,
@@ -284,6 +297,9 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
   onEditarTags,
 }: {
   condicao: MoldeDeCondicao;
+  /** A pasta dela, na busca: a lista plana não mostra onde cada uma mora. */
+  caminho?: string;
+  pastas: Pasta[];
   efeitos: DefinicaoDeEfeito[];
   onPorNoMenu: (condicao: MoldeDeCondicao) => void;
   onGuardarNoAto20: (condicao: MoldeDeCondicao) => void;
@@ -302,7 +318,10 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
     abrirJanela({ tipo: "condicao", lugar: "compendio", condicaoId: condicao.id });
   }
 
-  const itens = ({ Item, Separator }: Kit) => (
+  const itens = (kit: Kit) => {
+    const { Item, Separator } = kit;
+
+    return (
     <>
       <Item onClick={abrir}>
         <Maximize2 />
@@ -330,18 +349,27 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
         <Tags />
         {texto.tagsNoMenu}
       </Item>
+      <ItensDeMover
+        kit={kit}
+        atual={pastaDoMembro(pastas, condicao.id)}
+        destinos={pastas}
+        onMover={(destino) =>
+          useSceneStore.getState().moverNoCompendio(condicao.id, "compendio-condicoes", destino)
+        }
+      />
       <Separator />
       <Item variant="destructive" onClick={() => onApagar(condicao)}>
         <Trash2 />
         {texto.apagar}
       </Item>
     </>
-  );
+    );
+  };
 
   return (
     <Cartao
       nome={condicao.nome}
-      detalhe={efeito ?? texto.soOSelo}
+      detalhe={caminho || (efeito ?? texto.soOSelo)}
       tags={condicao.tags}
       faixa
       tinta={condicao.cor}

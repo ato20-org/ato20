@@ -111,3 +111,58 @@ export function caminhoDaPasta(pastas: Pasta[], id: string | undefined): string 
 export function pastaDoMembro(pastas: Pasta[], membroId: string): string | undefined {
   return pastas.find((pasta) => pasta.membros?.includes(membroId))?.id;
 }
+
+/**
+ * O que se vê DENTRO de uma pasta, como num gerenciador de arquivos: as
+ * subpastas dela, cada uma com quantas coisas tem embaixo (em qualquer nível),
+ * e as coisas que moram nela mesma. `pastaId` ausente, ou de pasta que sumiu,
+ * é a raiz. Quem aponta para pasta que sumiu aparece na raiz, como na árvore.
+ */
+export function conteudoDaPasta<T>(
+  itens: T[],
+  pastas: Pasta[],
+  pastaDe: (item: T) => string | undefined,
+  pastaId: string | undefined,
+): { pastas: Array<{ pasta: Pasta; total: number }>; itens: T[] } {
+  const existe = new Set(pastas.map((pasta) => pasta.id));
+  const aqui = pastaId && existe.has(pastaId) ? pastaId : undefined;
+  const ondeEsta = (item: T) => {
+    const dela = pastaDe(item);
+    return dela && existe.has(dela) ? dela : undefined;
+  };
+
+  function contar(id: string, vistas: Set<string>): number {
+    if (vistas.has(id)) return 0;
+    vistas.add(id);
+    let total = itens.filter((item) => ondeEsta(item) === id).length;
+    for (const filha of pastas) if (filha.parentId === id) total += contar(filha.id, vistas);
+    return total;
+  }
+
+  return {
+    pastas: pastas
+      .filter((pasta) => (pasta.parentId && existe.has(pasta.parentId) ? pasta.parentId : undefined) === aqui)
+      .map((pasta) => ({ pasta, total: contar(pasta.id, new Set()) })),
+    itens: itens.filter((item) => ondeEsta(item) === aqui),
+  };
+}
+
+/**
+ * As pastas do caminho, da de cima até ela: a trilha que leva de volta. Vazia
+ * na raiz, e na pasta que sumiu.
+ */
+export function trilhaDaPasta(pastas: Pasta[], id: string | undefined): Pasta[] {
+  const trilha: Pasta[] = [];
+  const vistas = new Set<string>();
+  let cursor = id;
+
+  while (cursor && !vistas.has(cursor)) {
+    vistas.add(cursor);
+    const pasta = pastas.find((outra) => outra.id === cursor);
+    if (!pasta) break;
+    trilha.unshift(pasta);
+    cursor = pasta.parentId;
+  }
+
+  return trilha;
+}

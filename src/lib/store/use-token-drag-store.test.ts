@@ -4,6 +4,7 @@ import {
   aceita,
   assetIdDoArrasto,
   chaveDoAlvo,
+  membroDaPasta,
   type DestinoDoArrasto,
   type FonteDoArrasto,
 } from "@/lib/store/use-token-drag-store";
@@ -79,3 +80,28 @@ describe("o efeito de área arrastado até o mapa", () => {
   });
 });
 
+describe("o card arrastado até uma pasta do Compêndio", () => {
+  const pasta = (lista: Parameters<typeof membroDaPasta>[1]) =>
+    ({ tipo: "pasta-compendio", lista, pastaId: "p" }) as const;
+  const envenenado = { nome: "Envenenado", cor: "#22c55e", icone: "circulo" };
+
+  it("cada aba recebe o que é dela, pelo id que a pasta guarda", () => {
+    expect(membroDaPasta({ tipo: "molde", personagemId: "goblin", assetId: "a" }, "compendio")).toBe("goblin");
+    expect(membroDaPasta({ tipo: "molde-item", itemId: "espada" }, "compendio-itens")).toBe("espada");
+    expect(membroDaPasta({ tipo: "condicao", condicaoId: "c1", condicao: envenenado }, "compendio-condicoes")).toBe("c1");
+    expect(membroDaPasta({ tipo: "area", efeitoId: "e1", cor: "#f00" }, "compendio-efeitos")).toBe("e1");
+    expect(membroDaPasta({ tipo: "disparo", efeitoId: "d1" }, "compendio-disparos")).toBe("d1");
+  });
+
+  it("a pasta de outra aba recusa, e a do ATO20 não entra na campanha", () => {
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00" }, pasta("compendio-disparos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00", doAto20: true }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "molde", personagemId: "g", assetId: "a" }, pasta("compendio-itens"))).toBe(false);
+  });
+
+  it("o disparo não cai no mapa: ele sai pela mira", () => {
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, { tipo: "palco" })).toBe(false);
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-disparos"))).toBe(true);
+  });
+});

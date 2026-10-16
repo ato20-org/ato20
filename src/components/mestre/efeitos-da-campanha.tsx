@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ImagePlus, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
@@ -9,6 +9,7 @@ import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { DeclarativoProvider } from "@/components/playground/declarativo";
+import { TiroEmLaco } from "@/components/playground/tiro-em-laco";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import {
   AlertDialog,
@@ -24,13 +25,15 @@ import { Button } from "@/components/ui/button";
 import { NumberField } from "@/components/ui/number-field";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { COR_DA_AREA, efeitosDeAreaProntos } from "@/lib/area-de-efeito";
+import { disparoDoEfeito, disparosProntos, LIMITES_DO_DISPARO } from "@/lib/disparo-de-efeito";
 import {
   copiaParaACampanha,
   definicaoDoEfeito,
-  EFEITOS_DE_FABRICA,
+  EFEITOS_PARA_A_FIGURA,
   urlDaImagemDaCampanha,
 } from "@/lib/efeitos";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
@@ -52,10 +55,12 @@ import type {
   AreaDoEfeito,
   BaseDoEfeito,
   DefinicaoDeEfeito,
+  DisparoDoEfeito,
   ExternoDoEfeito,
   FiguraDoEfeito,
   LuzDoEfeito,
   ParticulasDoEfeito,
+  ProjetilDoDisparo,
   QuadrosDoEfeito,
 } from "@/types/efeito";
 
@@ -153,7 +158,7 @@ export function TelaDaCondicao({
         <span className="text-muted-foreground mr-1 text-[11px]">
           {t.efeito.partirDePronto}
         </span>
-        {EFEITOS_DE_FABRICA.map((pronto) => (
+        {EFEITOS_PARA_A_FIGURA.map((pronto) => (
           <Button
             key={pronto.id}
             variant="outline"
@@ -248,19 +253,22 @@ export function TelaDoEfeitoEmArea({
         <PreviaDaArea efeito={efeito} />
       </FaixaDaPrevia>
 
-      <div className="flex items-center gap-2 rounded-md border p-2.5">
-        <CorDoEfeito cor={cor} onMudar={(nova) => salvar({ ...efeito, area: { ...efeito.area, cor: nova } })} />
-        <div className="flex min-w-0 flex-1 items-center gap-0.5">
-          <NomeDoMedidor
-            nome={efeito.titulo}
-            ocupado={false}
-            onGravar={(titulo) => salvar({ ...efeito, titulo })}
-            rotulos={{
-              campo: t.efeito.nomeDoEfeito,
-              lapis: t.efeito.renomearEfeito,
-            }}
-          />
+      <div className="space-y-1.5 rounded-md border p-2.5">
+        <div className="flex items-center gap-2">
+          <CorDoEfeito cor={cor} onMudar={(nova) => salvar({ ...efeito, area: { ...efeito.area, cor: nova } })} />
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <NomeDoMedidor
+              nome={efeito.titulo}
+              ocupado={false}
+              onGravar={(titulo) => salvar({ ...efeito, titulo })}
+              rotulos={{
+                campo: t.efeito.nomeDoEfeito,
+                lapis: t.efeito.renomearEfeito,
+              }}
+            />
+          </div>
         </div>
+        <DescricaoDoEfeito dica={efeito.dica} onGravar={(dica) => salvar(com(efeito, "dica", dica))} />
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
@@ -420,7 +428,7 @@ export function TelaDoEfeitoDePersonagem({
         <span className="text-muted-foreground mr-1 text-[11px]">
           {t.efeito.partirDePronto}
         </span>
-        {EFEITOS_DE_FABRICA.map((pronto) => (
+        {EFEITOS_PARA_A_FIGURA.map((pronto) => (
           <Button
             key={pronto.id}
             variant="outline"
@@ -469,6 +477,284 @@ export function TelaDoEfeitoDePersonagem({
 }
 
 /** As cores de partida de um efeito em área: as do lápis, que é a paleta da casa. */
+/**
+ * A tela de um DISPARO da campanha: o tiro que sai de um ponto e vai até outro.
+ * Abre pela engrenagem da lista (Efeitos, Disparo) e pelo card no Compêndio.
+ *
+ * A terceira tela, ao lado da da condição e da do efeito em área, e com abas
+ * que são do tiro: o trajeto primeiro, que é o que separa um disparo do outro,
+ * e depois só as camadas que a forma escolhida desenha -- a linha tem
+ * projétil e rastro, e estouro se estourar; o cone tem chão, elementos e
+ * partículas. A cor mora em `area.cor`, como na área: o cone e o estouro são
+ * áreas que o tiro abre. Ver `DisparoDoEfeito`.
+ */
+export function TelaDoDisparo({
+  efeito,
+  onVoltar,
+  rotuloDeVolta = t.efeito.disparos,
+}: {
+  efeito: DefinicaoDeEfeito;
+  /** Ausente = sem o "voltar": a tela é a janela do efeito inteira. */
+  onVoltar?: () => void;
+  rotuloDeVolta?: string;
+}) {
+  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
+  const cor = efeito.area?.cor ?? COR_DA_AREA;
+  const disparo: DisparoDoEfeito = efeito.disparo ?? { forma: "linha" };
+  const { forma, impacto } = disparoDoEfeito(efeito);
+  const temCamadas = Boolean(
+    efeito.base || efeito.area?.foco || efeito.particulas || efeito.disparo?.projetil,
+  );
+
+  /**
+   * O pronto inteiro, COM a cor dele: partir da "Bola de fogo" é querer o fogo
+   * laranja, e a cor sorteada do disparo novo o pintaria de roxo. O nome e as
+   * tags ficam os deste.
+   */
+  function partirDe(pronto: DefinicaoDeEfeito) {
+    salvar(com(copiaParaACampanha(pronto, efeito.id, efeito.titulo), "tags", efeito.tags));
+  }
+
+  const mudarDisparo = (novo: DisparoDoEfeito) => salvar({ ...efeito, disparo: novo });
+  const abaDoTrajeto = {
+    id: "trajeto",
+    titulo: t.efeito.trajeto,
+    ligada: true,
+    conteudo: <SecaoDoTrajeto disparo={disparo} onMudar={mudarDisparo} />,
+  };
+  const chao = {
+    id: "chao",
+    titulo: t.efeito.chao,
+    ligada: efeito.base !== undefined,
+    conteudo: (
+      <SecaoDoChao
+        base={efeito.base}
+        onMudar={(base) => salvar(com(efeito, "base", base))}
+        descricao={t.efeito.chaoDoDisparo}
+      />
+    ),
+  };
+  const elementos = {
+    id: "elementos",
+    titulo: t.efeito.elementos,
+    ligada: efeito.area?.foco !== undefined,
+    conteudo: (
+      <SecaoDosElementos
+        area={efeito.area ?? {}}
+        onMudar={(area) => salvar({ ...efeito, area })}
+        descricao={t.efeito.elementosDoDisparo}
+      />
+    ),
+  };
+  const particulas = (descricao: string, titulo: string, id: string) => ({
+    id,
+    titulo,
+    ligada: efeito.particulas !== undefined,
+    conteudo: (
+      <SecaoDasParticulas
+        particulas={efeito.particulas}
+        onMudar={(novas) => salvar(com(efeito, "particulas", novas))}
+        descricao={descricao}
+      />
+    ),
+  });
+
+  const abas =
+    forma === "cone"
+      ? [abaDoTrajeto, chao, elementos, particulas(t.efeito.particulasDoCone, t.efeito.particulas, "particulas")]
+      : [
+          abaDoTrajeto,
+          {
+            id: "projetil",
+            titulo: t.efeito.projetil,
+            ligada: true,
+            conteudo: <SecaoDoProjetil disparo={disparo} onMudar={mudarDisparo} />,
+          },
+          {
+            id: "rastro",
+            titulo: t.efeito.rastro,
+            ligada: disparoDoEfeito(efeito).rastro || efeito.particulas !== undefined,
+            conteudo: (
+              <div className="space-y-2">
+                <div className="rounded-md border p-2.5">
+                  <Interruptor
+                    rotulo={t.efeito.faixaDoRastro}
+                    dica={t.efeito.faixaDoRastroDica}
+                    valor={disparoDoEfeito(efeito).rastro}
+                    onMudar={(v) => mudarDisparo(com(disparo, "rastro", v ? undefined : false))}
+                  />
+                </div>
+                <SecaoDasParticulas
+                  particulas={efeito.particulas}
+                  onMudar={(novas) => salvar(com(efeito, "particulas", novas))}
+                  descricao={t.efeito.particulasDoRastro}
+                />
+              </div>
+            ),
+          },
+          // O chão e os elementos são os do estouro: a descrição de cada um diz.
+          ...(impacto > 0 ? [chao, elementos] : []),
+        ];
+
+  return (
+    <div className="space-y-3">
+      {onVoltar ? (
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onVoltar}>
+          <ArrowLeft />
+          {rotuloDeVolta}
+        </Button>
+      ) : null}
+
+      <FaixaDaPrevia>
+        <PreviaDoDisparo efeito={efeito} />
+      </FaixaDaPrevia>
+
+      <div className="space-y-1.5 rounded-md border p-2.5">
+        <div className="flex items-center gap-2">
+          <CorDoEfeito cor={cor} onMudar={(nova) => salvar({ ...efeito, area: { ...efeito.area, cor: nova } })} />
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <NomeDoMedidor
+              nome={efeito.titulo}
+              ocupado={false}
+              onGravar={(titulo) => salvar({ ...efeito, titulo })}
+              rotulos={{
+                campo: t.efeito.nomeDoEfeito,
+                lapis: t.efeito.renomearEfeito,
+              }}
+            />
+          </div>
+        </div>
+        <DescricaoDoEfeito dica={efeito.dica} onGravar={(dica) => salvar(com(efeito, "dica", dica))} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground mr-1 text-[11px]">{t.efeito.partirDeDisparoPronto}</span>
+        {disparosProntos(deFora).map((pronto) => (
+          <Button
+            key={pronto.id}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            title={pronto.dica}
+            onClick={() => (temCamadas ? setTrocarPor(pronto) : partirDe(pronto))}
+          >
+            {pronto.titulo}
+          </Button>
+        ))}
+      </div>
+
+      {/* Uma chave por forma: trocar de linha para cone troca as abas, e a
+          aberta numa que sumiu voltaria a ela sozinha se sobrevivesse. */}
+      <AbasDasCamadas key={forma === "cone" ? "cone" : "linha"} abas={abas} />
+
+      <AlertDialog
+        open={trocarPor !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setTrocarPor(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.efeito.trocarPelo(trocarPor?.titulo ?? "")}</AlertDialogTitle>
+            <AlertDialogDescription>{t.efeito.trocarNoEfeito(efeito.titulo)}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (trocarPor) partirDe(trocarPor);
+                setTrocarPor(null);
+              }}
+            >
+              {t.efeito.trocar}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/** O teto da descrição: uma linha embaixo do seletor. Espelho de `MAX_DICA`, no Rust. */
+const MAX_DICA = 120;
+
+/**
+ * A DESCRIÇÃO do efeito, embaixo do nome: o que ele é, em uma linha -- a que o
+ * card do Compêndio mostra embaixo do nome, e a dica do menu do Disparo e do
+ * gizmo da área. Editada no lugar, como o nome: o texto vira campo no clique,
+ * o Enter ou sair do campo grava, o Esc desiste. Vazia, o efeito fica sem
+ * descrição -- o Rust apaga a dica em branco.
+ */
+function DescricaoDoEfeito({
+  dica,
+  onGravar,
+}: {
+  dica: string | undefined;
+  onGravar: (dica: string | undefined) => void;
+}) {
+  const [rascunho, setRascunho] = useState<string | null>(null);
+  // O Esc MARCA, e o `blur` que ele provoca lê a marca -- a razão do nome.
+  const descartar = useRef(false);
+
+  function gravar() {
+    const lido = descartar.current ? null : rascunho;
+    descartar.current = false;
+    setRascunho(null);
+    if (lido === null) return;
+
+    // Uma linha: a quebra que o colar trouxe vira espaço.
+    const limpo = lido.replace(/\s+/g, " ").trim();
+    if (limpo === (dica ?? "")) return;
+    onGravar(limpo || undefined);
+  }
+
+  if (rascunho !== null) {
+    return (
+      <div className="space-y-0.5">
+        <Textarea
+          autoFocus
+          aria-label={t.efeito.descricao}
+          value={rascunho}
+          maxLength={MAX_DICA}
+          rows={2}
+          placeholder={t.efeito.descricaoPlaceholder}
+          className="min-h-0 resize-none rounded-md px-1.5 py-1 text-xs md:text-xs"
+          onFocus={(evento) => evento.currentTarget.select()}
+          onChange={(evento) => setRascunho(evento.target.value)}
+          onBlur={gravar}
+          onKeyDown={(evento) => {
+            if (evento.key === "Escape") descartar.current = true;
+            if ((evento.key === "Enter" && !evento.shiftKey) || evento.key === "Escape") {
+              evento.preventDefault();
+              evento.currentTarget.blur();
+            }
+          }}
+        />
+        <p className="text-muted-foreground text-right text-[10px] tabular-nums">
+          {rascunho.length}/{MAX_DICA}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={t.efeito.editarDescricao}
+      title={t.efeito.editarDescricao}
+      className="group text-muted-foreground hover:text-foreground flex w-full items-start gap-1 rounded-sm text-left text-[11px] leading-snug"
+      onClick={() => setRascunho(dica ?? "")}
+    >
+      <span className={cn("min-w-0 flex-1", !dica && "italic opacity-70")}>
+        {dica || t.efeito.semDescricao}
+      </span>
+      <Pencil className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+    </button>
+  );
+}
+
 function CorDoEfeito({ cor, onMudar }: { cor: string; onMudar: (cor: string) => void }) {
   return (
     <div className="flex shrink-0 items-center gap-1">
@@ -539,6 +825,34 @@ function PreviaDaArea({ efeito }: { efeito: DefinicaoDeEfeito }) {
         <DeclarativoProvider valor={declarativo}>
           <AreaDeEfeitoLayer areas={area} grid={undefined} variant="mesa" />
         </DeclarativoProvider>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A prévia do TIRO, no mesmo pedaço de chão da prévia da área: a linha voando
+ * da esquerda e estourando, ou o leque se abrindo, em laço. Ver `TiroEmLaco`.
+ */
+// O alvo longe da borda direita, para o estouro grande caber inteiro.
+const LINHA_DA_PREVIA = { de: { x: 48, y: 190 }, para: { x: 400, y: 190 } };
+const CONE_DA_PREVIA = { de: { x: 64, y: 150 }, para: { x: 448, y: 150 } };
+function PreviaDoDisparo({ efeito }: { efeito: DefinicaoDeEfeito }) {
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-md bg-neutral-900"
+      style={{ height: ALTURA_DA_PREVIA }}
+    >
+      <div
+        className="absolute top-0 left-1/2"
+        style={{
+          width: MUNDO_DA_PREVIA.largura,
+          height: MUNDO_DA_PREVIA.altura,
+          transform: `translateX(-50%) scale(${ALTURA_DA_PREVIA / MUNDO_DA_PREVIA.altura})`,
+          transformOrigin: "top center",
+        }}
+      >
+        <TiroEmLaco efeito={efeito} linha={LINHA_DA_PREVIA} cone={CONE_DA_PREVIA} />
       </div>
     </div>
   );
@@ -830,9 +1144,12 @@ function SecaoDoExterno({
 function SecaoDoChao({
   base,
   onMudar,
+  descricao = t.efeito.chaoDescricao,
 }: {
   base: BaseDoEfeito | undefined;
   onMudar: (base: BaseDoEfeito | undefined) => void;
+  /** O texto da seção: o chão da área, ou o do cone e do estouro de um disparo. */
+  descricao?: string;
 }) {
   const b = base ?? { imagem: "" };
   const mudar = <K extends keyof BaseDoEfeito>(chave: K, valor: BaseDoEfeito[K] | undefined) =>
@@ -841,7 +1158,7 @@ function SecaoDoChao({
   return (
     <Secao
       titulo={t.efeito.chao}
-      descricao={t.efeito.chaoDescricao}
+      descricao={descricao}
       ligado={base !== undefined}
       onLigar={(v) => onMudar(v ? { imagem: "" } : undefined)}
     >
@@ -902,9 +1219,12 @@ function SecaoDoChao({
 function SecaoDosElementos({
   area,
   onMudar,
+  descricao = t.efeito.elementosDescricao,
 }: {
   area: AreaDoEfeito;
   onMudar: (area: AreaDoEfeito) => void;
+  /** O texto da seção: os elementos da área, ou os do cone e do estouro. */
+  descricao?: string;
 }) {
   const foco = area.foco ?? { imagem: "" };
   const mudarFoco = <K extends keyof NonNullable<AreaDoEfeito["foco"]>>(
@@ -917,7 +1237,7 @@ function SecaoDosElementos({
   return (
     <Secao
       titulo={t.efeito.elementos}
-      descricao={t.efeito.elementosDescricao}
+      descricao={descricao}
       ligado={area.foco !== undefined}
       onLigar={(v) => onMudar(v ? { ...area, foco: { imagem: "" } } : com(area, "foco", undefined))}
     >
@@ -1031,6 +1351,127 @@ function SecaoDasParticulas({
           <Quadros quadros={p.quadros} onMudar={(q) => mudar("quadros", q)} />
         </>
       ) : null}
+    </Secao>
+  );
+}
+
+/** As três formas de um disparo como o mestre as lê: a forma, e se a linha estoura. */
+type FormaNoEditor = "reto" | "estouro" | "cone";
+
+/**
+ * O TRAJETO de um disparo: a forma e os números dela, em casas. Três formas, e
+ * não duas: a linha que só chega e a que estoura no alvo são tiros diferentes
+ * para quem joga -- a flecha e a bola de fogo --, embora sejam a mesma linha
+ * com e sem `impacto`. Ver `DisparoDoEfeito`.
+ */
+function SecaoDoTrajeto({
+  disparo,
+  onMudar,
+}: {
+  disparo: DisparoDoEfeito;
+  onMudar: (disparo: DisparoDoEfeito) => void;
+}) {
+  const resolvido = disparoDoEfeito({ id: "", titulo: "", disparo });
+  const mudar = (patch: Partial<DisparoDoEfeito>) => onMudar({ ...disparo, ...patch });
+  const forma: FormaNoEditor =
+    resolvido.forma === "cone" ? "cone" : resolvido.impacto > 0 ? "estouro" : "reto";
+  const { abertura, velocidade, alcance, impacto } = LIMITES_DO_DISPARO;
+
+  return (
+    <Secao titulo={t.efeito.trajeto} descricao={t.efeito.trajetoDescricao}>
+      <Escolha
+        rotulo={t.efeito.formaDoDisparo}
+        valor={forma}
+        opcoes={[
+          { valor: "reto", rotulo: t.efeito.reto },
+          { valor: "estouro", rotulo: t.efeito.comEstouro },
+          { valor: "cone", rotulo: t.efeito.emCone },
+        ]}
+        onMudar={(nova) =>
+          mudar(
+            nova === "cone"
+              ? { forma: "cone" }
+              : nova === "reto"
+                ? { forma: "linha", impacto: 0 }
+                : { forma: "linha", impacto: resolvido.impacto > 0 ? resolvido.impacto : 1 },
+          )
+        }
+      />
+      {forma === "cone" ? (
+        <Faixa rotulo={t.efeito.abertura} valor={resolvido.abertura} min={abertura[0]} max={abertura[1]} passo={5} sufixo="°" onMudar={(v) => mudar({ abertura: v })} />
+      ) : null}
+      {forma === "estouro" ? (
+        <Faixa rotulo={t.efeito.estouro} valor={resolvido.impacto} min={0.25} max={impacto[1]} passo={0.25} sufixo={t.efeito.sufixoCasas} onMudar={(v) => mudar({ impacto: v })} />
+      ) : null}
+      <Faixa rotulo={t.efeito.velocidade} valor={resolvido.velocidade} min={velocidade[0]} max={velocidade[1]} passo={1} sufixo={t.efeito.sufixoCasasPorSegundo} onMudar={(v) => mudar({ velocidade: v })} />
+      <Faixa rotulo={t.efeito.alcancePeloOlhar} valor={resolvido.alcance} min={alcance[0]} max={alcance[1]} passo={1} sufixo={t.efeito.sufixoCasas} onMudar={(v) => mudar({ alcance: v })} />
+      <p className="text-muted-foreground text-[10px] leading-snug">{t.efeito.alcancePeloOlharDica}</p>
+    </Secao>
+  );
+}
+
+/**
+ * O PROJÉTIL de um disparo em linha: a imagem que voa, o tamanho, como ela se
+ * deita no voo e o brilho em volta. Sem imagem própria, voa o elemento do
+ * estouro, de topo para trás -- a chama vira cauda. Ver `ProjetilDoDisparo`.
+ */
+function SecaoDoProjetil({
+  disparo,
+  onMudar,
+}: {
+  disparo: DisparoDoEfeito;
+  onMudar: (disparo: DisparoDoEfeito) => void;
+}) {
+  const resolvido = disparoDoEfeito({ id: "", titulo: "", disparo });
+  const projetil = disparo.projetil ?? { imagem: "" };
+  const mudarProjetil = <K extends keyof ProjetilDoDisparo>(chave: K, valor: ProjetilDoDisparo[K] | undefined) =>
+    onMudar({ ...disparo, projetil: com(projetil, chave, valor) });
+  const { tamanho } = LIMITES_DO_DISPARO;
+
+  return (
+    <Secao titulo={t.efeito.projetil} descricao={t.efeito.projetilDescricao}>
+      <ImagemDoAcervo
+        rotulo={t.efeito.imagem}
+        dica={t.efeito.projetilDica}
+        assetId={projetil.imagem || undefined}
+        onMudar={(id) =>
+          onMudar(
+            id
+              ? { ...disparo, projetil: com(com(projetil, "mipmaps", undefined), "imagem", id) }
+              : com(disparo, "projetil", undefined),
+          )
+        }
+      />
+      {disparo.projetil ? (
+        <>
+          <Quadros
+            quadros={projetil.quadros}
+            onMudar={(q) => mudarProjetil("quadros", q as QuadrosDoEfeito | undefined)}
+            comFps
+          />
+          <Interruptor
+            rotulo={t.efeito.pintarNaCorDoEfeito}
+            valor={projetil.cores === "condicao"}
+            onMudar={(v) => mudarProjetil("cores", v ? "condicao" : undefined)}
+          />
+          <Escolha
+            rotulo={t.efeito.comoVoa}
+            valor={String(projetil.giro ?? 0)}
+            opcoes={[
+              { valor: "0", rotulo: t.efeito.comoEsta },
+              { valor: "90", rotulo: t.efeito.topoNaFrente },
+              { valor: "-90", rotulo: t.efeito.topoAtras },
+            ]}
+            onMudar={(v) => mudarProjetil("giro", v === "0" ? undefined : Number(v))}
+          />
+        </>
+      ) : null}
+      <Faixa rotulo={t.efeito.tamanhoDoProjetil} valor={resolvido.tamanho} min={tamanho[0]} max={tamanho[1]} passo={0.1} sufixo={t.efeito.sufixoCasas} onMudar={(v) => onMudar({ ...disparo, tamanho: v })} />
+      <Interruptor
+        rotulo={t.efeito.brilhoEmVolta}
+        valor={resolvido.brilho}
+        onMudar={(v) => onMudar(com(disparo, "brilho", v ? undefined : false))}
+      />
     </Secao>
   );
 }
@@ -1218,7 +1659,10 @@ function AbasDasCamadas({
 
   return (
     <div className="space-y-2">
-      <Tabs value={aberta?.id} onValueChange={(valor) => setAtiva(String(valor))}>
+      <Tabs
+        value={aberta?.id}
+        onValueChange={(valor) => setAtiva(String(valor))}
+      >
         <TabsList variant="line" className="w-full">
           {abas.map((aba) => (
             <TabsTrigger key={aba.id} value={aba.id} className="min-w-0 flex-1 gap-1.5 px-1 text-xs">
