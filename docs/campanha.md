@@ -284,9 +284,20 @@ reconhece as fichas pelo nome, que duas cópias confundiriam.
   token, que é onde ele se vê — um botão que só o tirava do Compêndio parecia apagá-lo.
 - **De área ou de personagem.** Os dois têm o mesmo formato; o de área é o que declara
   `area`, e pinta o chão de uma região do mapa. O de personagem pinta a figura de quem está
-  com uma condição. A aba Efeitos do Compêndio só tem os de área: o de personagem só chega à
-  figura pela condição, e é na condição que ele se vê e se edita. Uma lista dele à parte era
-  a mesma coisa em dois lugares.
+  com uma condição. A aba Efeitos do Compêndio tem os de área e os disparos, numa fileira de
+  dentro: o de personagem só chega à figura pela condição, e é na condição que ele se vê e se
+  edita. Uma lista dele à parte era a mesma coisa em dois lugares.
+- **Disparo.** A terceira espécie: o efeito que sai de um ponto e vai até outro -- a bola de
+  fogo, o sopro do dragão. É o que declara `disparo`, e só ele dispara; não aparece entre os de
+  área nem no seletor da condição, embora leve chão e elementos (o cone e o estouro dele). Mora
+  só aqui, na aba própria dentro de Efeitos, e tem janela própria: o trajeto (reto, com estouro
+  ou em cone), o projétil, o rastro, e o chão e os elementos que a forma usa. O card tem a mira:
+  ela vai para o mapa. O Disparo da régua e o botão direito do token oferecem só os daqui (e os
+  dos plugins). Na hora do tiro o molde vai ao jogo como cópia, para a TV ter o que desenhar --
+  uma por molde, refeita no mesmo lugar quando ele muda, e apagada com ele; ela não aparece em
+  lista nenhuma. Com a aba
+  vazia, "Trazer os disparos prontos" traz os cinco de fábrica. O tiro em si não grava nada --
+  é evento, como o ping. Ver [Efeito disparado](extensoes.md#efeito-disparado).
 
 **Janelas próprias.** O efeito e a condição abrem cada um na sua janela, como o item e a
 ficha (`{ tipo: "efeito" }` e `{ tipo: "condicao", lugar }`). A do efeito é o editor
@@ -309,16 +320,19 @@ isso quatro goblins envenenados continuam sendo um veneno só. O molde mexido de
 uma cópia nova, e quem estava com a antiga não muda (`copiaEmJogo`).
 
 O **Compêndio do ATO20** nasce com as sugestões: as condições que o cardápio sugere, cada
-uma com o efeito de fábrica dela, e os efeitos de fábrica que têm chão, como efeitos de
-área. Entram uma vez por máquina, na primeira vez que
+uma com o efeito de fábrica dela, os efeitos de fábrica que têm chão, como efeitos de
+área, e os disparos de fábrica. Entram uma vez por máquina, na primeira vez que
 a janela abre (`compendio::semear` e a marca `semeado.json`), e o mestre que apaga "Molhado"
 não o vê voltar. Trazer uma condição de lá traz o efeito da campanha que ela usa, com as
-imagens; o de fábrica e o de plugin viajam pelo id.
+imagens; o de fábrica e o de plugin viajam pelo id. A máquina que recebeu as sugestões antes de os disparos
+existirem não os recebe por aí -- a marca é uma só --, e é o "Trazer os disparos prontos" da
+aba Disparo que os traz.
 
 ## Pastas dos painéis
 
-Arquivos, Mapas, Fundos, as duas seções de Personagens (Players e NPCs), Itens e as duas
-listas do Compêndio (Bestiário e Itens) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
+Arquivos, Mapas, Fundos, as duas seções de Personagens (Players e NPCs), Itens e as abas do
+Compêndio (Bestiário, Itens, Condições, e Efeitos com uma árvore para os de área e outra para os
+disparos) têm pastas próprias, todas em `board.pastas` com o campo `lista` dizendo de qual painel são. Pasta
 sem `lista` é do Arquivos, que é a forma da pasta gravada antes das outras listas. O Rust
 guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança lá.
 
@@ -327,6 +341,18 @@ guarda `pastas` como JSON opaco, então pasta nova de painel não pede mudança 
 - **Personagem** não tem `pastaId`: ele vive no índice do vault, tipado em Rust e servido ao
   celular do jogador. A pasta guarda os ids dele em `membros`, e o board não chega ao
   celular, então o nome de uma pasta como "Traidores" não vaza.
+- **O que mora no Compêndio** -- o molde, o item, a condição e o efeito guardados -- também
+  entra pela pasta, em `membros`: eles vivem em arquivos do vault, e a pasta é organização da
+  mesa do mestre. No Compêndio a pasta se vê como num gerenciador de arquivos: um card de pasta
+  na grade, antes dos cards, com a moldura e a área de imagem dos cards da aba (em pé no
+  Bestiário, quadrada em Itens, deitada em Condições e Efeitos) e o ícone de pasta no lugar da
+  imagem; o clique entra nela, a trilha em cima (a aba › a pasta › a
+  subpasta) volta, e o "+" e a "Nova pasta" criam dentro da pasta aberta. Na busca, a lista é
+  plana e o card diz de que pasta é. Mover é arrastando o card até a pasta, ou até um passo da
+  trilha (a raiz tira da pasta), ou pelo "Mover para" do menu do card. O
+  efeito vai ao jogo como cópia, e o molde dele fica na pasta; a condição que vai ao menu sai
+  da árvore, que só mostra o que está guardado, e o id dela fica na pasta até ela ser gravada
+  de novo.
 - **A seção é derivada do vínculo com um jogador**, e a pasta é da seção: o NPC que vira
   Player aparece na raiz de Players, e volta para a pasta de NPCs se o jogador sair.
 - **O painel Retratos não tem pastas próprias.** Ele agrupa os retratos soltos pela pasta do
