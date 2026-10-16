@@ -7,6 +7,7 @@ mod db;
 mod error;
 mod estante;
 mod extensoes;
+mod galeria;
 mod importar;
 mod presenca;
 mod serve;
@@ -221,6 +222,13 @@ pub fn run() {
             commands::documento_write,
             commands::documento_delete,
             commands::asset_list,
+            commands::galeria_anexos,
+            commands::galeria_anexo_mini,
+            commands::galeria_caminho,
+            commands::galeria_mostrar_na_pasta,
+            commands::galeria_programas,
+            commands::galeria_abrir_com,
+            commands::galeria_escolher_programa,
             commands::asset_import,
             commands::asset_import_bytes,
             commands::asset_import_cancelar,

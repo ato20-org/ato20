@@ -169,6 +169,13 @@ tauri-plugin-updater = { version = "2", optional = true }
 # fechar na mao.
 tauri-plugin-process = { version = "2", optional = true }
 
+# O "Abrir com" da Galeria: os programas que o sistema registra para o tipo do
+# arquivo, e abrir num deles. E a mesma lista do gerenciador de arquivos. Ja
+# vinha no lock pelo GTK do Tauri -- a versao e a dele, para nao entrar uma
+# segunda copia. Ver `galeria::programas`.
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se
 # apague sozinho: testes que compartilham pasta passam isolados e falham juntos.

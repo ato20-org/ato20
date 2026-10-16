@@ -7,6 +7,7 @@ import {
   Dices,
   Files,
   Image,
+  Images,
   Layers,
   Library,
   MessagesSquare,
@@ -58,6 +59,10 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     case "quadros":
       // Arquivos, como no Obsidian: quadros e notas na mesma árvore.
       return Files;
+    // Várias imagens, e não uma: `Image` já é a imagem aberta numa janela, e a
+    // Galeria é de onde ela se abre.
+    case "galeria":
+      return Images;
     // O mesmo do botão ao lado do + de Personagens, que é a porta dela.
     case "retratos":
       return SquareUser;
