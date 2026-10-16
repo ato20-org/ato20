@@ -160,6 +160,12 @@ def argumentos():
     # A NEVOA dinamica: K areas em faixas cobrindo o plano, abertas pelas
     # lanternas (`--carregadas`). Ver `nevoaDaMedida` na pagina.
     p.add_argument("--nevoa", default="0")
+    # O AMBIENTE da cena: a chuva na lente. Lista, com o vazio = sem ambiente,
+    # para os dois lados na mesma tabela: `--ambiente ,chuva,tempestade`.
+    # So os cenarios com palco desenham. Ver `ambienteDaMedida` na pagina.
+    p.add_argument("--ambiente", default="")
+    p.add_argument("--intensidade", default="1")
+    p.add_argument("--vento", default="0")
     # As FOTOS de tripe no cenario `fotos`: uma de cada duas em perspectiva.
     p.add_argument("--tripe", action="store_true")
     # Os efeitos pausados, como o Mestre os ve sem nada selecionado.
@@ -524,6 +530,21 @@ def main():
                             if med != "0" or len(args.medidores.split(",")) > 1:
                                 rotulo += f" medidores={med} {est}"
                             urls.append((rotulo, url))
+
+    if args.ambiente:
+        urls = [
+            (
+                rotulo + (f" ambiente={amb}" if amb else " sem-ambiente"),
+                url
+                + (
+                    f"&ambiente={amb}&intensidade={args.intensidade}&vento={args.vento}"
+                    if amb
+                    else ""
+                ),
+            )
+            for rotulo, url in urls
+            for amb in args.ambiente.split(",")
+        ]
 
     try:
         bancada = Bancada(args, urls)
