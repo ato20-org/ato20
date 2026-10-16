@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
-import { efeitoEmJogo, trazerDoCompendio } from "@/lib/vault/compendio";
-import { criarEfeitoDaCampanha, listarEfeitosDaCampanha } from "@/lib/vault/efeitos";
+import { efeitoEmJogo, guardarEfeitoNoCompendio, trazerDoCompendio } from "@/lib/vault/compendio";
+import {
+  apagarEfeitoDaCampanha,
+  criarEfeitoDaCampanha,
+  listarEfeitosDaCampanha,
+} from "@/lib/vault/efeitos";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 const publicados = vi.hoisted(() => [] as DefinicaoDeEfeito[][]);
@@ -233,3 +237,80 @@ describe("o efeito arrastado até o mapa vai ao jogo", () => {
   });
 });
 
+
+// O disparo não fica no mapa: a cópia em jogo existe só para a TV ter o que
+// desenhar, e é UMA por molde. Ver `disparoEmJogo`.
+describe("a cópia de passagem do disparo", () => {
+  const reto = { forma: "linha" as const };
+  const molde = { id: "campanha/bola", titulo: "Bola", compendio: true, disparo: reto };
+  const copia = { id: "campanha/bola-1", titulo: "Bola", molde: "campanha/bola", disparo: reto };
+
+  async function abrir(lista: DefinicaoDeEfeito[]) {
+    vi.mocked(listarEfeitosDaCampanha).mockResolvedValueOnce(lista);
+    useEfeitosDaCampanhaStore.setState({ efeitos: null, moldes: null, pedido: 0 });
+    await useEfeitosDaCampanhaStore.getState().carregar();
+    await useEfeitosDaCampanhaStore.getState().arrumarDisparos();
+  }
+
+  beforeEach(() => {
+    publicados.length = 0;
+    vi.mocked(apagarEfeitoDaCampanha).mockClear();
+    vi.mocked(guardarEfeitoNoCompendio).mockClear();
+    vi.mocked(criarEfeitoDaCampanha).mockReset();
+    vi.mocked(criarEfeitoDaCampanha).mockResolvedValue({ id: "campanha/nova", titulo: "Efeito novo" });
+  });
+
+  it("a faxina tira a repetida e a órfã, e guarda a sem molde", async () => {
+    await abrir([
+      { id: "campanha/fogo", titulo: "Fogo" },
+      molde,
+      copia,
+      { ...copia, id: "campanha/bola-2" },
+      { id: "campanha/orfa", titulo: "Raio", molde: "campanha/sumiu", disparo: reto },
+      { id: "campanha/solto", titulo: "Novo disparo", disparo: reto },
+    ]);
+
+    expect(ids(useEfeitosDaCampanhaStore.getState().efeitos)).toEqual(["campanha/fogo", "campanha/bola-1"]);
+    expect(vi.mocked(apagarEfeitoDaCampanha).mock.calls.map(([id]) => id)).toEqual([
+      "campanha/bola-2",
+      "campanha/orfa",
+    ]);
+    expect(guardarEfeitoNoCompendio).toHaveBeenCalledWith("campanha/solto");
+  });
+
+  it("o tiro reaproveita a cópia, e o molde mexido muda a mesma", async () => {
+    await abrir([molde, copia]);
+    const { disparoEmJogo, salvar } = useEfeitosDaCampanhaStore.getState();
+
+    expect((await disparoEmJogo("campanha/bola"))?.id).toBe("campanha/bola-1");
+    salvar({ ...molde, disparo: { forma: "cone" } });
+    const mexida = await disparoEmJogo("campanha/bola");
+
+    expect(mexida).toMatchObject({ id: "campanha/bola-1", molde: "campanha/bola", disparo: { forma: "cone" } });
+    expect(mexida?.compendio).toBeUndefined();
+    expect(ids(useEfeitosDaCampanhaStore.getState().efeitos)).toEqual(["campanha/bola-1"]);
+    expect(publicados.at(-1)?.[0]?.disparo).toEqual({ forma: "cone" });
+    expect(criarEfeitoDaCampanha).not.toHaveBeenCalled();
+  });
+
+  it("sem cópia, o primeiro tiro faz uma, e o arrasto vai pelo mesmo caminho", async () => {
+    await abrir([molde]);
+    const { disparoEmJogo, paraOJogo } = useEfeitosDaCampanhaStore.getState();
+
+    const [um, outro] = await Promise.all([disparoEmJogo("campanha/bola"), paraOJogo("campanha/bola")]);
+
+    expect(um).toMatchObject({ id: "campanha/nova", molde: "campanha/bola" });
+    expect(outro).toBe("campanha/nova");
+    expect(criarEfeitoDaCampanha).toHaveBeenCalledTimes(1);
+  });
+
+  it("apagar o molde leva a cópia junto", async () => {
+    await abrir([{ id: "campanha/fogo", titulo: "Fogo" }, molde, copia]);
+
+    await useEfeitosDaCampanhaStore.getState().apagar("campanha/bola");
+
+    const { efeitos, moldes } = useEfeitosDaCampanhaStore.getState();
+    expect(ids(efeitos)).toEqual(["campanha/fogo"]);
+    expect(moldes).toEqual([]);
+  });
+});

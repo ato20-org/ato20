@@ -812,6 +812,91 @@ a number, and every image raster and inside the folder, including those of the
 mipmaps and the color ramp. The base's total frame count must divide the
 elements': the fire's loop sets the sheet's loop.
 
+## Fired effect
+
+The third way an effect shows up, next to the figure and the ground: it GOES
+from one point to another -- the fireball, the ray of frost, the dragon's
+breath. It is a SPECIES of its own: the effect that declares `disparo` (shot)
+is a shot, only it can be fired, and it doesn't show up among the area effects
+or in a condition's picker, even though it carries `area` and `base` (they are
+its cone and its burst). It has its own list (the Shot tab inside Effects, in
+the Compendium) and its own editing window.
+
+It draws with the usual layers, each with another role:
+
+- **`disparo.projetil`** (projectile): what FLIES in a line -- the base's image
+  fields (`imagem`, `quadros`, `mipmaps`, `cores`) and `giro` (turn). Drawn as
+  it is, the image flies toward its right side; `giro` `90` puts the top in
+  front (the shard that pierces), `-90` puts it behind (the flame that becomes
+  a tail), `180` flips it. Without a projectile, the area's element
+  (`area.foco`, or the `externo`) flies, top facing back.
+- **`particulas`**: in a line, the trail -- they leave the projectile backward,
+  in a narrow fan. In a cone, what rises from the fan.
+- **`base`** and **`area.foco`**: the ground and the elements of the cone, and
+  those of the burst at the end of the line, baked by the area's engine. The
+  shot's color is `area.cor`.
+
+```json
+{ "id": "flecha-de-fogo", "titulo": "Fire arrow",
+  "area": { "cor": "#f59e0b" },
+  "disparo": { "forma": "linha", "velocidade": 24, "tamanho": 0.8, "impacto": 0,
+               "rastro": false,
+               "projetil": { "imagem": "fx/flecha.webp", "giro": 0 } } }
+```
+
+- **`forma`** (shape): `linha`, the projectile flies from A to B (and bursts
+  there, with `impacto`); `cone`, the fan opens from A out to B's distance,
+  toward it. The editor shows three: straight (`linha` with `impacto` `0`),
+  with burst, and cone.
+- **`abertura`** (opening): cone only, in degrees, from `10` to `160` (default
+  `60`).
+- **`velocidade`** (speed): in squares per second, from `3` to `60` (default
+  `15`). The flight stays between 0.12 and 2.5 seconds, near or far.
+- **`alcance`** (range): in squares, from `1` to `30` (default `6`): how far it
+  goes when it leaves a token toward where the token is looking, which is the
+  shot with no point B.
+- **`tamanho`** (size): the projectile's side, in squares, from `0.3` to `3`
+  (default `1`).
+- **`impacto`** (impact): the radius of the burst at the end of the line, in
+  squares, from `0` to `4` (default `1`). Zero is the arrow that just arrives.
+- **`rastro`** (trail) and **`brilho`** (glow): the streak in the shot's color
+  behind the projectile and the round glow around it. Absent, on; `false`
+  turns them off. The glow stays, even off, on a projectile with no image:
+  otherwise the shot would have no body.
+
+ATO20 ships five ready-made ones -- Fireball (with burst), Ray of frost
+(straight), Water jet (with burst), Fire breath and Poison cloud (cone) --,
+built-in packs that use the condition effects' art: a pack points to another's
+image with `../chamas/chama-128.webp`. The copy into the campaign stores
+`fabrica:chamas/chama-128.webp`, the owning folder's name.
+
+The GM fires from three places: **Shot** on the map ruler, right below Light
+(pick the effect, then two clicks on the map -- where from, where to --, or
+press on A and release on B; clicking a character fires from it and aiming at
+another lands on it; Shift locks the angle in fifteen-degree steps); any
+token's **right-click** menu, under "Fire", which shoots where the token is
+looking -- its lantern beam, or the beam's default -- out to the `alcance`, the
+whole selection at once; and the shot's **card** in the Compendium, which puts
+the crosshair in hand like the ruler button.
+
+The shot is an EVENT, like a ping: it is born in the GM window, travels in the
+frame already resolved (`LiveState.disparados`, with the points, the shape and
+the timing in scene units and milliseconds) and is gone when it ends -- nothing
+goes into the scene. The TV only needs the effect for the images, which is why
+a Compendium template goes into play as a copy at the moment of the shot --
+one per template, redone in place when the template changes, and never listed
+anywhere: the shot is edited in the Compendium. It
+draws above the darkness, since the shot glows, and below the fog, which hides
+what the table hasn't seen. Both points stay inside the plane, the cone and the
+burst are held to it, and the trail shrinks at the edge: the stage's rule. The
+cone's and the burst's sheets come out with frames of up to 256 pixels (the
+area's, 512), and are released when the shot ends: each shot bakes its own.
+
+Rust checks at import the shape (`linha` or `cone`), every number within the
+limits above, the `giro` (`0`, `90`, `-90` or `180`) and the projectile image
+like the others (raster, inside the folder, a full grid). The block alone draws
+nothing: the shot needs an image layer -- the projectile is enough.
+
 ## PDF sheet: the plugin teaches the reading
 
 In the Characters list, **Import PDF sheet** builds a character from a filled-in

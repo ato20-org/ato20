@@ -491,7 +491,67 @@ pub struct Efeito {
     /// O chao do efeito na area: a textura deitada. Ver `BaseDoEfeito`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<BaseDoEfeito>,
+    /// Como o efeito DISPARA: em linha ou em cone. Ver `DisparoDoEfeito`.
+    /// Antes deste campo, o bloco do plugin era descartado calado, e o tiro
+    /// dele saia sempre em linha.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disparo: Option<DisparoDoEfeito>,
 }
+
+/// Como o efeito sai quando e DISPARADO de um ponto a outro: a forma, e os
+/// numeros dela em casas da grade. Sem imagem propria -- o tiro desenha com
+/// as camadas do efeito (o foco vira o projetil, o chao faz o cone). Espelho
+/// de `DisparoDoEfeito` em `types/efeito.ts`; os limites sao os de
+/// `LIMITES_DO_DISPARO`, que o TS prende ao desenhar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisparoDoEfeito {
+    /// `linha` ou `cone`. Ver `FORMAS_DO_DISPARO`.
+    pub forma: String,
+    /// A abertura do cone, em graus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abertura: Option<f64>,
+    /// Em casas por segundo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub velocidade: Option<f64>,
+    /// Ate onde vai, em casas, quando sai de um token para onde ele olha.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alcance: Option<f64>,
+    /// O lado do projetil da linha, em casas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tamanho: Option<f64>,
+    /// O raio do estouro no fim da linha, em casas. Zero = sem estouro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impacto: Option<f64>,
+    /// O que voa na linha. Ausente = o elemento da area. Ver `ProjetilDoDisparo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projetil: Option<ProjetilDoDisparo>,
+    /// A faixa da cor do tiro atras do projetil. Ausente = sim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rastro: Option<bool>,
+    /// O brilho em volta do projetil. Ausente = sim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brilho: Option<bool>,
+}
+
+/// A imagem que voa num disparo em linha: os campos de imagem de sempre, e o
+/// giro que a deita no voo. Ver `ProjetilDoDisparo` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjetilDoDisparo {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    /// Em graus, no sentido horario. Ver `GIROS_DO_PROJETIL`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub giro: Option<f64>,
+}
+
+/// As formas de um disparo. A mesma lista que o TS desenha.
+pub const FORMAS_DO_DISPARO: &[&str] = &["linha", "cone"];
+
+/// Os giros do projetil: como esta, o topo na frente, o topo atras, de ponta
+/// cabeca. Outro angulo deitaria a imagem torta no voo.
+pub const GIROS_DO_PROJETIL: &[f64] = &[0.0, 90.0, -90.0, 180.0];
 
 /// Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -614,6 +674,9 @@ impl Efeito {
         if let Some(base) = &self.base {
             imagens.extend(base.imagem.imagens());
         }
+        if let Some(projetil) = self.disparo.as_ref().and_then(|disparo| disparo.projetil.as_ref()) {
+            imagens.extend(projetil.imagem.imagens());
+        }
 
         imagens
     }
@@ -627,6 +690,10 @@ impl Efeito {
             || self.particulas.is_some()
             || self.area.as_ref().is_some_and(|area| area.foco.is_some())
             || self.base.is_some()
+            || self
+                .disparo
+                .as_ref()
+                .is_some_and(|disparo| disparo.projetil.is_some())
     }
 }
 
@@ -2542,6 +2609,46 @@ fn validar_area(
     Ok(())
 }
 
+/// O bloco `disparo`, com uma forma conhecida e numeros que fazem sentido.
+/// Os limites sao os de `LIMITES_DO_DISPARO`, no TS.
+fn validar_disparo(disparo: &DisparoDoEfeito) -> Result<(), crate::error::Texto> {
+    if !FORMAS_DO_DISPARO.contains(&disparo.forma.as_str()) {
+        return Err(crate::texto!(
+            "pede o disparo {:?}; as formas sao {}",
+            "asks for the shot {:?}; the shapes are {}",
+            disparo.forma,
+            FORMAS_DO_DISPARO.join(", ")
+        ));
+    }
+
+    for (campo, valor, min, max) in [
+        ("abertura", disparo.abertura, 10.0, 160.0),
+        ("velocidade", disparo.velocidade, 3.0, 60.0),
+        ("alcance", disparo.alcance, 1.0, 30.0),
+        ("tamanho", disparo.tamanho, 0.3, 3.0),
+        ("impacto", disparo.impacto, 0.0, 4.0),
+    ] {
+        if valor.is_some_and(|v| !v.is_finite() || !(min..=max).contains(&v)) {
+            return Err(crate::texto!(
+                "tem `disparo.{campo}` fora de {min} a {max}",
+                "has `disparo.{campo}` out of range ({min} to {max})"
+            ));
+        }
+    }
+
+    if let Some(projetil) = &disparo.projetil {
+        imagem_animada_valida(&projetil.imagem, "disparo.projetil")?;
+        if projetil.giro.is_some_and(|giro| !GIROS_DO_PROJETIL.contains(&giro)) {
+            return Err(crate::texto!(
+                "tem `disparo.projetil.giro` que nao e 0, 90, -90 ou 180",
+                "has `disparo.projetil.giro` that is not 0, 90, -90 or 180"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// Um efeito desenha alguma coisa, com numeros que fazem sentido?
 ///
 /// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
@@ -2585,6 +2692,12 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 
     if let Err(motivo) = validar_area(efeito.area.as_ref(), efeito.base.as_ref()) {
         return invalido(motivo);
+    }
+
+    if let Some(disparo) = &efeito.disparo {
+        if let Err(motivo) = validar_disparo(disparo) {
+            return invalido(motivo);
+        }
     }
 
     let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
@@ -4022,6 +4135,75 @@ mod tests {
         ] {
             let corpo = format!(r#"[{{"id":"x","titulo":"X",{efeito}}}]"#);
             assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{efeito}");
+        }
+    }
+
+    #[test]
+    fn efeito_com_disparo_entra_e_chega_ao_ts_inteiro() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"sopro","titulo":"Sopro",
+                     "base":{"imagem":"fx/chao.webp"},
+                     "disparo":{"forma":"cone","abertura":90,"velocidade":20,"alcance":4}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let json = serde_json::to_value(&m.contribui.efeitos[0]).unwrap();
+        assert_eq!(json["disparo"]["forma"], "cone");
+        assert_eq!(json["disparo"]["abertura"], 90.0);
+        assert_eq!(json["disparo"]["alcance"], 4.0);
+        // O que o plugin nao disse nao vai: o TS poe os padroes.
+        assert!(json["disparo"].get("impacto").is_none());
+    }
+
+    #[test]
+    fn projetil_do_disparo_entra_e_e_servido() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"flecha","titulo":"Flecha",
+                     "disparo":{"forma":"linha","impacto":0,"rastro":false,
+                                "projetil":{"imagem":"fx/flecha.webp","giro":90,
+                                            "quadros":{"colunas":2,"total":2,"fps":8}}}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        // Só o projetil desenha: é o bastante para o efeito entrar.
+        assert_eq!(efeito.imagens(), vec!["fx/flecha.webp"]);
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["disparo"]["projetil"]["imagem"], "fx/flecha.webp");
+        assert_eq!(json["disparo"]["projetil"]["giro"], 90.0);
+        assert_eq!(json["disparo"]["rastro"], false);
+    }
+
+    #[test]
+    fn disparo_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for disparo in [
+            r#"{"forma":"espiral"}"#,
+            r#"{"abertura":60}"#,
+            r#"{"forma":"cone","abertura":300}"#,
+            r#"{"forma":"linha","velocidade":0}"#,
+            r#"{"forma":"linha","alcance":99}"#,
+            r#"{"forma":"linha","tamanho":0.1}"#,
+            r#"{"forma":"linha","impacto":-1}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"p.png","giro":45}}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"../fora.png"}}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"p.svg"}}"#,
+        ] {
+            let corpo = format!(
+                r#"[{{"id":"x","titulo":"X","base":{{"imagem":"c.png"}},"disparo":{disparo}}}]"#
+            );
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{disparo}");
         }
     }
 

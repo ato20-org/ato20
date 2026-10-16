@@ -295,6 +295,39 @@
     animation: ping-onda 1.1s ease-out 2 both;
   }
 
+  /* O efeito DISPARADO. Ver `DisparoLayer`.
+
+     O projétil anda no eixo do envelope girado, de A até a distância de B, e
+     apaga ao chegar -- de uma vez quando estoura, devagar quando só chega. O
+     rastro cresce atrás dele no mesmo tempo, a partir de A. O estouro espera o
+     que falta do voo (`--disparo-espera`, contado na montagem) e cresce
+     apagando. O cone abre da ponta até a borda no tempo do voo,
+     fica um instante e apaga. Os tempos vêm inline, do tiro.
+
+     Quem pediu menos movimento vê o fim: o projétil parado no alvo, o estouro
+     e o cone abertos, sem animar -- até o Mestre tirar o tiro do quadro. */
+  .disparo-voo {
+    animation:
+      disparo-voo var(--disparo-voo) linear both,
+      disparo-apaga var(--disparo-chega) ease-in var(--disparo-voo) forwards;
+  }
+
+  .disparo-rastro {
+    animation:
+      disparo-rastro var(--disparo-voo) linear both,
+      disparo-apaga 300ms ease-in var(--disparo-voo) forwards;
+  }
+
+  .disparo-impacto {
+    animation: disparo-impacto var(--disparo-impacto, 800ms) ease-out var(--disparo-espera, 0ms) both;
+  }
+
+  .disparo-cone {
+    animation:
+      disparo-cone var(--disparo-voo) cubic-bezier(0.2, 0.7, 0.3, 1) both,
+      disparo-apaga var(--disparo-some) ease-in var(--disparo-apaga) forwards;
+  }
+
   /* A roda de escolha, ao abrir sob o dedo. */
   .roda-de-ping {
     animation: ping-entra 160ms ease-out both;
@@ -519,6 +552,77 @@
   to {
     opacity: 0;
     transform: scale(3.2);
+  }
+}
+
+/* O tiro parado, sem o movimento: o projétil já no alvo, o rastro apagado.
+   Ver `.disparo-voo`. */
+.disparo-voo {
+  transform: translateX(var(--disparo-dx, 0));
+}
+
+.disparo-rastro {
+  opacity: 0;
+  transform-origin: 0 50%;
+}
+
+@keyframes disparo-voo {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(var(--disparo-dx, 0));
+  }
+}
+
+@keyframes disparo-rastro {
+  from {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes disparo-apaga {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes disparo-impacto {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  65% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes disparo-cone {
+  from {
+    opacity: 0.5;
+    transform: scale(0.06);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

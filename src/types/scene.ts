@@ -2650,7 +2650,28 @@ export type ListaDePastas =
   | "compendio"
   // Os moldes de item do Compêndio: um espaço próprio, como o dos moldes de
   // personagem, e não as pastas da janela de Itens.
-  | "compendio-itens";
+  | "compendio-itens"
+  // As condições, os efeitos de área e os disparos guardados no Compêndio:
+  // uma árvore por aba, pela razão de Mapas e Fundos -- a pasta de disparos
+  // não aparece vazia entre os efeitos de área.
+  | "compendio-condicoes"
+  | "compendio-efeitos"
+  | "compendio-disparos";
+
+/** As listas do Compêndio cujas coisas vivem fora do board: a pasta guarda os ids. */
+export type ListaDoCompendio = "compendio-condicoes" | "compendio-efeitos" | "compendio-disparos";
+
+/** Todas as árvores de pastas do Compêndio da campanha, uma por aba. */
+export type ListaDePastasDoCompendio = "compendio" | "compendio-itens" | ListaDoCompendio;
+
+/** As árvores do Compêndio, para conferir o que vem do DOM. */
+export const LISTAS_DE_PASTAS_DO_COMPENDIO: ReadonlyArray<ListaDePastasDoCompendio> = [
+  "compendio",
+  "compendio-itens",
+  "compendio-condicoes",
+  "compendio-efeitos",
+  "compendio-disparos",
+];
 
 /**
  * Uma pasta de um dos painéis: quadros e notas no Arquivos, mapas, fundos e
@@ -2672,7 +2693,9 @@ export type Pasta = {
   /**
    * Os personagens dentro dela, por id. Só nas listas `players`, `npcs` e
    * `itens` -- nesta, os itens do catálogo, pela mesma razão: o item também
-   * vive num índice do vault servido ao celular.
+   * vive num índice do vault servido ao celular. E nas do Compêndio, pela de
+   * sempre: o molde, a condição e o efeito guardados moram em arquivos do
+   * vault, e a pasta é organização da mesa do mestre.
    *
    * Aqui, e não num `pastaId` do personagem como o da cena: o personagem vive
    * no índice do vault, tipado em Rust e servido ao celular do jogador, e a

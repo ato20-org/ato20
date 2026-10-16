@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import { definicaoDoEfeito, EFEITOS_PARA_A_FIGURA } from "@/lib/efeitos";
 import { t } from "@/lib/i18n/personagens";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
@@ -315,7 +315,7 @@ export function AparenciaDaCondicao({
               >
                 {t.linhaDeCondicao.nenhum}
               </Button>
-              {EFEITOS_DE_FABRICA.map((opcao) => (
+              {EFEITOS_PARA_A_FIGURA.map((opcao) => (
                 <OpcaoDeEfeito
                   key={opcao.id}
                   titulo={opcao.titulo}

@@ -95,6 +95,7 @@ import {
   useSceneStore,
 } from "@/lib/store/use-scene-store";
 import { useRolagensStore } from "@/lib/store/use-rolagens-store";
+import { useDisparosStore } from "@/lib/store/use-disparos-store";
 import { usePingsStore } from "@/lib/store/use-pings-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
@@ -266,6 +267,13 @@ export function MestreShell() {
     () => todosOsPings.filter((ping) => ping.cenaId === cenaNoArId),
     [todosOsPings, cenaNoArId],
   );
+  // Os tiros também, pela mesma razão: o fogo que o mestre testa no mapa que
+  // está montando não voa na TV.
+  const todosOsDisparados = useDisparosStore((state) => state.ativos);
+  const disparados = useMemo(
+    () => todosOsDisparados.filter((disparo) => disparo.cenaId === cenaNoArId),
+    [todosOsDisparados, cenaNoArId],
+  );
   // Só o número viaja no quadro; o conjunto vai por `/sala/declarativo`.
   const declarativoVersao = useDeclarativoStore((state) => state.versao);
   // O contador do elenco, para o celular saber quando reler a ficha.
@@ -337,6 +345,7 @@ export function MestreShell() {
       fichasVersao,
       rolagens,
       pings,
+      disparados,
       imagem,
       iniciativa,
     },

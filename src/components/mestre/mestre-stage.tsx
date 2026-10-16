@@ -95,6 +95,7 @@ import {
   esquecerPonteiro,
   registrarConversor,
 } from "@/lib/mestre/ponteiro-no-palco";
+import { useDisparosStore } from "@/lib/store/use-disparos-store";
 import { usePingsStore } from "@/lib/store/use-pings-store";
 import { RodaDePing } from "@/components/playground/roda-de-ping";
 import { novoId } from "@/lib/id";
@@ -211,6 +212,9 @@ import {
 } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { ferramentaDeExtensao, useToolStore } from "@/lib/store/use-tool-store";
+import { ARRASTO_MINIMO_DO_DISPARO, pontosDoDisparo } from "@/lib/disparo-de-efeito";
+import { disparar } from "@/lib/mestre/disparar";
+import { MiraDoDisparo } from "@/components/mestre/mira-do-disparo";
 import { useBorrachaDaNevoaStore } from "@/lib/store/use-borracha-da-nevoa-store";
 import { useBorrachaDosRiscosStore } from "@/lib/store/use-borracha-dos-riscos-store";
 import { usePincelNaRoda } from "@/hooks/use-pincel-na-roda";
@@ -533,6 +537,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
 
   /** Os pings da mesa, os do mestre e os dos jogadores. Ver `PingLayer`. */
   const pings = usePingsStore((state) => state.ativos);
+  /** Os tiros no ar, todos do mestre. Ver `DisparoLayer`. */
+  const disparados = useDisparosStore((state) => state.ativos);
 
   const selectedIds = useSelectionStore((state) => state.selectedIds);
   const selectedTextoIds = useSelectionStore(
@@ -2537,6 +2543,45 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
       return;
     }
 
+    // Dois cliques -- de onde, para onde --, ou segurar no A e soltar no B,
+    // como a seta do quadro. O tiro sai do personagem clicado e encaixa no
+    // alvo (ver `pontosDoDisparo`), e a ferramenta se larga, como todas: o
+    // gesto seguinte a um tiro é mexer em quem ele acertou. O efeito fica
+    // marcado para a próxima vez. Ver `disparar`.
+    if (tool === "disparo") {
+      const disparos = useDisparosStore.getState();
+      const atirar = (de: Vec, para: Vec, travar: boolean) => {
+        const fonte = useToolStore.getState().efeitoDoDisparo;
+        disparos.largarMira();
+        setTool("select");
+        if (!fonte) return;
+
+        const pontos = pontosDoDisparo(scene.items, de, para, travar);
+        void disparar(fonte, scene, pontos.de, pontos.para);
+      };
+
+      // O A já estava marcado: este clique é o B.
+      if (disparos.mira?.cenaId === scene.id) {
+        atirar(disparos.mira.de, anchor, event.shiftKey);
+        return;
+      }
+
+      disparos.mirar(scene.id, anchor);
+      startDrag(event, {
+        // Quem desenha o tiro enquanto ele procura o B é a mira, que ouve o
+        // ponteiro no documento. Daqui só interessa onde o botão subiu.
+        onMove: () => undefined,
+        onEnd: (native) => {
+          const fim = toScene(native.clientX, native.clientY);
+          // Clique, e não arrasto: o A fica marcado, esperando o B.
+          if (Math.hypot(fim.x - anchor.x, fim.y - anchor.y) < ARRASTO_MINIMO_DO_DISPARO)
+            return;
+          atirar(anchor, fim, native.shiftKey);
+        },
+      });
+      return;
+    }
+
     // Clique também, e não arrasto, embora o postit TENHA tamanho: desenhar a
     // caixa antes de escrever pediria uma decisão — quanto papel isto vai
     // precisar — que o mestre só sabe responder depois de digitar. Nasce no
@@ -3248,6 +3293,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         tool === "parede" ||
         tool === "luz" ||
         tool === "porta" ||
+        tool === "disparo" ||
         Boolean(ferramentaDeExtensao(tool))));
   // Mão aberta sempre que o espaço estiver segurado.
   //
@@ -3302,6 +3348,7 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           variant="mestre"
           portaNaMao={gestoPorta?.portaId}
           pings={pings}
+          disparados={disparados}
           fichas={fichasNoPalco}
           efeitos={efeitosNoPalco}
           // Sem retratos: eles moram no quadro da janela Retratos, e é lá que
@@ -3428,6 +3475,10 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           câmera, e acender quatro pontos no meio de um deslocamento seria
           ruído. */}
       {tool === "ligacao" && !panMode ? <AncorasDeSeta scene={scene} /> : null}
+
+      {/* A sombra do tiro, do ponto A até o cursor, na forma do efeito. Pela
+          razão das âncoras: só com o Disparo na mão, e nunca deslocando. */}
+      {tool === "disparo" && !panMode ? <MiraDoDisparo scene={scene} /> : null}
 
       {/* Fora do `SceneLayer` pela mesma razão do `PinLayer`: hoje o dado é só
           do mestre. Dentro dele, os dados apareceriam na TV — e a decisão de

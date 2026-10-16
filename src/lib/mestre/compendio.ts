@@ -1,4 +1,3 @@
-import type { LinhaDaArvore } from "@/lib/mestre/arvore-de-pastas";
 import { normaliza } from "@/lib/search";
 
 /** O que a busca e o filtro de tags do Compêndio pedem. */
@@ -76,61 +75,4 @@ export function tagsDaLista<T>(
 export function temTag(tags: string[], tag: string): boolean {
   const chave = normaliza(tag);
   return tags.some((atual) => normaliza(atual) === chave);
-}
-
-/**
- * A árvore achatada em BLOCOS, para desenhar em cards: cada pasta é um bloco,
- * e cada sequência de coisas no mesmo nível vira uma grade.
- *
- * A lista desenha uma linha por coisa e não precisa disto; o card precisa,
- * porque uma grade é um elemento só com várias coisas dentro, e as coisas de
- * uma pasta vêm logo depois dela -- e das subpastas dela -- na ordem que
- * `achatarArvore` devolve. Juntar as vizinhas de mesma profundidade é o que
- * põe os goblins da pasta "Humanoides" numa grade embaixo do nome dela.
- */
-export function blocosDaArvore<T>(
-  linhas: LinhaDaArvore<T>[],
-): Array<
-  | { tipo: "pasta"; linha: Extract<LinhaDaArvore<T>, { tipo: "pasta" }> }
-  | { tipo: "grade"; depth: number; itens: T[] }
-> {
-  const blocos: ReturnType<typeof blocosDaArvore<T>> = [];
-
-  for (const linha of linhas) {
-    if (linha.tipo === "pasta") {
-      blocos.push({ tipo: "pasta", linha });
-      continue;
-    }
-
-    const ultimo = blocos.at(-1);
-    if (ultimo?.tipo === "grade" && ultimo.depth === linha.depth) ultimo.itens.push(linha.item);
-    else blocos.push({ tipo: "grade", depth: linha.depth, itens: [linha.item] });
-  }
-
-  return blocos;
-}
-
-/**
- * A árvore só até a `limite`-ésima coisa, com as pastas que vêm antes dela.
- *
- * É a montagem aos poucos da grade: com trezentos moldes, montar todos os
- * cards de uma vez custa caro, e ligar uma tag os desmonta e remonta. Corta-se
- * por COISAS, e não por linhas, porque uma pasta é só um cabeçalho e não pesa;
- * as pastas depois do corte esperam o próximo lote, junto do que há nelas.
- */
-export function cortarArvore<T>(linhas: LinhaDaArvore<T>[], limite: number): LinhaDaArvore<T>[] {
-  const cortadas: LinhaDaArvore<T>[] = [];
-  let coisas = 0;
-
-  for (const linha of linhas) {
-    if (linha.tipo === "item") {
-      if (coisas >= limite) break;
-      coisas += 1;
-    } else if (coisas >= limite) {
-      break;
-    }
-    cortadas.push(linha);
-  }
-
-  return cortadas;
 }

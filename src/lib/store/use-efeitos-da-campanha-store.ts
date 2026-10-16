@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { create } from "zustand";
 
+import { especieDoEfeito } from "@/lib/efeitos";
 import { t } from "@/lib/i18n/mestre";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { daemonAddr, isDesktop } from "@/lib/vault/bridge";
@@ -83,6 +84,22 @@ type EfeitosDaCampanhaStore = {
    * `null` quando não deu, com o motivo já avisado.
    */
   paraOJogo: (id: string, doAto20?: boolean) => Promise<string | null>;
+  /**
+   * A cópia EM JOGO de um DISPARO do Compêndio, para o tiro: uma só por molde,
+   * e sempre igual a ele. O disparo mora no Compêndio -- é lá que o mestre o
+   * vê e edita --, e a cópia existe só porque a mesa desenha o que está em
+   * jogo. Ao contrário da do token, ela não guarda o desenho de antes: nada
+   * fica com ela depois do tiro, e uma cópia nova a cada mudança no molde
+   * encheria os trinta e dois. `null` quando não deu, com o motivo já avisado.
+   */
+  disparoEmJogo: (moldeId: string) => Promise<DefinicaoDeEfeito | null>;
+  /**
+   * Tira do jogo as cópias de disparo que sobraram: a de um molde apagado, a
+   * segunda do mesmo molde. E guarda no Compêndio o disparo que estava em jogo
+   * sem molde -- de antes de o disparo morar lá --, para ele aparecer onde se
+   * edita. Ver `disparoEmJogo`.
+   */
+  arrumarDisparos: () => Promise<void>;
   /** O efeito em jogo volta ao Compêndio. Recusa se o menu o usa. */
   guardar: (id: string) => Promise<boolean>;
 };
@@ -97,6 +114,9 @@ const gravacoes = new Map<string, ReturnType<typeof setTimeout>>();
  * tokens soltos juntos levam a mesma.
  */
 const copiando = new Map<string, Promise<DefinicaoDeEfeito | null>>();
+
+/** A faxina dos disparos em andamento. Ver `arrumarDisparos`. */
+let arrumando: Promise<void> | null = null;
 
 /** O que não é desenho: o endereço, a marca e o que só serve ao Compêndio. */
 const FORA_DO_DESENHO = ["id", "molde", "ato20", "compendio", "tags", "origem"] as const;
@@ -143,6 +163,7 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       const efeitos = todos.filter((efeito) => !efeito.compendio);
       set({ efeitos, moldes: todos.filter((efeito) => efeito.compendio) });
       publicar(efeitos);
+      void get().arrumarDisparos();
     } catch (cause) {
       if (get().pedido !== meu) return;
       set({ efeitos: [], moldes: [] });
@@ -207,6 +228,9 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
     const espera = gravacoes.get(id);
     if (espera) clearTimeout(espera);
     gravacoes.delete(id);
+    const eraDisparo = get().moldes?.some(
+      (molde) => molde.id === id && especieDoEfeito(molde) === "disparo",
+    );
 
     try {
       await apagarEfeitoDaCampanha(id);
@@ -215,7 +239,16 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       publicar(efeitos);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoApagar);
+      return;
     }
+
+    // O disparo apagado do Compêndio leva a cópia de passagem dele: ninguém
+    // mais a usa. A do efeito de área e a da condição, não -- há área e token
+    // com elas. Depois da faxina que já corre, se corre: ela leu os moldes de
+    // antes, e ainda contaria com este.
+    if (!eraDisparo) return;
+    await arrumando;
+    await get().arrumarDisparos();
   },
 
   async criarMolde() {
@@ -288,11 +321,15 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
     const aCaminho = copiando.get(chave);
     if (aCaminho) return aCaminho;
 
+    // Já veio, e é um disparo: ele mora no Compêndio da campanha, e o tiro
+    // usa a cópia de passagem dele.
+    const guardado = get().moldes?.find((efeito) => efeito.ato20 === idNoAto20);
+    if (guardado && especieDoEfeito(guardado) === "disparo") return get().disparoEmJogo(guardado.id);
+
     const emJogo = get().efeitos?.find((efeito) => efeito.ato20 === idNoAto20);
     if (emJogo) return Promise.resolve(emJogo);
 
     // Já veio, e foi guardado no Compêndio da campanha depois: é molde de lá.
-    const guardado = get().moldes?.find((efeito) => efeito.ato20 === idNoAto20);
     if (guardado) return get().copiaEmJogo(guardado.id);
 
     const trazer = (async () => {
@@ -316,6 +353,13 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
       if (!trazido) return null;
       set({ moldes: [...(get().moldes ?? []), trazido] });
 
+      // O disparo trazido FICA no Compêndio da campanha, marcado, e o tiro
+      // leva a cópia de passagem: é lá que ele se vê e se edita.
+      if (especieDoEfeito(trazido) === "disparo") {
+        get().salvar({ ...trazido, ato20: idNoAto20 });
+        return get().disparoEmJogo(trazido.id);
+      }
+
       // Com os trinta e dois cheios, ele fica no Compêndio da campanha, e o
       // store já disse por quê. A marca vai nos dois casos.
       const entrou = await get().porEmJogo(trazido.id);
@@ -333,10 +377,83 @@ export const useEfeitosDaCampanhaStore = create<EfeitosDaCampanhaStore>((set, ge
 
   async paraOJogo(id, doAto20) {
     if (doAto20) return (await get().doAto20EmJogo(id))?.id ?? null;
-    if (get().moldes?.some((molde) => molde.id === id)) {
-      return (await get().copiaEmJogo(id))?.id ?? null;
+    const molde = get().moldes?.find((atual) => atual.id === id);
+    if (molde) {
+      const copia =
+        especieDoEfeito(molde) === "disparo"
+          ? await get().disparoEmJogo(id)
+          : await get().copiaEmJogo(id);
+      return copia?.id ?? null;
     }
     return id;
+  },
+
+  disparoEmJogo(moldeId) {
+    const chave = `disparo:${moldeId}`;
+    const aCaminho = copiando.get(chave);
+    if (aCaminho) return aCaminho;
+
+    const molde = get().moldes?.find((efeito) => efeito.id === moldeId);
+    if (!molde) return Promise.resolve(null);
+
+    const fazer = (async () => {
+      const [fica, ...sobram] = (get().efeitos ?? []).filter((efeito) => efeito.molde === moldeId);
+      for (const repetida of sobram) await get().apagar(repetida.id);
+
+      if (!fica) return get().copiaEmJogo(moldeId);
+      if (mesmoDesenho(fica, molde)) return fica;
+
+      // O molde mudou: a cópia muda junto, no mesmo id.
+      const igual: DefinicaoDeEfeito = { ...molde, id: fica.id, molde: moldeId };
+      delete igual.compendio;
+      delete igual.tags;
+      try {
+        const gravada = await salvarEfeitoDaCampanha(igual);
+        const efeitos = (get().efeitos ?? []).map((atual) =>
+          atual.id === gravada.id ? gravada : atual,
+        );
+        set({ efeitos });
+        publicar(efeitos);
+        return gravada;
+      } catch (cause) {
+        toast.error(cause instanceof Error ? cause.message : t.efeitosDaCampanha.falhaAoGravar);
+        return null;
+      }
+    })().finally(() => copiando.delete(chave));
+
+    copiando.set(chave, fazer);
+    return fazer;
+  },
+
+  arrumarDisparos() {
+    // Uma faxina por vez: o `carregar` chega duas vezes seguidas no
+    // StrictMode, e duas apagariam o mesmo efeito.
+    if (arrumando) return arrumando;
+
+    arrumando = (async () => {
+      const moldes = new Set(
+        (get().moldes ?? [])
+          .filter((molde) => especieDoEfeito(molde) === "disparo")
+          .map((molde) => molde.id),
+      );
+      const vistos = new Set<string>();
+
+      for (const efeito of [...(get().efeitos ?? [])]) {
+        if (especieDoEfeito(efeito) !== "disparo") continue;
+
+        if (!efeito.molde) {
+          await get().guardar(efeito.id);
+        } else if (!moldes.has(efeito.molde) || vistos.has(efeito.molde)) {
+          await get().apagar(efeito.id);
+        } else {
+          vistos.add(efeito.molde);
+        }
+      }
+    })().finally(() => {
+      arrumando = null;
+    });
+
+    return arrumando;
   },
 
   async guardar(id) {

@@ -4,6 +4,7 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import type {
   Ambiente,
@@ -145,6 +146,19 @@ export type LiveState = {
    * ausência como mapa sem ping.
    */
   pings?: Ping[];
+  /**
+   * Os efeitos DISPARADOS no ar: a bola de fogo voando, o sopro abrindo. Ver
+   * `EfeitoDisparado`. Não confundir com `disparos`, que são os sons.
+   *
+   * Nasce na janela do mestre e sai do quadro quando o tiro acaba, como o
+   * ping: o daemon reentrega o último quadro a quem conecta, e um tiro
+   * esquecido aqui voaria de novo na TV. Quem recebe desenha só os da cena
+   * que tem, e cada um uma vez -- a chave é o id.
+   *
+   * Opcional, como `pings`: ausente é o mapa sem tiro nenhum, e é o que um
+   * quadro de uma versão anterior diz.
+   */
+  disparados?: EfeitoDisparado[];
   /**
    * O laser do mestre, enquanto o rastro está aceso. Ver `LaserNaMesa`.
    *

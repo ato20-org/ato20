@@ -94,6 +94,7 @@ import {
 } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import {
+  temAreaDeEfeito,
   temCamera,
   temLuz,
   type CameraSalva,
@@ -106,6 +107,7 @@ import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { BlocoDaPorta } from "@/components/mestre/menu-da-porta";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
+import { SubmenuDeDisparo } from "@/components/mestre/menu-de-disparo";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
 import {
   ItensDeExtensao,
@@ -436,9 +438,16 @@ export function StageContextMenu({
             {/* Da seleção inteira, e não só do token único: envenenar a horda
                 de uma vez é o pedido. Vale para o objeto também -- o barril em
                 chamas. Some quando não há nem um nem outro. */}
-            {deAlguem || comObjeto ? (
+            {deAlguem || comObjeto || temAreaDeEfeito(scene) ? (
               <>
-                <SubmenuDeCondicoes itens={selectedItems} />
+                {deAlguem || comObjeto ? <SubmenuDeCondicoes itens={selectedItems} /> : null}
+                {/* Junto das condições: é o outro gesto do meio do combate. De
+                    QUALQUER token, e não só do personagem -- o canhão posto
+                    como imagem também atira. Só no mapa, que é a cena que tem
+                    chão para o tiro cair. */}
+                {temAreaDeEfeito(scene) ? (
+                  <SubmenuDeDisparo itens={selectedItems} scene={scene} />
+                ) : null}
                 {deAlguem ? <BlocoDaIniciativa itens={selectedItems} /> : null}
                 <ContextMenuSeparator />
               </>

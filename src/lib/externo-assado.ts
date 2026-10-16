@@ -396,6 +396,30 @@ export function assarArea(pedido: PedidoDeAreaAssada): Promise<string | null> {
   return assando;
 }
 
+/**
+ * Quanto a folha solta ainda vale, em ms, antes de o endereço ser revogado. A
+ * tela que a soltou pode estar trocando por outra -- a prévia do tiro no
+ * editor, a cada ajuste --, e a imagem que some antes da nova chegar piscaria.
+ */
+const FOLGA_DA_FOLHA_SOLTA_MS = 5_000;
+
+/**
+ * Esquece a folha de uma área DE PASSAGEM -- o cone de um tiro, o estouro --,
+ * que nenhuma outra tela vai pedir: cada tiro tem a sua. Sem isto, a guarda
+ * "para sempre" de `assarArea` acumularia uma folha por tiro até a janela
+ * fechar. Sai da guarda já, e o endereço é revogado depois da folga.
+ */
+export function soltarArea(pedido: PedidoDeAreaAssada): void {
+  const chave = JSON.stringify(pedido);
+  const assando = areasAssadas.get(chave);
+  if (!assando) return;
+
+  areasAssadas.delete(chave);
+  void assando.then((url) => {
+    if (url) setTimeout(() => URL.revokeObjectURL(url), FOLGA_DA_FOLHA_SOLTA_MS);
+  });
+}
+
 async function areaNoForno(pedido: PedidoDeAreaAssada): Promise<string> {
   const { fagulhas } = pedido;
   const [base, fogo, particula] = await Promise.all([

@@ -370,6 +370,7 @@ function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: Layou
           rolagens={live.rolagens}
           iniciativa={live.iniciativa}
           pings={live.pings}
+          disparados={live.disparados}
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}
@@ -411,6 +412,7 @@ function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutP
           rolagens={live.rolagens}
           iniciativa={live.iniciativa}
           pings={live.pings}
+          disparados={live.disparados}
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}

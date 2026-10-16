@@ -737,6 +737,86 @@ toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
 também. O total de quadros da base deve dividir o dos elementos: é o laço do
 fogo que dita o da folha.
 
+## Efeito disparado
+
+O terceiro jeito de um efeito aparecer, ao lado da figura e do chão: ele SAI
+de um ponto e vai até outro -- a bola de fogo, o raio de gelo, o sopro do
+dragão. É uma ESPÉCIE à parte: o efeito que declara `disparo` é um disparo, só
+ele dispara, e ele não aparece entre os efeitos em área nem no seletor da
+condição, mesmo levando `area` e `base` (são o cone e o estouro dele). Tem
+lista própria (a aba Disparo dentro de Efeitos, no Compêndio) e janela própria
+de edição.
+
+Desenha com as camadas de sempre, cada uma com outro papel:
+
+- **`disparo.projetil`** -- o que VOA na linha: os campos de imagem da base
+  (`imagem`, `quadros`, `mipmaps`, `cores`) e o `giro`. Desenhada como veio, a
+  imagem voa para a direita dela; `giro` `90` põe o topo na frente (o estilhaço
+  que fura), `-90` o põe para trás (a chama que vira cauda), `180` a vira. Sem
+  projétil, voa o elemento da área (`area.foco`, ou o `externo`), com o topo
+  para trás.
+- **`particulas`** -- na linha, o rastro: saem do projétil para trás, num leque
+  fechado. No cone, o que sobe do leque.
+- **`base`** e **`area.foco`** -- o chão e os elementos do cone, e os do estouro
+  no fim da linha, assados pelo mesmo motor da área. A cor do tiro é `area.cor`.
+
+```json
+{ "id": "flecha-de-fogo", "titulo": "Flecha de fogo",
+  "area": { "cor": "#f59e0b" },
+  "disparo": { "forma": "linha", "velocidade": 24, "tamanho": 0.8, "impacto": 0,
+               "rastro": false,
+               "projetil": { "imagem": "fx/flecha.webp", "giro": 0 } } }
+```
+
+- **`forma`** -- `linha`: o projétil voa de A até B (e estoura lá, com
+  `impacto`). `cone`: o leque se abre de A até a distância de B, na direção
+  dele. O editor mostra três: reto (`linha` com `impacto` `0`), com estouro e
+  em cone.
+- **`abertura`** -- só o cone, em graus, de `10` a `160` (padrão `60`).
+- **`velocidade`** -- em casas por segundo, de `3` a `60` (padrão `15`). O voo
+  fica entre 0,12 e 2,5 segundos, longe ou perto.
+- **`alcance`** -- em casas, de `1` a `30` (padrão `6`): até onde vai quando sai
+  de um token para onde ele olha, que é o tiro sem ponto B.
+- **`tamanho`** -- o lado do projétil, em casas, de `0.3` a `3` (padrão `1`).
+- **`impacto`** -- o raio do estouro no fim da linha, em casas, de `0` a `4`
+  (padrão `1`). Zero é a flecha que só chega.
+- **`rastro`** e **`brilho`** -- a faixa da cor do tiro atrás do projétil e o
+  brilho redondo em volta dele. Ausentes, ligados; `false` desliga. O brilho
+  fica, mesmo desligado, no projétil sem imagem: senão o tiro não teria corpo.
+
+O ATO20 traz cinco prontos -- Bola de fogo (com estouro), Raio de gelo (reto),
+Jato d'água (com estouro), Sopro de fogo e Nuvem venenosa (em cone) --, packs
+de fábrica que usam a arte dos efeitos de condição: um pack aponta para a
+imagem de outro com `../chamas/chama-128.webp`. A cópia para a campanha guarda
+`fabrica:chamas/chama-128.webp`, o nome da pasta dona.
+
+O mestre dispara de três lugares: o **Disparo** na régua do mapa, logo abaixo
+da Luz (escolhe o efeito, e dois cliques no mapa -- de onde, para onde --, ou
+segurar no A e soltar no B; clicar num personagem sai dele e mirar outro cai
+nele; Shift trava o ângulo de quinze em quinze graus); o **botão direito** de
+qualquer token, em "Disparar", que atira para onde ele olha -- o facho da
+lanterna, ou o padrão dele -- até o `alcance`, a seleção inteira de uma vez; e
+o **card** do disparo no Compêndio, que põe a mira na mão como o botão da
+régua.
+
+O tiro é EVENTO, como o ping: nasce no Mestre, viaja no quadro já resolvido
+(`LiveState.disparados`, com os pontos, a forma e os tempos em unidades de cena
+e milissegundos) e some quando acaba -- nada entra na cena. A TV só precisa do
+efeito para as imagens, e é por isso que o molde do Compêndio vai ao jogo como
+cópia na hora do tiro -- uma por molde, refeita no mesmo lugar quando ele muda,
+e fora de qualquer lista: o disparo se edita no Compêndio. Desenha por cima do
+escuro, que o tiro brilha, e embaixo
+da névoa, que esconde o que a mesa não viu. Os dois pontos ficam dentro do
+plano, o cone e o estouro se prendem a ele, e o rastro encolhe na borda: a
+regra do palco (ver a skill `debug-do-palco`). A folha do cone e a do estouro
+saem com quadro de até 256 pixels (a da área, 512), e são soltas quando o tiro
+acaba: cada tiro assa a sua.
+
+O Rust confere na importação a forma (`linha` ou `cone`), cada número nos
+limites acima, o `giro` (`0`, `90`, `-90` ou `180`) e a imagem do projétil como
+as outras (raster, dentro da pasta, a grade cheia). O bloco sozinho não desenha
+nada: o disparo precisa de uma camada de imagem -- o projétil basta.
+
 ## Ficha em PDF: o plugin ensina a ler
 
 Na lista de Personagens, **Importar ficha em PDF** cria o personagem a partir de

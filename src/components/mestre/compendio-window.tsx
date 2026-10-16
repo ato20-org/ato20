@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import {
   BookCopy,
+  Crosshair,
   Download,
   FolderPlus,
   Maximize2,
@@ -30,16 +31,15 @@ import {
   abrirItemNovo,
   apagarDaCampanha,
 } from "@/components/mestre/acoes-do-item";
-import {
-  ItensDeMover,
-  PastaRow,
-  RECUO_PX,
-} from "@/components/mestre/arvore-de-pastas";
+import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { tamanhoDoToken } from "@/components/mestre/characters-window";
 import {
   AcaoDaLinha,
+  ArvoreDoCompendio,
   Cartao,
+  NavegacaoDoCompendioProvider,
+  TrilhaDoCompendio,
   daMaoNoCartao,
   falhou,
   filtrando,
@@ -80,20 +80,14 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import { COR_DA_AREA, EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
+import { EFEITOS_DE_DISPARO } from "@/lib/disparo-de-efeito";
 import { SUGESTOES } from "@/lib/condicao";
 import { copiaParaACampanha } from "@/lib/efeitos";
 import { fitInitialSize } from "@/lib/geometry/transform";
 import { t as textoDosItens } from "@/lib/i18n/itens";
 import { t } from "@/lib/i18n/mestre";
+import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import {
-  achatarArvore,
-  caminhoDaPasta,
-  pastaDoMembro,
-  pastasDaLista,
-} from "@/lib/mestre/arvore-de-pastas";
-import {
-  blocosDaArvore,
-  cortarArvore,
   filtrarNoCompendio,
   tagsDaLista,
   temTag,
@@ -108,8 +102,8 @@ import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { itensMudaram, useMoldesDeItem } from "@/lib/store/use-itens-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
-import { CORES_LAPIS } from "@/lib/store/use-tool-store";
-import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { CORES_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
+import { membroDaPasta, useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
 import { removeCharacter } from "@/lib/vault/characters";
 import {
@@ -131,17 +125,18 @@ import {
 import type { Medidor, MoldeDeCondicao, Personagem } from "@/types/character";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 import type { Item } from "@/types/inventory";
-import type { Pasta } from "@/types/scene";
+import type { ListaDePastasDoCompendio, Pasta } from "@/types/scene";
 
 const texto = t.compendio;
 
 /**
  * O que o Compêndio guarda: fichas (o bestiário), itens, condições e efeitos.
  *
- * Os efeitos são só os de ÁREA. O de personagem é da condição -- é por ela
- * que ele chega à figura, e é na janela dela que ele se edita --, e uma aba
- * com ele à parte era a mesma coisa em dois lugares, que o mestre tinha de
- * casar de cabeça. O card da condição anima o efeito dela no hover.
+ * Os efeitos são os de ÁREA e os DISPAROS, numa fileira de dentro (ver
+ * `especie`). O de personagem é da condição -- é por ela que ele chega à
+ * figura, e é na janela dela que ele se edita --, e uma aba com ele à parte
+ * era a mesma coisa em dois lugares, que o mestre tinha de casar de cabeça. O
+ * card da condição anima o efeito dela no hover.
  */
 type Tipo = "bestiario" | "itens" | "condicoes" | "efeitos";
 
@@ -261,6 +256,8 @@ export function CompendioDoAto20Body() {
  */
 function PainelDoCompendio({ onde }: { onde: Onde }) {
   const [tipo, setTipo] = useState<Tipo>("bestiario");
+  // A aba de dentro de Efeitos: os de área ou os disparos.
+  const [especie, setEspecie] = useState<"area" | "disparo">("area");
   const [busca, setBusca] = useState("");
   const [tagsLigadas, setTagsLigadas] = useState<string[]>([]);
   const [aApagar, setAApagar] = useState<AApagar | null>(null);
@@ -298,12 +295,18 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         break;
       default:
         coisas = (daCampanha ? moldesDeEfeito : dados?.efeitos)?.filter(
-          (efeito) => especieDoEfeito(efeito) === "area",
+          (efeito) => especieDoEfeito(efeito) === especie,
         );
     }
 
     return tagsDaLista(coisas ?? [], (coisa) => coisa.tags ?? []);
-  }, [lista, onde, moldes, moldesDeItem, condicoes, moldesDeEfeito, maquina.dados]);
+  }, [lista, especie, onde, moldes, moldesDeItem, condicoes, moldesDeEfeito, maquina.dados]);
+
+  // Trocar entre área e disparo solta o filtro, pela razão da troca de lista.
+  function trocarEspecie(proxima: "area" | "disparo") {
+    setEspecie(proxima);
+    setTagsLigadas([]);
+  }
 
   // Trocar de lista solta o filtro: as tags de uma não são as da outra.
   function trocarTipo(proximo: Tipo) {
@@ -344,6 +347,75 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     () => pastasDaLista(pastas ?? [], "compendio-itens"),
     [pastas],
   );
+  // E uma árvore por aba das outras três: as condições, os efeitos de área e
+  // os disparos. Ver `ListaDoCompendio`.
+  const pastasDasCondicoes = useMemo(
+    () => pastasDaLista(pastas ?? [], "compendio-condicoes"),
+    [pastas],
+  );
+  const pastasDosEfeitos = useMemo(
+    () => pastasDaLista(pastas ?? [], "compendio-efeitos"),
+    [pastas],
+  );
+  const pastasDosDisparos = useMemo(
+    () => pastasDaLista(pastas ?? [], "compendio-disparos"),
+    [pastas],
+  );
+  // A lista de pastas da aba aberta, e de que árvore ela é.
+  const daAba: [ListaDePastasDoCompendio, Pasta[]] =
+    tipo === "bestiario"
+      ? ["compendio", pastasDoCompendio]
+      : tipo === "itens"
+        ? ["compendio-itens", pastasDosItens]
+        : tipo === "condicoes"
+          ? ["compendio-condicoes", pastasDasCondicoes]
+          : especie === "disparo"
+            ? ["compendio-disparos", pastasDosDisparos]
+            : ["compendio-efeitos", pastasDosEfeitos];
+
+  // A pasta aberta de cada aba, como num gerenciador de arquivos: voltar à aba
+  // volta à pasta em que se estava. A que sumiu -- desfeita no menu -- é a raiz.
+  const [abertas, setAbertas] = useState<Partial<Record<ListaDePastasDoCompendio, string>>>({});
+  const listaDaAba = daAba[0];
+  const aberta = abertas[listaDaAba];
+  const pastaAberta = aberta && daAba[1].some((pasta) => pasta.id === aberta) ? aberta : undefined;
+  const navegacao = useMemo(
+    () => ({
+      lista: listaDaAba,
+      pastaAberta,
+      abrirPasta: (pastaId: string | undefined) =>
+        setAbertas((atuais) => ({ ...atuais, [listaDaAba]: pastaId })),
+    }),
+    [pastaAberta, listaDaAba, setAbertas],
+  );
+  // Soltar um card numa pasta -- o card dela ou um passo da trilha -- o põe lá
+  // dentro. É o MESMO arrasto que leva o card ao mapa e ao token: ele já é esse
+  // gesto, e um segundo arrasto no mesmo card brigaria com ele. Só a campanha:
+  // o Compêndio do ATO20 não tem pastas. Ver `membroDaPasta`.
+  useEffect(() => {
+    if (onde !== "campanha") return;
+
+    return useTokenDragStore.getState().registrarAlvo("compendio", (solto, destino) => {
+      if (destino.tipo !== "pasta-compendio") return;
+      const membro = membroDaPasta(solto.fonte, destino.lista);
+      if (!membro) return;
+
+      const cena = useSceneStore.getState();
+      if (destino.lista === "compendio")
+        cena.moverPersonagemParaPasta(membro, "compendio", destino.pastaId);
+      else if (destino.lista === "compendio-itens")
+        cena.moverItemParaPasta(membro, destino.pastaId, "compendio-itens");
+      else cena.moverNoCompendio(membro, destino.lista, destino.pastaId);
+    });
+  }, [onde]);
+
+  // O nome da raiz na trilha: a aba, ou a de dentro de Efeitos.
+  const raizDaTrilha =
+    tipo === "efeitos"
+      ? especie === "disparo"
+        ? texto.disparos
+        : texto.deArea
+      : { bestiario: texto.bestiario, itens: texto.itens, condicoes: texto.condicoes }[tipo];
 
   async function criarNoBestiario(pastaId?: string) {
     try {
@@ -372,7 +444,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     }
   }
 
-  async function criarCondicao() {
+  async function criarCondicao(pastaId?: string) {
     try {
       const total = condicoes?.length ?? 0;
       const nova = await criarCondicaoDoCompendio(
@@ -380,6 +452,8 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         CORES_LAPIS[total % CORES_LAPIS.length] ?? CORES_LAPIS[0],
         "circulo",
       );
+      if (pastaId)
+        useSceneStore.getState().moverNoCompendio(nova.id, "compendio-condicoes", pastaId);
       useCondicoesDoCompendioStore.getState().recarregar();
       // Abre a janela dela, como o molde novo abre a ficha: uma condição
       // chamada "Nova condição", sem efeito, ainda não é nada.
@@ -394,30 +468,42 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
    * aberto na janela dele. Nasce com a cor -- é o que o faz de área. Ver
    * `EfeitosEmAreaDaCampanha`.
    */
-  async function criarEfeito() {
+  async function criarEfeito(pastaId?: string) {
     const { criarMolde: criarMoldeDeEfeito, salvar } = useEfeitosDaCampanhaStore.getState();
     const novo = await criarMoldeDeEfeito();
     if (!novo) return;
 
+    if (pastaId)
+      useSceneStore
+        .getState()
+        .moverNoCompendio(
+          novo.id,
+          especie === "disparo" ? "compendio-disparos" : "compendio-efeitos",
+          pastaId,
+        );
+
     const total = moldesDeEfeito?.length ?? 0;
     salvar({
       ...novo,
-      titulo: texto.novoEfeitoDeArea,
+      titulo: especie === "disparo" ? texto.novoDisparo : texto.novoEfeitoDeArea,
       area: { cor: CORES_LAPIS[total % CORES_LAPIS.length] ?? COR_DA_AREA },
+      // O disparo nasce reto; é a janela dele que o muda.
+      ...(especie === "disparo" ? { disparo: { forma: "linha" as const } } : {}),
     });
     abrir({ tipo: "efeito", efeitoId: novo.id });
   }
 
+  // O "+" cria DENTRO da pasta aberta, como o "Criar aqui" do menu dela.
   function criar() {
     switch (tipo) {
       case "bestiario":
-        return void criarNoBestiario();
+        return void criarNoBestiario(pastaAberta);
       case "itens":
-        return void criarNoCatalogo();
+        return void criarNoCatalogo(pastaAberta);
       case "condicoes":
-        return void criarCondicao();
+        return void criarCondicao(pastaAberta);
       case "efeitos":
-        return void criarEfeito();
+        return void criarEfeito(pastaAberta);
     }
   }
 
@@ -425,20 +511,18 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     bestiario: texto.criarMolde,
     itens: texto.criarItem,
     condicoes: texto.criarCondicao,
-    efeitos: texto.criarEfeitoDeArea,
+    efeitos: especie === "disparo" ? texto.criarDisparo : texto.criarEfeitoDeArea,
   }[tipo];
 
-  // A pasta nasce na lista da aba aberta: a dos moldes de personagem, ou a dos
-  // moldes de item.
+  // A pasta nasce na árvore da aba aberta: a dos moldes de personagem, a dos
+  // moldes de item, a das condições, a dos efeitos de área, a dos disparos.
+  // E dentro da pasta aberta também: é ali que o mestre está organizando.
   function criarPasta() {
-    const [destino, existentes] =
-      tipo === "bestiario"
-        ? (["compendio", pastasDoCompendio] as const)
-        : (["compendio-itens", pastasDosItens] as const);
+    const [destino, existentes] = daAba;
 
     useSceneStore
       .getState()
-      .criarPasta(texto.nomeDaPasta(existentes.length + 1), undefined, destino);
+      .criarPasta(texto.nomeDaPasta(existentes.length + 1), pastaAberta, destino);
   }
 
   function apagar(alvo: AApagar) {
@@ -524,6 +608,26 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         </TabsList>
       </Tabs>
 
+      {/* Dentro de Efeitos, as duas espécies que se guardam aqui: o chão e o
+          tiro. A fileira de baixo, sublinhada e menor, como Mapas e Fundos
+          dentro de Cenas. O de personagem mora na condição. */}
+      {tipo === "efeitos" ? (
+        <Tabs
+          value={especie}
+          onValueChange={(valor) => trocarEspecie(valor as "area" | "disparo")}
+          className="shrink-0 gap-0"
+        >
+          <TabsList variant="line" className="h-auto justify-start gap-1 px-2 pt-1">
+            <TabsTrigger value="area" className="flex-none text-xs">
+              {texto.deArea}
+            </TabsTrigger>
+            <TabsTrigger value="disparo" className="flex-none text-xs">
+              {texto.disparos}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      ) : null}
+
       <div className="flex items-center gap-2 p-2">
         <CampoDeBusca
           valor={busca}
@@ -541,7 +645,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           </BotaoDoTopo>
         ) : null}
 
-        {daCampanha && (tipo === "bestiario" || tipo === "itens") ? (
+        {daCampanha ? (
           <BotaoDoTopo rotulo={texto.novaPasta} onClick={criarPasta}>
             <FolderPlus />
           </BotaoDoTopo>
@@ -568,10 +672,20 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         />
       ) : null}
 
+      {/* A trilha da pasta aberta, só na campanha e fora da busca -- a busca
+          acha em todas as pastas, e o card diz de qual. */}
+      {daCampanha && !filtrando(filtro) && daAba[1].length > 0 ? (
+        <NavegacaoDoCompendioProvider value={navegacao}>
+          <TrilhaDoCompendio raiz={raizDaTrilha} pastas={daAba[1]} />
+        </NavegacaoDoCompendioProvider>
+      ) : null}
+
+      <NavegacaoDoCompendioProvider value={navegacao}>
       <AreaDeRolagemDoCompendio>
         {!daCampanha ? (
           <DaMaquina
             lista={lista}
+            especie={especie}
             filtro={filtro}
             dados={maquina.dados}
             onApagar={(id, nome) => setAApagar({ onde: "ato20", tipo: tipoDeMolde(lista), id, nome })}
@@ -597,13 +711,18 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         ) : tipo === "condicoes" ? (
           <CondicoesNoCompendio
             filtro={filtro}
+            pastas={pastasDasCondicoes}
+            onCriarEm={(pastaId) => void criarCondicao(pastaId)}
             onGuardado={maquina.reler}
             onApagar={apagarCondicao}
             onEditarTags={setEditandoTags}
           />
         ) : (
           <EfeitosNoCompendio
+            especie={especie}
             filtro={filtro}
+            pastas={especie === "disparo" ? pastasDosDisparos : pastasDosEfeitos}
+            onCriarEm={(pastaId) => void criarEfeito(pastaId)}
             onAbrir={abrirEfeito}
             onGuardado={maquina.reler}
             onApagar={apagarEfeito}
@@ -611,6 +730,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           />
         )}
       </AreaDeRolagemDoCompendio>
+      </NavegacaoDoCompendioProvider>
 
       <EditorDeTags
         edicao={editandoTags}
@@ -739,8 +859,10 @@ function useCompendioDaMaquina() {
 
 /**
  * O que o ATO20 sugere, como o Compêndio da máquina guarda: as condições de
- * `SUGESTOES`, e os efeitos de fábrica que têm chão, copiados como efeito de
- * área. O id é do Rust, que dá um novo a cada um.
+ * `SUGESTOES`, os efeitos de fábrica que têm chão, copiados como efeito de
+ * área, e os disparos de fábrica. O id é do Rust, que dá um novo a cada um. A
+ * máquina que já recebeu as sugestões antes dos disparos não os recebe: a
+ * marca é uma só, e o "Trazer os disparos prontos" da aba os traz.
  *
  * Os de personagem não entram por conta própria: cada condição sugerida já
  * aponta para o dela, de fábrica, e o efeito de personagem só existe pela
@@ -748,7 +870,7 @@ function useCompendioDaMaquina() {
  */
 function sugestoesDoAto20() {
   const condicoes = SUGESTOES.map(({ nome, cor, icone, efeito }) => ({ nome, cor, icone, efeito }));
-  const efeitos = EFEITOS_DE_AREA.map((pronto) =>
+  const efeitos = [...EFEITOS_DE_AREA, ...EFEITOS_DE_DISPARO].map((pronto) =>
     copiaParaACampanha(pronto, "campanha/sugestao", pronto.titulo),
   );
 
@@ -808,95 +930,6 @@ function BestiarioDaCampanha({
         />
       )}
     />
-  );
-}
-
-/**
- * A árvore de uma lista da campanha: as pastas do mestre e o que há dentro.
- *
- * A mesma para os moldes e para os itens -- só muda a linha e de que lista
- * são as pastas. Na busca, a lista plana com a pasta de cada um embaixo do
- * nome: abrir a árvore mostraria as pastas sem o que foi achado. Como em Itens.
- *
- * A pasta não se arrasta, e nada se solta nela: o arrasto da linha é para o
- * mapa. Mover é pelo "Mover para" do menu, como nos Personagens.
- *
- * Em cards: cada pasta é um cabeçalho, e o que mora nela, uma grade embaixo.
- * Ver `blocosDaArvore`. Montada aos poucos -- ver `useAosPoucos`.
- */
-function ArvoreDoCompendio<T extends { id: string }>({
-  achados,
-  pastas,
-  buscando,
-  rotuloCriarAqui,
-  onCriarEm,
-  linha,
-}: {
-  achados: T[];
-  pastas: Pasta[];
-  buscando: boolean;
-  rotuloCriarAqui: string;
-  onCriarEm: (pastaId: string) => void;
-  linha: (coisa: T, depth: number, caminho?: string) => ReactNode;
-}) {
-  const linhas = useMemo(
-    () =>
-      buscando
-        ? null
-        : achatarArvore(achados, pastas, (coisa) => pastaDoMembro(pastas, coisa.id)),
-    [achados, buscando, pastas],
-  );
-
-  const pastaRow = (atual: Extract<ReturnType<typeof achatarArvore<T>>[number], { tipo: "pasta" }>) => (
-    <PastaRow
-      key={atual.pasta.id}
-      pasta={atual.pasta}
-      pastas={pastas}
-      depth={atual.depth}
-      total={atual.total}
-      dropTarget={false}
-      itensDeCriar={({ Item }) => (
-        <Item onClick={() => onCriarEm(atual.pasta.id)}>
-          <Plus />
-          {rotuloCriarAqui}
-        </Item>
-      )}
-    />
-  );
-
-  const { limite, fim } = useAosPoucos(linhas ?? achados, achados.length);
-
-  // Na busca, uma grade só, com a pasta de cada um no card.
-  if (linhas === null) {
-    return (
-      <>
-        <GradeDeCartoes>
-          {achados
-            .slice(0, limite)
-            .map((coisa) =>
-              linha(coisa, 0, caminhoDaPasta(pastas, pastaDoMembro(pastas, coisa.id))),
-            )}
-        </GradeDeCartoes>
-        {fim}
-      </>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-1 pb-2">
-      {blocosDaArvore(cortarArvore(linhas, limite)).map((bloco) =>
-        bloco.tipo === "pasta" ? (
-          <ul key={bloco.linha.pasta.id} className="px-2">
-            {pastaRow(bloco.linha)}
-          </ul>
-        ) : (
-          <GradeDeCartoes key={`grade:${bloco.itens.at(0)?.id}`} recuo={bloco.depth * RECUO_PX}>
-            {bloco.itens.map((coisa) => linha(coisa, bloco.depth))}
-          </GradeDeCartoes>
-        ),
-      )}
-      {fim}
-    </div>
   );
 }
 
@@ -1304,12 +1337,15 @@ type CoisaDaMaquina = {
  */
 function DaMaquina({
   lista,
+  especie,
   filtro,
   dados,
   onApagar,
   onEditarTags,
 }: {
   lista: Tipo;
+  /** Dentro de Efeitos: os de área ou os disparos. */
+  especie: "area" | "disparo";
   filtro: FiltroDoCompendio;
   dados: CompendioDaMaquina | null;
   onApagar: (id: string, nome: string) => void;
@@ -1325,13 +1361,13 @@ function DaMaquina({
   const achados = useMemo(() => {
     if (!dados) return null;
 
-    const coisas = coisasDaMaquina(lista, dados, deFora);
+    const coisas = coisasDaMaquina(lista, dados, deFora, especie);
 
     return {
       total: coisas.length,
       lista: filtrarNoCompendio(coisas, filtro, (coisa) => coisa.nome, (coisa) => coisa.tags),
     };
-  }, [dados, lista, filtro, deFora]);
+  }, [dados, lista, especie, filtro, deFora]);
 
   const { limite, fim } = useAosPoucos(achados?.lista, achados?.lista.length ?? 0);
 
@@ -1379,7 +1415,8 @@ function DaMaquina({
       fundo: coisa.imagem ? <ImagemDaMaquina assetId={coisa.imagem} /> : undefined,
       tinta: coisa.tinta,
       naMao: coisa.id === naMao,
-      onPointerDown: coisa.efeito
+      onPointerDown:
+        coisa.efeito && especieDoEfeito(coisa.efeito) !== "disparo"
         ? (event: ReactPointerEvent) => {
             if (!daMaoNoCartao(event) || !coisa.efeito) return;
             // As condições de LÁ: os ids dos efeitos do ATO20 não são os daqui.
@@ -1403,6 +1440,23 @@ function DaMaquina({
             <Download />
             {texto.trazer}
           </Item>
+          {/* O efeito em área do ATO20 dispara daqui: vem para a campanha na
+              hora do tiro, como no arrasto. A definição vai junto, para a
+              mira desenhar a forma dele antes de ele chegar. */}
+          {lista === "efeitos" && coisa.efeito && especieDoEfeito(coisa.efeito) === "disparo" ? (
+            <Item
+              onClick={() =>
+                useToolStore.getState().armarDisparo({
+                  id: coisa.efeito!.id,
+                  doAto20: true,
+                  definicao: coisa.efeito,
+                })
+              }
+            >
+              <Crosshair />
+              {texto.disparar}
+            </Item>
+          ) : null}
           <Item
             onClick={() =>
               onEditarTags({
@@ -1456,6 +1510,7 @@ function coisasDaMaquina(
   lista: Tipo,
   dados: CompendioDaMaquina,
   deFora: Parameters<typeof tituloDoEfeito>[1],
+  especie: "area" | "disparo" = "area",
 ): CoisaDaMaquina[] {
   switch (lista) {
     case "bestiario":
@@ -1503,7 +1558,7 @@ function coisasDaMaquina(
       }
 
       return dados.efeitos
-        .filter((efeito) => especieDoEfeito(efeito) === "area")
+        .filter((efeito) => especieDoEfeito(efeito) === especie)
         .map((efeito) => {
           const cor = corDoEfeito(efeito, cores.get(efeito.id));
 

@@ -16,6 +16,7 @@ import type { LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import {
   type Ambiente,
@@ -50,6 +51,9 @@ const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
 
 /** Nenhum ping, pela mesma razão: o `PingLayer` filtra esta lista por cena. */
 const SEM_PINGS: Ping[] = [];
+
+/** Nenhum tiro no ar, pela mesma razão dos pings. */
+const SEM_DISPARADOS: EfeitoDisparado[] = [];
 
 /**
  * Lado do Mestre: publica cena, trilha e retratos.
@@ -191,6 +195,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
       fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
       pings: state.pings,
+      disparados: state.disparados,
       // Do módulo, como o idioma logo abaixo: o laser não passa pelo estado.
       // Ver `publicarLaser`.
       laser: laserNaMesa,
@@ -230,6 +235,7 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.fichasVersao,
     state.rolagens,
     state.pings,
+    state.disparados,
     state.imagem,
     state.iniciativa,
   ]);
@@ -268,6 +274,8 @@ export type Subscription = {
   rolagens: RolagemDaMesa[];
   /** Os pings no mapa agora. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** Os efeitos disparados no ar. Ver `LiveState.disparados`. */
+  disparados: EfeitoDisparado[];
   /** O laser do mestre, enquanto aceso. `null` = nenhum. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
   /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
@@ -354,6 +362,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
     pings: live.pings ?? SEM_PINGS,
+    disparados: live.disparados ?? SEM_DISPARADOS,
     laser: live.laser ?? null,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,

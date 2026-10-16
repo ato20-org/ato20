@@ -44,6 +44,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     spotlight,
     rolagens,
     pings,
+    disparados,
     laser,
     declarativoVersao,
     imagem,
@@ -130,6 +131,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
                 efeitos={efeitos}
                 rolagens={rolagens}
                 pings={pings}
+                disparados={disparados}
                 laser={laser}
                 smooth
                 tripe={tripe}

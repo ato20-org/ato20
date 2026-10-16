@@ -62,6 +62,7 @@ import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { podeMoverNaVez, type VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping, TipoDePing } from "@/types/ping";
 import {
   ehQuadro,
@@ -187,6 +188,7 @@ export function CenaDoJogador({
   rolagens,
   iniciativa,
   pings,
+  disparados,
   laser,
   tripe,
   corte,
@@ -203,6 +205,8 @@ export function CenaDoJogador({
   iniciativa: VezNaMesa | null;
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** Os efeitos disparados. Ver `LiveState.disparados`. */
+  disparados: EfeitoDisparado[];
   /** O laser do mestre. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
   /**
@@ -509,6 +513,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
         laser={laser}
         // Pela mesma razão do mapa de prumo, logo abaixo.
         variante="tela"
@@ -544,6 +549,7 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
         laser={laser}
         smooth
         naMao={naMao?.itemId}

@@ -11,6 +11,7 @@ import {
   type DestinoDoArrasto,
   type FonteDoArrasto,
 } from "@/lib/store/use-token-drag-store";
+import { LISTAS_DE_PASTAS_DO_COMPENDIO } from "@/types/scene";
 
 /**
  * Quanto o ponteiro precisa andar para ser arrasto e não clique.
@@ -305,6 +306,19 @@ function ler(sob: Element, fonte: FonteDoArrasto): DestinoDoArrasto | null {
     };
 
   // A lista de personagens é janela, e fica por cima do mapa como o acervo.
+  // Uma pasta do Compêndio: o card dela, ou um passo da trilha. A aba vem no
+  // atributo, e o que não é uma das árvores dele não é destino.
+  const doCompendio = sob.closest<HTMLElement>("[data-pasta-compendio]");
+  const arvore = LISTAS_DE_PASTAS_DO_COMPENDIO.find(
+    (lista) => lista === doCompendio?.dataset.pastaCompendio,
+  );
+  if (doCompendio && arvore)
+    return {
+      tipo: "pasta-compendio",
+      lista: arvore,
+      pastaId: doCompendio.dataset.pastaId || undefined,
+    };
+
   const personagens = sob.closest<HTMLElement>("[data-pasta-personagens]");
   const lista = personagens?.dataset.pastaPersonagens;
   if (lista === "players" || lista === "npcs")
