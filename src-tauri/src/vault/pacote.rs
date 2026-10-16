@@ -229,6 +229,11 @@ pub struct Importado {
     pub ambientes: BTreeMap<String, Value>,
     /// Quantos personagens entraram. Eles ja estao no disco; a tela so rele.
     pub personagens: usize,
+    /// Os ids NOVOS desses personagens, na ordem da escolha. Fica fora do JSON:
+    /// a tela do pacote so rele a lista, e quem precisa do id e o Compendio,
+    /// que marca como molde o que acabou de trazer. Ver `compendio::copiar_personagens`.
+    #[serde(skip)]
+    pub ids_dos_personagens: Vec<String>,
     /// Quantos itens da campanha entraram, ja no catalogo. As cenas que os
     /// citam voltam com o id novo.
     pub itens: usize,
@@ -804,7 +809,7 @@ fn nome_simples(nome: &str) -> bool {
 }
 
 /// Copia uma pasta, pulando link simbolico, arquivo oculto e os nomes de `fora`.
-fn copiar_pasta(origem: &Path, destino: &Path, fora: &[&str]) -> AppResult<()> {
+pub(crate) fn copiar_pasta(origem: &Path, destino: &Path, fora: &[&str]) -> AppResult<()> {
     if !origem.is_dir() {
         return Ok(());
     }
@@ -1870,6 +1875,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
     let quantos_itens = itens::adotar(vault, novos_itens)?;
 
     let quantos_personagens = fichas.len();
+    let ids_dos_personagens = fichas.iter().map(|ficha| ficha.id.clone()).collect();
     characters::adotar(vault, fichas)?;
 
     let mut pastas: Vec<Value> = Vec::new();
@@ -1886,6 +1892,7 @@ pub fn importar(vault: &Vault, raiz: &Path, escolha: &EscolhaDeImportacao) -> Ap
         pastas,
         ambientes,
         personagens: quantos_personagens,
+        ids_dos_personagens,
         itens: quantos_itens,
         efeitos: quantos_efeitos,
         condicoes: quantas_condicoes,

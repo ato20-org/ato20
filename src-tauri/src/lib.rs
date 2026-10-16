@@ -1,6 +1,7 @@
 mod appimage;
 mod catalogo;
 mod commands;
+mod compendio;
 mod configuracoes;
 mod db;
 mod error;
@@ -140,6 +141,10 @@ pub fn run() {
             // diretorio nasce na primeira importacao -- nao aqui.
             let extensoes = extensoes::dir(&app.path().app_data_dir()?);
 
+            // O Compendio do ATO20 tambem e dado da maquina, ao lado da estante.
+            // A pasta nasce no primeiro uso. Ver `compendio`.
+            let compendio = compendio::dir(&app.path().app_data_dir()?);
+
             // O atalho do menu, para quem roda o AppImage. Aqui e nao no
             // instalador porque o AppImage NAO TEM instalador: ver `appimage`.
             appimage::atalho(&app.path().app_data_dir()?);
@@ -183,6 +188,7 @@ pub fn run() {
                 estante,
                 extensoes,
                 config_dir,
+                compendio,
             });
 
             // Fora do `AppState`: nao e campanha, nem disco, nem daemon. Ver
@@ -239,6 +245,19 @@ pub fn run() {
             commands::player_attachments_dir,
             commands::characters_list,
             commands::character_create,
+            commands::compendio_criar,
+            commands::compendio_por_em_jogo,
+            commands::compendio_guardar,
+            commands::compendio_criar_item,
+            commands::compendio_item_em_jogo,
+            commands::compendio_guardar_item,
+            commands::compendio_maquina,
+            commands::compendio_maquina_imagem,
+            commands::compendio_trazer,
+            commands::compendio_levar,
+            commands::compendio_maquina_remover,
+            commands::compendio_tags,
+            commands::compendio_maquina_tags,
             commands::character_rename,
             commands::character_remove,
             commands::character_set_campo,
