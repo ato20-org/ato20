@@ -1,0 +1,42 @@
+{
+  "id": "neve",
+  "titulo": "Neve",
+  "dica": "Flocos descendo devagar e dançando de um lado para o outro.",
+  "ambiente": {
+    "cor": "#f1f5f9",
+    "camadas": [
+      {
+        "imagem": "neve-longe-512.webp",
+        "mipmaps": {
+          "256": "neve-longe-256.webp",
+          "512": "neve-longe-512.webp",
+          "1024": "neve-longe-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.4,
+        "direcao": 90,
+        "velocidade": 0.1,
+        "opacidade": 0.8,
+        "balanco": 0.05
+      },
+      {
+        "imagem": "neve-perto-512.webp",
+        "mipmaps": {
+          "256": "neve-perto-256.webp",
+          "512": "neve-perto-512.webp",
+          "1024": "neve-perto-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.75,
+        "direcao": 92,
+        "velocidade": 0.18,
+        "opacidade": 0.9,
+        "balanco": 0.08
+      }
+    ],
+    "veu": {
+      "cor": "#e2e8f0",
+      "opacidade": 0.06
+    }
+  }
+}

@@ -817,6 +817,97 @@ limites acima, o `giro` (`0`, `90`, `-90` ou `180`) e a imagem do projétil como
 as outras (raster, dentro da pasta, a grade cheia). O bloco sozinho não desenha
 nada: o disparo precisa de uma camada de imagem -- o projétil basta.
 
+## Efeito de ambiente
+
+O quarto jeito de um efeito aparecer: ele cobre a CENA inteira -- a chuva, a
+neve, a neblina, a cinza que cai, as brasas que sobem. É uma ESPÉCIE à parte: o
+efeito que declara `ambiente` é um ambiente, e não aparece entre os de área, os
+disparos nem no seletor da condição. Tem lista própria (a aba Ambiente dentro de
+Efeitos, no Compêndio) e janela própria de edição.
+
+Desenha NA LENTE: por cima da tela, e não no chão do mapa. A chuva cai de cima
+para baixo no 2D e no 2.5D, não amplia com o zoom e não anda com a câmera -- é o
+vidro por onde a mesa olha. Por isso passa por cima do escuro e da névoa: não
+chove só onde a mesa já viu. Fica embaixo dos retratos, das tarjas e da
+cortina do corte, que são HUD.
+
+```json
+{ "id": "chuva-de-sangue", "titulo": "Chuva de sangue",
+  "ambiente": {
+    "cor": "#991b1b",
+    "camadas": [
+      { "imagem": "fx/chuva-fina.webp", "cores": "condicao",
+        "escala": 0.3, "direcao": 95, "velocidade": 1.5, "opacidade": 0.6 },
+      { "imagem": "fx/chuva-grossa.webp", "cores": "condicao",
+        "escala": 0.7, "direcao": 95, "velocidade": 2.4 } ],
+    "veu": { "cor": "#1c0505", "opacidade": 0.25 },
+    "relampago": { "intervalo": 15, "forca": 0.5 } } }
+```
+
+- **`cor`** -- a cor do ambiente: a das camadas com `cores: "condicao"` (o
+  "condição" aqui é o ambiente, que não tem condição), e a do véu sem cor
+  própria. Padrão, um cinza azulado.
+- **`camadas`** -- de TRÁS para a frente, de uma a quatro. Cada uma é uma textura
+  que EMENDA nas quatro bordas e desliza em laço: anda um ladrilho e volta ao
+  começo, e a emenda esconde a volta. Os campos de imagem da base -- `imagem`,
+  `mipmaps` (pelo lado do ladrilho), `cores` -- menos os `quadros`: a camada anda
+  deslizando, e uma grade de quadros pediria repintar a tela inteira a cada
+  degrau. A arte em tons de cinza ganha a cor pela rampa, como o fogo. As
+  medidas são em ALTURAS DA TELA, e não em casas: o ambiente não está no mapa, e
+  a mesma chuva lê igual na TV e no celular.
+  - **`escala`** -- o lado do ladrilho, de `0.1` a `2` alturas (padrão `0.5`).
+  - **`direcao`** -- para onde vai, em graus, no sentido horário a partir da
+    direita: `90` desce, `270` sobe, `0` vai para a direita (padrão `90`). Fora
+    dos eixos, a textura inclina junto, como a chuva com vento: o eixo é o mais
+    perto, e o resto vira inclinação, até 45 graus.
+  - **`velocidade`** -- em alturas da tela por segundo, de `0` a `3` (padrão
+    `1`). Zero é parada.
+  - **`opacidade`** -- de `0` a `1` (padrão `1`).
+  - **`balanco`** -- o quanto ela balança de um lado para o outro enquanto anda,
+    em vezes o ladrilho, de `0` a `0.5` (padrão `0`): o floco que dança.
+- **`veu`** -- uma cor parada sobre a tela inteira: o cinza da tempestade, o
+  branco da nevasca. `opacidade` de `0` a `0.8`; `cor` ausente é a do ambiente.
+- **`relampago`** -- a tela clareia de repente, duas vezes, e apaga. `intervalo`
+  em segundos entre os clarões, de `3` a `60` (padrão `12`); `forca` de `0` a
+  `1` (padrão `0.6`); `cor` ausente é um branco azulado. Dois relógios, o segundo
+  mais fraco e num ritmo que não bate com o primeiro, e os dois saem da hora do
+  sistema: a TV e o celular clareiam juntos. Quem pediu menos movimento no
+  sistema não vê o clarão, e o Mestre também não.
+
+A CENA escolhe o ambiente e o ajusta (`Scene.ambiente`): o id do efeito, a
+`intensidade` (de `0.1` a `1`) e o `vento` (de `-1`, para a esquerda, a `1`).
+A intensidade tira as camadas da FRENTE primeiro -- a garoa é a camada fina da
+chuva -- e esmaece o resto, o véu e o clarão. O vento inclina o que cai, até 25
+graus, e empurra o que anda de lado, até virá-lo. O mestre escolhe nas
+configurações do mapa, ou pelo card no Compêndio ("Pôr nesta cena").
+
+A cena aponta para o efeito sem cópia: o de fábrica e o de plugin pelo id, e o
+da campanha pelo molde do Compêndio, que vai à mesa junto com os efeitos em
+jogo. Mexer no molde muda a chuva da TV enquanto o controle anda.
+
+O ATO20 traz seis prontos -- Chuva, Tempestade (chuva inclinada, céu fechado e
+relâmpago), Neve, Neblina, Cinzas e Brasas --, packs de fábrica em
+`src/efeitos/`. A Tempestade usa a arte da Chuva por `../chuva/chuva-longe-512.webp`.
+
+O custo foi medido na webview do aplicativo, com cem tokens mudando dez vezes
+por segundo e a TV a 1920x1080: sem ambiente, de 2 a 3,5% dos quadros perdidos
+(o ruído entre rodadas é de uns dois pontos); a Neve e as Brasas, quase o
+mesmo; a Chuva, de 4 a 6,5%; a Neblina e a Tempestade, as mais caras, até 8,5%.
+Cada camada é UMA superfície do tamanho da tela para o compositor, e é isso que
+pesa -- por isso o teto de quatro, e o véu, que como elemento próprio custava
+mais que as duas camadas da chuva, é pintado como fundo de uma delas. O clarão
+só existe para o compositor enquanto clareia.
+
+O Mestre vê o ambiente na metade e sem o clarão -- a tela de quem monta a cena
+piscando pesava o dobro da chuva --, e ele some enquanto o mestre arrasta alguma
+coisa: arrastando a moldura com sessenta tokens, a chuva levava o palco de 56 a
+50 quadros por segundo.
+
+O Rust confere na importação as camadas (até quatro, imagem raster dentro da
+pasta, sem `quadros`, cada número nos limites acima), o véu, o relâmpago e as
+cores em `#rrggbb`. O bloco desenha com uma camada, um véu ou um relâmpago -- o
+véu sozinho já é um ambiente, o breu de uma cena sem luz nenhuma.
+
 ## Ficha em PDF: o plugin ensina a ler
 
 Na lista de Personagens, **Importar ficha em PDF** cria o personagem a partir de

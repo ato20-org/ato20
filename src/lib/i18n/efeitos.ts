@@ -50,6 +50,31 @@ const pt = {
     titulo: "Nuvem venenosa",
     dica: "Um cone de névoa tóxica que se espalha de quem a solta.",
   },
+  // Os ambientes: cobrem a cena inteira.
+  chuva: {
+    titulo: "Chuva",
+    dica: "Chuva caindo sobre a cena, em duas camadas: a fina lá atrás e a grossa na frente.",
+  },
+  tempestade: {
+    titulo: "Tempestade",
+    dica: "Chuva pesada e inclinada, o céu fechado, e o relâmpago que clareia a mesa de tempos em tempos.",
+  },
+  neve: {
+    titulo: "Neve",
+    dica: "Flocos descendo devagar e dançando de um lado para o outro.",
+  },
+  neblina: {
+    titulo: "Neblina",
+    dica: "Uma névoa baixa passando devagar na frente de tudo.",
+  },
+  cinzas: {
+    titulo: "Cinzas",
+    dica: "Cinza caindo do céu, como depois de um incêndio ou perto do vulcão.",
+  },
+  brasas: {
+    titulo: "Brasas",
+    dica: "Fagulhas subindo no ar quente, como numa cidade em chamas.",
+  },
 };
 
 const en: typeof pt = {
@@ -92,6 +117,30 @@ const en: typeof pt = {
   "nuvem-venenosa": {
     titulo: "Poison cloud",
     dica: "A cone of toxic mist spreading from whoever releases it.",
+  },
+  chuva: {
+    titulo: "Rain",
+    dica: "Rain falling over the scene, in two layers: the fine one behind and the heavy one in front.",
+  },
+  tempestade: {
+    titulo: "Storm",
+    dica: "Heavy, slanted rain, a dark sky, and lightning that lights up the table now and then.",
+  },
+  neve: {
+    titulo: "Snow",
+    dica: "Flakes drifting down slowly, swaying from side to side.",
+  },
+  neblina: {
+    titulo: "Fog",
+    dica: "A low mist drifting slowly in front of everything.",
+  },
+  cinzas: {
+    titulo: "Ash",
+    dica: "Ash falling from the sky, as after a fire or near the volcano.",
+  },
+  brasas: {
+    titulo: "Embers",
+    dica: "Sparks rising in the hot air, as in a burning city.",
   },
 };
 

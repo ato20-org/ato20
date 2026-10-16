@@ -388,6 +388,29 @@ function areasDaMedida(): Pick<Scene, "areasDeEfeito"> {
 }
 
 /**
+ * O ambiente desta corrida: `?ambiente=chuva&intensidade=1&vento=0`. Um id de
+ * fábrica (`chuva`, `tempestade`, `neve`, `neblina`, `cinzas`, `brasas`) ou um
+ * da bancada. Ausente = tempo bom. Ver `AmbienteDaCena`.
+ */
+function ambienteDaMedida(): Pick<Scene, "ambiente"> {
+  if (typeof window === "undefined") return {};
+
+  const params = new URLSearchParams(window.location.search);
+  const efeito = params.get("ambiente");
+  if (!efeito) return {};
+
+  const intensidade = params.get("intensidade");
+  const vento = params.get("vento");
+  return {
+    ambiente: {
+      efeito,
+      ...(intensidade !== null ? { intensidade: Number(intensidade) } : {}),
+      ...(vento !== null ? { vento: Number(vento) } : {}),
+    },
+  };
+}
+
+/**
  * Os efeitos de condição desta corrida, lidos da URL: `?condicoes=K&figura=aura`.
  *
  * Os PRIMEIROS K tokens, pela razão das lanternas: o primeiro é o que o
@@ -647,6 +670,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
     fog: nevoaDaMedida(),
     ...sombraDaMedida(),
     ...areasDaMedida(),
+    ...ambienteDaMedida(),
     cameras: salvas,
     // No ar por padrão porque é assim que o mestre trabalha: ele mexe na
     // câmera que a mesa está vendo. E é o que faz o gesto gravar no board no

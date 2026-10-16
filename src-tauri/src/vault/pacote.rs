@@ -399,9 +399,9 @@ fn plugins_citados(valor: &Value, achados: &mut BTreeSet<String>) {
 
 /// Tira do valor o que cita um plugin removido ou um efeito que nao vai entrar.
 ///
-/// A area de efeito sai inteira, porque sem efeito ela nao e nada; a condicao
-/// fica, sem o `efeito` (mostra so o selo, como com um efeito que a tela nao
-/// conhece). Estilo de medidor volta ao de fabrica; os dados do plugin em
+/// A area de efeito sai inteira, porque sem efeito ela nao e nada, e o
+/// ambiente da cena tambem; a condicao fica, sem o `efeito` (mostra so o selo,
+/// como com um efeito que a tela nao conhece). Estilo de medidor volta ao de fabrica; os dados do plugin em
 /// `extensoes` saem.
 fn tirar_plugins(valor: &mut Value, plugins: &HashSet<String>, efeitos_fora: &HashSet<String>) {
     let cai = |id: &str| -> bool {
@@ -415,6 +415,14 @@ fn tirar_plugins(valor: &mut Value, plugins: &HashSet<String>, efeitos_fora: &Ha
         Value::Object(campos) => {
             if let Some(Value::Array(areas)) = campos.get_mut("areasDeEfeito") {
                 areas.retain(|area| !area.get("efeito").and_then(Value::as_str).is_some_and(cai));
+            }
+            if campos
+                .get("ambiente")
+                .and_then(|ambiente| ambiente.get("efeito"))
+                .and_then(Value::as_str)
+                .is_some_and(cai)
+            {
+                campos.remove("ambiente");
             }
 
             for chave in ["efeito", "estiloExtensao"] {
@@ -1985,6 +1993,17 @@ mod tests {
             json!({ "nome": "Envenenado" })
         );
         assert_eq!(cena["extensoes"], json!({ "outro": 2 }));
+    }
+
+    #[test]
+    fn tirar_o_plugin_tira_o_ambiente_da_cena_inteiro() {
+        let mut cena = json!({ "ambiente": { "efeito": "ordem/nevoa", "vento": 0.5 } });
+        let plugins = HashSet::from(["ordem".to_string()]);
+
+        tirar_plugins(&mut cena, &plugins, &HashSet::new());
+
+        // Sem o efeito, o vento sozinho nao e ambiente nenhum.
+        assert_eq!(cena, json!({}));
     }
 
     #[test]

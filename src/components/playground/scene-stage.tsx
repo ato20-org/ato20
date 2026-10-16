@@ -127,6 +127,21 @@ type SceneScale = {
    */
   planoDaTela: HTMLElement | null;
   /**
+   * A LENTE: onde o ambiente da cena se desenha -- a chuva, a neve, a neblina.
+   * Ver `AmbienteNaLente`.
+   *
+   * Do tamanho da moldura, em pixels de tela, fora dos dois planos e sem
+   * transform: o clima não amplia com o zoom nem anda com a câmera, e a
+   * textura do tamanho da tela que desliza aqui não infla a camada composta do
+   * mapa (ver `debug-do-palco` §3).
+   *
+   * Na mesa, por cima do plano de controles: no 2.5D é lá que ficam as paredes
+   * e as peças de pé, e a chuva cai na frente delas. No Mestre, ENTRE os
+   * planos: por cima do mapa e embaixo do gizmo, que não pode sumir na chuva.
+   * Nos dois, embaixo das tarjas e do retrato, que são HUD.
+   */
+  planoDoAmbiente: HTMLElement | null;
+  /**
    * O recorte da câmera em pixels de tela: onde a cena aparece, e fora dele é
    * tarja. A roda de ping lê daqui o que é mapa e o que é preto.
    */
@@ -179,6 +194,7 @@ export function PalcoSoTela({
   children: ReactNode;
 }) {
   const [tela, setTela] = useState<HTMLDivElement | null>(null);
+  const [ambiente, setAmbiente] = useState<HTMLDivElement | null>(null);
 
   const valor = useMemo<SceneScale>(
     () => ({
@@ -191,18 +207,26 @@ export function PalcoSoTela({
       fundoDoPalco: null,
       moldura: null,
       planoDaTela: tela,
+      planoDoAmbiente: ambiente,
       recorteDaCamera: { left: 0, top: 0, width: largura, height: altura },
       quadroDaTela: { left: 0, top: 0, width: largura, height: altura },
       offsetX: 0,
       offsetY: 0,
     }),
-    [tela, largura, altura],
+    [tela, ambiente, largura, altura],
   );
 
   return (
     <SceneScaleContext.Provider value={valor}>
       <div ref={setTela} className="pointer-events-none absolute top-0 left-0" style={{ width: largura, height: altura }} />
       {children}
+      {/* A lente vem DEPOIS da cena: aqui não há planos, e o 2.5D do Mestre
+          desenha tudo onde está. Ver `planoDoAmbiente`. */}
+      <div
+        ref={setAmbiente}
+        className="pointer-events-none absolute top-0 left-0"
+        style={{ width: largura, height: altura }}
+      />
     </SceneScaleContext.Provider>
   );
 }
@@ -421,6 +445,7 @@ export function SceneStage({
   const [conteudoNo, setConteudoNo] = useState<HTMLDivElement | null>(null);
   const [margemNo, setMargemNo] = useState<HTMLDivElement | null>(null);
   const [telaNo, setTelaNo] = useState<HTMLDivElement | null>(null);
+  const [ambienteNo, setAmbienteNo] = useState<HTMLDivElement | null>(null);
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   /** A câmera está parada há tempo bastante para valer redesenhar nítido. */
   const [parada, setParada] = useState(false);
@@ -824,6 +849,7 @@ export function SceneStage({
       fundoDoPalco: fundoNo,
       moldura: frameNo,
       planoDaTela: telaNo,
+      planoDoAmbiente: ambienteNo,
       recorteDaCamera: recorte,
       quadroDaTela: quadro,
       offsetX,
@@ -839,6 +865,7 @@ export function SceneStage({
       fundoNo,
       frameNo,
       telaNo,
+      ambienteNo,
       recorte,
       quadro,
       offsetX,
@@ -1045,6 +1072,21 @@ export function SceneStage({
     };
   }, []);
 
+  /**
+   * O nó da lente, do tamanho da moldura. Um só elemento, montado num de dois
+   * lugares conforme a tela -- ver `planoDoAmbiente`. `invisible` e não
+   * desmontado no primeiro paint, pela razão do `planoDaTela`.
+   */
+  const lente = (
+    <div
+      ref={setAmbienteNo}
+      className={cn(
+        "pointer-events-none absolute inset-0 overflow-hidden",
+        scale === 0 && "invisible",
+      )}
+    />
+  );
+
   return (
     <div
       ref={(no) => {
@@ -1137,6 +1179,10 @@ export function SceneStage({
         />
       </div>
 
+      {/* A LENTE do Mestre: por cima do mapa e embaixo dos controles. Ver
+          `planoDoAmbiente`. */}
+      {!smooth ? lente : null}
+
       {/* O plano de CIMA: os controles do mestre. Sempre no `transform`, porque
           é o que mantém exato o `v / scale` com que eles se medem.
 
@@ -1196,6 +1242,10 @@ export function SceneStage({
         </SceneScaleContext.Provider>
       </div>
       </div>
+
+      {/* A LENTE da mesa: por cima também do plano de controles, que no 2.5D
+          leva as paredes e as peças de pé. Ver `planoDoAmbiente`. */}
+      {smooth ? lente : null}
 
       {/* A MARGEM: postit e cartão, por portal. Ver `planoDaMargem`.
           Depois do plano de controles no DOM, logo por cima dele: o papel

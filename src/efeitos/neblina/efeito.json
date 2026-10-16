@@ -1,0 +1,39 @@
+{
+  "id": "neblina",
+  "titulo": "Neblina",
+  "dica": "Uma névoa baixa passando devagar na frente de tudo.",
+  "ambiente": {
+    "cor": "#cbd5e1",
+    "camadas": [
+      {
+        "imagem": "neblina-512.webp",
+        "mipmaps": {
+          "256": "neblina-256.webp",
+          "512": "neblina-512.webp",
+          "1024": "neblina-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 1.5,
+        "direcao": 0,
+        "velocidade": 0.025,
+        "opacidade": 0.45
+      },
+      {
+        "imagem": "neblina-512.webp",
+        "mipmaps": {
+          "256": "neblina-256.webp",
+          "512": "neblina-512.webp",
+          "1024": "neblina-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.9,
+        "direcao": 180,
+        "velocidade": 0.04,
+        "opacidade": 0.3
+      }
+    ],
+    "veu": {
+      "opacidade": 0.12
+    }
+  }
+}

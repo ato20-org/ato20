@@ -59,6 +59,7 @@ import {
   POSTIT_LARGURA,
   type AreaDeEfeito,
   type Ambiente,
+  type AmbienteDaCena,
   type Board,
   type CameraSalva,
   type CameraTripe,
@@ -488,6 +489,12 @@ type SceneStore = {
    * coleção. Ver `Sol`.
    */
   setSol: (sceneId: string, sol: Sol | undefined) => void;
+  /**
+   * Põe, ajusta ou tira o ambiente da cena -- a chuva, a neve. `undefined`
+   * tira. Um só por cena, como o sol. A intensidade e o vento neutros saem do
+   * arquivo, como a escuridão zero. Ver `AmbienteDaCena`.
+   */
+  setAmbiente: (sceneId: string, ambiente: AmbienteDaCena | undefined) => void;
   /**
    * Crava uma luz no mapa. Ver `Luz`.
    *
@@ -1899,6 +1906,23 @@ export const useSceneStore = create<SceneStore>((set, get) => {
 
     setSol(sceneId, sol) {
       get().updateScene(sceneId, (scene) => ({ ...scene, sol }));
+    },
+
+    setAmbiente(sceneId, ambiente) {
+      get().updateScene(sceneId, (scene) => {
+        if (!ambiente) return { ...scene, ambiente: undefined };
+
+        const intensidade = Math.min(1, Math.max(0.1, ambiente.intensidade ?? 1));
+        const vento = Math.min(1, Math.max(-1, ambiente.vento ?? 0));
+        return {
+          ...scene,
+          ambiente: {
+            efeito: ambiente.efeito,
+            ...(intensidade < 1 ? { intensidade } : {}),
+            ...(vento !== 0 ? { vento } : {}),
+          },
+        };
+      });
     },
 
     addLuz(sceneId, luz) {

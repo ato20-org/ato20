@@ -678,6 +678,35 @@ export type AreaDeEfeito = {
 export type NewAreaDeEfeito = Omit<AreaDeEfeito, "id">;
 
 /**
+ * O AMBIENTE da cena: o clima que cobre a tela -- a chuva, a neve, a neblina.
+ * Ver `AmbienteDoEfeito`, que é o desenho; aqui é só a escolha do mestre para
+ * ESTA cena. Não confundir com o som de ambiente (`Ambiente`), que mora no
+ * `TrackStore`: a chuva que se ouve e a que se vê se acendem à parte.
+ *
+ * Um, e não uma lista: dois climas na mesma tela são duas texturas de tela
+ * inteira deslizando, e o que o mestre quer de "chuva com neblina" é um efeito
+ * que tenha as duas camadas -- o que o editor já faz.
+ */
+export type AmbienteDaCena = {
+  /**
+   * O id do efeito: um molde de ambiente do Compêndio da campanha, um de
+   * plugin ou um de fábrica. Id que o catálogo não conhece não desenha nada.
+   */
+  efeito: string;
+  /**
+   * De 0,1 a 1. Ausente = 1, o efeito inteiro como ele foi feito. Menos é
+   * menos camadas -- as da frente saem primeiro -- e mais transparência: a
+   * garoa é a camada de trás da chuva. Ver `ambienteDaCena`.
+   */
+  intensidade?: number;
+  /**
+   * De -1 (sopra para a esquerda) a 1 (para a direita). Ausente = 0, sem
+   * vento. Inclina o que cai e empurra o que vai de lado. Ver `planoDaCamada`.
+   */
+  vento?: number;
+};
+
+/**
  * Grade sobre o mapa.
  *
  * Mora na CENA, e não numa preferência da máquina, porque cada mapa tem a
@@ -2651,15 +2680,20 @@ export type ListaDePastas =
   // Os moldes de item do Compêndio: um espaço próprio, como o dos moldes de
   // personagem, e não as pastas da janela de Itens.
   | "compendio-itens"
-  // As condições, os efeitos de área e os disparos guardados no Compêndio:
-  // uma árvore por aba, pela razão de Mapas e Fundos -- a pasta de disparos
-  // não aparece vazia entre os efeitos de área.
+  // As condições, os efeitos de área, os disparos e os ambientes guardados no
+  // Compêndio: uma árvore por aba, pela razão de Mapas e Fundos -- a pasta de
+  // disparos não aparece vazia entre os efeitos de área.
   | "compendio-condicoes"
   | "compendio-efeitos"
-  | "compendio-disparos";
+  | "compendio-disparos"
+  | "compendio-ambientes";
 
 /** As listas do Compêndio cujas coisas vivem fora do board: a pasta guarda os ids. */
-export type ListaDoCompendio = "compendio-condicoes" | "compendio-efeitos" | "compendio-disparos";
+export type ListaDoCompendio =
+  | "compendio-condicoes"
+  | "compendio-efeitos"
+  | "compendio-disparos"
+  | "compendio-ambientes";
 
 /** Todas as árvores de pastas do Compêndio da campanha, uma por aba. */
 export type ListaDePastasDoCompendio = "compendio" | "compendio-itens" | ListaDoCompendio;
@@ -2671,6 +2705,7 @@ export const LISTAS_DE_PASTAS_DO_COMPENDIO: ReadonlyArray<ListaDePastasDoCompend
   "compendio-condicoes",
   "compendio-efeitos",
   "compendio-disparos",
+  "compendio-ambientes",
 ];
 
 /**
@@ -2855,6 +2890,14 @@ export type Scene = {
    * `sceneForTable`.
    */
   areasDeEfeito?: AreaDeEfeito[];
+  /**
+   * O clima da cena: a chuva, a neve, a neblina. Ausente = tempo bom. Ver
+   * `AmbienteDaCena`.
+   *
+   * CHEGA à mesa, como a escuridão: é o que a TV e o celular desenham na
+   * lente. O Mestre vê mais fraco -- ver `AMBIENTE_DO_MESTRE`.
+   */
+  ambiente?: AmbienteDaCena;
   /**
    * O quanto o mapa escurece onde não há luz, de 0 a 1. Ausente = 0.
    *

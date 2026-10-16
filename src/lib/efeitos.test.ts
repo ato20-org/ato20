@@ -23,20 +23,27 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    // Em ordem de título: "Bola de fogo", "Congelado", "Em chamas",
-    // "Envenenado", "Jato d'água", "Molhado", "Nuvem venenosa", "Raio de
-    // gelo", "Sangrando", "Sopro de fogo".
+    // Em ordem de título: "Bola de fogo", "Brasas", "Chuva", "Cinzas",
+    // "Congelado", "Em chamas", "Envenenado", "Jato d'água", "Molhado",
+    // "Neblina", "Neve", "Nuvem venenosa", "Raio de gelo", "Sangrando", "Sopro
+    // de fogo", "Tempestade".
     expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual([
       "bola-de-fogo",
+      "brasas",
+      "chuva",
+      "cinzas",
       "congelado",
       "chamas",
       "envenenado",
       "jato-de-agua",
       "molhado",
+      "neblina",
+      "neve",
       "nuvem-venenosa",
       "raio-de-gelo",
       "sangrando",
       "sopro-de-fogo",
+      "tempestade",
     ]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
   });

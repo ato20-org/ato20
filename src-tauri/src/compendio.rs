@@ -565,8 +565,13 @@ fn efeito_sem_uso(vault: &Vault, id: &str) -> AppResult<bool> {
     else {
         return Ok(false);
     };
-    // O de area e o disparo nao sao de figura: nenhuma condicao os leva.
-    if efeitos::eh_molde(&efeito) || efeito.get("area").is_some() || efeito.get("disparo").is_some() {
+    // O de area, o disparo e o ambiente nao sao de figura: nenhuma condicao os
+    // leva.
+    if efeitos::eh_molde(&efeito)
+        || efeito.get("area").is_some()
+        || efeito.get("disparo").is_some()
+        || efeito.get("ambiente").is_some()
+    {
         return Ok(false);
     }
 

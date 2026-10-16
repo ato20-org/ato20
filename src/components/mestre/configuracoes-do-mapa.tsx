@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CloudRain,
   Frame,
   Moon,
   RotateCcw,
@@ -10,7 +11,7 @@ import {
   Tv,
 } from "lucide-react";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
@@ -26,6 +27,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -34,7 +44,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { ambientesProntos } from "@/lib/ambiente";
 import { corDoVazioDe } from "@/lib/cor";
+import { especieDoEfeito } from "@/lib/efeitos";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { t } from "@/lib/i18n/ferramentas";
@@ -44,6 +56,8 @@ import {
   tirarCeuDaCena,
   useFundoEmVoo,
 } from "@/lib/mestre/scene-background";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
@@ -217,6 +231,10 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </>
         ) : null}
 
+        {/* O clima, vizinho do escuro: os dois são o tempo que faz na cena. */}
+        <span className="bg-border block h-px w-full" />
+        <AmbienteDoMapa scene={scene} />
+
         {/* O avesso da escuridão: ela pinta o tom de DENTRO onde a luz não
             chega, esta pinta o que está FORA do mapa. Vizinhas porque as duas
             são cor da cena, e não ferramenta. */}
@@ -271,6 +289,133 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         </section>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** O valor do seletor para "nenhum ambiente": o `Select` não aceita vazio. */
+const TEMPO_BOM = "-";
+
+/**
+ * O AMBIENTE da cena: qual clima cobre a tela da mesa, com que força e com
+ * que vento. Ver `AmbienteDaCena`.
+ *
+ * O seletor junta o que a campanha guardou no Compêndio e os prontos -- os de
+ * fábrica e os dos plugins --, que a cena aponta direto, sem cópia: escolher a
+ * Chuva é chover, e recolorir é que pede trazê-la ao Compêndio. O id que o
+ * catálogo não conhece mais (o molde apagado) aparece como tempo bom, que é o
+ * que a mesa vê.
+ */
+function AmbienteDoMapa({ scene }: { scene: Scene }) {
+  const setAmbiente = useSceneStore((state) => state.setAmbiente);
+  const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const texto = t.configuracoesDoMapa;
+
+  const daCampanha = useMemo(
+    () => (moldes ?? []).filter((molde) => especieDoEfeito(molde) === "ambiente"),
+    [moldes],
+  );
+  const prontos = useMemo(() => ambientesProntos(deFora), [deFora]);
+  const itens = useMemo(
+    () => ({
+      [TEMPO_BOM]: texto.tempoBom,
+      ...Object.fromEntries([...daCampanha, ...prontos].map((efeito) => [efeito.id, efeito.titulo])),
+    }),
+    [daCampanha, prontos, texto.tempoBom],
+  );
+
+  const ambiente = scene.ambiente;
+  const escolhido = ambiente && Object.hasOwn(itens, ambiente.efeito) ? ambiente.efeito : TEMPO_BOM;
+  const intensidade = ambiente?.intensidade ?? 1;
+  const vento = ambiente?.vento ?? 0;
+  const ventoEmPorcento = Math.round(Math.abs(vento) * 100);
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="flex items-center gap-2 text-xs font-normal">
+          <CloudRain className="text-muted-foreground size-3.5" />
+          {texto.ambiente}
+        </Label>
+        <Select<string>
+          items={itens}
+          value={escolhido}
+          onValueChange={(novo) => {
+            if (!novo || novo === escolhido) return;
+            setAmbiente(scene.id, novo === TEMPO_BOM ? undefined : { ...ambiente, efeito: novo });
+          }}
+        >
+          <SelectTrigger size="sm" className="h-7 max-w-36 text-xs" aria-label={texto.ambiente}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TEMPO_BOM} className="text-xs">
+              {texto.tempoBom}
+            </SelectItem>
+            {daCampanha.length > 0 ? (
+              <SelectGroup>
+                <SelectLabel className="text-[10px]">{texto.doCompendio}</SelectLabel>
+                {daCampanha.map((efeito) => (
+                  <SelectItem key={efeito.id} value={efeito.id} className="text-xs">
+                    {efeito.titulo}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ) : null}
+            <SelectGroup>
+              <SelectLabel className="text-[10px]">{texto.prontos}</SelectLabel>
+              {prontos.map((efeito) => (
+                <SelectItem key={efeito.id} value={efeito.id} className="text-xs">
+                  {efeito.titulo}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ambiente && escolhido !== TEMPO_BOM ? (
+        <>
+          <Campo rotulo={texto.intensidade} valor={`${Math.round(intensidade * 100)}%`}>
+            <Slider
+              aria-label={texto.intensidade}
+              value={[Math.round(intensidade * 100)]}
+              min={10}
+              max={100}
+              step={5}
+              onValueChange={(value) =>
+                setAmbiente(scene.id, { ...ambiente, intensidade: primeiro(value) / 100 })
+              }
+            />
+          </Campo>
+          {/* No meio é sem vento: para um lado ou para o outro, até inclinar
+              a chuva e empurrar a neblina. */}
+          <Campo
+            rotulo={texto.vento}
+            valor={
+              vento === 0
+                ? texto.semVento
+                : vento < 0
+                  ? texto.ventoParaEsquerda(ventoEmPorcento)
+                  : texto.ventoParaDireita(ventoEmPorcento)
+            }
+          >
+            <Slider
+              aria-label={texto.vento}
+              value={[Math.round(vento * 100)]}
+              min={-100}
+              max={100}
+              step={10}
+              onValueChange={(value) =>
+                setAmbiente(scene.id, { ...ambiente, vento: primeiro(value) / 100 })
+              }
+            />
+          </Campo>
+        </>
+      ) : null}
+
+      <p className="text-muted-foreground text-[10px] leading-snug">{texto.ambienteAjuda}</p>
+    </section>
   );
 }
 

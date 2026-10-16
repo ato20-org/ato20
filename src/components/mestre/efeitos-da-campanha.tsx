@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ImagePlus, Pencil, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { ClimaNoCartao } from "@/components/mestre/compendio-efeitos";
 import { AparenciaDaCondicao } from "@/components/mestre/linha-de-condicao";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
@@ -28,6 +29,15 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import {
+  ambientesProntos,
+  COR_DO_AMBIENTE,
+  COR_DO_RELAMPAGO,
+  direcaoDoSentido,
+  LIMITES_DO_AMBIENTE,
+  sentidoDaDirecao,
+  type SentidoDaCamada,
+} from "@/lib/ambiente";
 import { COR_DA_AREA, efeitosDeAreaProntos } from "@/lib/area-de-efeito";
 import { disparoDoEfeito, disparosProntos, LIMITES_DO_DISPARO } from "@/lib/disparo-de-efeito";
 import {
@@ -51,9 +61,11 @@ import { vincularEfeitoDaCondicao } from "@/lib/vault/characters";
 import { editarCondicaoDoCompendio } from "@/lib/vault/compendio";
 import type { Condicao, PatchCondicao } from "@/types/character";
 import type {
+  AmbienteDoEfeito,
   AnimacaoDoEfeito,
   AreaDoEfeito,
   BaseDoEfeito,
+  CamadaDoAmbiente,
   DefinicaoDeEfeito,
   DisparoDoEfeito,
   ExternoDoEfeito,
@@ -674,6 +686,365 @@ export function TelaDoDisparo({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * A tela de um AMBIENTE: o clima que cobre a cena inteira -- a chuva, a neve,
+ * a neblina. Abre pelo card dele no Compêndio, que é onde ele mora: a cena
+ * aponta para o molde, sem cópia em jogo, e mexer aqui muda a chuva da mesa
+ * enquanto o controle anda. Ver `AmbienteDoEfeito`.
+ *
+ * As abas são as camadas, uma por textura que desliza, e depois o véu e o
+ * relâmpago. A cor do ambiente pinta as camadas que pedem e o véu sem cor
+ * própria.
+ */
+export function TelaDoAmbiente({ efeito }: { efeito: DefinicaoDeEfeito }) {
+  const salvar = useEfeitosDaCampanhaStore((state) => state.salvar);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const [trocarPor, setTrocarPor] = useState<DefinicaoDeEfeito | null>(null);
+  const ambiente: AmbienteDoEfeito = efeito.ambiente ?? { camadas: [] };
+  const camadas = ambiente.camadas ?? [];
+  const cor = ambiente.cor ?? COR_DO_AMBIENTE;
+  const temCamadas = camadas.length > 0 || Boolean(ambiente.veu || ambiente.relampago);
+
+  // O pronto inteiro, com a cor dele, como no disparo: o nome e as tags ficam.
+  function partirDe(pronto: DefinicaoDeEfeito) {
+    salvar(com(copiaParaACampanha(pronto, efeito.id, efeito.titulo), "tags", efeito.tags));
+  }
+
+  const mudar = (novo: AmbienteDoEfeito) => salvar({ ...efeito, ambiente: novo });
+  const mudarCamada = (indice: number, camada: CamadaDoAmbiente | undefined) =>
+    mudar({
+      ...ambiente,
+      camadas: camada
+        ? camadas.map((atual, i) => (i === indice ? camada : atual))
+        : camadas.filter((_, i) => i !== indice),
+    });
+  // A nova vai na frente, e começa como a de trás, que é o que se costuma
+  // querer: a mesma textura, maior e mais rápida.
+  const acrescentar = () => {
+    const ultima = camadas[camadas.length - 1];
+    mudar({
+      ...ambiente,
+      camadas: [
+        ...camadas,
+        ultima
+          ? {
+              ...ultima,
+              escala: Math.min(LIMITES_DO_AMBIENTE.escala.max, (ultima.escala ?? 0.5) * 1.6),
+              velocidade: Math.min(LIMITES_DO_AMBIENTE.velocidade.max, (ultima.velocidade ?? 1) * 1.4),
+            }
+          : { imagem: "", cores: "condicao" },
+      ],
+    });
+  };
+
+  const abas = [
+    ...camadas.map((camada, indice) => ({
+      id: `camada-${indice}`,
+      titulo: t.efeito.camada(indice + 1),
+      ligada: Boolean(camada.imagem),
+      conteudo: (
+        <SecaoDaCamada camada={camada} onMudar={(nova) => mudarCamada(indice, nova)} />
+      ),
+    })),
+    {
+      id: "veu",
+      titulo: t.efeito.veu,
+      ligada: ambiente.veu !== undefined,
+      conteudo: (
+        <SecaoDoVeu veu={ambiente.veu} cor={cor} onMudar={(veu) => mudar(com(ambiente, "veu", veu))} />
+      ),
+    },
+    {
+      id: "relampago",
+      titulo: t.efeito.relampago,
+      ligada: ambiente.relampago !== undefined,
+      conteudo: (
+        <SecaoDoRelampago
+          relampago={ambiente.relampago}
+          onMudar={(relampago) => mudar(com(ambiente, "relampago", relampago))}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <FaixaDaPrevia>
+        <div
+          className="relative w-full overflow-hidden rounded-md bg-gradient-to-b from-slate-600 to-neutral-900"
+          style={{ height: ALTURA_DA_PREVIA }}
+        >
+          <ClimaNoCartao efeito={efeito} />
+        </div>
+      </FaixaDaPrevia>
+
+      <div className="space-y-1.5 rounded-md border p-2.5">
+        <div className="flex items-center gap-2">
+          <CorDoEfeito cor={cor} onMudar={(nova) => mudar({ ...ambiente, cor: nova })} />
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <NomeDoMedidor
+              nome={efeito.titulo}
+              ocupado={false}
+              onGravar={(titulo) => salvar({ ...efeito, titulo })}
+              rotulos={{
+                campo: t.efeito.nomeDoEfeito,
+                lapis: t.efeito.renomearEfeito,
+              }}
+            />
+          </div>
+        </div>
+        <DescricaoDoEfeito dica={efeito.dica} onGravar={(dica) => salvar(com(efeito, "dica", dica))} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="text-muted-foreground mr-1 text-[11px]">{t.efeito.partirDeAmbientePronto}</span>
+        {ambientesProntos(deFora).map((pronto) => (
+          <Button
+            key={pronto.id}
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[11px]"
+            title={pronto.dica}
+            onClick={() => (temCamadas ? setTrocarPor(pronto) : partirDe(pronto))}
+          >
+            {pronto.titulo}
+          </Button>
+        ))}
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-[11px]"
+          title={t.efeito.acrescentarCamadaDica}
+          disabled={camadas.length >= LIMITES_DO_AMBIENTE.camadas}
+          onClick={acrescentar}
+        >
+          <Plus />
+          {t.efeito.acrescentarCamada}
+        </Button>
+      </div>
+
+      {/* Uma chave pelo número de camadas: a aba aberta numa camada que saiu
+          voltaria a ela sozinha se sobrevivesse. */}
+      <AbasDasCamadas key={camadas.length} abas={abas} />
+
+      <AlertDialog
+        open={trocarPor !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setTrocarPor(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t.efeito.trocarPelo(trocarPor?.titulo ?? "")}</AlertDialogTitle>
+            <AlertDialogDescription>{t.efeito.trocarNoEfeito(efeito.titulo)}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (trocarPor) partirDe(trocarPor);
+                setTrocarPor(null);
+              }}
+            >
+              {t.efeito.trocar}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/**
+ * Uma CAMADA do ambiente: a textura, para onde ela vai e com que pressa. A
+ * direção aparece como o mestre a pensa -- "cai, inclinada para a direita" --,
+ * e não em graus. Ver `CamadaDoAmbiente`.
+ */
+function SecaoDaCamada({
+  camada,
+  onMudar,
+}: {
+  camada: CamadaDoAmbiente;
+  onMudar: (camada: CamadaDoAmbiente | undefined) => void;
+}) {
+  const mudar = <K extends keyof CamadaDoAmbiente>(chave: K, valor: CamadaDoAmbiente[K] | undefined) =>
+    onMudar(com(camada, chave, valor));
+  const { sentido, inclinacao } = sentidoDaDirecao(camada.direcao ?? 90);
+  const mudarDirecao = (novoSentido: SentidoDaCamada, novaInclinacao: number) => {
+    const direcao = direcaoDoSentido(novoSentido, novaInclinacao);
+    mudar("direcao", direcao === 90 ? undefined : direcao);
+  };
+  const { escala, velocidade, balanco } = LIMITES_DO_AMBIENTE;
+
+  return (
+    <Secao titulo={t.efeito.textura} descricao={t.efeito.camadaDescricao}>
+      <ImagemDoAcervo
+        rotulo={t.efeito.textura}
+        dica={t.efeito.texturaDaCamadaDica}
+        assetId={camada.imagem || undefined}
+        onMudar={(id) => onMudar(com(com(camada, "mipmaps", undefined), "imagem", id ?? ""))}
+      />
+      <Faixa
+        rotulo={t.efeito.tamanhoNaTela}
+        valor={camada.escala ?? escala.padrao}
+        min={escala.min}
+        max={escala.max}
+        passo={0.05}
+        porcento
+        onMudar={(v) => mudar("escala", v === escala.padrao ? undefined : v)}
+      />
+      <Escolha<SentidoDaCamada>
+        rotulo={t.efeito.vaiPara}
+        valor={sentido}
+        opcoes={[
+          { valor: "baixo", rotulo: t.efeito.paraBaixo },
+          { valor: "cima", rotulo: t.efeito.paraCima },
+          { valor: "direita", rotulo: t.efeito.paraDireita },
+          { valor: "esquerda", rotulo: t.efeito.paraEsquerda },
+        ]}
+        onMudar={(novo) => mudarDirecao(novo, inclinacao)}
+      />
+      <Faixa
+        rotulo={t.efeito.inclinacao}
+        valor={inclinacao}
+        min={-45}
+        max={45}
+        passo={1}
+        sufixo="°"
+        onMudar={(v) => mudarDirecao(sentido, v)}
+      />
+      <Faixa
+        rotulo={t.efeito.velocidade}
+        valor={camada.velocidade ?? velocidade.padrao}
+        min={velocidade.min}
+        max={velocidade.max}
+        passo={0.01}
+        sufixo={t.efeito.sufixoTelasPorSegundo}
+        onMudar={(v) => mudar("velocidade", v === velocidade.padrao ? undefined : v)}
+      />
+      <Faixa
+        rotulo={t.efeito.balanco}
+        valor={camada.balanco ?? 0}
+        min={balanco.min}
+        max={balanco.max}
+        passo={0.01}
+        porcento
+        onMudar={(v) => mudar("balanco", v > 0 ? v : undefined)}
+      />
+      <Faixa
+        rotulo={t.efeito.opacidade}
+        valor={camada.opacidade ?? 1}
+        min={0.05}
+        max={1}
+        passo={0.05}
+        porcento
+        onMudar={(v) => mudar("opacidade", v >= 1 ? undefined : v)}
+      />
+      <Interruptor
+        rotulo={t.efeito.pintarNaCorDoAmbiente}
+        dica={t.efeito.pintarCamadaDica}
+        valor={camada.cores === "condicao"}
+        onMudar={(v) => mudar("cores", v ? "condicao" : undefined)}
+      />
+      <div className="flex justify-end">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive h-6 px-2 text-[11px]"
+          onClick={() => onMudar(undefined)}
+        >
+          <Trash2 />
+          {t.efeito.tirarCamada}
+        </Button>
+      </div>
+    </Secao>
+  );
+}
+
+/** O VÉU do ambiente: uma cor parada sobre a tela inteira. */
+function SecaoDoVeu({
+  veu,
+  cor,
+  onMudar,
+}: {
+  veu: AmbienteDoEfeito["veu"];
+  /** A cor do ambiente, que é a do véu sem cor própria. */
+  cor: string;
+  onMudar: (veu: AmbienteDoEfeito["veu"]) => void;
+}) {
+  const v = veu ?? { opacidade: 0.15 };
+
+  return (
+    <Secao
+      titulo={t.efeito.veu}
+      descricao={t.efeito.veuDescricao}
+      ligado={veu !== undefined}
+      onLigar={(ligado) => onMudar(ligado ? { opacidade: 0.15 } : undefined)}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs">{t.efeito.cor}</span>
+        <CorDoEfeito cor={v.cor ?? cor} onMudar={(nova) => onMudar({ ...v, cor: nova })} />
+      </div>
+      <Faixa
+        rotulo={t.efeito.opacidade}
+        valor={v.opacidade}
+        min={LIMITES_DO_AMBIENTE.veu.min}
+        max={LIMITES_DO_AMBIENTE.veu.max}
+        passo={0.01}
+        porcento
+        onMudar={(opacidade) => onMudar({ ...v, opacidade })}
+      />
+    </Secao>
+  );
+}
+
+/** O RELÂMPAGO do ambiente: o clarão de tempos em tempos. */
+function SecaoDoRelampago({
+  relampago,
+  onMudar,
+}: {
+  relampago: AmbienteDoEfeito["relampago"];
+  onMudar: (relampago: AmbienteDoEfeito["relampago"]) => void;
+}) {
+  const r = relampago ?? {};
+  const { intervalo, forca } = LIMITES_DO_AMBIENTE;
+
+  return (
+    <Secao
+      titulo={t.efeito.relampago}
+      descricao={t.efeito.relampagoDescricao}
+      ligado={relampago !== undefined}
+      onLigar={(ligado) => onMudar(ligado ? {} : undefined)}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs">{t.efeito.cor}</span>
+        <CorDoEfeito cor={r.cor ?? COR_DO_RELAMPAGO} onMudar={(nova) => onMudar({ ...r, cor: nova })} />
+      </div>
+      <Faixa
+        rotulo={t.efeito.intervalo}
+        valor={r.intervalo ?? intervalo.padrao}
+        min={intervalo.min}
+        max={intervalo.max}
+        passo={1}
+        sufixo={t.efeito.sufixoSegundos}
+        onMudar={(v) => onMudar(com(r, "intervalo", v === intervalo.padrao ? undefined : v))}
+      />
+      <Faixa
+        rotulo={t.efeito.forca}
+        valor={r.forca ?? forca.padrao}
+        min={0.05}
+        max={1}
+        passo={0.05}
+        porcento
+        onMudar={(v) => onMudar(com(r, "forca", v === forca.padrao ? undefined : v))}
+      />
+    </Secao>
   );
 }
 

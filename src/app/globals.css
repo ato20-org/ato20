@@ -352,6 +352,32 @@
     pointer-events: auto;
   }
 
+  /* O AMBIENTE na lente: cada camada desliza UM ladrilho em laço, e a
+     textura emenda, então a volta não se vê. Só `transform` -- o compositor
+     move a camada sem repintar a tela. O balanço vai na propriedade
+     `translate`, que se compõe com o `transform` em vez de trocá-lo: são duas
+     animações no MESMO elemento, e um envelope a mais seria outra camada do
+     tamanho da tela. Ver `planoDaCamada`. */
+  .ambiente-camada-y {
+    animation: ambiente-desliza-y var(--ambiente-duracao) linear infinite;
+  }
+
+  .ambiente-camada-x {
+    animation: ambiente-desliza-x var(--ambiente-duracao) linear infinite;
+  }
+
+  .ambiente-camada-y.ambiente-balanca {
+    animation:
+      ambiente-desliza-y var(--ambiente-duracao) linear infinite,
+      ambiente-balanca-x var(--ambiente-periodo) ease-in-out infinite alternate;
+  }
+
+  .ambiente-camada-x.ambiente-balanca {
+    animation:
+      ambiente-desliza-x var(--ambiente-duracao) linear infinite,
+      ambiente-balanca-y var(--ambiente-periodo) ease-in-out infinite alternate;
+  }
+
   .rolagem-limpa {
     scrollbar-width: none;
   }
@@ -662,4 +688,47 @@
 ::highlight(busca-na-nota-atual) {
   background-color: rgb(249 115 22 / 0.75);
   color: black;
+}
+
+/* Fora do `@media`, pela razão do `scene-fade-in`. A camada PARADA -- quem
+   pediu menos movimento, ou a de velocidade zero -- fica com a inclinação que
+   o `AmbienteNaLente` põe inline, e a animação a atravessa. */
+@keyframes ambiente-desliza-y {
+  from {
+    transform: skewX(var(--ambiente-inclinacao, 0deg)) translateY(0);
+  }
+
+  to {
+    transform: skewX(var(--ambiente-inclinacao, 0deg)) translateY(var(--ambiente-passo, 0));
+  }
+}
+
+@keyframes ambiente-desliza-x {
+  from {
+    transform: skewY(var(--ambiente-inclinacao, 0deg)) translateX(0);
+  }
+
+  to {
+    transform: skewY(var(--ambiente-inclinacao, 0deg)) translateX(var(--ambiente-passo, 0));
+  }
+}
+
+@keyframes ambiente-balanca-x {
+  from {
+    translate: calc(-1 * var(--ambiente-balanco, 0px)) 0;
+  }
+
+  to {
+    translate: var(--ambiente-balanco, 0px) 0;
+  }
+}
+
+@keyframes ambiente-balanca-y {
+  from {
+    translate: 0 calc(-1 * var(--ambiente-balanco, 0px));
+  }
+
+  to {
+    translate: 0 var(--ambiente-balanco, 0px);
+  }
 }

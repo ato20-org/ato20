@@ -496,6 +496,10 @@ pub struct Efeito {
     /// dele saia sempre em linha.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disparo: Option<DisparoDoEfeito>,
+    /// O efeito que cobre a CENA inteira: a chuva, a neve, a neblina. Ver
+    /// `AmbienteDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambiente: Option<AmbienteDoEfeito>,
 }
 
 /// Como o efeito sai quando e DISPARADO de um ponto a outro: a forma, e os
@@ -552,6 +556,75 @@ pub const FORMAS_DO_DISPARO: &[&str] = &["linha", "cone"];
 /// Os giros do projetil: como esta, o topo na frente, o topo atras, de ponta
 /// cabeca. Outro angulo deitaria a imagem torta no voo.
 pub const GIROS_DO_PROJETIL: &[f64] = &[0.0, 90.0, -90.0, 180.0];
+
+/// O AMBIENTE: o clima que cobre a cena inteira, desenhado na lente da tela --
+/// camadas de textura emendavel que deslizam em laco, um veu de cor parada e o
+/// clarao do relampago. Espelho de `AmbienteDoEfeito` em `types/efeito.ts`; os
+/// limites sao os de `LIMITES_DO_AMBIENTE`, que o TS prende ao desenhar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AmbienteDoEfeito {
+    /// A cor do ambiente: a das camadas que pedem `cores: "condicao"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// De tras para a frente, ate `MAX_CAMADAS_DO_AMBIENTE`.
+    #[serde(default)]
+    pub camadas: Vec<CamadaDoAmbiente>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub veu: Option<VeuDoAmbiente>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relampago: Option<RelampagoDoAmbiente>,
+}
+
+/// Uma camada do ambiente: a textura e como ela desliza, em alturas da tela.
+/// Os campos de imagem de sempre, menos os quadros: a camada anda deslizando.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CamadaDoAmbiente {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    /// O lado do ladrilho, em alturas da tela.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    /// Para onde vai, em graus, no sentido horario a partir da direita.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direcao: Option<f64>,
+    /// Em alturas da tela por segundo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub velocidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    /// O balanco de lado a lado, em vezes o ladrilho.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balanco: Option<f64>,
+}
+
+/// O veu: uma cor parada sobre a tela inteira.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VeuDoAmbiente {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    pub opacidade: f64,
+}
+
+/// O relampago: o clarao de tempos em tempos.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelampagoDoAmbiente {
+    /// Os segundos entre um clarao e outro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intervalo: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forca: Option<f64>,
+}
+
+/// Quantas camadas um ambiente tem, no maximo. Cada uma e uma superficie do
+/// tamanho da tela para o compositor; quatro ja sao a chuva fina, a grossa, a
+/// neblina e a cinza.
+pub const MAX_CAMADAS_DO_AMBIENTE: usize = 4;
 
 /// Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -677,6 +750,9 @@ impl Efeito {
         if let Some(projetil) = self.disparo.as_ref().and_then(|disparo| disparo.projetil.as_ref()) {
             imagens.extend(projetil.imagem.imagens());
         }
+        for camada in self.ambiente.iter().flat_map(|ambiente| &ambiente.camadas) {
+            imagens.extend(camada.imagem.imagens());
+        }
 
         imagens
     }
@@ -694,6 +770,9 @@ impl Efeito {
                 .disparo
                 .as_ref()
                 .is_some_and(|disparo| disparo.projetil.is_some())
+            || self.ambiente.as_ref().is_some_and(|ambiente| {
+                !ambiente.camadas.is_empty() || ambiente.veu.is_some() || ambiente.relampago.is_some()
+            })
     }
 }
 
@@ -2649,6 +2728,84 @@ fn validar_disparo(disparo: &DisparoDoEfeito) -> Result<(), crate::error::Texto>
     Ok(())
 }
 
+/// O bloco `ambiente`, com as camadas, o veu e o relampago nos limites de
+/// `LIMITES_DO_AMBIENTE`, no TS. A direcao e qualquer angulo: o TS a leva ao
+/// eixo mais perto.
+fn validar_ambiente(ambiente: &AmbienteDoEfeito) -> Result<(), crate::error::Texto> {
+    let entre = |valor: Option<f64>, min: f64, max: f64| {
+        valor.map_or(true, |v| v.is_finite() && (min..=max).contains(&v))
+    };
+    let fora = |campo: &str, min: f64, max: f64| {
+        Err(crate::texto!(
+            "tem `ambiente.{campo}` fora de {min} a {max}",
+            "has `ambiente.{campo}` out of range ({min} to {max})"
+        ))
+    };
+
+    if ambiente.camadas.len() > MAX_CAMADAS_DO_AMBIENTE {
+        return Err(crate::texto!(
+            "tem mais de {MAX_CAMADAS_DO_AMBIENTE} camadas no `ambiente`",
+            "has more than {MAX_CAMADAS_DO_AMBIENTE} layers in `ambiente`"
+        ));
+    }
+
+    for (campo, cor) in [
+        ("cor", ambiente.cor.as_deref()),
+        ("veu.cor", ambiente.veu.as_ref().and_then(|veu| veu.cor.as_deref())),
+        ("relampago.cor", ambiente.relampago.as_ref().and_then(|r| r.cor.as_deref())),
+    ] {
+        if cor.is_some_and(|cor| !cor_hex_valida(cor)) {
+            return Err(crate::texto!(
+                "tem `ambiente.{campo}` que nao e uma cor #rrggbb",
+                "has `ambiente.{campo}` that is not a #rrggbb color"
+            ));
+        }
+    }
+
+    for camada in &ambiente.camadas {
+        imagem_animada_valida(&camada.imagem, "ambiente.camadas")?;
+        if camada.imagem.quadros.is_some() {
+            return Err(crate::texto!(
+                "tem `quadros` numa camada do `ambiente`: a camada desliza, e nao toca quadros",
+                "has `quadros` in an `ambiente` layer: the layer slides, it doesn't play frames"
+            ));
+        }
+        if camada.direcao.is_some_and(|v| !v.is_finite()) {
+            return Err(crate::texto!(
+                "tem `ambiente.camadas.direcao` que nao e numero",
+                "has `ambiente.camadas.direcao` that is not a number"
+            ));
+        }
+        for (campo, valor, min, max) in [
+            ("camadas.escala", camada.escala, 0.1, 2.0),
+            ("camadas.velocidade", camada.velocidade, 0.0, 3.0),
+            ("camadas.opacidade", camada.opacidade, 0.0, 1.0),
+            ("camadas.balanco", camada.balanco, 0.0, 0.5),
+        ] {
+            if !entre(valor, min, max) {
+                return fora(campo, min, max);
+            }
+        }
+    }
+
+    if let Some(veu) = &ambiente.veu {
+        if !entre(Some(veu.opacidade), 0.0, 0.8) {
+            return fora("veu.opacidade", 0.0, 0.8);
+        }
+    }
+
+    if let Some(relampago) = &ambiente.relampago {
+        if !entre(relampago.intervalo, 3.0, 60.0) {
+            return fora("relampago.intervalo", 3.0, 60.0);
+        }
+        if !entre(relampago.forca, 0.0, 1.0) {
+            return fora("relampago.forca", 0.0, 1.0);
+        }
+    }
+
+    Ok(())
+}
+
 /// Um efeito desenha alguma coisa, com numeros que fazem sentido?
 ///
 /// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
@@ -2676,8 +2833,8 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 
     if !efeito.faz_algo() {
         return invalido(crate::texto!(
-            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` ou `base`",
-            "draws nothing: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` or `base`"
+            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco`, `base` ou `ambiente`",
+            "draws nothing: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco`, `base` or `ambiente`"
         ));
     }
 
@@ -2696,6 +2853,12 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 
     if let Some(disparo) = &efeito.disparo {
         if let Err(motivo) = validar_disparo(disparo) {
+            return invalido(motivo);
+        }
+    }
+
+    if let Some(ambiente) = &efeito.ambiente {
+        if let Err(motivo) = validar_ambiente(ambiente) {
             return invalido(motivo);
         }
     }
@@ -4182,6 +4345,73 @@ mod tests {
         assert_eq!(json["disparo"]["projetil"]["imagem"], "fx/flecha.webp");
         assert_eq!(json["disparo"]["projetil"]["giro"], 90.0);
         assert_eq!(json["disparo"]["rastro"], false);
+    }
+
+    #[test]
+    fn efeito_de_ambiente_entra_e_chega_ao_ts_inteiro() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"nevoa-de-sangue","titulo":"Névoa de sangue",
+                     "ambiente":{"cor":"#7f1d1d",
+                                 "camadas":[{"imagem":"fx/nevoa.webp","cores":"condicao",
+                                             "mipmaps":{"512":"fx/nevoa-512.webp"},
+                                             "escala":1.2,"direcao":0,"velocidade":0.04}],
+                                 "veu":{"opacidade":0.2},
+                                 "relampago":{"intervalo":20}}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.imagens(), vec!["fx/nevoa.webp", "fx/nevoa-512.webp"]);
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["ambiente"]["cor"], "#7f1d1d");
+        assert_eq!(json["ambiente"]["camadas"][0]["imagem"], "fx/nevoa.webp");
+        assert_eq!(json["ambiente"]["camadas"][0]["cores"], "condicao");
+        assert_eq!(json["ambiente"]["camadas"][0]["escala"], 1.2);
+        assert_eq!(json["ambiente"]["veu"]["opacidade"], 0.2);
+        assert_eq!(json["ambiente"]["relampago"]["intervalo"], 20.0);
+        // O que o plugin nao disse nao vai: o TS poe os padroes.
+        assert!(json["ambiente"]["camadas"][0].get("balanco").is_none());
+    }
+
+    #[test]
+    fn so_o_veu_ja_e_um_ambiente() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos("ordem", r##"[{"id":"breu","titulo":"Breu","ambiente":{"veu":{"cor":"#000000","opacidade":0.5}}}]"##),
+        )
+        .unwrap();
+        assert!(m.contribui.efeitos[0].imagens().is_empty());
+    }
+
+    #[test]
+    fn ambiente_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for ambiente in [
+            r#"{"camadas":[]}"#,
+            r#"{"cor":"azul","veu":{"opacidade":0.2}}"#,
+            r#"{"veu":{"opacidade":0.95}}"#,
+            r##"{"veu":{"cor":"#12","opacidade":0.2}}"##,
+            r#"{"relampago":{"intervalo":1}}"#,
+            r#"{"relampago":{"forca":2}}"#,
+            r#"{"camadas":[{"imagem":"c.png","escala":5}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","velocidade":-1}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","opacidade":1.5}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","balanco":0.9}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","quadros":{"colunas":2,"total":2,"fps":8}}]}"#,
+            r#"{"camadas":[{"imagem":"../fora.png"}]}"#,
+            r#"{"camadas":[{"imagem":"c.svg"}]}"#,
+            r#"{"camadas":[{"imagem":"a.png"},{"imagem":"b.png"},{"imagem":"c.png"},{"imagem":"d.png"},{"imagem":"e.png"}]}"#,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","ambiente":{ambiente}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{ambiente}");
+        }
     }
 
     #[test]

@@ -14,6 +14,7 @@ import {
 } from "@/types/scene";
 import type {
   AnimacaoDoEfeito,
+  CamadaDoAmbiente,
   DefinicaoDeEfeito,
   ExternoDoEfeito,
   QuadrosDoEfeito,
@@ -78,10 +79,14 @@ const POR_ID = new Map(EFEITOS_DE_FABRICA.map((efeito) => [efeito.id, efeito]));
 /**
  * Os de fábrica que servem a uma FIGURA: o seletor da condição e o "partir de
  * um efeito pronto" dela. Todos menos os disparos, que numa figura parada não
- * têm o que fazer. Ver `especieDoEfeito`.
+ * têm o que fazer, e os ambientes, que cobrem a cena e não uma figura. Ver
+ * `especieDoEfeito`.
  */
 export const EFEITOS_PARA_A_FIGURA: ReadonlyArray<DefinicaoDeEfeito> = EFEITOS_DE_FABRICA.filter(
-  (efeito) => especieDoEfeito(efeito) !== "disparo",
+  (efeito) => {
+    const especie = especieDoEfeito(efeito);
+    return especie !== "disparo" && especie !== "ambiente";
+  },
 );
 
 /**
@@ -115,19 +120,25 @@ export function definicaoDoEfeito(
 
 
 /**
- * As três espécies de efeito, e a que cada um é. Moram no mesmo arquivo e têm
- * o mesmo formato, mas um não serve no lugar do outro, e cada espécie tem as
- * suas listas e a sua janela:
+ * As quatro espécies de efeito, e a que cada um é. Moram no mesmo arquivo e
+ * têm o mesmo formato, mas um não serve no lugar do outro, e cada espécie tem
+ * as suas listas e a sua janela:
  *
+ * - `ambiente` -- o que declara `ambiente`: cobre a cena inteira, na lente.
+ *   Vence as outras três: o "+" do Compêndio cria todo efeito com `area.cor`,
+ *   e o ambiente novo pareceria um efeito de área.
  * - `disparo` -- o que declara `disparo`: sai de um ponto e vai até outro.
- *   Vence as outras duas, porque ele também leva chão e elementos (são o cone
- *   e o estouro dele), e com eles pareceria um efeito de área.
+ *   Vence a área, porque ele também leva chão e elementos (são o cone e o
+ *   estouro dele), e com eles pareceria um efeito de área.
  * - `area` -- o que declara `area`: pinta o chão de uma região do mapa.
  * - `personagem` -- o resto: pinta a figura de quem está com uma condição.
  */
-export type EspecieDeEfeito = "personagem" | "area" | "disparo";
+export type EspecieDeEfeito = "personagem" | "area" | "disparo" | "ambiente";
 
-export function especieDoEfeito(efeito: Pick<DefinicaoDeEfeito, "area" | "disparo">): EspecieDeEfeito {
+export function especieDoEfeito(
+  efeito: Pick<DefinicaoDeEfeito, "area" | "disparo" | "ambiente">,
+): EspecieDeEfeito {
+  if (efeito.ambiente) return "ambiente";
   if (efeito.disparo) return "disparo";
   return efeito.area ? "area" : "personagem";
 }
@@ -328,6 +339,7 @@ export function copiaParaACampanha(
   if (copia.area?.foco) imagens(copia.area.foco);
   if (copia.base) imagens(copia.base);
   if (copia.disparo?.projetil) imagens(copia.disparo.projetil);
+  for (const camada of copia.ambiente?.camadas ?? []) imagens(camada);
   if (copia.interno) copia.interno.textura = referencia(copia.interno.textura) ?? "";
   if (copia.particulas?.imagem) copia.particulas.imagem = referencia(copia.particulas.imagem);
 
@@ -434,6 +446,22 @@ export function focoDaArea(
   const definicao = definicaoDoEfeito(pedido.efeito, deFora);
   const foco = definicao?.area?.foco;
   return definicao && foco ? resolverImagem(definicao, foco, pedido.cor) : undefined;
+}
+
+/**
+ * A imagem de uma camada de ambiente para esta tela, na cor dele, ou
+ * `undefined` quando o arquivo não tem endereço. Sem quadros: a camada anda
+ * deslizando. Os números são de `ambienteDaCena`.
+ */
+export function imagemDaCamada(
+  definicao: DefinicaoDeEfeito,
+  camada: CamadaDoAmbiente,
+  cor: string,
+): ImagemResolvida | undefined {
+  if (typeof camada.imagem !== "string" || !camada.imagem) return undefined;
+
+  const { imagem, mipmaps, cores } = camada;
+  return resolverImagem(definicao, { imagem, mipmaps, cores }, cor);
 }
 
 /** O projétil pronto para desenhar, com o giro que o deita no voo. */
