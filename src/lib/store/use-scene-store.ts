@@ -228,7 +228,8 @@ type SceneStore = {
    */
   moverPersonagemParaPasta: (
     personagemId: string,
-    lista: "players" | "npcs",
+    // `compendio` é a árvore dos moldes, na janela do Compêndio.
+    lista: "players" | "npcs" | "compendio",
     pastaId: string | undefined,
   ) => void;
   /**
@@ -236,7 +237,12 @@ type SceneStore = {
    * a raiz. Mesmo desenho do personagem: o item vive num índice do vault, e a
    * pasta guarda os ids dele em `membros`.
    */
-  moverItemParaPasta: (itemId: string, pastaId: string | undefined) => void;
+  moverItemParaPasta: (
+    itemId: string,
+    pastaId: string | undefined,
+    // `compendio-itens` é a árvore dos moldes de item, no Compêndio.
+    lista?: "itens" | "compendio-itens",
+  ) => void;
 
   /**
    * As notas `.md`. O arquivo já existe quando a nota entra -- quem o cria é
@@ -804,7 +810,7 @@ export const useSceneStore = create<SceneStore>((set, get) => {
    */
   function moverMembro(
     membroId: string,
-    lista: "players" | "npcs" | "itens",
+    lista: "players" | "npcs" | "itens" | "compendio" | "compendio-itens",
     pastaId: string | undefined,
   ) {
     const { board } = get();
@@ -1217,8 +1223,8 @@ export const useSceneStore = create<SceneStore>((set, get) => {
       moverMembro(personagemId, lista, pastaId);
     },
 
-    moverItemParaPasta(itemId, pastaId) {
-      moverMembro(itemId, "itens", pastaId);
+    moverItemParaPasta(itemId, pastaId, lista = "itens") {
+      moverMembro(itemId, lista, pastaId);
     },
 
     addNota(nota) {

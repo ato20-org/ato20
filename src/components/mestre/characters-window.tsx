@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  BookMarked,
   FileInput,
   FileUp,
   FolderPlus,
@@ -108,6 +109,7 @@ import {
   removeCharacter,
   renameCharacter,
 } from "@/lib/vault/characters";
+import { guardarNoCompendio } from "@/lib/vault/compendio";
 import type { Personagem } from "@/types/character";
 import type { AssetMeta, Pasta } from "@/types/scene";
 
@@ -152,7 +154,7 @@ const TAMANHO_PADRAO = { x: 140, y: 187 };
  * concordar: o arrasto ainda multiplica isto pelo que a roda pediu, e uma base
  * diferente faria a roda parada dar um token de outro tamanho que o botao.
  */
-function tamanhoDoToken(miniatura: AssetMeta | undefined) {
+export function tamanhoDoToken(miniatura: AssetMeta | undefined) {
   return miniatura?.naturalWidth && miniatura.naturalHeight
     ? fitInitialSize(miniatura.naturalWidth, miniatura.naturalHeight)
     : TAMANHO_PADRAO;
@@ -610,6 +612,26 @@ export function CharactersBody() {
             )}
           </SubContent>
         </Sub>
+
+        {/* Uma CÓPIA vira molde: o que está em jogo continua como está. É o
+            caminho do NPC que o mestre montou na hora e quer de novo. */}
+        <Item
+          onClick={() =>
+            void guardarNoCompendio(personagem.id).then(
+              (molde) => {
+                recarregar();
+                toast.success(textoDoMestre.compendio.guardadoNoCompendio(molde.nome));
+              },
+              (cause: unknown) =>
+                toast.error(
+                  cause instanceof Error ? cause.message : textoDoMestre.compendio.falhou,
+                ),
+            )
+          }
+        >
+          <BookMarked />
+          {textoDoMestre.compendio.guardarNoCompendio}
+        </Item>
 
         <Item
           onClick={() => usePacoteStore.getState().abrirExportar({ personagens: [personagem.id] })}

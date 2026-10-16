@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
+  BookMarked,
   ChevronRight,
   File,
   FileAudio,
@@ -15,6 +16,8 @@ import {
   RadioTower,
   Trash2,
   TriangleAlert,
+  Upload,
+  UserPlus,
   UserRound,
   X,
   Zap,
@@ -32,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { RetratoDesfocado } from "@/components/mestre/retrato-desfocado";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -61,6 +65,7 @@ import { useFecharJanela } from "@/hooks/use-fechar-janela";
 import { useFontesDeRetrato } from "@/hooks/use-fontes-de-retrato";
 import { fonteDaUrl, urlDaFonte } from "@/lib/extensoes/fontes";
 import { comum } from "@/lib/i18n/comum";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
 import { t } from "@/lib/i18n/personagens";
 import { rico } from "@/lib/i18n/rico";
 import { usePaginaVivaSuportada } from "@/lib/motor";
@@ -70,6 +75,9 @@ import {
   imageMimeByName,
   type AttachmentKind,
 } from "@/lib/attachments/kind";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { compendioDaMaquinaMudou } from "@/lib/store/use-compendio-store";
+import { levarAoCompendio, porEmJogo } from "@/lib/vault/compendio";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { chaveDe, type ConteudoJanela } from "@/lib/store/use-window-store";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
@@ -142,11 +150,16 @@ const ICONE: Record<AttachmentKind, typeof File> = {
  */
 export function CharacterBody({ personagemId }: { personagemId: string }) {
   const { personagens, jogadores, recarregar } = useCharacters();
+  // O molde do Compêndio abre na mesma ficha: é a mesma ficha, e editá-la é o
+  // que se faz para preparar o goblin. Ver `Personagem.compendio`.
+  const moldes = useCharactersStore((state) => state.moldes);
   const fecharJanela = useFecharJanela();
   const abrirJanela = useAbrirJanela();
 
   const personagem =
-    personagens?.find((atual) => atual.id === personagemId) ?? null;
+    personagens?.find((atual) => atual.id === personagemId) ??
+    moldes?.find((atual) => atual.id === personagemId) ??
+    null;
 
   const chave = chaveDe({ tipo: "personagem", personagemId });
 
@@ -154,8 +167,8 @@ export function CharacterBody({ personagemId }: { personagemId: string }) {
   // quem não existe mais sai da tela em vez de ficar mostrando o último retrato
   // dele. `personagens === null` é "ainda não leu", e não "não existe".
   useEffect(() => {
-    if (personagens !== null && !personagem) fecharJanela(chave);
-  }, [personagens, personagem, fecharJanela, chave]);
+    if (personagens !== null && moldes !== null && !personagem) fecharJanela(chave);
+  }, [personagens, moldes, personagem, fecharJanela, chave]);
 
   if (!personagem) {
     return <p className="text-muted-foreground p-4 text-xs">{t.geral.lendo}</p>;
@@ -284,6 +297,9 @@ function Ficha({
 
   // Lida no primeiro render, e não num efeito: ver `abaLembrada`.
   const [aba, setAba] = useState<AbaDaFicha>(() => abaLembrada(personagem.id));
+  // A ficha de um molde do Compêndio: sem Arquivos, sem condições, sem dono, e
+  // com os gestos do Compêndio no cabeçalho. Ver `Personagem.compendio`.
+  const molde = Boolean(personagem.compendio);
 
   const raizRef = useRef<HTMLDivElement>(null);
   const barraAoLado = useBarraAoLado(raizRef);
@@ -329,7 +345,9 @@ function Ficha({
           {/* `gap-0`: o `Tabs` separa lista e painel por padrão, e aqui a lista
               é um cabeçalho colado no conteúdo. */}
           <Tabs
-            value={aba}
+            // O molde não tem Arquivos: a aba lembrada de quando ele era (ou
+            // de quem ele copiou) cai na Ficha.
+            value={molde && aba === "arquivos" ? "ficha" : aba}
             onValueChange={(valor) => {
               setAba(valor as AbaDaFicha);
               lembrarAba(personagem.id, valor as AbaDaFicha);
@@ -358,14 +376,19 @@ function Ficha({
                   recebendo && "ring-primary text-foreground ring-2",
                 )}
               >
-                {t.inventario.titulo}
+                {/* No molde, o que cada cópia leva ao entrar em jogo. */}
+                {molde ? t.ficha.equipamento : t.inventario.titulo}
                 <Contagem quantos={inventario.itens?.length} />
               </TabsTrigger>
 
-              <TabsTrigger value="arquivos" className="flex-none">
-                {t.ficha.arquivos}
-                <Contagem quantos={soltos.length} />
-              </TabsTrigger>
+              {/* Arquivo é de um personagem que existe: a ficha que o jogador
+                  mandou, o print da magia. O molde ainda não é ninguém. */}
+              {molde ? null : (
+                <TabsTrigger value="arquivos" className="flex-none">
+                  {t.ficha.arquivos}
+                  <Contagem quantos={soltos.length} />
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {/* A rolagem é das abas, e o cabeçalho fica parado: quem é o
@@ -519,6 +542,16 @@ export function OQueVaiJunto() {
  * Quem joga com ele vai para o 👤 pelo mesmo motivo: vincula-se uma vez, e a
  * resposta para "de quem é este?" continua escrita embaixo do nome.
  */
+/**
+ * O fundo desfocado some de cima para baixo: a cor fica atrás do retrato e do
+ * nome, e não chega às abas. A mesma máscara do card do item, com as duas
+ * grafias porque o WebKitGTK ainda lê a prefixada.
+ */
+const MASCARA_DO_FUNDO: CSSProperties = {
+  maskImage: "linear-gradient(to bottom, black 30%, transparent 100%)",
+  WebkitMaskImage: "linear-gradient(to bottom, black 30%, transparent 100%)",
+};
+
 function Cabecalho({
   personagem,
   jogadores,
@@ -556,8 +589,26 @@ function Cabecalho({
    */
   const [camposAbertos, setCamposAbertos] = useState(false);
 
+  // O retrato, e o token quando não há retrato: a cor da ficha.
+  const imagemDoFundo = personagem.retrato ?? personagem.miniatura;
+
   return (
-    <div className="flex shrink-0 items-start gap-3 p-3 pb-2">
+    // `isolate`: o fundo desfocado vai em `-z-10`, atrás do retrato e do nome
+    // e na frente do fundo da janela, sem precisar empurrar o resto para cima.
+    <div className="relative isolate flex shrink-0 items-start gap-3 overflow-hidden p-3 pb-2">
+      {/* A cor do personagem atrás do alto da ficha, como no card do item: some
+          de cima para baixo, e não chega às abas, onde a leitura é o que
+          importa. */}
+      {imagemDoFundo ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10"
+          style={MASCARA_DO_FUNDO}
+        >
+          <RetratoDesfocado assetId={imagemDoFundo} />
+        </div>
+      ) : null}
+
       {personagem.retrato ? (
         <Thumb
           url={retrato}
@@ -633,19 +684,39 @@ function Cabecalho({
 
             {/* Quem joga com ele, logo embaixo do nome: e a pergunta que se
                 faz olhando a ficha de longe -- "de quem e este?". No 👤 fica a
-                lista que se EDITA; aqui e so o que ela diz. */}
-            <p className="text-muted-foreground truncate text-xs">
-              {donosNomes.length === 0 ? t.ficha.semDono : donosNomes.join(", ")}
-            </p>
+                lista que se EDITA; aqui e so o que ela diz. O molde nao e de
+                ninguem: no lugar do dono, o que ele e, e as tags dele. */}
+            {personagem.compendio ? (
+              <p className="text-muted-foreground flex min-w-0 items-center gap-1 overflow-hidden text-xs">
+                <BookMarked className="size-3 shrink-0" aria-hidden />
+                <span className="shrink-0">{t.ficha.moldeDoCompendio}</span>
+                {(personagem.tags ?? []).map((tag) => (
+                  <span
+                    key={tag}
+                    className="bg-muted inline-flex h-4 shrink-0 items-center rounded-full px-1.5 text-[10px]"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </p>
+            ) : (
+              <p className="text-muted-foreground truncate text-xs">
+                {donosNomes.length === 0 ? t.ficha.semDono : donosNomes.join(", ")}
+              </p>
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-0.5">
-            <Donos
-              personagem={personagem}
-              jogadores={jogadores}
-              donos={donos}
-              onChanged={onDonosChanged}
-            />
+            {personagem.compendio ? (
+              <AcoesDoMolde personagem={personagem} onChanged={onChanged} />
+            ) : (
+              <Donos
+                personagem={personagem}
+                jogadores={jogadores}
+                donos={donos}
+                onChanged={onDonosChanged}
+              />
+            )}
 
             <Button
               variant="ghost"
@@ -656,11 +727,14 @@ function Cabecalho({
               <Pencil />
             </Button>
 
-            <AbrirFicha
-              ficha={personagem.ficha}
-              onAbrir={onAbrirAnexo}
-              onAnexar={() => setCamposAbertos(true)}
-            />
+            {/* A ficha em PDF é um anexo, e o molde não tem anexos. */}
+            {personagem.compendio ? null : (
+              <AbrirFicha
+                ficha={personagem.ficha}
+                onAbrir={onAbrirAnexo}
+                onAnexar={() => setCamposAbertos(true)}
+              />
+            )}
 
             <Apagar personagem={personagem} onRemoved={onRemoved} />
           </div>
@@ -855,6 +929,69 @@ function Apagar({
  * diálogo dele, e o diálogo mora aqui dentro. Fechar o popover ao clicar no
  * diálogo o desmontaria no primeiro clique.
  */
+/**
+ * O que se faz com um molde, no lugar de "quem joga com ele": pôr em jogo e
+ * guardar no ATO20. Os mesmos gestos do card do Compêndio, para quem está com
+ * a ficha aberta preparando o goblin não precisar voltar à lista.
+ */
+function AcoesDoMolde({
+  personagem,
+  onChanged,
+}: {
+  personagem: Personagem;
+  onChanged: () => void;
+}) {
+  const texto = textoDoMestre.compendio;
+  const falhou = (cause: unknown) =>
+    toast.error(cause instanceof Error ? cause.message : texto.falhou);
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={texto.porEmJogo}
+              onClick={() =>
+                void porEmJogo(personagem.id).then((novo) => {
+                  onChanged();
+                  toast.success(texto.emJogo(novo.nome));
+                }, falhou)
+              }
+            >
+              <UserPlus />
+            </Button>
+          }
+        />
+        <TooltipContent>{texto.porEmJogo}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={texto.guardarNoAto20}
+              onClick={() =>
+                void levarAoCompendio([personagem.id], []).then(() => {
+                  compendioDaMaquinaMudou();
+                  toast.success(texto.guardadoNoAto20(personagem.nome));
+                }, falhou)
+              }
+            >
+              <Upload />
+            </Button>
+          }
+        />
+        <TooltipContent>{texto.guardarNoAto20}</TooltipContent>
+      </Tooltip>
+    </>
+  );
+}
+
 function Donos({
   personagem,
   jogadores,

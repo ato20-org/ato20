@@ -72,6 +72,21 @@ export type FonteDoArrasto =
    * ao mapa, que é onde só a imagem diz alguma coisa; vai a todo o resto.
    */
   | { tipo: "item"; itemId: string; personagemId?: string; url?: string }
+  /**
+   * Um molde do Compêndio. Solto no mapa, ENTRA EM JOGO: vira um personagem
+   * novo ("Goblin 2"), e é ele que ganha a peça -- quatro goblins com o mesmo
+   * personagem dividiriam a mesma vida. Ver `porEmJogo`.
+   *
+   * `assetId` é a miniatura do molde, que a cópia divide com ele: é o que a
+   * sombra desenha enquanto a ficha nova ainda não existe.
+   */
+  | { tipo: "molde"; personagemId: string; assetId: string }
+  /**
+   * Um molde de ITEM do Compêndio. Solto no mapa, entra no catálogo -- vira um
+   * item de verdade -- e é a cópia que ganha a peça. A URL é a da imagem
+   * desenhada, pela razão de `item`: pode ser a foto do jogador.
+   */
+  | { tipo: "molde-item"; itemId: string; url?: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -138,7 +153,10 @@ export type ArrastoDeToken = {
 
 /** O arquivo do acervo que está sendo arrastado, quando há um. */
 export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
-  return fonte.tipo === "item" || fonte.tipo === "nota" || fonte.tipo === "cena"
+  return fonte.tipo === "item" ||
+    fonte.tipo === "molde-item" ||
+    fonte.tipo === "nota" ||
+    fonte.tipo === "cena"
     ? undefined
     : fonte.assetId || undefined;
 }
@@ -208,6 +226,8 @@ export function aceita(
       return (
         fonte.tipo !== "cena" &&
         !(fonte.tipo === "personagem" && !fonte.assetId) &&
+        !(fonte.tipo === "molde" && !fonte.assetId) &&
+        !(fonte.tipo === "molde-item" && !fonte.url) &&
         !(fonte.tipo === "item" && !fonte.url)
       );
     case "nota":

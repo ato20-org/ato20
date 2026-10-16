@@ -241,9 +241,14 @@ function Principal({
           <AparenciasPersonagem personagem={personagem} onChanged={onChanged} />
         </div>
 
-        <div className="order-4 min-w-0 @[38rem]/pagina:order-0">
-          <CondicoesPersonagem personagem={personagem} onChanged={onChanged} />
-        </div>
+        {/* Condição é estado de quem está em jogo -- caído, envenenado --, e
+            um molde do Compêndio ainda não está. Um goblin preparado
+            "envenenado" nasceria envenenado em cada cópia. */}
+        {personagem.compendio ? null : (
+          <div className="order-4 min-w-0 @[38rem]/pagina:order-0">
+            <CondicoesPersonagem personagem={personagem} onChanged={onChanged} />
+          </div>
+        )}
       </div>
 
       {/* Um plugin desenha o que quiser ali, e meia coluna seria pouco para

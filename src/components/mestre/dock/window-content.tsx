@@ -4,6 +4,8 @@ import { AudioLibrary } from "@/components/mestre/audio-library";
 import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
+import { CompendioBody, CompendioDoAto20Body } from "@/components/mestre/compendio-window";
+import { FundoDoPersonagem } from "@/components/mestre/retrato-desfocado";
 import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
 import {
@@ -24,6 +26,7 @@ import { ArquivosList } from "@/components/mestre/arquivos-list";
 import { SceneList } from "@/components/mestre/scene-list";
 import { useCharacters } from "@/hooks/use-characters";
 import { t } from "@/lib/i18n/mestre";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useItensStore } from "@/lib/store/use-itens-store";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useMemo } from "react";
@@ -75,6 +78,10 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   // Logo depois de Personagens: é para eles que os itens são arrastados, e
   // quem abre um costuma querer o outro ao lado.
   { conteudo: { tipo: "itens" }, titulo: t.janelas.itens },
+  // Depois dos dois: é de onde vêm o goblin que entra em Personagens e o item
+  // que entra no catálogo.
+  { conteudo: { tipo: "compendio" }, titulo: t.janelas.compendio },
+  { conteudo: { tipo: "compendio-ato20" }, titulo: t.janelas.compendioAto20 },
   { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
   { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
   { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
@@ -125,10 +132,17 @@ export function useTelas(): Array<{
  */
 export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
   const { personagens } = useCharacters();
+  const moldes = useCharactersStore((state) => state.moldes);
   const extensoes = useExtensoesStore((state) => state.extensoes);
   const nomeDoItem = useItensStore((state) =>
     conteudo.tipo === "item"
       ? state.itens?.find((item) => item.id === conteudo.itemId)?.nome
+      : undefined,
+  );
+  // O molde de item abre na mesma janela, e a aba diz que é molde.
+  const nomeDoMoldeDeItem = useItensStore((state) =>
+    conteudo.tipo === "item"
+      ? state.moldes?.find((item) => item.id === conteudo.itemId)?.nome
       : undefined,
   );
 
@@ -140,6 +154,10 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       };
     case "itens":
       return { titulo: t.janelas.itens, subtitulo: t.janelas.itensSub };
+    case "compendio":
+      return { titulo: t.janelas.compendio, subtitulo: t.janelas.compendioSub };
+    case "compendio-ato20":
+      return { titulo: t.janelas.compendioAto20, subtitulo: t.janelas.compendioAto20Sub };
     case "item": {
       const dono = conteudo.personagemId
         ? personagens?.find((atual) => atual.id === conteudo.personagemId)?.nome
@@ -148,20 +166,27 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       // "Item" enquanto o catálogo não chegou, pela razão da ficha: título que
       // aparece depois faz a aba pular.
       return {
-        titulo: nomeDoItem ?? t.janelas.item,
-        subtitulo: dono ? t.janelas.itemNaMochila(dono) : t.janelas.itemSub,
+        titulo: nomeDoItem ?? nomeDoMoldeDeItem ?? t.janelas.item,
+        subtitulo: nomeDoMoldeDeItem
+          ? t.janelas.moldeSub
+          : dono
+            ? t.janelas.itemNaMochila(dono)
+            : t.janelas.itemSub,
       };
     }
     case "personagem": {
       const nome = personagens?.find(
         (atual) => atual.id === conteudo.personagemId,
       )?.nome;
+      // O molde se edita na mesma ficha, e a aba diz que é molde: mexer no
+      // goblin preparado não é mexer no que está em jogo.
+      const molde = moldes?.find((atual) => atual.id === conteudo.personagemId);
 
       // "Personagem" enquanto o índice não chegou, e não vazio: título que
       // aparece depois faz a largura da aba pular na frente de quem olha.
       return {
-        titulo: nome ?? t.janelas.personagem,
-        subtitulo: t.janelas.personagemSub,
+        titulo: nome ?? molde?.nome ?? t.janelas.personagem,
+        subtitulo: molde ? t.janelas.moldeSub : t.janelas.personagemSub,
       };
     }
     case "anexo":
@@ -251,14 +276,17 @@ export function AcoesDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
 /**
  * O fundo que a tela põe ATRÁS do cabeçalho da moldura flutuante.
  *
- * Hoje é só o item: a imagem dele desfocada, a mesma do alto do card, para a
- * janela ter a cor do item também no cabeçalho -- e, recolhida, ser
- * reconhecida por ela, quando o cabeçalho é tudo o que sobra.
+ * O item e a ficha: a imagem desfocada, a mesma do alto do card, para a
+ * janela ter a cor do item ou do personagem também no cabeçalho -- e,
+ * recolhida, ser reconhecida por ela, quando o cabeçalho é tudo o que sobra.
+ * Três fichas recolhidas no pé do palco se distinguem pela cor do retrato.
  */
 export function FundoDaJanela({ conteudo }: { conteudo: ConteudoJanela }) {
   switch (conteudo.tipo) {
     case "item":
       return <FundoDoItem itemId={conteudo.itemId} />;
+    case "personagem":
+      return <FundoDoPersonagem personagemId={conteudo.personagemId} />;
     default:
       return null;
   }
@@ -285,6 +313,8 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     // O catálogo cresce como o chat: uma campanha longa junta centenas de
     // itens, e crescer com eles cobriria o palco na primeira abertura.
     case "itens":
+    case "compendio":
+    case "compendio-ato20":
       return 480;
     default:
       return undefined;
@@ -303,6 +333,11 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     case "personagens":
     case "itens":
       return 256;
+    // Um pouco mais larga que as listas: a linha tem a ação de trazer ou pôr
+    // em jogo ao lado do nome, e as abas de cima são duas fileiras.
+    case "compendio":
+    case "compendio-ato20":
+      return 320;
     // Larga o bastante para a imagem do item ser vista, e não um ícone, e
     // estreita o bastante para caber ao lado da ficha de quem o carrega.
     case "item":
@@ -414,6 +449,11 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
       return <CharactersBody />;
     case "itens":
       return <ItensBody />;
+    case "compendio":
+      return <CompendioBody />;
+    // Da MÁQUINA, e não da campanha: a mesma de qualquer mesa, como a Estante.
+    case "compendio-ato20":
+      return <CompendioDoAto20Body />;
     case "item":
       return <ItemBody itemId={conteudo.itemId} personagemId={conteudo.personagemId} />;
     case "personagem":

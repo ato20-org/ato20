@@ -96,6 +96,13 @@ export type Item = {
   autor: AnexoAutor;
   /** Só no item do jogador: o personagem pelo qual ele o criou. */
   criadoPor?: string;
+  /** As tags do Compêndio, para filtrar os itens. Espelho de `Item::tags`. */
+  tags?: string[];
+  /**
+   * Um molde do Compêndio, e não um item da campanha: fora da janela de Itens
+   * e das mochilas. Pôr em jogo copia no catálogo. Espelho de `Item::compendio`.
+   */
+  compendio?: boolean;
   criadoEm: number;
 };
 

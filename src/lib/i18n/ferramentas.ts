@@ -445,6 +445,7 @@ const pt = {
 
   fantasma: {
     naoDeuItem: "Não deu para pôr o item na mesa.",
+    naoDeuMolde: "Não deu para pôr o molde em jogo.",
     naGrade: (largura: string, altura: string) => `${largura} × ${altura} na grade`,
   },
 
@@ -909,6 +910,7 @@ const en: typeof pt = {
 
   fantasma: {
     naoDeuItem: "Couldn't put the item on the table.",
+    naoDeuMolde: "Couldn't put the template in play.",
     naGrade: (largura, altura) => `${largura} × ${altura} on the grid`,
   },
 

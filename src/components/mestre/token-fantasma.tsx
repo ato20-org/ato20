@@ -15,7 +15,9 @@ import {
   tamanhoDoArrasto,
   useTokenDragStore,
 } from "@/lib/store/use-token-drag-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { itensMudaram } from "@/lib/store/use-itens-store";
+import { itemEmJogo, porEmJogo } from "@/lib/vault/compendio";
 import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
 
@@ -67,7 +69,9 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
     arrasto ? assetIdDoArrasto(arrasto.fonte) : undefined,
   );
   const url =
-    arrasto?.fonte.tipo === "item" ? arrasto.fonte.url : doAcervo;
+    arrasto?.fonte.tipo === "item" || arrasto?.fonte.tipo === "molde-item"
+      ? arrasto.fonte.url
+      : doAcervo;
 
   const addItem = useSceneStore((state) => state.addItem);
   const select = useSelectionStore((state) => state.select);
@@ -156,6 +160,45 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
                 : t.fantasma.naoDeuItem,
             ),
         );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "molde") {
+        // O molde do Compêndio entra em jogo ANTES de virar peça: a peça
+        // aponta para o personagem, e o personagem é a cópia, não o molde. A
+        // imagem é a mesma -- a cópia divide a miniatura com o molde --, então
+        // a peça nasce com o que a sombra mostrou.
+        const { personagemId, assetId } = solto.fonte;
+
+        void porEmJogo(personagemId).then(
+          (novo) => {
+            por(assetId, { personagemId: novo.id });
+            useCharactersStore.getState().recarregar();
+          },
+          (cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+        );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "molde-item") {
+        // O molde entra no catálogo, e a cópia é que vira peça: a peça leva o
+        // `itemId`, e o molde não é item do jogo. Depois, a promoção da imagem,
+        // como no item comum -- a peça precisa de um asset de verdade.
+        const { itemId } = solto.fonte;
+
+        void itemEmJogo(itemId)
+          .then((novo) =>
+            promoverImagemDoItem(novo.id).then((asset) => {
+              por(asset.id, { itemId: novo.id });
+              itensMudaram();
+            }),
+          )
+          .catch((cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+          );
 
         return;
       }

@@ -1,4 +1,6 @@
 import {
+  BookCopy,
+  BookMarked,
   BookOpen,
   Clapperboard,
   Dices,
@@ -72,6 +74,12 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     // A caixa aberta: é o item que se abriu para ler.
     case "item":
       return PackageOpen;
+    // O livro marcado: o que se prepara antes e se consulta durante.
+    case "compendio":
+      return BookMarked;
+    // As cópias: o que se guardou daqui para levar a outra mesa.
+    case "compendio-ato20":
+      return BookCopy;
     case "personagem":
       // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
       // ícone na mesma tira não distinguem nada.
