@@ -360,6 +360,13 @@ them into view, and `janela:chat`/`janela:rolagens` work as replacement
 targets. The Rolls window is the dice one: that is where a dice-rules plugin
 plugs in.
 
+The Gallery (every image in the campaign, including the scene backdrop, the
+portrait and the character attachments that Files doesn't list) is built in
+too: `janelas.abrir({ tela: "galeria" })` brings it into view, `janela:galeria`
+works as a replacement target, and right-clicking a library image in it shows
+the `linha.imagem` items, with the same context (`{ assetId }`). Character
+attachments don't get them: they have no `assetId`.
+
 ## Extension points: menus, sections, replacements and tools
 
 The request was for a plugin to be able to create new options on elements and

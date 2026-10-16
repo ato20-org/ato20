@@ -67,6 +67,9 @@ export type ConteudoJanela =
   | { tipo: "retratos" }
   // A Biblioteca (`imagens`) saiu: o acervo entrou na árvore de Arquivos. O
   // layout guardado com ela migra em `semBiblioteca`.
+  // A Galeria não é ela de volta: é TODA imagem, inclusive o fundo de cena e o
+  // retrato que Arquivos esconde, e sem pasta. Ver `GaleriaBody`.
+  | { tipo: "galeria" }
   | { tipo: "sons" }
   | { tipo: "camadas" }
   | { tipo: "iniciativa" }
@@ -131,6 +134,7 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     case "chat":
     case "cenas":
     case "quadros":
+    case "galeria":
     case "retratos":
     case "sons":
     case "camadas":

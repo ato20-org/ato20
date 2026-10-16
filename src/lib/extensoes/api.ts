@@ -109,6 +109,8 @@ export type JanelaDeExtensao =
         | "chat"
         | "cenas"
         | "quadros"
+        /** Toda imagem da campanha, inclusive as que Arquivos esconde. */
+        | "galeria"
         | "retratos"
         /** A Biblioteca de antes: abre Arquivos, onde o acervo está agora. */
         | "imagens"

@@ -1197,6 +1197,7 @@ pub const JANELAS_DE_FABRICA: &[&str] = &[
     "chat",
     "cenas",
     "quadros",
+    "galeria",
     "retratos",
     "imagens",
     "sons",

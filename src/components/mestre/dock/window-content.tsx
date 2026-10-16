@@ -6,6 +6,7 @@ import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { ConfiguracaoDaCampanhaBody } from "@/components/mestre/configuracao-da-campanha";
 import { EstanteBody } from "@/components/mestre/estante-window";
+import { GaleriaBody } from "@/components/mestre/galeria-window";
 import {
   ApagarItemNoTopo,
   FundoDoItem,
@@ -67,6 +68,9 @@ export type Rotulo = { titulo: string; subtitulo?: string };
 export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "cenas" }, titulo: t.janelas.cenas },
   { conteudo: { tipo: "quadros" }, titulo: t.janelas.arquivos },
+  // Ao lado de Arquivos: é o mesmo acervo, sem pasta e sem esconder o que tem
+  // dono -- quem não acha a imagem lá a procura aqui.
+  { conteudo: { tipo: "galeria" }, titulo: t.janelas.galeria },
   { conteudo: { tipo: "retratos" }, titulo: t.janelas.retratos },
   { conteudo: { tipo: "camadas" }, titulo: t.janelas.camadas },
   { conteudo: { tipo: "sons" }, titulo: t.janelas.sons },
@@ -198,6 +202,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.cenas, subtitulo: t.janelas.cenasSub };
     case "quadros":
       return { titulo: t.janelas.arquivos, subtitulo: t.janelas.arquivosSub };
+    case "galeria":
+      return { titulo: t.janelas.galeria, subtitulo: t.janelas.galeriaSub };
     case "retratos":
       return { titulo: t.janelas.retratos };
     case "sons":
@@ -286,6 +292,9 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     // itens, e crescer com eles cobriria o palco na primeira abertura.
     case "itens":
       return 480;
+    // Pela mesma razão: o acervo de uma campanha longa é maior que o palco.
+    case "galeria":
+      return 480;
     default:
       return undefined;
   }
@@ -328,6 +337,10 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // volta para cima das abas.
     case "retratos":
       return 760;
+    // Quatro cartões por linha: a miniatura grande o bastante para reconhecer
+    // o mapa sem abrir, e o nome inteiro na maioria dos arquivos.
+    case "galeria":
+      return 480;
     default:
       return 288;
   }
@@ -399,6 +412,7 @@ const SUBSTITUIVEIS = new Set<ConteudoJanela["tipo"]>([
   "chat",
   "cenas",
   "quadros",
+  "galeria",
   "retratos",
   "sons",
   "camadas",
@@ -455,6 +469,9 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
       return <SceneList ready={pronta} />;
     case "quadros":
       return <ArquivosList ready={pronta} />;
+    // Nem cena nem pronta: é o acervo, lido pelo store dele.
+    case "galeria":
+      return <GaleriaBody />;
     // Retrato não depende de cena: ele é da sessão e atravessa a troca.
     case "retratos":
       return <RetratosWindow />;

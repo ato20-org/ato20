@@ -10,6 +10,7 @@ use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
 use crate::error::{AppError, AppResult};
 use crate::estante;
+use crate::galeria::{self, AnexoNaGaleria, ArquivoDaGaleria, ProgramasDoArquivo};
 use crate::tailscale;
 use crate::uvtt;
 use crate::extensoes::{self, Extensao};
@@ -447,6 +448,97 @@ pub fn board_save(state: State<'_, AppState>, board: Board) -> AppResult<()> {
 #[tauri::command]
 pub fn board_save_patch(state: State<'_, AppState>, patch: BoardPatch) -> AppResult<()> {
     state.with_vault(|vault| board::save_patch(vault, &patch))
+}
+
+// --- galeria ----------------------------------------------------------------
+
+/// Todo anexo de personagem que e imagem. O acervo a tela ja le por
+/// `asset_list`; isto e a outra metade da Galeria. Ver `galeria::anexos`.
+#[tauri::command]
+pub async fn galeria_anexos(state: State<'_, AppState>) -> AppResult<Vec<AnexoNaGaleria>> {
+    let shared = state.vault.clone();
+
+    // Fora da thread da janela: e um `read_dir` por personagem e um cabecalho
+    // lido por imagem, e uma campanha longa tem centenas.
+    em_segundo_plano(move || com_vault(&shared, galeria::anexos)).await
+}
+
+/// A miniatura de um anexo, pelo canal binario. Ver `galeria::miniatura_do_anexo`.
+#[tauri::command]
+pub async fn galeria_anexo_mini(
+    state: State<'_, AppState>,
+    personagem_id: String,
+    autor: Autor,
+    arquivo: String,
+) -> AppResult<tauri::ipc::Response> {
+    let alvo = ArquivoDaGaleria::Anexo {
+        personagem_id: personagem_id.clone(),
+        autor,
+        arquivo: arquivo.clone(),
+    };
+
+    // A tranca so ate saber o caminho: a reducao roda sem ela.
+    let (vault, origem) =
+        state.with_vault(|vault| Ok((vault.clone(), galeria::caminho(vault, &alvo)?.0)))?;
+
+    let bytes =
+        galeria::miniatura_do_anexo(vault, origem, &personagem_id, autor, &arquivo).await?;
+
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Onde a imagem esta no disco, para a janela de propriedades.
+#[tauri::command]
+pub fn galeria_caminho(state: State<'_, AppState>, alvo: ArquivoDaGaleria) -> AppResult<String> {
+    state.with_vault(|vault| Ok(galeria::para_mostrar(&galeria::caminho(vault, &alvo)?.0)))
+}
+
+/// Abre o gerenciador de arquivos com a imagem selecionada.
+#[tauri::command]
+pub fn galeria_mostrar_na_pasta(
+    state: State<'_, AppState>,
+    alvo: ArquivoDaGaleria,
+) -> AppResult<()> {
+    let (caminho, _) = state.with_vault(|vault| galeria::caminho(vault, &alvo))?;
+
+    galeria::mostrar_na_pasta(&caminho)
+}
+
+/// Os programas que abrem a imagem, para o submenu "Abrir com".
+///
+/// Assincrono porque o GIO le os `.desktop` instalados na primeira pergunta, e
+/// isso nao pode segurar a janela enquanto o menu abre.
+#[tauri::command]
+pub async fn galeria_programas(
+    state: State<'_, AppState>,
+    alvo: ArquivoDaGaleria,
+) -> AppResult<ProgramasDoArquivo> {
+    let (_, mime) = state.with_vault(|vault| galeria::caminho(vault, &alvo))?;
+
+    em_segundo_plano(move || Ok(galeria::programas(&mime))).await
+}
+
+/// Abre a imagem num dos programas de `galeria_programas`, ou no padrao.
+#[tauri::command]
+pub async fn galeria_abrir_com(
+    state: State<'_, AppState>,
+    alvo: ArquivoDaGaleria,
+    programa: Option<String>,
+) -> AppResult<()> {
+    let (caminho, mime) = state.with_vault(|vault| galeria::caminho(vault, &alvo))?;
+
+    em_segundo_plano(move || galeria::abrir_com(&caminho, &mime, programa.as_deref())).await
+}
+
+/// O seletor "Abrir com" do sistema, onde ele existe. Ver `ProgramasDoArquivo::seletor`.
+#[tauri::command]
+pub fn galeria_escolher_programa(
+    state: State<'_, AppState>,
+    alvo: ArquivoDaGaleria,
+) -> AppResult<()> {
+    let (caminho, _) = state.with_vault(|vault| galeria::caminho(vault, &alvo))?;
+
+    galeria::escolher_programa(&caminho)
 }
 
 // --- acervo -----------------------------------------------------------------
