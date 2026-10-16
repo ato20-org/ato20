@@ -28,6 +28,51 @@ export function AjustesDaForma() {
   const setForma = useToolStore((state) => state.setForma);
 
   return (
+    <ControlesDaForma
+      cor={cor}
+      fundo={fundo}
+      espessura={espessura}
+      onMudar={(mudanca) =>
+        setForma({
+          ...(mudanca.cor !== undefined ? { corForma: mudanca.cor } : {}),
+          ...(mudanca.fundo !== undefined ? { fundoForma: mudanca.fundo } : {}),
+          ...(mudanca.espessura !== undefined ? { espessuraForma: mudanca.espessura } : {}),
+        })
+      }
+    />
+  );
+}
+
+/**
+ * O que uma mudança nos controles da forma pede. `null` volta ao padrão: a cor
+ * do tema, ou o vazado. Ausente não mexe.
+ */
+export type MudancaNaForma = { cor?: string | null; fundo?: string | null; espessura?: number };
+
+/**
+ * Os controles da forma, por prop: os mesmos para a PRÓXIMA forma (ver
+ * `AjustesDaForma`) e para as que estão selecionadas no mapa -- ver
+ * `PainelDeElementos`. Um desenho só, e duas origens para o valor.
+ */
+export function ControlesDaForma({
+  cor,
+  fundo,
+  espessura,
+  onMudar,
+}: {
+  cor?: string;
+  fundo?: string;
+  espessura: number;
+  onMudar: (mudanca: MudancaNaForma) => void;
+}) {
+  const setForma = (forma: { corForma?: string | null; fundoForma?: string | null; espessuraForma?: number }) =>
+    onMudar({
+      ...(forma.corForma !== undefined ? { cor: forma.corForma } : {}),
+      ...(forma.fundoForma !== undefined ? { fundo: forma.fundoForma } : {}),
+      ...(forma.espessuraForma !== undefined ? { espessura: forma.espessuraForma } : {}),
+    });
+
+  return (
     <>
       <div className="space-y-1.5">
         <span className="text-muted-foreground text-[10px]">
@@ -130,11 +175,9 @@ export function AjustesDaForma() {
         </div>
 
         <Slider
-          value={[
-            ESPESSURAS_LAPIS.indexOf(
-              espessura as (typeof ESPESSURAS_LAPIS)[number],
-            ),
-          ]}
+          // A mais perto da lista: a forma do mapa pode ter uma espessura que o
+          // lápis não oferece -- a colada de outra campanha, a escalada.
+          value={[indiceDaEspessura(espessura)]}
           min={0}
           max={ESPESSURAS_LAPIS.length - 1}
           step={1}
@@ -147,4 +190,13 @@ export function AjustesDaForma() {
       </div>
     </>
   );
+}
+
+/** O degrau do lápis mais perto da espessura. */
+function indiceDaEspessura(espessura: number): number {
+  let melhor = 0;
+  ESPESSURAS_LAPIS.forEach((opcao, indice) => {
+    if (Math.abs(opcao - espessura) < Math.abs((ESPESSURAS_LAPIS[melhor] ?? 0) - espessura)) melhor = indice;
+  });
+  return melhor;
 }
