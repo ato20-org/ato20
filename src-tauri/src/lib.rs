@@ -9,6 +9,7 @@ mod estante;
 mod extensoes;
 mod galeria;
 mod importar;
+mod mcp;
 mod presenca;
 mod serve;
 mod tailscale;
@@ -20,7 +21,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use commands::AppState;
 use db::AppDb;
@@ -131,6 +132,15 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let db = AppDb::open(&config_dir.join("ato20.db"))?;
 
+            // O cano do MCP, ligado se o mestre o deixou ligado. Os pedidos
+            // saem para a janela por evento, e nao por um fluxo do daemon --
+            // ver `serve::mcp::Ponte`. A janela pode nem existir ainda: o
+            // daemon espera ela dizer que ouve (`mcp_ouvir`).
+            let ponte_do_mcp = Arc::new(mcp::ponte(&db));
+            let janela = app.handle().clone();
+            ponte_do_mcp
+                .ligar_janela(move |pedido| janela.emit_to("main", "mcp-pedido", pedido).is_ok());
+
             // A estante fica no diretorio de DADOS, e nao junto do banco: um
             // manual de trezentas paginas nao e preferencia de maquina. Ver
             // `estante::dir`. O diretorio nasce na primeira importacao -- nao
@@ -166,8 +176,13 @@ pub fn run() {
                 log::warn!("bundle das telas nao encontrado; Espectador e Jogador nao serao servidos");
             }
 
-            let started =
-                serve::spawn(Arc::clone(&vault), web_root, estante.clone(), extensoes.clone())?;
+            let started = serve::spawn(
+                Arc::clone(&vault),
+                web_root,
+                estante.clone(),
+                extensoes.clone(),
+                Arc::clone(&ponte_do_mcp),
+            )?;
             log::info!(
                 "daemon em {} (rede: {:?})",
                 started.addr.url,
@@ -181,6 +196,7 @@ pub fn run() {
             let porta = started.addr.porta;
             std::thread::spawn(move || tailscale::fechar_se_nosso(porta));
 
+            app.manage(ponte_do_mcp);
             app.manage(AppState {
                 vault,
                 db,
@@ -389,6 +405,11 @@ pub fn run() {
             commands::configuracoes_gravar,
             commands::configuracoes_abrir_arquivo,
             presenca::definir_presenca,
+            mcp::mcp_estado,
+            mcp::mcp_ligar,
+            mcp::mcp_trocar_token,
+            mcp::mcp_ouvir,
+            mcp::mcp_responder,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
