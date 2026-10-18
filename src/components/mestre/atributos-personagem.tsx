@@ -529,7 +529,9 @@ export function useMarcarAoFocar() {
 
   return {
     onMouseDown: (evento: MouseEvent<HTMLInputElement>) => {
-      focandoPeloMouse.current = document.activeElement !== evento.currentTarget;
+      // O documento do campo: numa janela solta, o do Mestre nunca tem ele.
+      focandoPeloMouse.current =
+        evento.currentTarget.ownerDocument.activeElement !== evento.currentTarget;
     },
     onFocus: (evento: FocusEvent<HTMLInputElement>) => {
       evento.currentTarget.select();

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/context-menu";
 import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ehElemento } from "@/lib/dom";
 import { t } from "@/lib/i18n/mestre";
 import { aoApertarF2, useRenomearPeloMenu } from "@/hooks/use-renomear-pelo-menu";
 import { t as textoDasPastas } from "@/lib/i18n/arquivos";
@@ -95,8 +96,10 @@ export function useEmCimaDoCartao(): boolean {
  */
 export function daMaoNoCartao(event: ReactPointerEvent): boolean {
   const alvo = event.target;
+  // `ehElemento`, e não `instanceof Element`: o card numa janela solta é de
+  // outro documento, e a classe do Mestre não o reconhece. Ver `lib/dom`.
   return (
-    alvo instanceof Element &&
+    ehElemento(alvo) &&
     event.currentTarget.contains(alvo) &&
     !alvo.closest("input, textarea, [contenteditable]")
   );
@@ -449,7 +452,12 @@ export function ImagemDaMaquina({ assetId }: { assetId: string }) {
       (entradas) => {
         if (entradas.some((entrada) => entrada.isIntersecting)) setPerto(true);
       },
-      { rootMargin: "100% 0px" },
+      // Numa janela solta, a raiz é o documento DELA: a implícita é a do
+      // Mestre, e o card do outro monitor nunca "apareceria".
+      {
+        rootMargin: "100% 0px",
+        ...(aqui.ownerDocument !== document ? { root: aqui.ownerDocument } : {}),
+      },
     );
     observador.observe(aqui);
 

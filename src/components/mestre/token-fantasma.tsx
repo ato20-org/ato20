@@ -249,7 +249,8 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
     });
   }, []);
 
-  if (!arrasto || arrasto.destino?.tipo !== "palco" || scale === 0) return null;
+  if (!arrasto || arrasto.destino?.tipo !== "palco" || arrasto.emOutraJanela || scale === 0)
+    return null;
 
   const { largura, altura } = tamanhoDoArrasto(arrasto);
   const caixa = boxAround(toScene(arrasto.x, arrasto.y), largura, altura);

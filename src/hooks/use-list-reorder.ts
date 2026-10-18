@@ -7,6 +7,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { janelaDe } from "@/lib/dom";
 
 /**
  * Reordenar uma lista arrastando a linha pela alça.
@@ -117,6 +118,8 @@ export function useListReorder<T>(
     event.stopPropagation();
 
     const target = event.currentTarget as HTMLElement;
+    // A janela da lista: a do Mestre, ou a solta em que ela está.
+    const vista = janelaDe(target);
     const { pointerId, clientX: x0, clientY: y0 } = event;
 
     let arrastando = limiar === undefined;
@@ -146,9 +149,9 @@ export function useListReorder<T>(
         native.preventDefault();
       };
 
-      window.addEventListener("click", comer, { capture: true, once: true });
-      window.setTimeout(() => {
-        window.removeEventListener("click", comer, true);
+      vista.addEventListener("click", comer, { capture: true, once: true });
+      vista.setTimeout(() => {
+        vista.removeEventListener("click", comer, true);
       }, 0);
     };
 
