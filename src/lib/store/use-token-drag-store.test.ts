@@ -101,6 +101,23 @@ describe("o card arrastado até uma pasta do Compêndio", () => {
     expect(aceita({ tipo: "molde", personagemId: "g", assetId: "a" }, pasta("compendio-itens"))).toBe(false);
   });
 
+  it("a ficha do plugin cai no mapa, mesmo sem imagem, e não entra em pasta", () => {
+    const ficha: FonteDoArrasto = {
+      tipo: "molde-plugin",
+      extensaoId: "ordem-paranormal",
+      colecaoId: "ameacas",
+      moldeId: "zumbi",
+    };
+
+    // A imagem por URL só é baixada ao trazer: a sombra é a caixa.
+    expect(aceita(ficha, { tipo: "palco" })).toBe(true);
+    expect(aceita({ ...ficha, url: "blob:zumbi" }, { tipo: "palco" })).toBe(true);
+    // A sombra não pede o acervo: a URL do card já vem pronta.
+    expect(assetIdDoArrasto({ ...ficha, url: "blob:zumbi" })).toBeUndefined();
+    // As pastas são da campanha, e a ficha ainda não é.
+    expect(aceita(ficha, pasta("compendio"))).toBe(false);
+  });
+
   it("o disparo não cai no mapa: ele sai pela mira", () => {
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, { tipo: "palco" })).toBe(false);
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-disparos"))).toBe(true);

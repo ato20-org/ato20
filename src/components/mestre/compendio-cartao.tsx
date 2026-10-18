@@ -5,6 +5,7 @@ import {
   Fragment,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -51,6 +52,7 @@ import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import type { FiltroDoCompendio } from "@/lib/mestre/compendio";
 import { MINIATURA } from "@/lib/miniatura";
 import { cn } from "@/lib/utils";
+import { imagemDoBestiario } from "@/lib/vault/bestiario";
 import { imagemDoCompendio, type TipoDeMolde } from "@/lib/vault/compendio";
 import type { Medidor } from "@/types/character";
 import type { ListaDePastasDoCompendio, Pasta } from "@/types/scene";
@@ -440,6 +442,47 @@ export function AcaoDaLinha({
  * alcança a ida ao Rust. Ver `imagemDoCompendio`.
  */
 export function ImagemDaMaquina({ assetId }: { assetId: string }) {
+  return <ImagemPedida chave={assetId} pedir={() => imagemDoCompendio(assetId)} />;
+}
+
+/**
+ * A miniatura de uma imagem da pasta de um plugin, do mesmo jeito: pedida
+ * perto da vista, pelo IPC. `onUrl` entrega o endereço a quem precisa dele
+ * fora do desenho -- o card, que o põe na sombra do arrasto. Ver
+ * `imagemDoBestiario`.
+ */
+export function ImagemDoPlugin({
+  extensaoId,
+  caminho,
+  onUrl,
+}: {
+  extensaoId: string;
+  caminho: string;
+  onUrl?: (url: string | null) => void;
+}) {
+  return (
+    <ImagemPedida
+      chave={`${extensaoId}/${caminho}`}
+      pedir={() => imagemDoBestiario(extensaoId, caminho)}
+      onUrl={onUrl}
+    />
+  );
+}
+
+/**
+ * Uma imagem que vem por IPC, pedida quando a linha chega perto da vista. A
+ * `chave` diz quando é outra imagem; `pedir` e `onUrl` são lidos no efeito
+ * (`useEffectEvent`), e trocar de função a cada render não pede de novo.
+ */
+function ImagemPedida({
+  chave,
+  pedir,
+  onUrl,
+}: {
+  chave: string;
+  pedir: () => Promise<string>;
+  onUrl?: (url: string | null) => void;
+}) {
   const ancora = useRef<HTMLSpanElement>(null);
   const [perto, setPerto] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -464,13 +507,16 @@ export function ImagemDaMaquina({ assetId }: { assetId: string }) {
     return () => observador.disconnect();
   }, [perto]);
 
+  const pedirAgora = useEffectEvent(pedir);
+  const avisar = useEffectEvent((endereco: string | null) => onUrl?.(endereco));
+
   useEffect(() => {
     if (!perto) return;
 
     let ativo = true;
     let criada: string | null = null;
 
-    void imagemDoCompendio(assetId).then(
+    void pedirAgora().then(
       (endereco) => {
         if (!ativo) {
           URL.revokeObjectURL(endereco);
@@ -478,15 +524,19 @@ export function ImagemDaMaquina({ assetId }: { assetId: string }) {
         }
         criada = endereco;
         setUrl(endereco);
+        avisar(endereco);
       },
       () => {},
     );
 
     return () => {
       ativo = false;
-      if (criada) URL.revokeObjectURL(criada);
+      if (criada) {
+        URL.revokeObjectURL(criada);
+        avisar(null);
+      }
     };
-  }, [perto, assetId]);
+  }, [perto, chave]);
 
   return (
     <span ref={ancora} className="absolute inset-0">

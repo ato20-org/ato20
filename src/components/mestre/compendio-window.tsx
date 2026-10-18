@@ -46,6 +46,7 @@ import {
   filtrando,
   GradeDeCartoes,
   ImagemDaMaquina,
+  ImagemDoPlugin,
   Lendo,
   NadaCom,
   useAosPoucos,
@@ -79,6 +80,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
 import { fecharJanela } from "@/lib/extensoes/janelas";
+import { resolverTexto } from "@/lib/extensoes/texto";
 import { chaveDe } from "@/lib/store/use-window-store";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useCharacters } from "@/hooks/use-characters";
@@ -92,6 +94,7 @@ import { fitInitialSize } from "@/lib/geometry/transform";
 import { t as textoDosItens } from "@/lib/i18n/itens";
 import { t } from "@/lib/i18n/mestre";
 import { pastaDoMembro, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
+import { avisarDoTrazido, noIdioma, tagsDosPlugins } from "@/lib/mestre/bestiario";
 import {
   filtrarNoCompendio,
   tagsDaLista,
@@ -105,11 +108,19 @@ import {
 } from "@/lib/store/use-condicoes-do-compendio-store";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
+import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { itensMudaram, useMoldesDeItem } from "@/lib/store/use-itens-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { CORES_LAPIS, useToolStore } from "@/lib/store/use-tool-store";
 import { membroDaPasta, useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
+import {
+  listarBestiarioDosPlugins,
+  porEmJogoDoBestiario,
+  trazerDoBestiario,
+  type ColecaoDoPlugin,
+  type FichaDoPlugin,
+} from "@/lib/vault/bestiario";
 import { removeCharacter } from "@/lib/vault/characters";
 import {
   apagarCondicaoDoCompendio,
@@ -269,6 +280,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   const [aApagar, setAApagar] = useState<AApagar | null>(null);
   const [editandoTags, setEditandoTags] = useState<EdicaoDeTags | null>(null);
   const maquina = useCompendioDaMaquina();
+  const doPlugin = useBestiarioDosPlugins();
   const abrir = useAbrirJanela();
   const { recarregar } = useCharacters();
   const moldes = useCharactersStore((state) => state.moldes);
@@ -282,6 +294,19 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     [busca, tagsLigadas],
   );
 
+  // As fichas dos plugins que batem com a busca e as tags, por coleção. Aqui,
+  // e não na seção, porque o Bestiário da campanha precisa do total: o "nada
+  // com isso" é um só para as duas listas.
+  const achadosDosPlugins = useMemo(
+    () =>
+      doPlugin.map((colecao) => ({
+        colecao,
+        fichas: filtrarNoCompendio(colecao.fichas, filtro, (ficha) => ficha.nome, (ficha) => ficha.tags),
+      })),
+    [doPlugin, filtro],
+  );
+  const totalDosPlugins = achadosDosPlugins.reduce((total, { fichas }) => total + fichas.length, 0);
+
   // As tags da lista ABERTA, e não de todas: ligar "morto-vivo" na aba de
   // Itens não acharia nada, e o botão estaria ali só para confundir.
   const tagsDisponiveis = useMemo(() => {
@@ -291,7 +316,11 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
 
     switch (lista) {
       case "bestiario":
-        coisas = daCampanha ? moldes : dados?.personagens;
+        // As fichas dos plugins somam: a tag "Sangue" acha a ameaça do plugin
+        // ao lado do molde que o mestre fez.
+        coisas = daCampanha
+          ? moldes && [...moldes, ...tagsDosPlugins(doPlugin)]
+          : dados?.personagens;
         break;
       case "itens":
         coisas = daCampanha ? moldesDeItem : dados?.itens;
@@ -306,7 +335,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     }
 
     return tagsDaLista(coisas ?? [], (coisa) => coisa.tags ?? []);
-  }, [lista, especie, onde, moldes, moldesDeItem, condicoes, moldesDeEfeito, maquina.dados]);
+  }, [lista, especie, onde, moldes, moldesDeItem, condicoes, moldesDeEfeito, maquina.dados, doPlugin]);
 
   // Trocar de espécie solta o filtro, pela razão da troca de lista.
   function trocarEspecie(proxima: EspecieDoCompendio) {
@@ -721,14 +750,23 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
             onEditarTags={setEditandoTags}
           />
         ) : tipo === "bestiario" ? (
-          <BestiarioDaCampanha
-            filtro={filtro}
-            pastas={pastasDoCompendio}
-            onCriarEm={(pastaId) => void criarNoBestiario(pastaId)}
-            onGuardado={maquina.reler}
-            onApagar={apagarMolde}
-            onEditarTags={setEditandoTags}
-          />
+          <>
+            <BestiarioDaCampanha
+              filtro={filtro}
+              pastas={pastasDoCompendio}
+              temDoPlugin={doPlugin.length > 0}
+              achadosDoPlugin={totalDosPlugins}
+              onCriarEm={(pastaId) => void criarNoBestiario(pastaId)}
+              onGuardado={maquina.reler}
+              onApagar={apagarMolde}
+              onEditarTags={setEditandoTags}
+            />
+            {/* Na raiz e na busca, e não dentro de uma pasta: as pastas são do
+                mestre, e a ficha do plugin não é da campanha até chegar nela. */}
+            {pastaAberta === undefined || filtrando(filtro) ? (
+              <BestiarioDosPlugins achados={achadosDosPlugins} buscando={filtrando(filtro)} />
+            ) : null}
+          </>
         ) : tipo === "itens" ? (
           <ItensDaCampanha
             filtro={filtro}
@@ -906,10 +944,19 @@ function sugestoesDoAto20() {
   return { condicoes, efeitos };
 }
 
-/** Os moldes da campanha, com as pastas do mestre. */
+/**
+ * Os moldes da campanha, com as pastas do mestre.
+ *
+ * Os dois vazios contam com o bestiário dos plugins, que vem logo abaixo: a
+ * campanha sem molde não diz "crie o primeiro" em cima de trezentas ameaças
+ * prontas, e a busca só diz "nada com isso" quando nenhuma das duas listas
+ * achou.
+ */
 function BestiarioDaCampanha({
   filtro,
   pastas,
+  temDoPlugin,
+  achadosDoPlugin,
   onCriarEm,
   onGuardado,
   onApagar,
@@ -917,6 +964,10 @@ function BestiarioDaCampanha({
 }: {
   filtro: FiltroDoCompendio;
   pastas: Pasta[];
+  /** Algum plugin ligado traz bestiário. */
+  temDoPlugin: boolean;
+  /** Quantas fichas dos plugins batem com a busca e as tags. */
+  achadosDoPlugin: number;
   onCriarEm: (pastaId: string) => void;
   onGuardado: () => void;
   onApagar: (molde: Personagem) => void;
@@ -935,9 +986,13 @@ function BestiarioDaCampanha({
   );
 
   if (achados === null) return <Lendo />;
-  if (moldes?.length === 0 && pastas.length === 0)
-    return <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioBestiario}</PainelVazio>;
-  if (buscando && achados.length === 0) return <NadaCom filtro={filtro} />;
+  if (moldes?.length === 0 && pastas.length === 0) {
+    if (!temDoPlugin)
+      return <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioBestiario}</PainelVazio>;
+    return buscando && achadosDoPlugin === 0 ? <NadaCom filtro={filtro} /> : null;
+  }
+  if (buscando && achados.length === 0)
+    return achadosDoPlugin > 0 ? null : <NadaCom filtro={filtro} />;
 
   return (
     <ArvoreDoCompendio
@@ -961,6 +1016,197 @@ function BestiarioDaCampanha({
     />
   );
 }
+
+/**
+ * As coleções do bestiário dos plugins ligados, relidas quando a lista de
+ * plugins muda -- instalar, atualizar, ligar, desligar. Estado da janela, como
+ * o Compêndio do ATO20: só esta tela o lê. Vazio enquanto lê, e na falha: a
+ * seção some, e o Bestiário da campanha continua.
+ */
+function useBestiarioDosPlugins(): ColecaoDoPlugin[] {
+  const [colecoes, setColecoes] = useState<ColecaoDoPlugin[]>([]);
+  const extensoes = useExtensoesStore((estado) => estado.extensoes);
+
+  useEffect(() => {
+    let ativo = true;
+
+    void listarBestiarioDosPlugins().then(
+      (lidas) => {
+        if (ativo) setColecoes(lidas);
+      },
+      () => {
+        if (ativo) setColecoes([]);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [extensoes]);
+
+  return colecoes;
+}
+
+/**
+ * O bestiário dos plugins, depois das fichas da campanha. Só de leitura, como
+ * o Compêndio do ATO20, e sem clique de abrir pela mesma razão: seria ler uma
+ * ficha que nenhuma janela edita. Trazer copia a ficha para o Compêndio da
+ * campanha, onde ela se edita; pôr em jogo -- pelo botão ou arrastando para o
+ * mapa -- sai do molde que ela deixa lá. Ver `compendio::trazer_do_plugin`.
+ *
+ * Uma seção por coleção, com o nome do plugin no título: é por ele que o
+ * mestre sabe de onde a ficha veio, e a quem dar o crédito.
+ */
+function BestiarioDosPlugins({
+  achados,
+  buscando,
+}: {
+  achados: Array<{ colecao: ColecaoDoPlugin; fichas: FichaDoPlugin[] }>;
+  buscando: boolean;
+}) {
+  const extensoes = useExtensoesStore((estado) => estado.extensoes);
+
+  return achados.map(({ colecao, fichas }) => {
+    // Na busca, a coleção sem nada que bata some: o título sozinho pareceria
+    // dizer que ela achou alguma coisa.
+    if (buscando && fichas.length === 0) return null;
+
+    const plugin = extensoes.find((extensao) => extensao.id === colecao.extensao)?.nome ?? colecao.extensao;
+    const titulo = texto.doPlugin(resolverTexto(colecao.titulo), plugin);
+
+    return (
+      <section key={`${colecao.extensao}/${colecao.id}`} aria-label={titulo}>
+        <h3 className="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium">{titulo}</h3>
+        {colecao.erro ? (
+          <p className="text-destructive px-3 pb-2 text-xs">
+            {texto.colecaoQuebrada(noIdioma(colecao.erro))}
+          </p>
+        ) : (
+          <FichasDoPlugin colecao={colecao} fichas={fichas} />
+        )}
+      </section>
+    );
+  });
+}
+
+/** Os cards de uma coleção, aos poucos: um plugin pode trazer quinhentas. */
+function FichasDoPlugin({ colecao, fichas }: { colecao: ColecaoDoPlugin; fichas: FichaDoPlugin[] }) {
+  const { limite, fim } = useAosPoucos(fichas, fichas.length);
+
+  return (
+    <>
+      <GradeDeCartoes>
+        {fichas.slice(0, limite).map((ficha) => (
+          <CartaoDaFichaDoPlugin
+            key={ficha.id}
+            extensaoId={colecao.extensao}
+            colecaoId={colecao.id}
+            ficha={ficha}
+          />
+        ))}
+      </GradeDeCartoes>
+      {fim}
+    </>
+  );
+}
+
+/**
+ * Uma ficha de plugin, como card: arrastar para o mapa põe em jogo, o botão
+ * também, e o menu traz para a campanha sem pôr em jogo.
+ *
+ * Arrasta mesmo sem imagem na pasta: a ficha que aponta a imagem por URL só a
+ * baixa ao chegar na campanha, e a peça nasce com ela. Enquanto isso a sombra
+ * é a caixa tracejada.
+ */
+const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
+  extensaoId,
+  colecaoId,
+  ficha,
+}: {
+  extensaoId: string;
+  colecaoId: string;
+  ficha: FichaDoPlugin;
+}) {
+  const arrastar = useTokenDrag();
+  const { recarregar } = useCharacters();
+  // O endereço da miniatura do card, para a sombra do arrasto.
+  const [url, setUrl] = useState<string | null>(null);
+  const naMao = useTokenDragStore((state) => {
+    const fonte = state.arrasto?.fonte;
+    return (
+      fonte?.tipo === "molde-plugin" &&
+      fonte.extensaoId === extensaoId &&
+      fonte.colecaoId === colecaoId &&
+      fonte.moldeId === ficha.id
+    );
+  });
+  const qual = { extensaoId, colecaoId, moldeId: ficha.id };
+
+  function trazer() {
+    void trazerDoBestiario(qual).then((trazido) => {
+      recarregar();
+      toast.success(
+        trazido.jaHavia ? texto.jaNaCampanha(trazido.molde.nome) : texto.trazido(trazido.molde.nome),
+      );
+      avisarDoTrazido(trazido);
+    }, falhou);
+  }
+
+  function porAgora() {
+    void porEmJogoDoBestiario(qual).then(({ trazido, personagem }) => {
+      recarregar();
+      toast.success(texto.emJogo(personagem.nome));
+      avisarDoTrazido(trazido);
+    }, falhou);
+  }
+
+  const itens = ({ Item }: Kit) => (
+    <>
+      <Item onClick={porAgora}>
+        <UserPlus />
+        {texto.porEmJogo}
+      </Item>
+      <Item onClick={trazer}>
+        <Download />
+        {texto.trazer}
+      </Item>
+    </>
+  );
+
+  return (
+    <Cartao
+      nome={ficha.nome}
+      detalhe={ficha.fonte ?? undefined}
+      tags={ficha.tags}
+      titulo={texto.dicaDoPlugin(ficha.nome)}
+      naMao={naMao}
+      imagem={
+        ficha.imagem ? (
+          <ImagemDoPlugin extensaoId={extensaoId} caminho={ficha.imagem} onUrl={setUrl} />
+        ) : (
+          <Skull className="text-muted-foreground size-8" aria-hidden />
+        )
+      }
+      fundo={ficha.imagem ? <ImagemDoPlugin extensaoId={extensaoId} caminho={ficha.imagem} /> : undefined}
+      onPointerDown={(event) => {
+        if (!daMaoNoCartao(event)) return;
+        const tamanho = tamanhoDoToken(undefined);
+
+        arrastar(event, {
+          fonte: { tipo: "molde-plugin", ...qual, url: url ?? undefined },
+          largura: tamanho.x,
+          altura: tamanho.y,
+        });
+      }}
+      acao={
+        <AcaoDaLinha rotulo={texto.porEmJogo} onClick={porAgora}>
+          <UserPlus />
+        </AcaoDaLinha>
+      }
+      itens={itens}
+    />
+  );
+});
 
 /**
  * Um molde, como card: clicar abre a ficha, arrastar para o mapa põe em jogo.

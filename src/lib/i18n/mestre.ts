@@ -1000,6 +1000,14 @@ const pt = {
     guardadoNoAto20: (nome: string) => `${nome} guardado no ATO20`,
     trazer: "Trazer para a campanha",
     trazido: (nome: string) => `${nome} veio para a campanha`,
+    doPlugin: (colecao: string, plugin: string) => `${colecao}, do plugin ${plugin}`,
+    dicaDoPlugin: (nome: string) =>
+      `${nome} — arraste para o mapa para pôr em jogo, ou traga para a campanha para editar`,
+    jaNaCampanha: (nome: string) => `${nome} já está no Compêndio da campanha`,
+    semImagem: (nome: string, motivo: string) => `${nome} veio sem a imagem: ${motivo}`,
+    gruposDeFora: (grupos: string) =>
+      `A ficha da campanha não tem lugar para ${grupos}; esses detalhes ficam no fim`,
+    colecaoQuebrada: (motivo: string) => `Esta coleção não abriu: ${motivo}`,
     disparar: "Disparar",
     dispararDica: "Disparar: a mira vai para o mapa",
     porNaCena: "Pôr nesta cena",
@@ -2294,6 +2302,14 @@ const en: typeof pt = {
     guardadoNoAto20: (nome) => `${nome} saved to ATO20`,
     trazer: "Bring to the campaign",
     trazido: (nome) => `${nome} came to the campaign`,
+    doPlugin: (colecao, plugin) => `${colecao}, from the ${plugin} plugin`,
+    dicaDoPlugin: (nome) =>
+      `${nome}: drag to the map to put it in play, or bring it to the campaign to edit it`,
+    jaNaCampanha: (nome) => `${nome} is already in the campaign's Compendium`,
+    semImagem: (nome, motivo) => `${nome} came without the image: ${motivo}`,
+    gruposDeFora: (grupos) =>
+      `The campaign sheet has no room for ${grupos}; those details go at the end`,
+    colecaoQuebrada: (motivo) => `This collection did not open: ${motivo}`,
     disparar: "Fire",
     dispararDica: "Fire: the crosshair goes to the map",
     porNaCena: "Put in this scene",
