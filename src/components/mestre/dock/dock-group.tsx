@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Plus, X, type LucideIcon } from "lucide-react";
+import { Plus, SquareArrowOutUpRight, X, type LucideIcon } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
 import {
@@ -11,6 +11,7 @@ import {
   useTelas,
   useRotuloJanela,
 } from "@/components/mestre/dock/window-content";
+import { soltarJanela } from "@/components/mestre/janela-solta";
 import { t } from "@/lib/i18n/mestre";
 import { iconeDaJanela } from "@/lib/mestre/icone-da-janela";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ import {
   type ConteudoJanela,
 } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
+import { isDesktop } from "@/lib/vault/bridge";
 
 /**
  * Uma região da coluna: a tira de abas e o corpo da aba ativa.
@@ -94,6 +96,9 @@ export function DockGroup({ lado, grupo }: { lado: Lado; grupo: Grupo }) {
         {/* As ações da aba ATIVA, como no cabeçalho da janela flutuante: aqui
             não há um cabeçalho por tela, e a tira é o topo do grupo. */}
         <AcoesDaJanela conteudo={ativa} />
+
+        {/* A aba ativa para fora do ATO20, como no cabeçalho da flutuante. */}
+        {isDesktop() ? <SoltarAba conteudo={ativa} /> : null}
 
         <Adicionar lado={lado} grupoId={grupo.id} />
       </div>
@@ -367,5 +372,22 @@ function Aba({
         <X className="size-3" />
       </button>
     </span>
+  );
+}
+
+function SoltarAba({ conteudo }: { conteudo: ConteudoJanela }) {
+  const { titulo } = useRotuloJanela(conteudo);
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      className="mb-1"
+      aria-label={t.janela.soltar(titulo)}
+      title={t.janela.soltar(titulo)}
+      onClick={() => void soltarJanela(conteudo)}
+    >
+      <SquareArrowOutUpRight />
+    </Button>
   );
 }

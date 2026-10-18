@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ehElemento } from "@/lib/dom";
 
 /**
  * O xadrez magenta e preto da textura que não carregou, o do Source.
@@ -46,11 +47,17 @@ const XADREZ = `data:image/svg+xml,${encodeURIComponent(
  * ouvinte só age de novo se o novo também falhar. `new Image()` fora da árvore
  * não passa por aqui -- é carga de quem decide sozinho o que fazer com a falha.
  */
-export function ImagemAusente() {
+export function ImagemAusente({ documento }: { documento?: Document } = {}) {
   useEffect(() => {
+    // O documento a vigiar: o da página, ou o de uma janela solta, que monta
+    // um destes para si. Ver `janela-solta.tsx`.
+    const onde = documento ?? document;
+
     const aoFalhar = (evento: Event) => {
       const img = evento.target;
-      if (!(img instanceof HTMLImageElement)) return;
+      // Pelo nome, e não por `instanceof`: a imagem de uma janela solta é de
+      // outro documento, e a classe daqui não a reconhece.
+      if (!ehImagem(img)) return;
       // O `src` do ATRIBUTO: a propriedade devolve a URL já resolvida.
       if (img.getAttribute("src") === XADREZ) return;
 
@@ -60,18 +67,21 @@ export function ImagemAusente() {
 
     const aoCarregar = (evento: Event) => {
       const img = evento.target;
-      if (img instanceof HTMLImageElement && img.getAttribute("src") === XADREZ)
-        evento.stopPropagation();
+      if (ehImagem(img) && img.getAttribute("src") === XADREZ) evento.stopPropagation();
     };
 
-    document.addEventListener("error", aoFalhar, true);
-    document.addEventListener("load", aoCarregar, true);
+    onde.addEventListener("error", aoFalhar, true);
+    onde.addEventListener("load", aoCarregar, true);
 
     return () => {
-      document.removeEventListener("error", aoFalhar, true);
-      document.removeEventListener("load", aoCarregar, true);
+      onde.removeEventListener("error", aoFalhar, true);
+      onde.removeEventListener("load", aoCarregar, true);
     };
-  }, []);
+  }, [documento]);
 
   return null;
+}
+
+function ehImagem(alvo: EventTarget | null): alvo is HTMLImageElement {
+  return ehElemento(alvo) && alvo.nodeName === "IMG";
 }

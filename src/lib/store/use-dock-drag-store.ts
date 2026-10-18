@@ -23,8 +23,14 @@ type DockDragStore = {
    * uma etiqueta que se reposiciona pelo store custaria um render por quadro.
    */
   fantasma: { titulo: string; x: number; y: number } | null;
+  /**
+   * O ponteiro saiu da janela do ATO20 no meio do arrasto: soltar ali abre a
+   * janela numa janela do sistema. Ver `soltarJanela`.
+   */
+  fora: boolean;
 
   mirar: (alvo: AlvoDock | null, retangulo: Retangulo | null) => void;
+  marcarFora: (fora: boolean) => void;
   /** Levanta a etiqueta. Chamado quando o gesto passa do limiar de clique. */
   pegar: (titulo: string, x: number, y: number) => void;
   limpar: () => void;
@@ -44,6 +50,7 @@ export const useDockDragStore = create<DockDragStore>((set) => ({
   alvo: null,
   retangulo: null,
   fantasma: null,
+  fora: false,
 
   mirar(alvo, retangulo) {
     set({ alvo, retangulo });
@@ -53,7 +60,11 @@ export const useDockDragStore = create<DockDragStore>((set) => ({
     set({ fantasma: { titulo, x, y } });
   },
 
+  marcarFora(fora) {
+    set({ fora });
+  },
+
   limpar() {
-    set({ alvo: null, retangulo: null, fantasma: null });
+    set({ alvo: null, retangulo: null, fantasma: null, fora: false });
   },
 }));

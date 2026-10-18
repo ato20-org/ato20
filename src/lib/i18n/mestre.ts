@@ -806,6 +806,10 @@ const pt = {
     recolher: (titulo: string) => `Recolher ${titulo}`,
     fechar: (titulo: string) => `Fechar ${titulo}`,
     redimensionar: (titulo: string) => `Redimensionar ${titulo}`,
+    soltar: (titulo: string) => `Abrir ${titulo} numa janela própria`,
+    voltar: (titulo: string) => `Trazer ${titulo} de volta ao ATO20`,
+    soltarFora: "Solte fora do ATO20 para abrir numa janela própria",
+    naoSoltou: "Não deu para abrir a janela.",
   },
 
   /** A janela Mesa: o que a mesa está vendo. */
@@ -2106,6 +2110,10 @@ const en: typeof pt = {
     recolher: (titulo) => `Collapse ${titulo}`,
     fechar: (titulo) => `Close ${titulo}`,
     redimensionar: (titulo) => `Resize ${titulo}`,
+    soltar: (titulo) => `Open ${titulo} in its own window`,
+    voltar: (titulo) => `Bring ${titulo} back into ATO20`,
+    soltarFora: "Drop outside ATO20 to open it in its own window",
+    naoSoltou: "Couldn't open the window.",
   },
 
   miniplayer: {
