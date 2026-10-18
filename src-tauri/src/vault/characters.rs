@@ -151,6 +151,15 @@ pub struct Personagem {
     /// `compendio::normalizar_tags`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// De que ficha de plugin este molde foi trazido: `{plugin}/{colecao}/{ficha}`.
+    ///
+    /// So no MOLDE, e e o que deixa o segundo goblin arrastado do bestiario do
+    /// plugin sair do molde que o primeiro deixou, sem trazer a ficha -- e a
+    /// imagem dela -- de novo. A copia em jogo nao a leva (`compendio::duplicar`):
+    /// ela e um personagem, e nao o lugar de onde os proximos saem. Ver
+    /// `compendio::trazer_do_plugin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub do_plugin: Option<String>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -579,6 +588,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         atributos: Vec::new(),
         compendio: false,
         tags: Vec::new(),
+        do_plugin: None,
         criado_em: now_ms(),
     };
 

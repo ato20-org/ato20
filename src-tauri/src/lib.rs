@@ -1,4 +1,5 @@
 mod appimage;
+mod bestiario;
 mod catalogo;
 mod commands;
 mod compendio;
@@ -282,6 +283,10 @@ pub fn run() {
             commands::compendio_efeito_guardar,
             commands::compendio_tags,
             commands::compendio_maquina_tags,
+            commands::bestiario_listar,
+            commands::bestiario_imagem,
+            commands::bestiario_trazer,
+            commands::bestiario_por_em_jogo,
             commands::character_rename,
             commands::character_remove,
             commands::character_set_campo,

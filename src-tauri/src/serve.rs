@@ -26,7 +26,7 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-mod expressao;
+pub(crate) mod expressao;
 mod page;
 
 use crate::error::{AppError, AppResult};

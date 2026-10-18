@@ -139,6 +139,9 @@ pub fn duplicar(vault: &Vault, id: &str, compendio: bool) -> AppResult<Personage
         id: uuid::Uuid::new_v4().to_string(),
         nome: nome_da_copia(&original.nome, &usados),
         compendio,
+        // A marca e de UM molde: a copia que levasse a dela disputaria com o
+        // original o lugar de onde o proximo goblin do plugin sai.
+        do_plugin: None,
         criado_em: now_ms(),
         ..original.clone()
     };
@@ -280,8 +283,8 @@ pub enum TipoDeMolde {
 /// Tag e para filtrar, e o filtro mostra todas as da lista numa fileira: uma
 /// ficha com quarenta tags, ou uma tag com um paragrafo, encheria a fileira de
 /// todo mundo.
-const MAX_TAGS: usize = 16;
-const MAX_LETRAS_DA_TAG: usize = 32;
+pub(crate) const MAX_TAGS: usize = 16;
+pub(crate) const MAX_LETRAS_DA_TAG: usize = 32;
 
 /// As tags como o mestre as digitou, limpas.
 ///
@@ -908,6 +911,301 @@ pub fn miniatura(maquina: &Vault, asset_id: &str) -> AppResult<Vec<u8>> {
     }
 }
 
+// --- fichas de plugin ------------------------------------------------------------
+//
+// O bestiario de um plugin (`bestiario.rs`) e a terceira origem, ao lado da
+// campanha e do ATO20: so de leitura, e sempre COPIADO para a campanha. O
+// molde copiado guarda de onde veio (`Personagem::do_plugin`), e e por isso
+// que o segundo goblin arrastado do plugin nao traz a ficha de novo -- ele sai
+// do molde que o primeiro deixou no Compendio da campanha, como o goblin do
+// mestre sai do dele.
+
+/// A cor do medidor que nem a ficha nem a campanha dizem. A primeira da paleta
+/// (`CORES_LAPIS`), como na ficha em PDF.
+const COR_DO_MEDIDOR: &str = "#ef4444";
+
+/// A imagem de uma ficha de plugin, pronta para o acervo: o arquivo da pasta
+/// do plugin, ou os bytes que vieram da URL.
+pub enum ImagemDoPlugin {
+    Arquivo(PathBuf),
+    Baixada { nome: String, bytes: Vec<u8> },
+}
+
+/// O que voltou de trazer uma ficha de plugin.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrazidoDoPlugin {
+    /// O molde no Compendio da campanha.
+    pub molde: Personagem,
+    /// Ja estava la. Trazer de novo devolve o mesmo, e nao um segundo.
+    pub ja_havia: bool,
+    /// Os grupos que nao couberam no molde da campanha. Os detalhes deles
+    /// aparecem no fim da ficha, em linhas.
+    pub grupos_de_fora: Vec<String>,
+    /// As imagens que nao entraram, com o motivo. A ficha entra sem elas.
+    pub imagens_de_fora: Vec<crate::error::Texto>,
+}
+
+/// A marca de uma ficha de plugin: `{plugin}/{colecao}/{ficha}`.
+pub fn chave_do_plugin(extensao: &str, colecao: &str, molde: &str) -> String {
+    format!("{extensao}/{colecao}/{molde}")
+}
+
+/// O molde que esta ficha de plugin ja deixou no Compendio da campanha.
+pub fn molde_do_plugin(vault: &Vault, chave: &str) -> AppResult<Option<Personagem>> {
+    Ok(characters::load(vault)?
+        .into_iter()
+        .find(|personagem| personagem.compendio && personagem.do_plugin.as_deref() == Some(chave)))
+}
+
+/// Traz uma ficha de plugin para o Compendio da campanha, como molde.
+///
+/// Monta o personagem inteiro e grava uma vez, e NAO passa por
+/// `criar_personagem`: aquele daria a ameaca os medidores, atributos e
+/// detalhes de fabrica da campanha -- a NEX e a Patente de um agente --, e a
+/// ficha do plugin ja diz tudo o que ela e.
+///
+/// O medidor veste o modelo da campanha de mesmo nome: o PV da ameaca sai com a
+/// cor e o pincel que o mestre escolheu para o PV da mesa, e so o teto e da
+/// ficha. Os grupos que a ficha usa entram no molde da campanha -- so os
+/// grupos, sem os detalhes de fabrica deles --, para os Ataques desenharem como
+/// lista; e o detalhe guarda o nome do grupo como a CAMPANHA o escreve.
+///
+/// `imagens` sao o retrato e a miniatura ja prontos, pelo valor que a ficha
+/// declara: o arquivo resolvido, os bytes baixados, ou o motivo de nao terem
+/// vindo. A ficha entra sem a imagem que faltou -- a imagem e o enfeite, e a
+/// ficha e o que a mesa usa.
+pub fn trazer_do_plugin(
+    vault: &Vault,
+    chave: &str,
+    molde: &crate::bestiario::MoldeDoBestiario,
+    grupos: &[crate::extensoes::GrupoDoSistema],
+    imagens: Vec<(String, Result<ImagemDoPlugin, crate::error::Texto>)>,
+) -> AppResult<TrazidoDoPlugin> {
+    use crate::vault::characters::{Aparencia, Atributo, Medidor, APARENCIA_PADRAO};
+    use crate::vault::{atributos, detalhes, modelos};
+
+    // Conferido de novo dentro da trava: dois arrastos seguidos chegam aqui um
+    // depois do outro, e o segundo acha o que o primeiro gravou.
+    if let Some(molde) = molde_do_plugin(vault, chave)? {
+        return Ok(TrazidoDoPlugin {
+            molde,
+            ja_havia: true,
+            grupos_de_fora: Vec::new(),
+            imagens_de_fora: Vec::new(),
+        });
+    }
+
+    let mut imagens_de_fora = Vec::new();
+    let mut no_acervo: HashMap<String, String> = HashMap::new();
+    for (valor, pronta) in imagens {
+        let importado = match pronta {
+            Ok(ImagemDoPlugin::Arquivo(caminho)) => assets::import(vault, &[caminho], Some("personagem")),
+            Ok(ImagemDoPlugin::Baixada { nome, bytes }) => {
+                assets::import_bytes(vault, &nome, &bytes, Some("personagem"))
+            }
+            Err(motivo) => {
+                imagens_de_fora.push(motivo);
+                continue;
+            }
+        };
+        match importado {
+            Ok((aceitos, recusados)) => match aceitos.into_iter().next() {
+                Some(meta) => {
+                    no_acervo.insert(valor, meta.id);
+                }
+                // O acervo explica a recusa numa lingua so; vai nas duas.
+                None => imagens_de_fora.extend(recusados.into_iter().map(|motivo| crate::error::Texto {
+                    pt: motivo.clone(),
+                    en: motivo,
+                })),
+            },
+            Err(cause) => imagens_de_fora.push(crate::error::Texto {
+                pt: cause.to_string(),
+                en: cause.to_string(),
+            }),
+        }
+    }
+
+    // Sem miniatura o card nao arrasta para o mapa, e sem retrato a ficha abre
+    // com a caveira: a que veio serve aos dois.
+    let do_acervo = |valor: &Option<String>| valor.as_ref().and_then(|v| no_acervo.get(v).cloned());
+    let retrato = do_acervo(&molde.retrato).or_else(|| do_acervo(&molde.miniatura));
+    let miniatura = do_acervo(&molde.miniatura).or_else(|| retrato.clone());
+
+    let modelos_de_atributo = atributos::load(vault)?;
+    let atributos: Vec<Atributo> = molde
+        .atributos
+        .iter()
+        .map(|atributo| {
+            // A descricao de AGI e da campanha quando a ficha nao diz: o hover
+            // do cartao explica o mesmo atributo igual em toda ficha da mesa.
+            let descricao = atributo.descricao.clone().or_else(|| {
+                modelos_de_atributo
+                    .iter()
+                    .find(|modelo| chave_do_nome(&modelo.sigla) == chave_do_nome(&atributo.sigla))
+                    .and_then(|modelo| modelo.descricao.clone())
+            });
+            let mut novo = Atributo {
+                id: uuid::Uuid::new_v4().to_string(),
+                sigla: atributo.sigla.clone(),
+                valor: atributo.valor,
+                descricao,
+            };
+            characters::ajustar_atributo(&mut novo);
+            novo
+        })
+        .collect();
+
+    let modelos_de_medidor = modelos::load(vault)?;
+    let medidores: Vec<Medidor> = molde
+        .medidores
+        .iter()
+        .map(|medidor| {
+            let modelo = modelos_de_medidor
+                .iter()
+                .find(|modelo| chave_do_nome(&modelo.nome) == chave_do_nome(&medidor.nome));
+            let mut novo = match modelo {
+                Some(modelo) => modelo.materializar(),
+                None => Medidor {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    nome: medidor.nome.trim().to_string(),
+                    cor: medidor.cor.clone().unwrap_or_else(|| COR_DO_MEDIDOR.to_string()),
+                    estilo: medidor.estilo.unwrap_or_default(),
+                    atual: 0,
+                    maximo: 0,
+                    escondido: false,
+                    estilo_extensao: None,
+                    mostrar_nome: None,
+                    mostrar_valor: None,
+                },
+            };
+            novo.maximo = medidor.maximo;
+            novo.atual = medidor.maximo;
+            novo
+        })
+        .collect();
+
+    let usados: HashSet<String> = characters::load(vault)?
+        .into_iter()
+        .filter(|personagem| personagem.compendio)
+        .map(|personagem| personagem.nome)
+        .collect();
+
+    let personagem = Personagem {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: nome_da_copia(molde.nome.trim(), &usados),
+        ficha: None,
+        retrato: retrato.clone(),
+        retrato_url: None,
+        miniatura: miniatura.clone(),
+        aparencias: vec![Aparencia {
+            id: APARENCIA_PADRAO.to_string(),
+            nome: "Padrão".to_string(),
+            retrato,
+            retrato_url: None,
+            miniatura,
+        }],
+        aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
+        medidores,
+        condicoes: Vec::new(),
+        atributos,
+        compendio: true,
+        tags: normalizar_tags(molde.tags.clone()),
+        do_plugin: Some(chave.to_string()),
+        criado_em: now_ms(),
+    };
+    characters::adotar(vault, vec![personagem.clone()])?;
+
+    let detalhes_e_grupos = (|| -> AppResult<Vec<String>> {
+        let usados: Vec<_> = grupos
+            .iter()
+            .filter(|grupo| {
+                molde
+                    .detalhes
+                    .iter()
+                    .any(|detalhe| chave_do_nome(&detalhe.grupo) == chave_do_nome(&grupo.nome))
+            })
+            .cloned()
+            .collect();
+        let (juntados, _) = detalhes::juntar_molde(
+            vault,
+            &crate::extensoes::DetalhesDoSistema {
+                grupos: usados,
+                modelos: Vec::new(),
+            },
+        )?;
+
+        let da_campanha = detalhes::molde(vault)?.grupos;
+        let novos = molde
+            .detalhes
+            .iter()
+            .map(|detalhe| detalhes::Detalhe {
+                id: uuid::Uuid::new_v4().to_string(),
+                rotulo: detalhe.rotulo.clone(),
+                tipo: detalhe.tipo,
+                grupo: da_campanha
+                    .iter()
+                    .find(|grupo| chave_do_nome(&grupo.nome) == chave_do_nome(&detalhe.grupo))
+                    .map(|grupo| grupo.nome.clone())
+                    .unwrap_or_else(|| detalhe.grupo.trim().to_string()),
+                valor: detalhe.valor.clone(),
+                opcoes: detalhe.opcoes.clone(),
+                descricao: detalhe.descricao.clone(),
+                rolagem: detalhe.rolagem.clone(),
+            })
+            .collect();
+        detalhes::acrescentar(vault, &personagem.id, novos)?;
+
+        Ok(juntados.nao_couberam)
+    })();
+
+    // Meia ficha no Compendio -- o nome sem os detalhes -- seria um molde que
+    // o mestre poe em jogo sem saber que falta tudo. Falhou, sai inteira.
+    let grupos_de_fora = match detalhes_e_grupos {
+        Ok(grupos_de_fora) => grupos_de_fora,
+        Err(cause) => {
+            if let Err(limpeza) = characters::remove(vault, &personagem.id) {
+                log::warn!("compendio: a ficha {chave} ficou pela metade: {limpeza}");
+            }
+            return Err(cause);
+        }
+    };
+
+    Ok(TrazidoDoPlugin {
+        molde: personagem,
+        ja_havia: false,
+        grupos_de_fora,
+        imagens_de_fora,
+    })
+}
+
+/// A miniatura de uma imagem da pasta de um plugin, para o card do bestiario.
+///
+/// A reducao mora no cache do Compendio do ATO20 (`maquina`), e nao na
+/// campanha: o card do plugin aparece em toda mesa desta maquina, e a imagem
+/// ainda nao e de campanha nenhuma. A chave e o caminho do arquivo, e a
+/// reducao se refaz sozinha quando o plugin atualizado troca a imagem -- ver
+/// `variantes::ensure_arquivo`.
+pub fn miniatura_do_plugin(maquina: &Vault, caminho: &Path, extensao: &str, rel: &str) -> AppResult<Vec<u8>> {
+    use sha2::{Digest, Sha256};
+
+    let digest = Sha256::digest(format!("{extensao}/{rel}").as_bytes());
+    let chave = digest[..16].iter().fold("plugin-".to_string(), |mut chave, byte| {
+        use std::fmt::Write as _;
+        let _ = write!(chave, "{byte:02x}");
+        chave
+    });
+
+    match variantes::ensure_arquivo(maquina, variantes::Variante::Mini, caminho, &chave, rel) {
+        Ok(reduzida) => Ok(std::fs::read(reduzida)?),
+        Err(cause) => {
+            log::warn!("compendio: miniatura de {extensao}/{rel} nao saiu: {cause}");
+            Ok(std::fs::read(caminho)?)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1355,5 +1653,131 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    /// A ficha do zumbi como um plugin a escreve, e os grupos do arquivo.
+    fn zumbi() -> (crate::bestiario::MoldeDoBestiario, Vec<crate::extensoes::GrupoDoSistema>) {
+        let bestiario: crate::bestiario::Bestiario = serde_json::from_value(serde_json::json!({
+            "grupos": [{ "nome": "Combate" }, { "nome": "Ataques", "exibicao": "lista" }, { "nome": "Sobra" }],
+            "moldes": [{
+                "id": "zumbi", "nome": "Zumbi", "tags": ["Sangue", "sangue", "VD 40"],
+                "retrato": "bestiario/zumbi.png",
+                "atributos": [{ "sigla": "AGI", "valor": 2 }],
+                "medidores": [{ "nome": "pv", "maximo": 45, "cor": "#22c55e" }, { "nome": "Fúria", "maximo": 3 }],
+                "detalhes": [
+                    { "grupo": "combate", "rotulo": "Defesa", "tipo": "numero", "valor": 19 },
+                    { "grupo": "Ataques", "rotulo": "Mordida", "valor": "2d6+5", "rolagem": "2d20+10" }
+                ]
+            }]
+        }))
+        .unwrap();
+        (bestiario.moldes[0].clone(), bestiario.grupos)
+    }
+
+    #[test]
+    fn a_ficha_do_plugin_vira_molde_e_veste_a_campanha() {
+        use crate::vault::{atributos, detalhes, modelos};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+        // A campanha de Ordem: PV com o pincel do mestre, AGI com descricao, e
+        // o grupo Combate escrito do jeito dela.
+        modelos::criar(&vault, "PV", "#3b82f6", characters::Estilo::Pontos, 20).unwrap();
+        atributos::criar(&vault, "AGI", 1, Some("Agilidade")).unwrap();
+        detalhes::juntar_molde(
+            &vault,
+            &crate::extensoes::DetalhesDoSistema {
+                grupos: vec![crate::extensoes::GrupoDoSistema {
+                    nome: "Combate".into(),
+                    exibicao: detalhes::Exibicao::Linhas,
+                }],
+                modelos: vec![crate::extensoes::ModeloDoSistema {
+                    grupo: "Combate".into(),
+                    rotulo: "Proteção".into(),
+                    tipo: detalhes::Tipo::Texto,
+                    valor: None,
+                    opcoes: Vec::new(),
+                    descricao: None,
+                }],
+            },
+        )
+        .unwrap();
+
+        let (molde, grupos) = zumbi();
+        let imagem = tmp.path().join("zumbi.png");
+        std::fs::write(&imagem, png()).unwrap();
+        let chave = chave_do_plugin("ordem", "ameacas", "zumbi");
+
+        let trazido = trazer_do_plugin(
+            &vault,
+            &chave,
+            &molde,
+            &grupos,
+            vec![("bestiario/zumbi.png".into(), Ok(ImagemDoPlugin::Arquivo(imagem)))],
+        )
+        .unwrap();
+        let zumbi = &trazido.molde;
+
+        assert!(!trazido.ja_havia);
+        assert!(zumbi.compendio);
+        assert_eq!(zumbi.do_plugin.as_deref(), Some(chave.as_str()));
+        assert_eq!(zumbi.tags, ["Sangue", "VD 40"]);
+        // So o retrato veio, e serve de miniatura: sem ela o card nao arrasta.
+        assert!(zumbi.retrato.is_some());
+        assert_eq!(zumbi.miniatura, zumbi.retrato);
+        assert_eq!(assets::index(&vault).unwrap().len(), 1);
+
+        // O PV veste o modelo da campanha; a Furia, que a campanha nao tem,
+        // sai com a cor de fabrica.
+        let pv = &zumbi.medidores[0];
+        assert_eq!((pv.nome.as_str(), pv.estilo, pv.cor.as_str()), ("PV", characters::Estilo::Pontos, "#3b82f6"));
+        assert_eq!((pv.atual, pv.maximo), (45, 45));
+        assert_eq!(zumbi.medidores[1].cor, COR_DO_MEDIDOR);
+        assert_eq!(zumbi.atributos[0].descricao.as_deref(), Some("Agilidade"));
+
+        // So os grupos que a ficha usa entram, e o detalhe fica no grupo com o
+        // nome que a campanha escreve. O detalhe de fabrica do grupo nao vem.
+        let molde_da_campanha = detalhes::molde(&vault).unwrap();
+        let nomes: Vec<_> = molde_da_campanha.grupos.iter().map(|g| g.nome.as_str()).collect();
+        assert_eq!(nomes, ["Combate", "Ataques"]);
+        assert_eq!(molde_da_campanha.grupos[1].exibicao, detalhes::Exibicao::Lista);
+        let da_ficha = detalhes::load(&vault, &zumbi.id).unwrap();
+        assert_eq!(da_ficha.len(), 2);
+        assert_eq!(da_ficha[0].grupo, "Combate");
+        assert_eq!(da_ficha[1].rolagem.as_deref(), Some("2d20+10"));
+
+        // Trazer de novo devolve o mesmo molde, sem outra imagem no acervo.
+        let de_novo = trazer_do_plugin(&vault, &chave, &molde, &grupos, Vec::new()).unwrap();
+        assert!(de_novo.ja_havia);
+        assert_eq!(de_novo.molde.id, zumbi.id);
+        assert_eq!(assets::index(&vault).unwrap().len(), 1);
+
+        // Em jogo, a copia nao leva a marca: o proximo goblin sai do molde.
+        let em_jogo = duplicar(&vault, &zumbi.id, false).unwrap();
+        assert!(em_jogo.do_plugin.is_none());
+        assert_eq!(molde_do_plugin(&vault, &chave).unwrap().unwrap().id, zumbi.id);
+    }
+
+    #[test]
+    fn a_imagem_que_nao_veio_nao_impede_a_ficha() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+        let (molde, grupos) = zumbi();
+
+        let trazido = trazer_do_plugin(
+            &vault,
+            "ordem/ameacas/zumbi",
+            &molde,
+            &grupos,
+            vec![(
+                "bestiario/zumbi.png".into(),
+                Err(crate::texto!("o site nao respondeu", "the site did not answer")),
+            )],
+        )
+        .unwrap();
+
+        assert_eq!(trazido.imagens_de_fora[0].pt, "o site nao respondeu");
+        assert!(trazido.molde.retrato.is_none());
+        assert_eq!(trazido.molde.medidores[0].nome, "pv");
     }
 }

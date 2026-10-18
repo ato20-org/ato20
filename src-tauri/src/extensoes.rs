@@ -80,7 +80,12 @@ use crate::error::{AppError, AppResult};
 /// sigla, o ritual do Ordem -- e o `estiloDosAtributos` do sistema. Um ATO20
 /// de API 10 ignoraria os dois calado, e a ficha seguiria nos cartoes sem
 /// dizer por que; pedindo 11, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 11;
+///
+/// A 12 acrescentou o `bestiario` -- as fichas prontas que o plugin traz para
+/// o Compendio, num arquivo ao lado do manifesto. Um ATO20 de API 11 ignoraria
+/// a chave calado, e o plugin instalado so para isso nao mostraria nada;
+/// pedindo 12, ele ouve "atualize o ATO20".
+pub const API_VERSAO: u32 = 12;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -348,6 +353,9 @@ impl Manifesto {
         for x in &c.sistemas {
             textos.push((caminho("sistemas", &x.id, "titulo"), &x.titulo));
         }
+        for x in &c.bestiario {
+            textos.push((caminho("bestiario", &x.id, "titulo"), &x.titulo));
+        }
         for x in &c.configuracoes {
             textos.push((caminho("configuracoes", &x.chave, "titulo"), &x.titulo));
             if let Some(descricao) = &x.descricao {
@@ -447,6 +455,33 @@ pub struct Contribuicoes {
     /// Sistemas de jogo que o mestre aplica numa campanha. Ver `Sistema`.
     #[serde(default)]
     pub sistemas: Vec<Sistema>,
+    /// Fichas prontas para o Compendio. Ver `ColecaoDoBestiario`.
+    #[serde(default)]
+    pub bestiario: Vec<ColecaoDoBestiario>,
+}
+
+/// Uma colecao de fichas prontas: o bestiario de um sistema, ou parte dele.
+///
+/// O manifesto so DECLARA a colecao -- id, titulo e onde estao as fichas --, e
+/// as fichas moram num arquivo a parte, por duas razoes. O teto de
+/// `MAX_CONTRIBUICOES` conta linhas de menu, e quinhentas ameacas nao sao
+/// quinhentas linhas. E o manifesto e lido em toda listagem e em cada pedido
+/// do daemon: o bestiario inteiro iria junto sem ninguem ter aberto o
+/// Compendio. Ver `bestiario`.
+///
+/// DECLARATIVO, como o sistema: o nucleo mostra as fichas e as copia para a
+/// campanha, e a regra do jogo continua sendo do plugin que as escreveu.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColecaoDoBestiario {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// O arquivo das fichas, relativo a pasta: `bestiario/ameacas.json`.
+    pub arquivo: String,
+    /// O sistema do MESMO plugin a que estas fichas servem. So etiqueta, para
+    /// o Compendio dizer de onde elas sao; trazer nao aplica o sistema.
+    #[serde(default)]
+    pub sistema: Option<String>,
 }
 
 /// Um efeito de condicao: o que a figura faz quando uma condicao aponta para
@@ -1952,6 +1987,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             "sistemas",
             c.sistemas.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
+        (
+            "bestiario",
+            c.bestiario.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
     ];
 
     for (nome, itens) in grupos {
@@ -2008,6 +2047,9 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     }
     for sistema in &c.sistemas {
         validar_sistema(sistema)?;
+    }
+    for colecao in &c.bestiario {
+        validar_colecao(colecao, &c.sistemas)?;
     }
 
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
@@ -2494,6 +2536,38 @@ fn validar_sistema(sistema: &Sistema) -> AppResult<()> {
                     "the condition {nome:?} in the system {id:?} points to the effect {efeito:?}, which is not shaped like an id"
                 ));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// A colecao do bestiario aponta para um lugar que faz sentido?
+///
+/// So a DECLARACAO: o arquivo das fichas e lido e conferido na importacao
+/// (`bestiario::validar_pasta`), e nao aqui. Esta funcao roda em toda
+/// listagem, e abrir quinhentas fichas para listar plugins custaria o que o
+/// arquivo a parte existe para poupar.
+fn validar_colecao(colecao: &ColecaoDoBestiario, sistemas: &[Sistema]) -> AppResult<()> {
+    let id = &colecao.id;
+    let arquivo = &colecao.arquivo;
+
+    if !caminho_relativo_seguro(arquivo) || !arquivo.to_ascii_lowercase().ends_with(".json") {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "o bestiario {id:?} aponta para {arquivo:?}; tem de ser um .json dentro da pasta",
+            "the bestiary {id:?} points to {arquivo:?}; it must be a .json inside the folder"
+        )));
+    }
+
+    // O sistema e do MESMO plugin, como o grupo do detalhe e do mesmo sistema:
+    // uma etiqueta que aponta para o que nao existe diria ao mestre que estas
+    // fichas sao de um sistema que ele nao acha em lugar nenhum.
+    if let Some(sistema) = &colecao.sistema {
+        if !sistemas.iter().any(|s| &s.id == sistema) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "o bestiario {id:?} e do sistema {sistema:?}, que o plugin nao declara",
+                "the bestiary {id:?} belongs to the system {sistema:?}, which the plugin does not declare"
+            )));
         }
     }
 
@@ -3575,6 +3649,7 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
 pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
     validar_imagens_declaradas(origem, &manifesto)?;
+    crate::bestiario::validar_pasta(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -5725,6 +5800,54 @@ mod tests {
             ler(base.path(), vazio).unwrap_err(),
             AppError::ExtensaoInvalida(_)
         ));
+    }
+
+    /// Um plugin so de bestiario, com a colecao trocada por quem quer quebrar.
+    fn com_bestiario(colecao: &str) -> String {
+        format!(
+            r#"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":12,
+            "contribui":{{"sistemas":[{{"id":"ordem","titulo":"Ordem","atributos":[{{"sigla":"AGI","valor":1}}]}}],
+                         "bestiario":[{colecao}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_bestiario_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_bestiario(
+                r#"{"id":"ameacas","titulo":"Ameaças","arquivo":"bestiario/ameacas.json","sistema":"ordem"}"#,
+            ),
+        )
+        .unwrap();
+
+        let colecao = &m.contribui.bestiario[0];
+        assert_eq!(colecao.titulo, "Ameaças");
+        assert_eq!(colecao.arquivo, "bestiario/ameacas.json");
+        assert_eq!(colecao.sistema.as_deref(), Some("ordem"));
+    }
+
+    #[test]
+    fn colecao_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for colecao in [
+            r#"{"id":"ameacas","titulo":"A","arquivo":"../ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"bestiario/ameacas.txt"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"/ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"ameacas.json","sistema":"dnd"}"#,
+            r#"{"id":"Ameacas","titulo":"A","arquivo":"ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"","arquivo":"ameacas.json"}"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_bestiario(colecao)),
+                    Err(AppError::ExtensaoInvalida(_))
+                ),
+                "{colecao} devia ser recusado"
+            );
+        }
     }
 
     #[test]

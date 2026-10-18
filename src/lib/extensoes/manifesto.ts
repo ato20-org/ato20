@@ -38,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 11;
+export const API_VERSAO = 12;
 
 /**
  * O que uma extensão diz de si.
@@ -109,6 +109,21 @@ export type Contribuicoes = {
   /** Ausente em lista lida por um Rust anterior à API 10. */
   fichasPdf?: FichaPdfDeclarada[];
   sistemas?: SistemaDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 12. */
+  bestiario?: ColecaoDoBestiarioDeclarada[];
+};
+
+/**
+ * Uma coleção de fichas prontas para o Compêndio. O manifesto só a declara: as
+ * fichas moram no `arquivo`, e quem as lê é o Rust (`bestiario.rs`). Espelho de
+ * `extensoes::ColecaoDoBestiario`.
+ */
+export type ColecaoDoBestiarioDeclarada = {
+  id: string;
+  titulo: string;
+  arquivo: string;
+  /** O sistema do mesmo plugin a que as fichas servem. Só etiqueta. */
+  sistema?: string | null;
 };
 
 /**
@@ -537,6 +552,7 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       })),
       fichasPdf: c.fichasPdf?.map(titulo),
       sistemas: c.sistemas?.map(titulo),
+      bestiario: c.bestiario?.map(titulo),
     },
   };
 }
