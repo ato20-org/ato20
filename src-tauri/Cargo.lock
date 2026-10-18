@@ -273,6 +273,7 @@ dependencies = [
  "tower",
  "tower-http",
  "uuid",
+ "webkit2gtk",
  "zip",
 ]
 

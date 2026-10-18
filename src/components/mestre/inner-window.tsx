@@ -5,9 +5,10 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { ChevronDown, ChevronUp, GripHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripHorizontal, SquareArrowOutUpRight, X } from "lucide-react";
 
 import { useDockDrag } from "@/components/mestre/dock/dock-drag";
+import { soltarJanela } from "@/components/mestre/janela-solta";
 import { Button } from "@/components/ui/button";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import { t } from "@/lib/i18n/mestre";
@@ -21,6 +22,7 @@ import {
   type Janela,
 } from "@/lib/store/use-window-store";
 import { cn } from "@/lib/utils";
+import { isDesktop } from "@/lib/vault/bridge";
 
 /**
  * As faixas invisíveis de esticar, nas bordas e nos cantos.
@@ -330,6 +332,20 @@ export function InnerWindow({
         </span>
 
         {acoes}
+
+        {/* Para fora do ATO20, numa janela do sistema. O mesmo que arrastar o
+            cabeçalho para fora, para quem não sabe que dá. Só no app. */}
+        {isDesktop() ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t.janela.soltar(titulo)}
+            title={t.janela.soltar(titulo)}
+            onClick={() => void soltarJanela(janela.conteudo)}
+          >
+            <SquareArrowOutUpRight />
+          </Button>
+        ) : null}
 
         <Button
           variant="ghost"

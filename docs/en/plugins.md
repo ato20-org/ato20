@@ -211,12 +211,20 @@ folder, through `api.extensao.url()`, and only weighs anything when installed.
 
 `api.janelas.abrir` and `fechar` (open and close) reach the plugin's windows
 and the built-in ones: a character's sheet, the list, the campaign settings.
-Wherever the window already is, docked or floating, opening it brings it into
-view instead of duplicating it. The plugin panel accepts a **`parametro`**
+Wherever the window already is, docked, floating or detached into a system
+window, opening it brings it into view instead of duplicating it. The plugin panel accepts a **`parametro`**
 (parameter): that is what lets the same panel open as "Edgar" and as "Mira", in
 two windows, each one remembering its own position. The body receives it as a
 prop. And a plugin only opens and closes **its own** windows: the plugin id is
 put into the key by the app, not by the plugin.
+
+A plugin panel can also go into a **detached window**, on the second monitor:
+the GM drags it out of ATO20, or uses the ↗ in its header. There the body is
+drawn into another document by the same JavaScript, and the global `document`
+and `window` are still the GM window's: listening to the pointer, looking under
+it or opening a portal needs the node's own document (`node.ownerDocument`, and
+its `defaultView`), and `node instanceof HTMLElement` is false for a node over
+there. The `api.ui` components already handle this on their own.
 
 ## Settings, like in VSCode
 

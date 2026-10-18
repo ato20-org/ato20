@@ -3,6 +3,7 @@
 import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 
 import { cn } from "@/lib/utils";
+import { useContainerDosPortais } from "@/components/ui/container-dos-portais";
 
 /**
  * Painel flutuante ancorado num gatilho.
@@ -37,7 +38,7 @@ function PopoverContent({
   > &
   Pick<PopoverPrimitive.Portal.Props, "keepMounted">) {
   return (
-    <PopoverPrimitive.Portal keepMounted={keepMounted}>
+    <PopoverPrimitive.Portal keepMounted={keepMounted} container={useContainerDosPortais()}>
       <PopoverPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}

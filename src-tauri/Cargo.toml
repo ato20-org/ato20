@@ -175,6 +175,9 @@ tauri-plugin-process = { version = "2", optional = true }
 # segunda copia. Ver `galeria::programas`.
 [target.'cfg(target_os = "linux")'.dependencies]
 gio = "0.18"
+# O `window.open` das janelas soltas fora do gesto do usuario: o ajuste mora
+# na WebKitGTK, e a versao e a que o wry ja traz. Ver `janelas`.
+webkit2gtk = "2.0"
 
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se

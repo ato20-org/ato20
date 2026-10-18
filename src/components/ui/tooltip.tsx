@@ -3,6 +3,7 @@
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
+import { useContainerDosPortais } from "@/components/ui/container-dos-portais"
 
 function TooltipProvider({
   delay = 0,
@@ -50,7 +51,7 @@ function TooltipContent({
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={useContainerDosPortais()}>
       <TooltipPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}

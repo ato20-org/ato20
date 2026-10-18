@@ -9,6 +9,7 @@ mod estante;
 mod extensoes;
 mod galeria;
 mod importar;
+mod janelas;
 mod presenca;
 mod serve;
 mod tailscale;
@@ -197,6 +198,11 @@ pub fn run() {
             app.manage(presenca::Presenca::iniciar());
 
             relogio_da_mesa(app.handle().clone());
+
+            // A janela principal nasce aqui, e nao do `tauri.conf.json`: e
+            // ela que atende o `window.open` das janelas soltas. Ver `janelas`.
+            app.manage(janelas::Pedidos::default());
+            janelas::criar_principal(app.handle())?;
 
             Ok(())
         })
@@ -389,17 +395,24 @@ pub fn run() {
             commands::configuracoes_gravar,
             commands::configuracoes_abrir_arquivo,
             presenca::definir_presenca,
+            janelas::janela_solta_pedir,
+            janelas::janela_solta_focar,
+            janelas::janela_solta_fechar,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app, evento| {
+        .run(|app, evento| match evento {
             // Fecha o Funnel na saida: a mesa aberta para a internet e
             // escolha de uma sessao, e nao um estado que fica para tras.
-            if let tauri::RunEvent::Exit = evento {
+            tauri::RunEvent::Exit => {
                 if let Some(estado) = app.try_state::<AppState>() {
                     tailscale::fechar_se_nosso(estado.daemon.porta);
                 }
             }
+            tauri::RunEvent::WindowEvent { label, event, .. } => {
+                janelas::ao_evento(app, &label, &event)
+            }
+            _ => {}
         });
 }
 

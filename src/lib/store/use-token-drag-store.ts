@@ -201,6 +201,12 @@ export type ArrastoDeToken = {
   x: number;
   y: number;
   destino: DestinoDoArrasto | null;
+  /**
+   * O gesto é numa janela SOLTA, e não no Mestre: o `x` e o `y` são de lá.
+   * Quem desenha algo seguindo o cursor no Mestre -- a etiqueta da condição,
+   * a prévia do token -- não desenha. Ver `janela-solta.tsx`.
+   */
+  emOutraJanela?: boolean;
 };
 
 /** O arquivo do acervo que está sendo arrastado, quando há um. */
