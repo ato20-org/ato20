@@ -190,11 +190,20 @@ instalado.
 
 `api.janelas.abrir` e `fechar` alcançam as janelas do plugin e as de fábrica —
 a ficha de um personagem, a lista, a configuração da campanha. Onde a janela já
-estiver, atracada ou flutuando, abrir a traz à vista em vez de duplicar. O
+estiver, atracada, flutuando ou solta numa janela do sistema, abrir a traz à
+vista em vez de duplicar. O
 painel do plugin aceita um **`parametro`**: é o que faz o mesmo painel abrir
 como "Edgar" e como "Mira", em duas janelas, cada uma lembrando a própria
 posição. O corpo o recebe como prop. E um plugin só abre e fecha as janelas
 **dele**: o id da extensão entra na chave pelo aplicativo, não pelo plugin.
+
+O painel de um plugin também pode ir para uma **janela solta**, no segundo
+monitor (ver [Janelas soltas](telas.md#janelas-soltas)). Lá o corpo é desenhado
+num outro documento pelo mesmo JavaScript, e o `document` e o `window` globais
+continuam sendo os do Mestre: ouvir o ponteiro, procurar sob ele ou abrir um
+portal pede o documento do próprio nó (`no.ownerDocument`, e o `defaultView`
+dele), e `no instanceof HTMLElement` dá falso para um nó de lá. Os componentes
+de `api.ui` já resolvem isso sozinhos.
 
 ## Configurações, como no VSCode
 
