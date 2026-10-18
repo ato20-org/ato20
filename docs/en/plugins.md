@@ -96,7 +96,10 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 11 is the current one: it added
+that asks for more than it has.** Version 12 is the current one: it added
+`bestiario`, the ready-made sheets a plugin brings to the Compendium (see
+[Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)),
+which an earlier ATO20 would silently ignore. Version 11 added
 `estilosDeAtributos` and the system's `estiloDosAtributos` (see
 [Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual)), which an
 earlier ATO20 would silently ignore, leaving the sheet on cards without saying
@@ -1136,6 +1139,92 @@ for **API 10**:
 A plugin with a system **and** a PDF sheet closes the loop: use the system's
 groups and labels in the sheet, and the imported character lands right in the
 template.
+
+## Plugin bestiary: ready-made sheets in the Compendium
+
+A plugin brings ready-made sheets -- a system's threats, an adventure's NPCs
+-- and they show up in the campaign Compendium's Bestiary, in a section named
+after the collection and the plugin, after the GM's own templates. It is also
+just the manifest, and asks for **API 12**. The manifest declares the
+collection; the sheets live in a file next to it:
+
+```json
+"apiVersao": 12,
+"contribui": {
+  "bestiario": [{
+    "id": "threats",
+    "titulo": { "pt-BR": "Ameaças", "en": "Threats" },
+    "arquivo": "bestiary/threats.json",
+    "sistema": "ordem"
+  }]
+}
+```
+
+```json
+{
+  "grupos": [
+    { "nome": "Combat" },
+    { "nome": "Attacks", "exibicao": "lista" }
+  ],
+  "moldes": [{
+    "id": "blood-zombie",
+    "nome": "Blood Zombie",
+    "tags": ["Blood", "VD 40"],
+    "fonte": "Rulebook",
+    "miniatura": "bestiary/blood-zombie.webp",
+    "atributos": [{ "sigla": "AGI", "valor": 1 }, { "sigla": "FOR", "valor": 3 }],
+    "medidores": [{ "nome": "HP", "maximo": 45 }],
+    "detalhes": [
+      { "grupo": "Combat", "rotulo": "Defense", "tipo": "numero", "valor": 19 },
+      { "grupo": "Attacks", "rotulo": "Bite", "valor": "2d6+5 slashing",
+        "rolagem": "2d20+10", "descricao": "Standard. Attack." }
+    ]
+  }]
+}
+```
+
+- **Read-only, and always copied.** The plugin card has "Put in play" and, in
+  its menu, "Bring to the campaign". Bringing copies the sheet into the
+  campaign Compendium, where it is edited like any template; putting it in
+  play -- with the button or by dragging the card to the map -- comes out of
+  that template, brought right then if it wasn't there yet. The fourth goblin
+  doesn't bring the sheet again: the brought template remembers where it came
+  from (`doPlugin`), and bringing the same sheet again returns the same
+  template. Updating the plugin doesn't touch what the campaign already brought.
+- **The threat starts clean.** It doesn't get the campaign's default meters,
+  attributes and details -- an agent's NEX and Rank. It gets what the sheet
+  says.
+- **The meter wears the campaign.** The sheet's HP comes out with the color and
+  style of the campaign's HP template; only the maximum is the sheet's. `cor`
+  and `estilo` apply when the campaign has no template with that name.
+- **Groups live in the file**, not in each sheet. Bringing adds to the
+  campaign's template only the groups the sheet uses -- without their default
+  details --, and the detail keeps the group name as the campaign spells it.
+  Use your `sistema`'s groups and the threat lands on the usual sheet.
+- **`rolagem`** is the detail's roll expression, read by the same parser that
+  rolls at the table. Whether the detail gets the d20 is up to the campaign's
+  template (`rolavel`), by label.
+- **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
+  URL with a site name. The file goes into the campaign's library when brought;
+  the URL is downloaded then, by the GM's machine, and the sheet comes in
+  without the image that didn't arrive, with a warning. The card only draws
+  images from the folder: it doesn't go to the network before anyone asks. One
+  image stands in for the missing other -- without a token the card couldn't be
+  dragged. Up to 2 MB, in the meter style's formats; a downloaded one goes
+  through the same limit, with its type checked from the bytes.
+- **`fonte`** shows on the card: the book, the supplement, the collection of
+  whoever made the sheet. It's where the credit stays in sight.
+- **`sistema`** is only a label: the id of a system from the same plugin.
+  Bringing doesn't apply the system.
+- **Checked on install, in full.** The file, each sheet and each image in the
+  folder: what saving would silently cut becomes an error at install time.
+  The limits are the campaign's (12 attributes, 6 meters, 16 groups, 200
+  details, 16 tags), plus 500 sheets and 4 MB per file, 60 characters in the
+  name and 120 in the source. A text detail holds up to 80 characters; the rest
+  goes in `descricao`, up to 2,000. A file that breaks after install shows in
+  the section with the reason, and the other collections carry on.
+- **Plugin off, collection out.** Turning it on and off shows and hides the
+  section right away.
 
 ## Plugin-drawn attributes: the ritual
 
