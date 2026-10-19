@@ -233,8 +233,10 @@ lugar nenhum até chegarem a uma campanha.
   e `inventory::dar` recusa pô-lo numa mochila. As pastas são do Compêndio (`compendio`
   e `compendio-itens`), não as de Personagens e Itens.
 - **Do plugin.** As fichas que um plugin ligado traz (`contribui.bestiario`)
-  aparecem no Bestiário depois dos moldes do mestre, numa seção por coleção, só
-  de leitura e fora das pastas. Trazer é cópia, como do ATO20: vira um molde da
+  aparecem no Bestiário depois dos moldes do mestre, uma pasta por coleção,
+  pintada com a aura dela, só de leitura e fora das pastas do mestre. A pasta
+  aberta acende a janela com a luz da aura, e a ficha trazida leva a aura
+  junto. Ver [Auras](extensoes.md#auras-a-cor-o-emblema-e-a-luz-do-plugin). Trazer é cópia, como do ATO20: vira um molde da
   campanha, que lembra de onde veio (`doPlugin`) para o próximo arrasto sair
   dele. Ver [Bestiário do plugin](extensoes.md#bestiário-do-plugin-fichas-prontas-no-compêndio).
 - **Do ATO20.** O que serve a qualquer campanha desta máquina mora em

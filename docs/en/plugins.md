@@ -98,7 +98,9 @@ the app to run all of them to know what exists.
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
 that asks for more than it has.** Version 12 is the current one: it added
 `bestiario`, the ready-made sheets a plugin brings to the Compendium (see
-[Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)),
+[Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)), and
+`auras`, the color, emblem and light a plugin marks folders, cards,
+characters and items with (see [Auras](#auras-the-plugins-color-emblem-and-light)),
 which an earlier ATO20 would silently ignore. Version 11 added
 `estilosDeAtributos` and the system's `estiloDosAtributos` (see
 [Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual)), which an
@@ -1143,8 +1145,11 @@ template.
 ## Plugin bestiary: ready-made sheets in the Compendium
 
 A plugin brings ready-made sheets -- a system's threats, an adventure's NPCs
--- and they show up in the campaign Compendium's Bestiary, in a section named
-after the collection and the plugin, after the GM's own templates. It is also
+-- and they show up in the campaign Compendium's Bestiary, after the GM's own
+templates: each collection is a folder, in a section named after the plugin,
+and a click opens it. The folder belongs to the plugin, not to the GM: it
+can't be renamed or moved, and it goes away with the plugin. While searching,
+the folders give way to the matching sheets, one section per collection. It is also
 just the manifest, and asks for **API 12**. The manifest declares the
 collection; the sheets live in a file next to it:
 
@@ -1216,6 +1221,11 @@ collection; the sheets live in a file next to it:
   whoever made the sheet. It's where the credit stays in sight.
 - **`sistema`** is only a label: the id of a system from the same plugin.
   Bringing doesn't apply the system.
+- **`aura`**, on the collection, is the id of an aura from the same plugin: it
+  paints the folder, lights up the window opened on it and frames each
+  sheet's card. A sheet can bring its own (`"aura"` on the template), over the
+  collection's, and the brought sheet takes its aura into the campaign. See
+  [Auras](#auras-the-plugins-color-emblem-and-light).
 - **Checked on install, in full.** The file, each sheet and each image in the
   folder: what saving would silently cut becomes an error at install time.
   The limits are the campaign's (12 attributes, 6 meters, 16 groups, 200
@@ -1225,6 +1235,52 @@ collection; the sheets live in a file next to it:
   the section with the reason, and the other collections carry on.
 - **Plugin off, collection out.** Turning it on and off shows and hides the
   section right away.
+
+## Auras: the plugin's color, emblem and light
+
+An aura is the mark a plugin paints something with: a bestiary collection's
+folder, the window opened on it, each sheet's card, and the campaign character
+or item that receives it. Ordem gives one to each element -- the Blood folder
+red, with the cross on its front, and the window lighting up in red running
+along its edges --; a D&D plugin would give a golden "Legendary" to an item.
+Declared once and pointed to by id, like a meter style. Asks for **API 12**:
+
+```json
+"auras": [{
+  "id": "blood",
+  "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+  "cor": "#b3121f",
+  "emblema": "bestiary/elements/blood.webp",
+  "luz": { "efeito": "fluxo", "cores": ["#dc2626"] }
+}],
+"bestiario": [{ "id": "blood", "titulo": "Blood", "arquivo": "bestiary/blood.json", "aura": "blood" }]
+```
+
+- **`cor`** paints the folder and the card's border, in hex.
+- **`emblema`** is an image from the plugin folder, drawn on the front of the
+  folder. Raster, up to 2 MB, in the meter style formats, checked on install.
+  Pick the emblem's ink for contrast with `cor`: white on a dark folder, dark
+  on a light one. It stays on the GM's screen: the daemon doesn't publish it.
+- **`luz`** lights the edges of the window opened on the folder, and the
+  border of the card under the pointer. The effect belongs to the CORE, from
+  a closed list, and the plugin picks which and in what colors (1 to 4):
+  - `fixa`: a steady glow.
+  - `pulso`: a glow that slowly breathes.
+  - `fluxo`: a throbbing glow, with light running along the four edges.
+  - `cintilar`: one glow per color, each flickering at its own pace.
+
+  Closed because of the GM's machine: each effect is a layer painted once,
+  with only its opacity or position animated -- what the GPU does without
+  repainting the window. Whoever asked the system for reduced motion gets a
+  steady light. A card only animates under the pointer; the others keep the
+  border and a steady glow.
+- **In the campaign**, the aura is `{plugin}/{id}`. A sheet brought from the
+  bestiary takes its own, and so does the copy in play. The GM gives, changes
+  or removes the aura of a template, an item or a character in play through
+  the "Aura" menu, which lists the enabled plugins' auras. In the Compendium
+  it is the card's border, and in the Characters list, the ring around the
+  face. With the plugin disabled it disappears from the screen and stays
+  saved, and comes back with it.
 
 ## Plugin-drawn attributes: the ritual
 

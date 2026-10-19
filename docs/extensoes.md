@@ -88,8 +88,10 @@ app a rodar todas para saber o que existe.
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
 mais do que ele tem.** A 12 é a atual: ela acrescentou o `bestiario`, as
 fichas prontas que o plugin traz para o Compêndio (ver
-[Bestiário do plugin](#bestiário-do-plugin-fichas-prontas-no-compêndio)), que
-um ATO20 anterior ignoraria calado. A 11 acrescentou os
+[Bestiário do plugin](#bestiário-do-plugin-fichas-prontas-no-compêndio)), e as
+`auras`, a cor, o emblema e a luz com que o plugin marca pastas, cards,
+personagens e itens (ver [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin)),
+que um ATO20 anterior ignoraria calado. A 11 acrescentou os
 `estilosDeAtributos` e o `estiloDosAtributos` do sistema (ver
 [Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual)),
 que um ATO20 anterior ignoraria calado, com a ficha nos cartões sem dizer por
@@ -1055,8 +1057,11 @@ grupos e rótulos do sistema, e o personagem importado cai certinho no molde.
 ## Bestiário do plugin: fichas prontas no Compêndio
 
 O plugin traz fichas prontas -- as ameaças de um sistema, os NPCs de uma
-aventura -- e elas aparecem no Bestiário do Compêndio da campanha, numa seção
-com o nome da coleção e do plugin, depois dos moldes do mestre. Também é só o
+aventura -- e elas aparecem no Bestiário do Compêndio da campanha, depois dos
+moldes do mestre: cada coleção é uma pasta, numa seção com o nome do plugin, e
+um clique entra nela. A pasta é do plugin, e não do mestre: não se renomeia nem
+se move, e some com ele. Na busca, as pastas dão lugar às fichas que bateram,
+uma seção por coleção. Também é só o
 manifesto, e pede a **API 12**. O manifesto declara a coleção; as fichas moram
 num arquivo ao lado dele:
 
@@ -1127,6 +1132,11 @@ num arquivo ao lado dele:
   ficha. É onde o crédito fica à vista.
 - **`sistema`** é só etiqueta: o id de um sistema do mesmo plugin. Trazer
   não aplica o sistema.
+- **`aura`**, na coleção, é o id de uma aura do mesmo plugin: ela pinta a
+  pasta, acende a janela aberta nela e emoldura o card de cada ficha. A ficha
+  pode trazer a dela (`"aura"` no molde), por cima da da coleção, e a ficha
+  trazida leva a aura junto para a campanha. Ver
+  [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin).
 - **Conferido na instalação, inteiro.** O arquivo, cada ficha e cada imagem
   da pasta: o que a gravação cortaria calada vira erro na hora de instalar.
   Os tetos são os da campanha (12 atributos, 6 medidores, 16 grupos, 200
@@ -1136,6 +1146,53 @@ num arquivo ao lado dele:
   seção com o motivo, e as outras coleções seguem.
 - **Plugin desligado, coleção fora.** Ligar e desligar mostra e esconde a
   seção na hora.
+
+## Auras: a cor, o emblema e a luz do plugin
+
+Uma aura é a marca com que o plugin pinta uma coisa: a pasta de uma coleção do
+bestiário, a janela aberta nela, o card de cada ficha, e o personagem ou o
+item da campanha que a recebe. O Ordem dá uma a cada elemento -- a pasta de
+Sangue vermelha, com a cruz na frente, e a janela que acende em vermelho
+correndo pelas bordas --; um plugin de D&D daria a "Lendário" dourada a um item.
+Declarada uma vez e apontada por id, como o estilo de medidor. Pede a
+**API 12**:
+
+```json
+"auras": [{
+  "id": "sangue",
+  "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+  "cor": "#b3121f",
+  "emblema": "bestiario/elementos/sangue.webp",
+  "luz": { "efeito": "fluxo", "cores": ["#dc2626"] }
+}],
+"bestiario": [{ "id": "sangue", "titulo": "Sangue", "arquivo": "bestiario/sangue.json", "aura": "sangue" }]
+```
+
+- **`cor`** pinta a pasta e a borda do card, em hex.
+- **`emblema`** é uma imagem da pasta do plugin, desenhada na frente da pasta.
+  Raster, até 2 MB, nos formatos do estilo de medidor, conferida na
+  instalação. Escolha a tinta do emblema pelo contraste com a `cor`: branca na
+  pasta escura, escura na clara. Fica na tela do mestre: o daemon não a
+  publica na rede.
+- **`luz`** é a das bordas da janela aberta na pasta, e a da borda do card sob
+  a mão. O efeito é do NÚCLEO, de uma lista fechada, e o plugin escolhe qual e
+  com que cores (de 1 a 4):
+  - `fixa`: o brilho parado.
+  - `pulso`: o brilho que respira devagar.
+  - `fluxo`: o brilho latejando, com a luz correndo pelas quatro bordas.
+  - `cintilar`: um brilho por cor, cada um piscando no seu ritmo.
+
+  Fechada por causa da máquina do mestre: cada efeito é camada pintada uma vez,
+  com só a opacidade ou a posição animada -- o que a placa de vídeo faz sem
+  redesenhar a janela. Quem pediu menos movimento no sistema recebe a luz
+  parada. O card só anima sob a mão; os outros ficam com a borda e um brilho
+  parado.
+- **Na campanha**, a aura é `{plugin}/{id}`. A ficha trazida do bestiário leva
+  a dela, e a cópia em jogo também. O mestre dá, troca ou tira a aura de um
+  molde, de um item ou de um personagem em jogo pelo menu "Aura", que lista as
+  dos plugins ligados. No Compêndio ela é a borda do card, e na lista de
+  Personagens, o anel do rosto. Com o plugin desligado ela some da tela e fica
+  gravada, e volta com ele.
 
 ## Atributos desenhados pelo plugin: o ritual
 
