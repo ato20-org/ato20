@@ -39,6 +39,7 @@ import {
   AcaoDaLinha,
   ArvoreDoCompendio,
   Cartao,
+  CartaoDaColecao,
   NavegacaoDoCompendioProvider,
   TrilhaDoCompendio,
   daMaoNoCartao,
@@ -71,6 +72,8 @@ import {
 } from "@/components/mestre/compendio-efeitos";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { EditorDeTags } from "@/components/mestre/editor-de-tags";
+import { ItensDeAura } from "@/components/mestre/itens-de-aura";
+import { LuzDaAura } from "@/components/mestre/luz-da-aura";
 import { ImagemDoItem, imagemDesenhada } from "@/components/mestre/imagem-do-item";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
@@ -79,7 +82,9 @@ import type { Kit } from "@/components/ui/menu-kit";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useAura, useAuras, type AuraDoPlugin } from "@/lib/extensoes/auras";
 import { fecharJanela } from "@/lib/extensoes/janelas";
+import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { resolverTexto } from "@/lib/extensoes/texto";
 import { chaveDe } from "@/lib/store/use-window-store";
 import { useAssetList } from "@/hooks/use-asset-list";
@@ -128,6 +133,7 @@ import {
   criarMolde,
   criarMoldeDeItem,
   itemEmJogo,
+  definirAura,
   levarAoCompendio,
   listarCompendioDaMaquina,
   porEmJogo,
@@ -281,6 +287,10 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   const [editandoTags, setEditandoTags] = useState<EdicaoDeTags | null>(null);
   const maquina = useCompendioDaMaquina();
   const doPlugin = useBestiarioDosPlugins();
+  const auras = useAuras();
+  // A pasta de um plugin aberta (`{plugin}/{colecao}`), que não é do board:
+  // por isso à parte das `abertas`. Lembrada ao trocar de aba, como elas.
+  const [colecaoAberta, setColecaoAberta] = useState<string | null>(null);
   const abrir = useAbrirJanela();
   const { recarregar } = useCharacters();
   const moldes = useCharactersStore((state) => state.moldes);
@@ -542,6 +552,9 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   function criar() {
     switch (tipo) {
       case "bestiario":
+        // A pasta do plugin não recebe molde: o novo nasce na raiz, e é para
+        // lá que a lista volta.
+        setColecaoAberta(null);
         return void criarNoBestiario(pastaAberta);
       case "itens":
         return void criarNoCatalogo(pastaAberta);
@@ -606,6 +619,15 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
 
   const daCampanha = onde === "campanha";
 
+  // A pasta do plugin, só no Bestiário da campanha e fora da busca: a busca
+  // acha em todas, como nas pastas do mestre. A que sumiu -- plugin desligado
+  // -- é a raiz.
+  const pastaDoPlugin =
+    daCampanha && tipo === "bestiario" && !filtrando(filtro) && colecaoAberta
+      ? (doPlugin.find((colecao) => chaveContribuicao(colecao.extensao, colecao.id) === colecaoAberta) ?? null)
+      : null;
+  const auraDaPastaDoPlugin = pastaDoPlugin?.aura ? (auras[chaveContribuicao(pastaDoPlugin.extensao, pastaDoPlugin.aura)] ?? null) : null;
+
   // Estáveis: vão a cada card, e um card em `memo` não pode receber uma
   // função nova a cada letra da busca.
   const apagarMolde = useCallback(
@@ -639,7 +661,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   const textosDoApagar = textosDeApagar(aApagar);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {/* As abas de sempre, as da ficha: sublinhadas, à esquerda, com a borda
           de ponta a ponta. Eram pílulas, e eram a única janela com elas. */}
       <Tabs value={tipo} onValueChange={(valor) => trocarTipo(valor as Tipo)} className="shrink-0 gap-0">
@@ -732,7 +754,15 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
 
       {/* A trilha da pasta aberta, só na campanha e fora da busca -- a busca
           acha em todas as pastas, e o card diz de qual. */}
-      {daCampanha && !filtrando(filtro) && daAba[1].length > 0 ? (
+      {pastaDoPlugin ? (
+        <NavegacaoDoCompendioProvider value={navegacao}>
+          <TrilhaDoCompendio
+            raiz={raizDaTrilha}
+            pastas={[]}
+            colecao={{ nome: resolverTexto(pastaDoPlugin.titulo), onFechar: () => setColecaoAberta(null) }}
+          />
+        </NavegacaoDoCompendioProvider>
+      ) : daCampanha && !filtrando(filtro) && daAba[1].length > 0 ? (
         <NavegacaoDoCompendioProvider value={navegacao}>
           <TrilhaDoCompendio raiz={raizDaTrilha} pastas={daAba[1]} />
         </NavegacaoDoCompendioProvider>
@@ -749,6 +779,12 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
             onApagar={(id, nome) => setAApagar({ onde: "ato20", tipo: tipoDeMolde(lista), id, nome })}
             onEditarTags={setEditandoTags}
           />
+        ) : tipo === "bestiario" && pastaDoPlugin ? (
+          pastaDoPlugin.erro ? (
+            <p className="text-destructive px-3 py-2 text-xs">{texto.colecaoQuebrada(noIdioma(pastaDoPlugin.erro))}</p>
+          ) : (
+            <FichasDoPlugin colecao={pastaDoPlugin} fichas={pastaDoPlugin.fichas} auras={auras} />
+          )
         ) : tipo === "bestiario" ? (
           <>
             <BestiarioDaCampanha
@@ -764,7 +800,12 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
             {/* Na raiz e na busca, e não dentro de uma pasta: as pastas são do
                 mestre, e a ficha do plugin não é da campanha até chegar nela. */}
             {pastaAberta === undefined || filtrando(filtro) ? (
-              <BestiarioDosPlugins achados={achadosDosPlugins} buscando={filtrando(filtro)} />
+              <BestiarioDosPlugins
+                achados={achadosDosPlugins}
+                buscando={filtrando(filtro)}
+                auras={auras}
+                onAbrir={setColecaoAberta}
+              />
             ) : null}
           </>
         ) : tipo === "itens" ? (
@@ -798,6 +839,15 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         )}
       </AreaDeRolagemDoCompendio>
       </NavegacaoDoCompendioProvider>
+
+      {/* As bordas da janela acendem com a luz da aura da pasta aberta: o
+          Sangue corre, a Energia pisca. Por cima de tudo e sem pegar clique.
+          Ver `LuzDaAura`. */}
+      {auraDaPastaDoPlugin?.luz ? (
+        <span aria-hidden className="pointer-events-none absolute inset-0 z-10">
+          <LuzDaAura luz={auraDaPastaDoPlugin.luz} />
+        </span>
+      ) : null}
 
       <EditorDeTags
         edicao={editandoTags}
@@ -1054,43 +1104,95 @@ function useBestiarioDosPlugins(): ColecaoDoPlugin[] {
  * campanha, onde ela se edita; pôr em jogo -- pelo botão ou arrastando para o
  * mapa -- sai do molde que ela deixa lá. Ver `compendio::trazer_do_plugin`.
  *
- * Uma seção por coleção, com o nome do plugin no título: é por ele que o
- * mestre sabe de onde a ficha veio, e a quem dar o crédito.
+ * Cada coleção é uma PASTA, uma seção por plugin com o nome dele no título: é
+ * por ele que o mestre sabe de onde a ficha veio, e a quem dar o crédito. A
+ * pasta veste a aura da coleção -- a cor e o emblema do elemento --, e um
+ * clique entra nela. Ver `CartaoDaColecao`.
+ *
+ * Na busca, as pastas somem e as fichas que bateram aparecem, uma seção por
+ * coleção: entrar numa pasta esconderia o que foi achado nas outras.
  */
 function BestiarioDosPlugins({
   achados,
   buscando,
+  auras,
+  onAbrir,
 }: {
   achados: Array<{ colecao: ColecaoDoPlugin; fichas: FichaDoPlugin[] }>;
   buscando: boolean;
+  auras: Record<string, AuraDoPlugin>;
+  /** Entra na pasta da coleção, pela chave `{plugin}/{colecao}`. */
+  onAbrir: (chave: string) => void;
 }) {
   const extensoes = useExtensoesStore((estado) => estado.extensoes);
+  const nomeDoPlugin = (id: string) => extensoes.find((extensao) => extensao.id === id)?.nome ?? id;
 
-  return achados.map(({ colecao, fichas }) => {
-    // Na busca, a coleção sem nada que bata some: o título sozinho pareceria
-    // dizer que ela achou alguma coisa.
-    if (buscando && fichas.length === 0) return null;
+  if (buscando) {
+    return achados.map(({ colecao, fichas }) => {
+      // Na busca, a coleção sem nada que bata some: o título sozinho pareceria
+      // dizer que ela achou alguma coisa.
+      if (fichas.length === 0) return null;
 
-    const plugin = extensoes.find((extensao) => extensao.id === colecao.extensao)?.nome ?? colecao.extensao;
-    const titulo = texto.doPlugin(resolverTexto(colecao.titulo), plugin);
+      const titulo = texto.doPlugin(resolverTexto(colecao.titulo), nomeDoPlugin(colecao.extensao));
+
+      return (
+        <section key={`${colecao.extensao}/${colecao.id}`} aria-label={titulo}>
+          <h3 className="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium">{titulo}</h3>
+          <FichasDoPlugin colecao={colecao} fichas={fichas} auras={auras} />
+        </section>
+      );
+    });
+  }
+
+  // Uma seção por plugin, na ordem em que as coleções chegaram.
+  const porPlugin = new Map<string, ColecaoDoPlugin[]>();
+  for (const { colecao } of achados) {
+    porPlugin.set(colecao.extensao, [...(porPlugin.get(colecao.extensao) ?? []), colecao]);
+  }
+
+  return [...porPlugin].map(([extensao, colecoes]) => {
+    const titulo = texto.pastasDoPlugin(nomeDoPlugin(extensao));
+    const quebradas = colecoes.filter((colecao) => colecao.erro);
 
     return (
-      <section key={`${colecao.extensao}/${colecao.id}`} aria-label={titulo}>
+      <section key={extensao} aria-label={titulo}>
         <h3 className="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium">{titulo}</h3>
-        {colecao.erro ? (
-          <p className="text-destructive px-3 pb-2 text-xs">
-            {texto.colecaoQuebrada(noIdioma(colecao.erro))}
+        <GradeDeCartoes>
+          {colecoes
+            .filter((colecao) => !colecao.erro)
+            .map((colecao) => (
+              <CartaoDaColecao
+                key={colecao.id}
+                nome={resolverTexto(colecao.titulo)}
+                plugin={nomeDoPlugin(extensao)}
+                total={colecao.fichas.length}
+                aura={colecao.aura ? (auras[chaveContribuicao(extensao, colecao.aura)] ?? null) : null}
+                onAbrir={() => onAbrir(chaveContribuicao(extensao, colecao.id))}
+              />
+            ))}
+        </GradeDeCartoes>
+        {/* A coleção que quebrou depois de instalada não vira pasta: uma pasta
+            vazia diria que ela não tem nada. Aparece com o motivo. */}
+        {quebradas.map((colecao) => (
+          <p key={colecao.id} className="text-destructive px-3 pb-2 text-xs">
+            {resolverTexto(colecao.titulo)}: {texto.colecaoQuebrada(noIdioma(colecao.erro!))}
           </p>
-        ) : (
-          <FichasDoPlugin colecao={colecao} fichas={fichas} />
-        )}
+        ))}
       </section>
     );
   });
 }
 
 /** Os cards de uma coleção, aos poucos: um plugin pode trazer quinhentas. */
-function FichasDoPlugin({ colecao, fichas }: { colecao: ColecaoDoPlugin; fichas: FichaDoPlugin[] }) {
+function FichasDoPlugin({
+  colecao,
+  fichas,
+  auras,
+}: {
+  colecao: ColecaoDoPlugin;
+  fichas: FichaDoPlugin[];
+  auras: Record<string, AuraDoPlugin>;
+}) {
   const { limite, fim } = useAosPoucos(fichas, fichas.length);
 
   return (
@@ -1102,6 +1204,7 @@ function FichasDoPlugin({ colecao, fichas }: { colecao: ColecaoDoPlugin; fichas:
             extensaoId={colecao.extensao}
             colecaoId={colecao.id}
             ficha={ficha}
+            aura={ficha.aura ? (auras[chaveContribuicao(colecao.extensao, ficha.aura)] ?? null) : null}
           />
         ))}
       </GradeDeCartoes>
@@ -1122,10 +1225,12 @@ const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
   extensaoId,
   colecaoId,
   ficha,
+  aura,
 }: {
   extensaoId: string;
   colecaoId: string;
   ficha: FichaDoPlugin;
+  aura: AuraDoPlugin | null;
 }) {
   const arrastar = useTokenDrag();
   const { recarregar } = useCharacters();
@@ -1179,6 +1284,7 @@ const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
       detalhe={ficha.fonte ?? undefined}
       tags={ficha.tags}
       titulo={texto.dicaDoPlugin(ficha.nome)}
+      aura={aura}
       naMao={naMao}
       imagem={
         ficha.imagem ? (
@@ -1240,6 +1346,7 @@ const CartaoDoMolde = memo(function CartaoDoMolde({
   const abrir = useAbrirJanela();
   const arrastar = useTokenDrag();
   const { recarregar } = useCharacters();
+  const aura = useAura(molde.aura);
   const naMao = useTokenDragStore(
     (state) =>
       state.arrasto?.fonte.tipo === "molde" && state.arrasto.fonte.personagemId === molde.id,
@@ -1294,6 +1401,11 @@ const CartaoDoMolde = memo(function CartaoDoMolde({
           <Tags />
           {texto.tagsNoMenu}
         </Item>
+        <ItensDeAura
+          kit={kit}
+          atual={molde.aura}
+          onEscolher={(escolhida) => void definirAura("personagem", molde.id, escolhida).then(recarregar, falhou)}
+        />
         <ItensDeMover
           kit={kit}
           atual={pastaDoMembro(pastas, molde.id)}
@@ -1318,6 +1430,7 @@ const CartaoDoMolde = memo(function CartaoDoMolde({
       tags={molde.tags}
       medidores={molde.medidores}
       titulo={texto.dicaDoMolde(molde.nome)}
+      aura={aura}
       naMao={naMao}
       imagem={
         molde.retrato ?? molde.miniatura ? (
@@ -1439,6 +1552,7 @@ const CartaoDoMoldeDeItem = memo(function CartaoDoMoldeDeItem({
   onEditarTags: (edicao: EdicaoDeTags) => void;
 }) {
   const arrastar = useTokenDrag();
+  const aura = useAura(item.aura);
   const naMao = useTokenDragStore(
     (state) => state.arrasto?.fonte.tipo === "molde-item" && state.arrasto.fonte.itemId === item.id,
   );
@@ -1488,6 +1602,13 @@ const CartaoDoMoldeDeItem = memo(function CartaoDoMoldeDeItem({
           <Tags />
           {texto.tagsNoMenu}
         </Opcao>
+        <ItensDeAura
+          kit={kit}
+          atual={item.aura}
+          onEscolher={(escolhida) =>
+            void definirAura("item", item.id, escolhida).then(() => itensMudaram([]), falhou)
+          }
+        />
         <ItensDeMover
           kit={kit}
           atual={pastaDoMembro(pastas, item.id)}
@@ -1514,6 +1635,7 @@ const CartaoDoMoldeDeItem = memo(function CartaoDoMoldeDeItem({
       corpo={<AtributosDoCartao atributos={item.atributos} />}
       quadrado
       titulo={texto.dicaDoMoldeDeItem(item.nome)}
+      aura={aura}
       naMao={naMao}
       imagem={
         <ImagemDoItem
@@ -1598,6 +1720,8 @@ type CoisaDaMaquina = {
   tinta?: string;
   /** O efeito, que se arrasta até o mapa. Ver `arrastoDoEfeito`. */
   efeito?: DefinicaoDeEfeito;
+  /** A aura de plugin do molde ou do item guardado, `{plugin}/{aura}`. */
+  aura?: string;
 };
 
 /**
@@ -1628,6 +1752,7 @@ function DaMaquina({
 }) {
   const { recarregar } = useCharacters();
   const deFora = useDeclarativoStore((state) => state.efeitos);
+  const auras = useAuras();
   const arrastar = useTokenDrag();
   // Um só para a lista, e não um por card: os cards daqui são desenhados por
   // função, e não por componente.
@@ -1676,6 +1801,8 @@ function DaMaquina({
       nome: coisa.nome,
       detalhe: coisa.detalhe,
       tags: coisa.tags,
+      // Só a borda: a aura se troca na campanha, como tudo o que não é tag.
+      aura: coisa.aura ? (auras[coisa.aura] ?? null) : null,
       titulo: texto.dicaDaMaquina(coisa.nome),
       imagem: coisa.imagem ? (
         <ImagemDaMaquina assetId={coisa.imagem} />
@@ -1807,6 +1934,7 @@ function coisasDaMaquina(
         tags: personagem.tags ?? [],
         medidores: personagem.medidores,
         imagem: personagem.retrato ?? personagem.miniatura,
+        aura: personagem.aura,
       }));
     case "itens":
       return dados.itens.map((item) => ({
@@ -1816,6 +1944,7 @@ function coisasDaMaquina(
         tags: item.tags ?? [],
         atributos: item.atributos,
         imagem: item.imagem?.tipo === "asset" ? item.imagem.id : undefined,
+        aura: item.aura,
       }));
     case "condicoes": {
       // O efeito pelo nome: o de fábrica e o de plugin daqui, e o da campanha

@@ -238,6 +238,10 @@ pub struct Item {
     /// nao numa pasta do board, porque viajam com ele para o ATO20 e de volta.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// A aura de plugin do item: `{plugin}/{aura}`, a borda dourada do
+    /// lendario. Ver `characters::Personagem::aura`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aura: Option<String>,
     /// Um MOLDE do Compendio, e nao um item da campanha: a espada preparada
     /// que ainda nao entrou no jogo. Fica no mesmo `itens.json`, e por isso se
     /// edita na mesma janela; quem lista separa -- o `useItensStore` guarda os
@@ -417,6 +421,7 @@ pub(crate) fn montar(
             Autor::Mestre => None,
         },
         tags: Vec::new(),
+        aura: None,
         compendio: false,
         criado_em: now_ms(),
     };
@@ -599,6 +604,20 @@ pub fn set_tags(vault: &Vault, id: &str, tags: Vec<String>) -> AppResult<()> {
         .find(|item| item.id == id)
         .ok_or_else(|| nao_existe(id))?
         .tags = tags;
+
+    save(vault, &itens)
+}
+
+/// Troca a aura do item, ou a tira. Ver `compendio::definir_aura`.
+pub fn set_aura(vault: &Vault, id: &str, aura: Option<String>) -> AppResult<()> {
+    let _vez = travar();
+    let mut itens = load(vault)?;
+
+    itens
+        .iter_mut()
+        .find(|item| item.id == id)
+        .ok_or_else(|| nao_existe(id))?
+        .aura = aura;
 
     save(vault, &itens)
 }
@@ -1411,6 +1430,7 @@ mod tests {
                 autor: Autor::Mestre,
                 criado_por: None,
                 tags: Vec::new(),
+                aura: None,
                 compendio: false,
                 criado_em: n as i64,
             })

@@ -282,6 +282,7 @@ pub fn run() {
             commands::compendio_efeito_em_jogo,
             commands::compendio_efeito_guardar,
             commands::compendio_tags,
+            commands::compendio_aura,
             commands::compendio_maquina_tags,
             commands::bestiario_listar,
             commands::bestiario_imagem,

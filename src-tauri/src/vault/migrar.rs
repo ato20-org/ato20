@@ -324,6 +324,7 @@ pub(crate) fn converter_inventario(
                 // e por onde ele nasceu.
                 criado_por: (antigo.autor == Autor::Jogador).then(|| personagem.to_string()),
                 tags: Vec::new(),
+                aura: None,
                 compendio: false,
                 criado_em: antigo.criado_em,
             };

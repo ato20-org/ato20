@@ -109,6 +109,12 @@ export type Personagem = {
    * a ficha de novo. Espelho de `Personagem::do_plugin`.
    */
   doPlugin?: string;
+  /**
+   * A aura de plugin, `{plugin}/{aura}`: a borda do card e o anel do rosto. Vem
+   * com a ficha trazida do bestiário, e o mestre a troca pelo menu. Espelho de
+   * `Personagem::aura`; ver `useAura`.
+   */
+  aura?: string;
   criadoEm: number;
 };
 

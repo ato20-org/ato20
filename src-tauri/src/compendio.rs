@@ -339,6 +339,36 @@ pub fn definir_tags(
     Ok(tags)
 }
 
+/// A forma de uma aura apontada pela campanha: `{plugin}/{aura}`, os dois ids
+/// do jeito de sempre. Se o plugin existe nao importa: desligado, ele leva a
+/// aura da tela e ela volta com ele. Ver `extensoes::Aura`.
+pub fn aura_valida(aura: &str) -> bool {
+    aura.split_once('/')
+        .is_some_and(|(plugin, id)| crate::extensoes::id_valido(plugin) && crate::extensoes::id_valido(id))
+}
+
+/// Troca a aura de um personagem -- molde ou em jogo -- ou de um item, ou a
+/// tira. Condicao e efeito nao tem: a cor deles ja e a marca deles.
+pub fn definir_aura(vault: &Vault, tipo: TipoDeMolde, id: &str, aura: Option<String>) -> AppResult<()> {
+    if let Some(aura) = &aura {
+        if !aura_valida(aura) {
+            return Err(AppError::Recusado(crate::texto!(
+                "{aura:?} nao e uma aura: e `plugin/id`",
+                "{aura:?} is not an aura: it is `plugin/id`"
+            )));
+        }
+    }
+
+    match tipo {
+        TipoDeMolde::Personagem => characters::set_aura(vault, id, aura),
+        TipoDeMolde::Item => itens::set_aura(vault, id, aura),
+        TipoDeMolde::Condicao | TipoDeMolde::Efeito => Err(AppError::Recusado(crate::texto!(
+            "condicao e efeito nao levam aura",
+            "conditions and effects do not take an aura"
+        ))),
+    }
+}
+
 // --- condicoes e efeitos -----------------------------------------------------
 //
 // O cardapio de condicoes e o MENU do token, com dezesseis no maximo, e o
@@ -979,6 +1009,8 @@ pub fn trazer_do_plugin(
     vault: &Vault,
     chave: &str,
     molde: &crate::bestiario::MoldeDoBestiario,
+    // A aura da ficha, ja com o plugin na frente: `ordem-paranormal/sangue`.
+    aura: Option<String>,
     grupos: &[crate::extensoes::GrupoDoSistema],
     imagens: Vec<(String, Result<ImagemDoPlugin, crate::error::Texto>)>,
 ) -> AppResult<TrazidoDoPlugin> {
@@ -1113,6 +1145,7 @@ pub fn trazer_do_plugin(
         compendio: true,
         tags: normalizar_tags(molde.tags.clone()),
         do_plugin: Some(chave.to_string()),
+        aura,
         criado_em: now_ms(),
     };
     characters::adotar(vault, vec![personagem.clone()])?;
@@ -1712,6 +1745,7 @@ mod tests {
             &vault,
             &chave,
             &molde,
+            Some("ordem/sangue".into()),
             &grupos,
             vec![("bestiario/zumbi.png".into(), Ok(ImagemDoPlugin::Arquivo(imagem)))],
         )
@@ -1721,6 +1755,7 @@ mod tests {
         assert!(!trazido.ja_havia);
         assert!(zumbi.compendio);
         assert_eq!(zumbi.do_plugin.as_deref(), Some(chave.as_str()));
+        assert_eq!(zumbi.aura.as_deref(), Some("ordem/sangue"));
         assert_eq!(zumbi.tags, ["Sangue", "VD 40"]);
         // So o retrato veio, e serve de miniatura: sem ela o card nao arrasta.
         assert!(zumbi.retrato.is_some());
@@ -1747,15 +1782,39 @@ mod tests {
         assert_eq!(da_ficha[1].rolagem.as_deref(), Some("2d20+10"));
 
         // Trazer de novo devolve o mesmo molde, sem outra imagem no acervo.
-        let de_novo = trazer_do_plugin(&vault, &chave, &molde, &grupos, Vec::new()).unwrap();
+        let de_novo = trazer_do_plugin(&vault, &chave, &molde, None, &grupos, Vec::new()).unwrap();
         assert!(de_novo.ja_havia);
         assert_eq!(de_novo.molde.id, zumbi.id);
         assert_eq!(assets::index(&vault).unwrap().len(), 1);
 
         // Em jogo, a copia nao leva a marca: o proximo goblin sai do molde.
+        // A aura vai junto: e a cara do monstro, e nao de onde ele saiu.
         let em_jogo = duplicar(&vault, &zumbi.id, false).unwrap();
         assert!(em_jogo.do_plugin.is_none());
+        assert_eq!(em_jogo.aura.as_deref(), Some("ordem/sangue"));
         assert_eq!(molde_do_plugin(&vault, &chave).unwrap().unwrap().id, zumbi.id);
+    }
+
+    #[test]
+    fn a_aura_se_troca_e_se_tira_e_so_na_forma_certa() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+        let goblin = characters::create(&vault, "Goblin").unwrap();
+
+        definir_aura(&vault, TipoDeMolde::Personagem, &goblin.id, Some("dnd/lendario".into())).unwrap();
+        let lido = characters::load(&vault).unwrap();
+        assert_eq!(lido[0].aura.as_deref(), Some("dnd/lendario"));
+
+        definir_aura(&vault, TipoDeMolde::Personagem, &goblin.id, None).unwrap();
+        assert!(characters::load(&vault).unwrap()[0].aura.is_none());
+
+        for torta in ["lendario", "dnd/", "/lendario", "dnd/Lendario", "dnd/lendario/x"] {
+            assert!(
+                definir_aura(&vault, TipoDeMolde::Personagem, &goblin.id, Some(torta.into())).is_err(),
+                "{torta} devia ser recusada"
+            );
+        }
+        assert!(definir_aura(&vault, TipoDeMolde::Condicao, "x", Some("dnd/lendario".into())).is_err());
     }
 
     #[test]
@@ -1768,6 +1827,7 @@ mod tests {
             &vault,
             "ordem/ameacas/zumbi",
             &molde,
+            None,
             &grupos,
             vec![(
                 "bestiario/zumbi.png".into(),

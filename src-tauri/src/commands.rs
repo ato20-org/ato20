@@ -1316,6 +1316,18 @@ pub fn compendio_tags(
     state.with_vault(|vault| compendio::definir_tags(vault, tipo, &id, tags))
 }
 
+/// A aura de um personagem -- molde ou em jogo -- ou de um item da campanha:
+/// `plugin/aura`, ou nada para tirar. Ver `compendio::definir_aura`.
+#[tauri::command]
+pub fn compendio_aura(
+    state: State<'_, AppState>,
+    tipo: compendio::TipoDeMolde,
+    id: String,
+    aura: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| compendio::definir_aura(vault, tipo, &id, aura))
+}
+
 /// As tags de uma ficha ou de um item do Compendio do ATO20. Tag e
 /// organizacao, e nao conteudo: e a unica coisa que se mexe la sem trazer.
 #[tauri::command]
@@ -1447,6 +1459,11 @@ async fn trazer_ficha_do_plugin(
             ))
         })?;
     let chave = compendio::chave_do_plugin(&extensao_id, &colecao.id, &molde.id);
+    // A aura vai com o plugin na frente: na campanha ela e `plugin/aura`, como
+    // o estilo de medidor.
+    let aura = molde
+        .aura(&colecao)
+        .map(|aura| format!("{extensao_id}/{aura}"));
 
     let shared = state.vault.clone();
     let procurada = chave.clone();
@@ -1490,7 +1507,7 @@ async fn trazer_ficha_do_plugin(
     let shared = state.vault.clone();
     em_segundo_plano(move || {
         com_vault(&shared, |vault| {
-            compendio::trazer_do_plugin(vault, &chave, &molde, &grupos, imagens)
+            compendio::trazer_do_plugin(vault, &chave, &molde, aura, &grupos, imagens)
         })
     })
     .await

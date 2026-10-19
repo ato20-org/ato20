@@ -125,6 +125,9 @@ type LugarDaLinha = {
   caminho?: string;
 };
 import { cn } from "@/lib/utils";
+import { useAura } from "@/lib/extensoes/auras";
+import { ItensDeAura } from "@/components/mestre/itens-de-aura";
+import { definirAura } from "@/lib/vault/compendio";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 
 /**
@@ -573,6 +576,18 @@ export function CharactersBody() {
           kit={kit}
           personagem={personagem}
           onChanged={recarregar}
+        />
+
+        {/* A aura de plugin: o anel do rosto aqui, a borda do card no
+            Compêndio. Some sem plugin que declare aura. */}
+        <ItensDeAura
+          kit={kit}
+          atual={personagem.aura}
+          onEscolher={(escolhida) =>
+            void definirAura("personagem", personagem.id, escolhida).then(recarregar, (cause) =>
+              toast.error(cause instanceof Error ? cause.message : String(cause)),
+            )
+          }
         />
 
         {/* As pastas da seção dele. É também o caminho de quem não tem
@@ -1224,13 +1239,18 @@ export function Rosto({
 }) {
   const rosto = personagem.retrato ?? personagem.miniatura;
   const animada = useAnimada(rosto);
+  // A aura de plugin vira o ANEL do rosto: a borda na cor dela, e um brilho
+  // parado por dentro. Sem a luz animada: a lista tem trinta rostos.
+  const aura = useAura(personagem.aura);
 
   return (
     <span
       className={cn(
         "bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border",
+        aura && "border-2",
         className,
       )}
+      style={aura ? { borderColor: aura.cor, boxShadow: `0 0 6px -1px ${aura.cor}` } : undefined}
     >
       {/* Sem selo: num quadrado de 28px ele cobriria o rosto. O hover na
           linha continua animando. */}

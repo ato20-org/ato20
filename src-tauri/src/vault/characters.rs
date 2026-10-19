@@ -160,6 +160,13 @@ pub struct Personagem {
     /// `compendio::trazer_do_plugin`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub do_plugin: Option<String>,
+    /// A aura de plugin do personagem: `{plugin}/{aura}`. A borda do card no
+    /// Compendio e o anel do rosto na lista de Personagens. Vem com a ficha
+    /// trazida do bestiario, passa para a copia em jogo, e o mestre a troca
+    /// pelo menu. Com o plugin desligado ela some da tela e fica gravada: e
+    /// so a marca, e volta quando ele voltar. Ver `extensoes::Aura`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aura: Option<String>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -527,6 +534,23 @@ pub fn set_tags(vault: &Vault, id: &str, tags: Vec<String>) -> AppResult<()> {
     save(vault, &personagens)
 }
 
+/// Troca a aura do personagem, ou a tira. Quem confere a forma e quem chama --
+/// ver `compendio::definir_aura`.
+pub fn set_aura(vault: &Vault, id: &str, aura: Option<String>) -> AppResult<()> {
+    let mut personagens = load(vault)?;
+
+    personagens
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| AppError::Malformed {
+            file: "personagens.json".into(),
+            cause: format!("personagem {id} nao existe"),
+        })?
+        .aura = aura;
+
+    save(vault, &personagens)
+}
+
 /// Marca ou desmarca personagens como molde do Compendio. Ver `compendio`.
 ///
 /// Id que nao existe e ignorado: quem chama acabou de criar ou importar os
@@ -589,6 +613,7 @@ pub fn create(vault: &Vault, nome: &str) -> AppResult<Personagem> {
         compendio: false,
         tags: Vec::new(),
         do_plugin: None,
+        aura: None,
         criado_em: now_ms(),
     };
 
