@@ -38,6 +38,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useListReorder } from "@/hooks/use-list-reorder";
+import { documentoComFoco } from "@/lib/janelas-soltas";
+import { ehElemento } from "@/lib/dom";
 import { achadosNosDetalhes } from "@/lib/busca-nos-detalhes";
 import { t } from "@/lib/i18n/personagens";
 import { normaliza } from "@/lib/search";
@@ -505,7 +507,9 @@ export function Lixeira({
  * antes de fechar a edição.
  */
 function soltarFoco() {
-  if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  // O documento com o foco: a ficha pode estar numa janela solta.
+  const ativo = documentoComFoco().activeElement;
+  if (ehElemento(ativo)) (ativo as HTMLElement).blur();
 }
 
 /**

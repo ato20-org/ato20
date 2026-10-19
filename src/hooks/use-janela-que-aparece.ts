@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { soltaDaChave } from "@/lib/janelas-soltas";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
 import {
   chaveDe,
@@ -65,7 +66,9 @@ export function useJanelaQueAparece(
         ),
       );
 
-    if (aberta) return;
+    // Solta numa janela do sistema também conta: cada rolagem nova roubaria o
+    // foco do Mestre para levantar a janela do outro monitor.
+    if (aberta || soltaDaChave(chave)) return;
 
     abrir(conteudo);
   }, [ultima, abrir, conteudo]);

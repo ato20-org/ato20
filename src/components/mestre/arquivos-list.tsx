@@ -75,6 +75,7 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { documentoDe } from "@/lib/dom";
 import { achatarArvore, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
@@ -797,12 +798,14 @@ const QUADRO_PARA_O_SPLIT: ForaDaLista<string> = {
     }
 
     paineis.pegarParaSplit({ tipo: "quadro", sceneId: id });
-    paineis.mirarSplit(zonaDeSplitSob(native.clientX, native.clientY));
+    paineis.mirarSplit(
+      zonaDeSplitSob(native.clientX, native.clientY, documentoDe(native.target as Node)),
+    );
   },
   soltar(id, native) {
     if (id.startsWith(PREFIXO_PASTA)) return false;
 
-    const alvo = zonaDeSplitSob(native.clientX, native.clientY);
+    const alvo = zonaDeSplitSob(native.clientX, native.clientY, documentoDe(native.target as Node));
     if (!alvo) return false;
 
     usePaineisStore.getState().abrirEm({ tipo: "quadro", sceneId: id }, alvo);

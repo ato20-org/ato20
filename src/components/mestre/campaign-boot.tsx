@@ -23,6 +23,7 @@ import {
 } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { t } from "@/lib/i18n/mestre";
+import { fecharTodasAsSoltas } from "@/lib/janelas-soltas";
 import { listAssets } from "@/lib/vault/assets";
 import type { CampaignInfo } from "@/lib/vault/campaign";
 
@@ -100,6 +101,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // As configurações da campanha anterior também: sem isto, o zoom que a
       // outra mesa pedia continuaria valendo nesta até o arquivo dela chegar.
       useConfiguracoesStore.getState().esquecer("campanha");
+      // As janelas soltas mostravam a campanha anterior: a ficha de lá, o
+      // Compêndio de lá. Ver `janelas-soltas`.
+      fecharTodasAsSoltas();
 
       try {
         await hydrateBoard(campaign.path);
@@ -165,6 +169,8 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
 
     return () => {
       ativo = false;
+      // Fechou a campanha: as soltas vão junto, pela razão de cima.
+      fecharTodasAsSoltas();
     };
   }, [campaign.path, hydrateBoard, hydratePortraits, hydrateTrack]);
 

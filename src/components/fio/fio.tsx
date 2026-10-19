@@ -38,6 +38,7 @@ import {
   fragmentoNoCursor,
   type Sugestao,
 } from "@/lib/mencoes/sugestao";
+import { ehElemento } from "@/lib/dom";
 import { normaliza } from "@/lib/search";
 import { idioma } from "@/lib/i18n/idioma";
 import { t as textos } from "@/lib/i18n/palco";
@@ -711,7 +712,7 @@ export function CampoDoFio({
             // A lista vive num portal fora do campo, e escolher nela tira o
             // foco daqui. Sem esta guarda, ela fecharia no meio da escolha.
             const alvo = event.relatedTarget;
-            if (alvo instanceof Element && alvo.closest(`[${MARCA_LISTA}]`)) return;
+            if (ehElemento(alvo) && alvo.closest(`[${MARCA_LISTA}]`)) return;
 
             setFocado(false);
           }}

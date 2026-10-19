@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 
+import { useJanelaSolta } from "@/components/mestre/contexto-da-janela-solta";
 import { abrirJanela } from "@/lib/extensoes/janelas";
 import type { ConteudoJanela } from "@/lib/store/use-window-store";
 
@@ -20,7 +21,10 @@ import type { ConteudoJanela } from "@/lib/store/use-window-store";
  *   grupo -- a janela pedida podia estar atrás de outra aba, ou dentro de uma
  *   coluna escondida, e nos dois casos apontar sem revelar leria como nada;
  * - flutuando: vem para a frente da pilha;
- * - em lugar nenhum: nasce flutuante.
+ * - solta numa janela do sistema: vem para a frente lá;
+ * - em lugar nenhum: nasce flutuante -- ou solta, quando quem pede está numa
+ *   janela solta: o editor do efeito clicado no Compêndio solto abre ao lado
+ *   dele, e não no monitor do Mestre. Ver `useJanelaSolta`.
  *
  * Houve uma PISCADA aqui, nos dois primeiros casos, para responder ao clique
  * quando não havia nada a abrir. Saiu: os dois já respondem sozinhos -- a
@@ -35,5 +39,10 @@ import type { ConteudoJanela } from "@/lib/store/use-window-store";
  * estável para quem está num render.
  */
 export function useAbrirJanela(): (conteudo: ConteudoJanela) => void {
-  return useCallback((conteudo: ConteudoJanela) => abrirJanela(conteudo), []);
+  const solta = useJanelaSolta();
+
+  return useCallback(
+    (conteudo: ConteudoJanela) => (solta ? solta.abrir(conteudo) : abrirJanela(conteudo)),
+    [solta],
+  );
 }

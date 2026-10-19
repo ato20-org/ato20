@@ -61,7 +61,8 @@ export function ArrastoParaAPeca() {
     });
   }, []);
 
-  if (!arrasto || !vaiNaPeca(arrasto.fonte)) return null;
+  // Numa janela solta o cursor é de lá: a etiqueta aqui sairia no lugar errado.
+  if (!arrasto || !vaiNaPeca(arrasto.fonte) || arrasto.emOutraJanela) return null;
 
   const { condicao } = arrasto.fonte;
   const destino = arrasto.destino?.tipo === "peca" ? arrasto.destino : null;

@@ -1,5 +1,8 @@
 "use client";
 
+import { SquareArrowOutUpRight } from "lucide-react";
+
+import { t } from "@/lib/i18n/mestre";
 import { useDockDragStore } from "@/lib/store/use-dock-drag-store";
 
 /**
@@ -19,6 +22,21 @@ import { useDockDragStore } from "@/lib/store/use-dock-drag-store";
  */
 export function DockGhost() {
   const fantasma = useDockDragStore((state) => state.fantasma);
+  const fora = useDockDragStore((state) => state.fora);
+
+  // Com a mão fora do ATO20, a etiqueta não está à vista -- ela vive na camada
+  // --, e o que se diz é o que soltar ali faz.
+  if (fora) {
+    return (
+      <div
+        aria-hidden
+        className="bg-popover text-popover-foreground animate-in fade-in-0 slide-in-from-bottom-2 pointer-events-none absolute bottom-4 left-1/2 z-[110] flex -translate-x-1/2 items-center gap-2 rounded-md border px-3 py-1.5 text-xs shadow-xl duration-150 motion-reduce:animate-none"
+      >
+        <SquareArrowOutUpRight className="size-3.5" />
+        {t.janela.soltarFora}
+      </div>
+    );
+  }
 
   if (!fantasma) return null;
 

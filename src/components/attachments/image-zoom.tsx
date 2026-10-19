@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { janelaDe } from "@/lib/dom";
 import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import {
@@ -149,16 +150,21 @@ export function ImageZoom({
       if (active.size < 2) pinchDistance = 0;
     }
 
+    // A janela da imagem: a do Mestre, ou a solta em que o anexo está aberto.
+    // Ouvindo a do Mestre, o arrasto na solta não andava, e o próximo
+    // movimento do mouse no Mestre arrastava a imagem do outro monitor.
+    const vista = janelaDe(element);
+
     element.addEventListener("pointerdown", handleDown);
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
-    window.addEventListener("pointercancel", handleUp);
+    vista.addEventListener("pointermove", handleMove);
+    vista.addEventListener("pointerup", handleUp);
+    vista.addEventListener("pointercancel", handleUp);
 
     return () => {
       element.removeEventListener("pointerdown", handleDown);
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-      window.removeEventListener("pointercancel", handleUp);
+      vista.removeEventListener("pointermove", handleMove);
+      vista.removeEventListener("pointerup", handleUp);
+      vista.removeEventListener("pointercancel", handleUp);
     };
   }, []);
 

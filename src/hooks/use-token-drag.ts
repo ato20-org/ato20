@@ -11,6 +11,7 @@ import {
   type DestinoDoArrasto,
   type FonteDoArrasto,
 } from "@/lib/store/use-token-drag-store";
+import { janelaDe } from "@/lib/dom";
 import { LISTAS_DE_PASTAS_DO_COMPENDIO } from "@/types/scene";
 
 /**
@@ -57,6 +58,10 @@ export function useTokenDrag() {
     // pointerdown mata os eventos de mouse de compatibilidade, o `click` entre
     // eles, que é o que abre a ficha do personagem.
     const alvo = event.currentTarget as HTMLElement;
+    // A janela do gesto: a do Mestre, ou a solta em que o card está. É nela que
+    // o ponteiro anda e onde se procura o alvo. Ver `janelaDe`.
+    const vista = janelaDe(alvo);
+    const fora = vista !== window;
     const { pointerId, clientX: startX, clientY: startY } = event;
     const { pegar, mover, ajustar, largar } = useTokenDragStore.getState();
 
@@ -90,7 +95,7 @@ export function useTokenDrag() {
     };
 
     const comerOProximoClique = () => {
-      window.addEventListener("click", comerClique, {
+      vista.addEventListener("click", comerClique, {
         capture: true,
         once: true,
       });
@@ -98,13 +103,13 @@ export function useTokenDrag() {
       // sistema —, o comedor ficaria de tocaia e engoliria o clique seguinte,
       // que é do mestre. O tempo zero basta: o `click` nasce do mesmo evento de
       // entrada do `pointerup` e chega antes de qualquer temporizador.
-      window.setTimeout(() => {
-        window.removeEventListener("click", comerClique, true);
+      vista.setTimeout(() => {
+        vista.removeEventListener("click", comerClique, true);
       }, 0);
     };
 
     const posicao = (native: PointerEvent) => {
-      mover(native.clientX, native.clientY, destinoSob(native, token.fonte));
+      mover(native.clientX, native.clientY, destinoSob(native, token.fonte, vista.document));
     };
 
     /** A roda, enquanto o token está no ar: tamanho, não zoom do palco. */
@@ -125,8 +130,8 @@ export function useTokenDrag() {
       desistiu = true;
       // A roda volta a ser o zoom do palco no mesmo instante: o gesto acabou
       // para todos os efeitos, o que falta é só a mão largar o botão.
-      window.removeEventListener("wheel", handleWheel, true);
-      window.removeEventListener("keydown", handleKey, true);
+      vista.removeEventListener("wheel", handleWheel, true);
+      vista.removeEventListener("keydown", handleKey, true);
       largar();
     };
 
@@ -136,18 +141,19 @@ export function useTokenDrag() {
       // A condição não tem tamanho a escolher: a roda continua sendo o zoom do
       // palco, que é o que ajuda a mirar o token pequeno no meio da horda.
       if (!vaiNaPeca(token.fonte)) {
-        window.addEventListener("wheel", handleWheel, {
+        vista.addEventListener("wheel", handleWheel, {
           capture: true,
           passive: false,
         });
       }
-      window.addEventListener("keydown", handleKey, true);
+      vista.addEventListener("keydown", handleKey, true);
       pegar({
         ...token,
         fator: 1,
         x: native.clientX,
         y: native.clientY,
-        destino: destinoSob(native, token.fonte),
+        destino: destinoSob(native, token.fonte, vista.document),
+        ...(fora ? { emOutraJanela: true } : {}),
       });
     };
 
@@ -173,7 +179,7 @@ export function useTokenDrag() {
       pending = native;
       if (frame !== undefined) return;
 
-      frame = requestAnimationFrame(() => {
+      frame = vista.requestAnimationFrame(() => {
         frame = undefined;
         const ultimo = pending;
         pending = null;
@@ -182,15 +188,15 @@ export function useTokenDrag() {
     };
 
     function desmontar() {
-      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (frame !== undefined) vista.cancelAnimationFrame(frame);
       frame = undefined;
       pending = null;
 
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleEnd);
-      window.removeEventListener("pointercancel", handleCancel);
-      window.removeEventListener("wheel", handleWheel, true);
-      window.removeEventListener("keydown", handleKey, true);
+      vista.removeEventListener("pointermove", handleMove);
+      vista.removeEventListener("pointerup", handleEnd);
+      vista.removeEventListener("pointercancel", handleCancel);
+      vista.removeEventListener("wheel", handleWheel, true);
+      vista.removeEventListener("keydown", handleKey, true);
       if (pegou && alvo.hasPointerCapture(pointerId)) {
         alvo.releasePointerCapture(pointerId);
       }
@@ -208,7 +214,7 @@ export function useTokenDrag() {
 
       // O último movimento pendente entra antes do fim: descartá-lo poria o
       // token um quadro atrás de onde a mão soltou.
-      if (frame !== undefined) cancelAnimationFrame(frame);
+      if (frame !== undefined) vista.cancelAnimationFrame(frame);
       if (pending) posicao(pending);
 
       const emMaos = desistiu ? null : useTokenDragStore.getState().arrasto;
@@ -231,9 +237,9 @@ export function useTokenDrag() {
       );
     };
 
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleEnd);
-    window.addEventListener("pointercancel", handleCancel);
+    vista.addEventListener("pointermove", handleMove);
+    vista.addEventListener("pointerup", handleEnd);
+    vista.addEventListener("pointercancel", handleCancel);
   }, []);
 }
 
@@ -254,8 +260,9 @@ export function useTokenDrag() {
 function destinoSob(
   native: PointerEvent,
   fonte: FonteDoArrasto,
+  documento: Document,
 ): DestinoDoArrasto | null {
-  const sob = document.elementFromPoint(native.clientX, native.clientY);
+  const sob = documento.elementFromPoint(native.clientX, native.clientY);
   if (!sob) return null;
 
   const destino = ler(sob, fonte);

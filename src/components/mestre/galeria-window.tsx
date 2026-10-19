@@ -543,7 +543,12 @@ function MiniaturaDoAnexo({ anexo, alt }: { anexo: AnexoNaGaleria; alt: string }
       (entradas) => {
         if (entradas.some((entrada) => entrada.isIntersecting)) setPerto(true);
       },
-      { rootMargin: "100% 0px" },
+      // Numa janela solta, a raiz é o documento DELA: a implícita é a do
+      // Mestre, e o card do outro monitor nunca "apareceria".
+      {
+        rootMargin: "100% 0px",
+        ...(aqui.ownerDocument !== document ? { root: aqui.ownerDocument } : {}),
+      },
     );
 
     observador.observe(aqui);
