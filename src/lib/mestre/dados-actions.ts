@@ -1,12 +1,12 @@
 "use client";
 
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
-import type { ExpressaoDeRolagem } from "@/lib/mestre/expressao-de-rolagem";
+import type { ExpressaoDeRolagem, TermoDeDados } from "@/lib/mestre/expressao-de-rolagem";
 import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import type { Jogada } from "@/lib/mestre/notacao-de-dados";
 import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import type { Dado, Lance } from "@/types/dado";
+import { descartadosDe, sortearValor, type Dado, type Lance } from "@/types/dado";
 
 /** Velocidade do arremesso sem gesto, em unidades de cena por segundo. */
 const IMPULSO = 400;
@@ -30,7 +30,7 @@ const IMPULSO = 400;
  * Devolve os DADOS, e não só quantos: a API de plugin precisa do valor de
  * cada um para somar. A paleta continua contando.
  */
-export function lancarNaMesa({ quantidade, faces }: Jogada, lance?: Lance): Dado[] {
+export function lancarNaMesa({ quantidade, faces, manter }: TermoDeDados, lance?: Lance): Dado[] {
   const { viewport } = useViewportStore.getState();
   const { lancar } = useDadosStore.getState();
 
@@ -42,6 +42,12 @@ export function lancarNaMesa({ quantidade, faces }: Jogada, lance?: Lance): Dado
   // Roda um pouco maior que o dado, para dois d20 vizinhos não nascerem se
   // atravessando. Um dado só cai no centro mesmo.
   const roda = quantidade === 1 ? 0 : RAIO_DADO * 1.5;
+
+  // O termo que fica com o maior (ou o menor) sorteia AQUI, antes de lançar:
+  // é preciso saber os seis valores para marcar os cinco que não contam. O
+  // dado só anima até a face que já foi decidida, como sempre. Ver `lancar`.
+  const gravados = manter ? Array.from({ length: quantidade }, () => sortearValor(faces)) : null;
+  const descartados = gravados ? descartadosDe(faces, gravados, manter) : null;
 
   const jogados: Dado[] = [];
 
@@ -57,8 +63,9 @@ export function lancarNaMesa({ quantidade, faces }: Jogada, lance?: Lance): Dado
       centro.y + direcao.y * roda,
       { x: direcao.x * IMPULSO, y: direcao.y * IMPULSO },
       undefined,
-      undefined,
+      gravados?.[i],
       lance,
+      descartados?.[i],
     );
 
     if (!dado) break;

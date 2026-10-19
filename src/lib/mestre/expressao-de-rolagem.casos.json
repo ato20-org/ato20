@@ -15,7 +15,13 @@
     { "texto": "1d100", "dados": [[1, 100]], "modificador": 0 },
     { "texto": "2d20+5", "dados": [[2, 20]], "modificador": 5 },
     { "texto": "20d6", "dados": [[20, 6]], "modificador": 0 },
-    { "texto": "1d20+99999999999999999999*0", "dados": [[1, 20]], "modificador": 0 }
+    { "texto": "1d20+99999999999999999999*0", "dados": [[1, 20]], "modificador": 0 },
+    { "texto": "6d20>+45", "dados": [[6, 20, ">"]], "modificador": 45 },
+    { "texto": "2d20<", "dados": [[2, 20, "<"]], "modificador": 0 },
+    { "texto": "2d20 < - 1", "dados": [[2, 20, "<"]], "modificador": -1 },
+    { "texto": "1d20>+5", "dados": [[1, 20]], "modificador": 5 },
+    { "texto": "3d20>+1d6+2", "dados": [[3, 20, ">"], [1, 6]], "modificador": 2 },
+    { "texto": "4d6>", "dados": [[4, 6, ">"]], "modificador": 0 }
   ],
   "recusadas": [
     { "texto": "", "erro": "vazia" },
@@ -35,6 +41,10 @@
     { "texto": "1d20 + abc", "erro": "sintaxe" },
     { "texto": "(1d20+5", "erro": "sintaxe" },
     { "texto": "1d20+5)", "erro": "sintaxe" },
-    { "texto": "0d6", "erro": "sintaxe" }
+    { "texto": "0d6", "erro": "sintaxe" },
+    { "texto": "6d20>>", "erro": "sintaxe" },
+    { "texto": "5>+1d20", "erro": "sintaxe" },
+    { "texto": "-2d20>", "erro": "dado-fora-da-soma" },
+    { "texto": "21d20>", "erro": "muitos-dados" }
   ]
 }

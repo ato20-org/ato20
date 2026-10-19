@@ -339,7 +339,7 @@ export function ConteudoDoSaquinho({
    * resultado antes de o dado parar -- a mesma regra do saquinho do Mestre.
    */
   const valores = dados
-    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
+    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado))
     .map((dado) => valorDaRolagem(dado.faces, dado.valor));
 
   /**

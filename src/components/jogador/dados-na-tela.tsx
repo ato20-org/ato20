@@ -53,7 +53,7 @@ const IMPULSO = 400;
  * mesa.
  */
 export function lancarNoVidro(
-  dados: ReadonlyArray<{ faces: FacesDado; valor: number }>,
+  dados: ReadonlyArray<{ faces: FacesDado; valor: number; descartado?: boolean }>,
   lance: Lance,
 ): void {
   const { lancar } = useDadosStore.getState();
@@ -63,7 +63,7 @@ export function lancarNoVidro(
   const centro = { x: LARGURA / 2, y: window.innerHeight / escala / 2 };
   const roda = dados.length === 1 ? 0 : RAIO_DADO * 1.5;
 
-  dados.forEach(({ faces, valor }, i) => {
+  dados.forEach(({ faces, valor, descartado }, i) => {
     const angulo = (i / dados.length) * Math.PI * 2;
     const direcao = { x: Math.cos(angulo), y: Math.sin(angulo) };
 
@@ -75,6 +75,7 @@ export function lancarNoVidro(
       undefined,
       valor,
       lance,
+      descartado,
     );
   });
 }

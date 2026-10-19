@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Pencil } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 
 import { IconeD20 } from "@/components/mestre/icone-d20";
@@ -170,13 +170,19 @@ export function RolagemDoDetalhe({
 export const DadosDaExpressao = memo(function DadosDaExpressao({ expressao }: { expressao: ExpressaoDeRolagem }) {
   return (
     <span className="flex items-center">
-      {expressao.dados.map(({ quantidade, faces }, termo) => (
+      {expressao.dados.map(({ quantidade, faces, manter }, termo) => (
         <span key={termo} className="flex items-center">
           {Array.from({ length: Math.min(quantidade, DADOS_A_VISTA) }, (_, i) => (
             <DadoEmImagem key={i} tipo={tipoDado(faces)} tamanho={LADO_DO_DADO} />
           ))}
           {quantidade > DADOS_A_VISTA ? (
             <span className="text-muted-foreground text-[10px] tabular-nums">×{quantidade}</span>
+          ) : null}
+          {/* Quem fica do termo: a seta para o maior, ou para o menor. */}
+          {manter === "maior" ? (
+            <ArrowUp aria-hidden className="size-3" />
+          ) : manter === "menor" ? (
+            <ArrowDown aria-hidden className="size-3" />
           ) : null}
         </span>
       ))}
