@@ -26,7 +26,7 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
-mod expressao;
+pub(crate) mod expressao;
 pub mod mcp;
 mod page;
 
@@ -1731,6 +1731,9 @@ pub struct Rolagem {
     /// `+5`. O dado avulso do saquinho vai sem. Ver `Lance` em `types/dado.ts`.
     #[serde(skip_serializing_if = "Option::is_none")]
     lance: Option<Lance>,
+    /// Caiu, e nao conta: nao foi o maior do termo. Ver `fio::Dado::descartado`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    descartado: bool,
 }
 
 /// Uma rolagem com nome: "Dante · Defesa", `2d20+5`.
@@ -1782,6 +1785,7 @@ async fn roll(
         valor,
         quando: crate::vault::now_ms(),
         lance: None,
+        descartado: false,
     };
 
     // O fio tambem, e AQUI, e nao na janela do Mestre: quem sorteia e o
@@ -1803,7 +1807,11 @@ async fn roll(
         para: None,
         texto: None,
         rolagem: Some(fio::Rolagem {
-            dados: vec![fio::Dado { faces: rolagem.faces, valor: rolagem.valor }],
+            dados: vec![fio::Dado {
+                faces: rolagem.faces,
+                valor: rolagem.valor,
+                descartado: false,
+            }],
             modificador: 0,
             rotulo: None,
         }),
@@ -3991,6 +3999,9 @@ async fn roll_detail(
 
     let mut rolagens = Vec::new();
     for jogada in &expressao.dados {
+        // O termo inteiro antes: e preciso saber os seis valores para marcar os
+        // cinco que nao contam (`6d20>`). Ver `expressao::descartados`.
+        let mut gravados = Vec::new();
         for _ in 0..jogada.quantidade {
             let Some(valor) = sortear_face(jogada.faces) else {
                 return fail(
@@ -3998,6 +4009,11 @@ async fn roll_detail(
                     "sem fonte de aleatoriedade",
                 );
             };
+            gravados.push(valor);
+        }
+        let fora = expressao::descartados(jogada.faces, &gravados, jogada.manter);
+
+        for (valor, descartado) in gravados.into_iter().zip(fora) {
             rolagens.push(Rolagem {
                 id: uuid::Uuid::new_v4().to_string(),
                 jogador_id: player.id.clone(),
@@ -4006,6 +4022,7 @@ async fn roll_detail(
                 valor,
                 quando,
                 lance: Some(lance.clone()),
+                descartado,
             });
         }
     }
@@ -4028,6 +4045,7 @@ async fn roll_detail(
                 .map(|r| fio::Dado {
                     faces: r.faces,
                     valor: r.valor,
+                    descartado: r.descartado,
                 })
                 .collect(),
             modificador: expressao.modificador,

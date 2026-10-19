@@ -98,6 +98,8 @@ export type Item = {
   criadoPor?: string;
   /** As tags do Compêndio, para filtrar os itens. Espelho de `Item::tags`. */
   tags?: string[];
+  /** A aura de plugin, `{plugin}/{aura}`: a borda dourada do lendário. Espelho de `Item::aura`. */
+  aura?: string;
   /**
    * Um molde do Compêndio, e não um item da campanha: fora da janela de Itens
    * e das mochilas. Pôr em jogo copia no catálogo. Espelho de `Item::compendio`.

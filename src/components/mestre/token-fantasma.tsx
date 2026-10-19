@@ -16,10 +16,12 @@ import {
   useTokenDragStore,
   vaiNaPeca,
 } from "@/lib/store/use-token-drag-store";
+import { avisarDoTrazido } from "@/lib/mestre/bestiario";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { itensMudaram } from "@/lib/store/use-itens-store";
 import { itemEmJogo, porEmJogo } from "@/lib/vault/compendio";
+import { porEmJogoDoBestiario } from "@/lib/vault/bestiario";
 import { cn } from "@/lib/utils";
 import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
@@ -72,7 +74,9 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
     arrasto ? assetIdDoArrasto(arrasto.fonte) : undefined,
   );
   const url =
-    arrasto?.fonte.tipo === "item" || arrasto?.fonte.tipo === "molde-item"
+    arrasto?.fonte.tipo === "item" ||
+    arrasto?.fonte.tipo === "molde-item" ||
+    arrasto?.fonte.tipo === "molde-plugin"
       ? arrasto.fonte.url
       : doAcervo;
 
@@ -208,6 +212,26 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
           (novo) => {
             por(assetId, { personagemId: novo.id });
             useCharactersStore.getState().recarregar();
+          },
+          (cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+        );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "molde-plugin") {
+        // A ficha do plugin entra em jogo pelo molde que ela deixa na
+        // campanha, como o molde do mestre. A peça é a miniatura que a CÓPIA
+        // ganhou -- o arquivo da pasta do plugin ou a imagem baixada --, e sem
+        // ela o personagem entra em jogo sem peça, e o aviso diz por quê.
+        const { extensaoId, colecaoId, moldeId } = solto.fonte;
+
+        void porEmJogoDoBestiario({ extensaoId, colecaoId, moldeId }).then(
+          ({ trazido, personagem }) => {
+            if (personagem.miniatura) por(personagem.miniatura, { personagemId: personagem.id });
+            useCharactersStore.getState().recarregar();
+            avisarDoTrazido(trazido);
           },
           (cause: unknown) =>
             toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),

@@ -9,14 +9,27 @@ import { TIPOS_DADO } from "@/types/dado";
  * É o "dados somados + modificador" que o fio já sabe mostrar (`RolagemNoFio`),
  * e a forma é essa de propósito: dado multiplicado (`1d20*2`) ou subtraído
  * (`1d20-1d4`) pediria outro jeito de anunciar a rolagem, e fica para quando
- * um sistema pedir. Tirar o maior, explodir, rolar de novo: regra de sistema,
- * que mora em plugin.
+ * um sistema pedir. Ficar com o maior ou o menor de um termo é o único que a
+ * expressão escreve (`6d20>`, ver `Manter`): o dado que não conta cai mesmo
+ * assim, marcado `descartado`, e a soma o pula. Explodir e rolar de novo são
+ * regra de sistema, que mora em plugin.
  */
 export type ExpressaoDeRolagem = {
   /** Na ordem em que foram escritos, um por termo: `2d6+1d4` são dois. */
-  dados: Jogada[];
+  dados: TermoDeDados[];
   modificador: number;
 };
+
+/**
+ * Quantos dados de um termo contam: todos (a soma, ausente), ou só o MAIOR ou o
+ * MENOR. `6d20>` são seis d20 e fica o maior -- o teste do Ordem, um d20 por
+ * ponto de atributo --; `2d20<`, dois e fica o menor -- a desvantagem.
+ * Escrito logo depois do dado. Num dado só não muda nada, e some na leitura.
+ */
+export type Manter = "maior" | "menor";
+
+/** Um termo de dados da expressão: a jogada, e quais dados dela contam. */
+export type TermoDeDados = Jogada & { manter?: Manter };
 
 /** Por que a expressão não serve. A tela diz cada um com a frase dele. */
 export type ErroDaExpressao =
@@ -38,13 +51,13 @@ export const MAX_MODIFICADOR = 10_000;
 
 type No =
   | { tipo: "numero"; valor: number }
-  | { tipo: "dado"; quantidade: number; faces: number }
+  | { tipo: "dado"; quantidade: number; faces: number; manter?: Manter }
   | { tipo: "negativo"; de: No }
   | { tipo: "conta"; operador: "+" | "-" | "*" | "/"; a: No; b: No };
 
 type Simbolo =
   | { tipo: "numero"; valor: number }
-  | { tipo: "dado"; quantidade: number; faces: number }
+  | { tipo: "dado"; quantidade: number; faces: number; manter?: Manter }
   | { tipo: "operador"; valor: "+" | "-" | "*" | "/" }
   | { tipo: "abre" }
   | { tipo: "fecha" };
@@ -58,7 +71,8 @@ class ErroDeLeitura extends Error {
 /**
  * Lê uma expressão como `1d20+5`, `2d4`, `1d20+5-2*5/2` ou `(3+1)*2+1d6`.
  *
- * Os dados se SOMAM, e o resto é conta: `+ - * /` com a precedência de
+ * Os dados se SOMAM -- ou, com `>` ou `<` logo depois, fica só o maior ou o
+ * menor do termo (`6d20>+45`, ver `Manter`) --, e o resto é conta: `+ - * /` com a precedência de
  * sempre, e parênteses. A divisão arredonda para BAIXO, que é a regra do
  * Tormenta e do D&D ("arredonde para baixo") -- e a única que dá o mesmo
  * número a quem faz a conta de cabeça na mesa. `×` e `÷` valem como `*` e `/`.
@@ -89,7 +103,15 @@ export function lerExpressaoDeRolagem(texto: string): LeituraDaExpressao {
 
 /** A forma curta: `2d20+1d4+10`, `1d20-2`, `2d6`. */
 export function textoDaExpressao({ dados, modificador }: ExpressaoDeRolagem): string {
-  return dados.map(({ quantidade, faces }) => `${quantidade}d${faces}`).join("+") + textoDoModificador(modificador);
+  return (
+    dados.map(({ quantidade, faces, manter }) => `${quantidade}d${faces}${sinalDeManter(manter)}`).join("+") +
+    textoDoModificador(modificador)
+  );
+}
+
+/** `>` para o maior, `<` para o menor, nada para a soma. */
+export function sinalDeManter(manter: Manter | undefined): string {
+  return manter === "maior" ? ">" : manter === "menor" ? "<" : "";
 }
 
 /** `+5`, `-2`, ou nada para zero: o modificador ao lado dos dados. */
@@ -122,13 +144,22 @@ function somar(no: No, sinal: 1 | -1, expressao: ExpressaoDeRolagem): void {
   expressao.modificador += sinal * avaliar(no);
 }
 
-function jogadaDe({ quantidade, faces }: { quantidade: number; faces: number }): Jogada {
+function jogadaDe({
+  quantidade,
+  faces,
+  manter,
+}: {
+  quantidade: number;
+  faces: number;
+  manter?: Manter;
+}): TermoDeDados {
   const tipo = TIPOS_DADO.find((atual) => atual.faces === faces);
   if (!tipo) throw new ErroDeLeitura("faces");
   if (quantidade < 1) throw new ErroDeLeitura("sintaxe");
   if (quantidade > MAX_DADOS_POR_JOGADA) throw new ErroDeLeitura("muitos-dados");
 
-  return { quantidade, faces: tipo.faces };
+  // Num dado só, o maior e o menor são ele: a leitura é a mesma de `1d20`.
+  return manter && quantidade > 1 ? { quantidade, faces: tipo.faces, manter } : { quantidade, faces: tipo.faces };
 }
 
 /** A conta de um pedaço sem dado. Dado aqui dentro é o que a soma não aceita. */
@@ -175,8 +206,9 @@ function simbolosDe(texto: string): Simbolo[] {
       continue;
     }
 
-    // Número, ou dado: `20`, `d20`, `2d6`, `2 d 6`.
-    const casou = /^(\d*)\s*([dD])\s*(\d+)|^(\d+)/.exec(entrada.slice(i));
+    // Número, ou dado: `20`, `d20`, `2d6`, `2 d 6`, e o dado com o que fica
+    // dele: `6d20>`, `2d20 <`.
+    const casou = /^(\d*)\s*([dD])\s*(\d+)(?:\s*([<>]))?|^(\d+)/.exec(entrada.slice(i));
     if (!casou) throw new ErroDeLeitura("sintaxe");
 
     if (casou[2]) {
@@ -184,9 +216,10 @@ function simbolosDe(texto: string): Simbolo[] {
         tipo: "dado",
         quantidade: casou[1] === "" ? 1 : Number(casou[1]),
         faces: Number(casou[3]),
+        ...(casou[4] && { manter: casou[4] === ">" ? ("maior" as const) : ("menor" as const) }),
       });
     } else {
-      simbolos.push({ tipo: "numero", valor: Number(casou[4]) });
+      simbolos.push({ tipo: "numero", valor: Number(casou[5]) });
     }
     i += casou[0].length;
   }
@@ -237,7 +270,8 @@ class Leitor {
     if (!simbolo) throw new ErroDeLeitura("sintaxe");
 
     if (simbolo.tipo === "numero") return { tipo: "numero", valor: simbolo.valor };
-    if (simbolo.tipo === "dado") return { tipo: "dado", quantidade: simbolo.quantidade, faces: simbolo.faces };
+    if (simbolo.tipo === "dado")
+      return { tipo: "dado", quantidade: simbolo.quantidade, faces: simbolo.faces, manter: simbolo.manter };
     if (simbolo.tipo === "abre") {
       const dentro = this.soma();
       if (this.simbolos[this.posicao++]?.tipo !== "fecha") throw new ErroDeLeitura("sintaxe");

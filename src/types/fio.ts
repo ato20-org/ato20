@@ -31,6 +31,8 @@ export type DadoNoFio = {
   faces: FacesDado;
   /** O número GRAVADO, como em toda rolagem. Ver `valorDaRolagem`. */
   valor: number;
+  /** Caiu, e não conta: não foi o maior do termo. Ver `Dado.descartado`. */
+  descartado?: boolean;
 };
 
 /**

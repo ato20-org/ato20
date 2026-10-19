@@ -87,6 +87,16 @@ export type FonteDoArrasto =
    */
   | { tipo: "molde"; personagemId: string; assetId: string }
   /**
+   * Uma ficha do bestiário de um PLUGIN. Solta no mapa, entra em jogo como o
+   * molde: sai do molde que ela deixou na campanha, trazido na hora se ainda
+   * não estava. Ver `porEmJogoDoBestiario`.
+   *
+   * A URL é a da miniatura do card, só para a sombra: a imagem da ficha só
+   * vira asset quando ela chega à campanha. Sem URL a sombra é a caixa, e a
+   * ficha vai ao mapa mesmo assim -- a imagem por URL é baixada ao trazer.
+   */
+  | { tipo: "molde-plugin"; extensaoId: string; colecaoId: string; moldeId: string; url?: string }
+  /**
    * Um molde de ITEM do Compêndio. Solto no mapa, entra no catálogo -- vira um
    * item de verdade -- e é a cópia que ganha a peça. A URL é a da imagem
    * desenhada, pela razão de `item`: pode ser a foto do jogador.
@@ -213,6 +223,7 @@ export type ArrastoDeToken = {
 export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
   return fonte.tipo === "item" ||
     fonte.tipo === "molde-item" ||
+    fonte.tipo === "molde-plugin" ||
     fonte.tipo === "nota" ||
     fonte.tipo === "cena" ||
     fonte.tipo === "area" ||

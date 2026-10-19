@@ -6,7 +6,10 @@ use serde::{Serialize, Serializer};
 /// dois, e quem mostra escolhe -- ver `call` em `src/lib/vault/bridge.ts`. Um
 /// idioma guardado aqui seria estado a sincronizar com a configuracao da
 /// maquina, e o celular nem fala o idioma do Mestre necessariamente.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Serialize` para o motivo que vai DENTRO de uma resposta, e nao como o erro
+/// dela: a colecao do bestiario que quebrou, ao lado das que leram bem.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Texto {
     pub pt: String,
     pub en: String,

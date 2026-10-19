@@ -134,7 +134,7 @@ export function anunciarDadosNoFio(
   setTimeout(() => {
     void falarNoFio({
       rolagem: {
-        dados: dados.map(({ faces, valor }) => ({ faces, valor })),
+        dados: dados.map(({ faces, valor, descartado }) => ({ faces, valor, ...(descartado && { descartado }) })),
         ...(modificador ? { modificador } : {}),
         ...(rotulo ? { rotulo } : {}),
       },

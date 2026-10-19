@@ -86,6 +86,11 @@ pub struct Dado {
     /// o valor da soma no lugar faria o fio ter a unica rolagem da casa que
     /// fala a outra lingua.
     pub valor: u32,
+    /// Caiu, e nao conta: nao foi o maior (ou o menor) do termo -- o d20 que
+    /// perdeu nos seis do teste. Quem le pula na soma. Ver `Dado.descartado`
+    /// em `types/dado.ts`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub descartado: bool,
 }
 
 /// Uma rolagem no fio: os dados, e o que o plugin disse sobre eles.
@@ -437,7 +442,7 @@ mod tests {
             para: None,
             texto: None,
             rolagem: Some(Rolagem {
-                dados: vec![Dado { faces: 20, valor: 17 }],
+                dados: vec![Dado { faces: 20, valor: 17, descartado: false }],
                 modificador: 0,
                 rotulo: None,
             }),
@@ -464,7 +469,7 @@ mod tests {
     #[test]
     fn a_rolagem_valida_limpa_o_rotulo() {
         let rolagem = rolagem_valida(Rolagem {
-            dados: vec![Dado { faces: 20, valor: 3 }],
+            dados: vec![Dado { faces: 20, valor: 3, descartado: false }],
             modificador: 3,
             rotulo: Some("  Ataque\ncom   espada ".into()),
         })
@@ -473,7 +478,7 @@ mod tests {
 
         assert!(rolagem_valida(Rolagem { dados: vec![], modificador: 0, rotulo: None }).is_err());
         assert!(rolagem_valida(Rolagem {
-            dados: vec![Dado { faces: 20, valor: 1 }],
+            dados: vec![Dado { faces: 20, valor: 1, descartado: false }],
             modificador: MODIFICADOR_MAX + 1,
             rotulo: None,
         })

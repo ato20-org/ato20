@@ -732,3 +732,261 @@
     translate: 0 var(--ambiente-balanco, 0px);
   }
 }
+
+/* A LUZ de uma aura de plugin (`extensoes::Aura`): a borda do card sob a mão.
+   Ver `LuzDaAura`.
+
+   Cada camada é um brilho de borda PINTADO UMA VEZ (`box-shadow` inset, ou o
+   gradiente do cometa), e o que anima é só a opacidade ou a posição dela --
+   o que o compositor faz sem redesenhar a janela. Nada de `filter` nem de
+   `box-shadow` animado: no WebKitGTK um desfoque animado na borda de uma
+   janela inteira custa um quadro por quadro.
+
+   A cor vem inline (`--luz-cor`), e o alcance do brilho também
+   (`--luz-alcance`): curto no card, e um pouco maior na luz sob a mão. */
+.luz-camada {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 var(--luz-alcance, 32px) calc(var(--luz-alcance, 32px) / -8) var(--luz-cor),
+    inset 0 0 0 1px color-mix(in srgb, var(--luz-cor) 70%, transparent);
+}
+
+/* O cometa do `fluxo`: uma mancha de luz colada numa borda, que corre por
+   ela. A faixa corta o que passa do lado de fora; o cometa só se move. */
+.luz-faixa {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.luz-faixa[data-borda="cima"] {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="baixo"] {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="esquerda"] {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="direita"] {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--luz-alcance, 32px);
+}
+
+.luz-cometa {
+  position: absolute;
+}
+
+[data-borda="cima"] > .luz-cometa,
+[data-borda="baixo"] > .luz-cometa {
+  top: 0;
+  bottom: 0;
+  width: 45%;
+}
+
+[data-borda="esquerda"] > .luz-cometa,
+[data-borda="direita"] > .luz-cometa {
+  left: 0;
+  right: 0;
+  height: 45%;
+}
+
+[data-borda="cima"] > .luz-cometa {
+  background: radial-gradient(ellipse 50% 100% at 50% 0%, var(--luz-cor), transparent);
+}
+
+[data-borda="baixo"] > .luz-cometa {
+  background: radial-gradient(ellipse 50% 100% at 50% 100%, var(--luz-cor), transparent);
+}
+
+[data-borda="esquerda"] > .luz-cometa {
+  background: radial-gradient(ellipse 100% 50% at 0% 50%, var(--luz-cor), transparent);
+}
+
+[data-borda="direita"] > .luz-cometa {
+  background: radial-gradient(ellipse 100% 50% at 100% 50%, var(--luz-cor), transparent);
+}
+
+/* Parados, os cometas não aparecem: sem movimento, eles seriam manchas
+   soltas na borda. A luz de baixo continua. */
+.luz-cometa {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .luz-pulso {
+    animation: luz-pulso 6s ease-in-out infinite;
+  }
+
+  /* O fluxo de Sangue é violento: a luz de baixo lateja em surtos, e os
+     cometas correm acelerando, cada borda no seu ritmo. */
+  .luz-latejo {
+    animation: luz-latejo 1.9s ease-in infinite;
+  }
+
+  .luz-cometa {
+    opacity: 1;
+    animation-duration: var(--luz-duracao, 1.4s);
+    animation-delay: var(--luz-atraso, 0s);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+    animation-iteration-count: infinite;
+  }
+
+  [data-borda="cima"] > .luz-cometa {
+    animation-name: luz-corre-direita;
+  }
+
+  [data-borda="baixo"] > .luz-cometa {
+    animation-name: luz-corre-esquerda;
+  }
+
+  [data-borda="direita"] > .luz-cometa {
+    animation-name: luz-corre-baixo;
+  }
+
+  [data-borda="esquerda"] > .luz-cometa {
+    animation-name: luz-corre-cima;
+  }
+
+  /* O cintilar de Energia: cada cor pisca no seu ritmo, aos saltos. */
+  .luz-cintilar {
+    animation: luz-cintilar var(--luz-duracao, 2.3s) step-end var(--luz-atraso, 0s) infinite;
+  }
+}
+
+@keyframes luz-pulso {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes luz-latejo {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  30% {
+    opacity: 0.55;
+  }
+
+  42% {
+    opacity: 0.95;
+  }
+
+  70% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes luz-corre-direita {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(223%);
+  }
+}
+
+@keyframes luz-corre-esquerda {
+  from {
+    transform: translateX(223%);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes luz-corre-baixo {
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(223%);
+  }
+}
+
+@keyframes luz-corre-cima {
+  from {
+    transform: translateY(223%);
+  }
+
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes luz-cintilar {
+  0% {
+    opacity: 0.15;
+  }
+
+  4% {
+    opacity: 1;
+  }
+
+  7% {
+    opacity: 0.2;
+  }
+
+  10% {
+    opacity: 0.85;
+  }
+
+  13% {
+    opacity: 0.1;
+  }
+
+  41% {
+    opacity: 0.9;
+  }
+
+  44% {
+    opacity: 0.25;
+  }
+
+  63% {
+    opacity: 0.7;
+  }
+
+  65% {
+    opacity: 0.1;
+  }
+
+  88% {
+    opacity: 1;
+  }
+
+  91% {
+    opacity: 0.3;
+  }
+}

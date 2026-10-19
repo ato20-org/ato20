@@ -76,7 +76,7 @@ function dadosDe(rolagem: Rolagem) {
     {
       faces: rolagem.faces,
       valor: valorDaRolagem(rolagem.faces, rolagem.valor),
-      soma: entraNaSoma(rolagem.faces),
+      soma: entraNaSoma(rolagem),
     },
   ];
 }

@@ -221,7 +221,8 @@ cópias forem iguais, e dois se divergiram.
 
 Fichas, itens, condições e efeitos prontos, fora do jogo: o goblin preparado, o NPC que
 ainda não apareceu, o "Possuído" que esta sessão não vai usar. Dois lugares, e a diferença
-entre eles é a que mesa o molde serve.
+entre eles é a que mesa o molde serve -- mais as fichas que um plugin traz, que não são de
+lugar nenhum até chegarem a uma campanha.
 
 - **Da campanha.** O molde de personagem mora no próprio `personagens.json`, com
   `"compendio": true`. É a mesma ficha, e se edita na mesma janela; quem lista é que
@@ -231,6 +232,12 @@ entre eles é a que mesa o molde serve.
   item é igual: mora em `itens.json` com `"compendio": true`, fora da janela de Itens,
   e `inventory::dar` recusa pô-lo numa mochila. As pastas são do Compêndio (`compendio`
   e `compendio-itens`), não as de Personagens e Itens.
+- **Do plugin.** As fichas que um plugin ligado traz (`contribui.bestiario`)
+  aparecem no Bestiário depois dos moldes do mestre, uma pasta por coleção,
+  pintada com a aura dela, só de leitura e fora das pastas do mestre. O card
+  de cada ficha leva a borda da aura, e a ficha trazida leva a aura junto. Ver [Auras](extensoes.md#auras-a-cor-o-emblema-e-a-luz-do-plugin). Trazer é cópia, como do ATO20: vira um molde da
+  campanha, que lembra de onde veio (`doPlugin`) para o próximo arrasto sair
+  dele. Ver [Bestiário do plugin](extensoes.md#bestiário-do-plugin-fichas-prontas-no-compêndio).
 - **Do ATO20.** O que serve a qualquer campanha desta máquina mora em
   `{dados do app}/compendio/`, ao lado da estante, numa pasta com o desenho de uma
   campanha, e se vê numa janela própria, "Compêndio do ATO20" -- como a Estante é outra

@@ -11,6 +11,7 @@ import { detalhesDoPersonagem, type DetalheDoJogador } from "@/lib/player/detalh
 import { myInventory } from "@/lib/player/inventory";
 import { normaliza } from "@/lib/search";
 import { cn } from "@/lib/utils";
+import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
 import type { Personagem } from "@/types/character";
 import type { ItemInventario } from "@/types/inventory";
 
@@ -183,7 +184,7 @@ function LinhaDoAchado({
   const valor = ehDetalhe
     ? achado.detalhe.valor === undefined || achado.detalhe.valor === ""
       ? ""
-      : String(achado.detalhe.valor)
+      : textoSemChaves(String(achado.detalhe.valor))
     : achado.item.quantidade > 1
       ? `×${achado.item.quantidade}`
       : "";
@@ -215,7 +216,7 @@ function LinhaDoAchado({
                 !aberta && "line-clamp-2",
               )}
             >
-              {descricao}
+              {textoSemChaves(descricao)}
             </span>
           ) : null}
         </button>

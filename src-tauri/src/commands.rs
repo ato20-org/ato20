@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::bestiario;
 use crate::compendio;
 use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
@@ -1315,6 +1316,18 @@ pub fn compendio_tags(
     state.with_vault(|vault| compendio::definir_tags(vault, tipo, &id, tags))
 }
 
+/// A aura de um personagem -- molde ou em jogo -- ou de um item da campanha:
+/// `plugin/aura`, ou nada para tirar. Ver `compendio::definir_aura`.
+#[tauri::command]
+pub fn compendio_aura(
+    state: State<'_, AppState>,
+    tipo: compendio::TipoDeMolde,
+    id: String,
+    aura: Option<String>,
+) -> AppResult<()> {
+    state.with_vault(|vault| compendio::definir_aura(vault, tipo, &id, aura))
+}
+
 /// As tags de uma ficha ou de um item do Compendio do ATO20. Tag e
 /// organizacao, e nao conteudo: e a unica coisa que se mexe la sem trazer.
 #[tauri::command]
@@ -1354,6 +1367,213 @@ pub async fn compendio_maquina_imagem(
     .await?;
 
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+// --- bestiario de plugin ------------------------------------------------------
+//
+// A terceira origem do Bestiario, ao lado da campanha e do ATO20: as fichas que
+// um plugin traz, so de leitura. Tudo e lido do DISCO, pelo id, e nao recebido
+// da tela -- como o sistema em `sistema_aplicar`: o que entra na campanha e o
+// que o Rust conferiu. Ver `bestiario` e `compendio::trazer_do_plugin`.
+
+/// O plugin esta ligado? O que o banco nunca viu nasce ligado, como em
+/// `extensoes_listar`.
+fn extensao_ligada(state: &AppState, id: &str) -> AppResult<bool> {
+    Ok(state
+        .db
+        .extensoes_estado()?
+        .into_iter()
+        .find(|(extensao, _)| extensao == id)
+        .is_none_or(|(_, ligada)| ligada))
+}
+
+/// As colecoes do bestiario dos plugins ligados. Nao depende de campanha
+/// aberta: o card mostra a ficha antes de ela ser de alguma mesa.
+#[tauri::command]
+pub async fn bestiario_listar(state: State<'_, AppState>) -> AppResult<Vec<bestiario::Listada>> {
+    let estado: HashMap<String, bool> = state.db.extensoes_estado()?.into_iter().collect();
+    let dir = state.extensoes.clone();
+
+    em_segundo_plano(move || {
+        bestiario::listar(&dir, |id| estado.get(id).copied().unwrap_or(true))
+    })
+    .await
+}
+
+/// A miniatura de uma imagem da pasta do plugin, pelo canal binario. Ver
+/// `compendio::miniatura_do_plugin`.
+#[tauri::command]
+pub async fn bestiario_imagem(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    caminho: String,
+) -> AppResult<tauri::ipc::Response> {
+    let (dir, maquina) = (state.extensoes.clone(), state.compendio.clone());
+
+    let bytes = em_segundo_plano(move || {
+        let arquivo = bestiario::caminho_da_imagem(&dir, &extensao_id, &caminho).ok_or_else(|| {
+            AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{extensao_id}/{caminho} nao e uma imagem do plugin"),
+            ))
+        })?;
+        compendio::com_a_maquina(&maquina, |maquina| {
+            compendio::miniatura_do_plugin(maquina, &arquivo, &extensao_id, &caminho)
+        })
+    })
+    .await?;
+
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// A ficha inteira de um plugin ligado, para a previa: ver a ameaca sem
+/// traze-la para a campanha. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn bestiario_ficha(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    molde_id: String,
+) -> AppResult<bestiario::FichaCompleta> {
+    if !extensao_ligada(&state, &extensao_id)? {
+        return Err(AppError::Recusado(crate::texto!(
+            "o plugin {extensao_id:?} esta desligado",
+            "the plugin {extensao_id:?} is turned off"
+        )));
+    }
+
+    let dir = state.extensoes.clone();
+    em_segundo_plano(move || bestiario::ficha(&dir, &extensao_id, &colecao_id, &molde_id)).await
+}
+
+/// Traz a ficha do plugin para o Compendio da campanha aberta.
+///
+/// Em tres tempos, e o do meio fora de qualquer trava: o download da imagem
+/// pode levar segundos, e o vault travado esse tempo todo pararia o autosave
+/// da cena. A ficha ja trazida nao le nem baixa nada.
+async fn trazer_ficha_do_plugin(
+    state: &AppState,
+    extensao_id: String,
+    colecao_id: String,
+    molde_id: String,
+) -> AppResult<compendio::TrazidoDoPlugin> {
+    if !extensao_ligada(state, &extensao_id)? {
+        return Err(AppError::Recusado(crate::texto!(
+            "o plugin {extensao_id:?} esta desligado",
+            "the plugin {extensao_id:?} is turned off"
+        )));
+    }
+
+    let dir = state.extensoes.clone();
+    let (ext, col) = (extensao_id.clone(), colecao_id.clone());
+    let (colecao, bestiario) = em_segundo_plano(move || bestiario::ler(&dir, &ext, &col)).await?;
+    let grupos = bestiario.grupos;
+    let molde = bestiario
+        .moldes
+        .into_iter()
+        .find(|molde| molde.id == molde_id)
+        .ok_or_else(|| {
+            AppError::Recusado(crate::texto!(
+                "o bestiario {colecao_id:?} nao tem mais a ficha {molde_id:?}",
+                "the bestiary {colecao_id:?} no longer has the sheet {molde_id:?}"
+            ))
+        })?;
+    let chave = compendio::chave_do_plugin(&extensao_id, &colecao.id, &molde.id);
+    // A aura vai com o plugin na frente: na campanha ela e `plugin/aura`, como
+    // o estilo de medidor.
+    let aura = molde
+        .aura(&colecao)
+        .map(|aura| format!("{extensao_id}/{aura}"));
+
+    let shared = state.vault.clone();
+    let procurada = chave.clone();
+    let ja_trazida =
+        em_segundo_plano(move || com_vault(&shared, |vault| compendio::molde_do_plugin(vault, &procurada)))
+            .await?;
+    if let Some(molde) = ja_trazida {
+        return Ok(compendio::TrazidoDoPlugin {
+            molde,
+            ja_havia: true,
+            grupos_de_fora: Vec::new(),
+            imagens_de_fora: Vec::new(),
+        });
+    }
+
+    let mut imagens = Vec::new();
+    let mut vistas = HashSet::new();
+    for valor in [&molde.retrato, &molde.miniatura].into_iter().flatten() {
+        // A mesma imagem nos dois campos entra uma vez so no acervo.
+        if !vistas.insert(valor.clone()) {
+            continue;
+        }
+        let pronta = match bestiario::Imagem::de(valor) {
+            bestiario::Imagem::Arquivo(rel) => {
+                bestiario::caminho_da_imagem(&state.extensoes, &extensao_id, rel)
+                    .map(compendio::ImagemDoPlugin::Arquivo)
+                    .ok_or_else(|| {
+                        crate::texto!(
+                            "a imagem {rel:?} nao esta mais na pasta do plugin",
+                            "the image {rel:?} is no longer in the plugin folder"
+                        )
+                    })
+            }
+            bestiario::Imagem::Url(url) => bestiario::baixar_imagem(url, &molde.nome)
+                .await
+                .map(|(nome, bytes)| compendio::ImagemDoPlugin::Baixada { nome, bytes }),
+        };
+        imagens.push((valor.clone(), pronta));
+    }
+
+    let shared = state.vault.clone();
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            compendio::trazer_do_plugin(vault, &chave, &molde, aura, &grupos, imagens)
+        })
+    })
+    .await
+}
+
+/// A ficha do plugin entra no Compendio da campanha, como molde. Trazer a
+/// mesma de novo devolve a que ja esta la.
+#[tauri::command]
+pub async fn bestiario_trazer(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    molde_id: String,
+) -> AppResult<compendio::TrazidoDoPlugin> {
+    trazer_ficha_do_plugin(&state, extensao_id, colecao_id, molde_id).await
+}
+
+/// O que voltou de por em jogo uma ficha de plugin: o molde, que a tela poe no
+/// Bestiario da campanha se ele acabou de chegar, e o personagem em jogo.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostoEmJogo {
+    pub trazido: compendio::TrazidoDoPlugin,
+    pub personagem: Personagem,
+}
+
+/// A ficha do plugin entra em jogo: sai do molde que ela deixou no Compendio
+/// da campanha, trazido agora se ainda nao estava -- o mesmo caminho do
+/// molde do mestre (`compendio_por_em_jogo`), e por isso o quarto goblin nao
+/// baixa a imagem de novo.
+#[tauri::command]
+pub async fn bestiario_por_em_jogo(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    molde_id: String,
+) -> AppResult<PostoEmJogo> {
+    let trazido = trazer_ficha_do_plugin(&state, extensao_id, colecao_id, molde_id).await?;
+
+    let shared = state.vault.clone();
+    let id = trazido.molde.id.clone();
+    let personagem =
+        em_segundo_plano(move || com_vault(&shared, |vault| compendio::duplicar(vault, &id, false)))
+            .await?;
+
+    Ok(PostoEmJogo { trazido, personagem })
 }
 
 /// O que entrou do outro lado, de cada lista.

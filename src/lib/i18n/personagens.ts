@@ -306,6 +306,7 @@ const pt = {
     rolagemDe: (rotulo: string) => `Rolagem de ${rotulo}`,
     exemploDeRolagem: "1d20+5",
     rolar: (rotulo: string, expressao: string) => `Rolar ${rotulo}: ${expressao}`,
+    ficaOMaior: "↑ fica com o maior dado do termo, e ↓ com o menor",
     editarRolagem: (rotulo: string) => `Editar a rolagem de ${rotulo}`,
     opcoes: (rotulo: string) => `Opções de ${rotulo}`,
     /** O menu de três pontos do detalhe. */
@@ -871,6 +872,7 @@ const en: typeof pt = {
     rolagemDe: (rotulo) => `Roll for ${rotulo}`,
     exemploDeRolagem: "1d20+5",
     rolar: (rotulo, expressao) => `Roll ${rotulo}: ${expressao}`,
+    ficaOMaior: "↑ keeps the highest die of the term, and ↓ the lowest",
     editarRolagem: (rotulo) => `Edit the roll for ${rotulo}`,
     opcoes: (rotulo) => `Options for ${rotulo}`,
     menu: {

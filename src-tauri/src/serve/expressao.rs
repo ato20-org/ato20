@@ -25,6 +25,33 @@ const MAX_MODIFICADOR: f64 = 10_000.0;
 pub struct Jogada {
     pub quantidade: u32,
     pub faces: u32,
+    /// Quais dados contam: todos (a soma, `None`), ou so o maior ou o menor.
+    /// Espelha `Manter` do TS.
+    pub manter: Option<Manter>,
+}
+
+/// `6d20>` fica com o MAIOR dos seis -- o teste do Ordem --; `2d20<`, com o
+/// MENOR. Num dado so nao muda nada, e some na leitura.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Manter {
+    Maior,
+    Menor,
+}
+
+/// Quais dados de um termo ficam FORA da soma: todos menos o maior, ou todos
+/// menos o menor. Espelha `descartadosDe` em `types/dado.ts`: pelo valor, com
+/// o zero do d10 valendo dez, e no empate fica o primeiro.
+pub fn descartados(faces: u32, gravados: &[u32], manter: Option<Manter>) -> Vec<bool> {
+    let valor = |gravado: u32| if faces == 10 && gravado == 0 { 10 } else { gravado };
+    let fica = match manter {
+        _ if gravados.len() < 2 => None,
+        None => None,
+        Some(Manter::Maior) => gravados.iter().map(|&g| valor(g)).max(),
+        Some(Manter::Menor) => gravados.iter().map(|&g| valor(g)).min(),
+    }
+    .and_then(|alvo| gravados.iter().position(|&g| valor(g) == alvo));
+
+    (0..gravados.len()).map(|i| fica.is_some_and(|fica| i != fica)).collect()
 }
 
 /// Os dados que caem, e o que se soma a eles.
@@ -75,7 +102,11 @@ enum Operador {
 #[derive(Debug, Clone, Copy)]
 enum Simbolo {
     Numero(f64),
-    Dado { quantidade: f64, faces: f64 },
+    Dado {
+        quantidade: f64,
+        faces: f64,
+        manter: Option<Manter>,
+    },
     Operador(Operador),
     Abre,
     Fecha,
@@ -84,7 +115,11 @@ enum Simbolo {
 #[derive(Debug)]
 enum No {
     Numero(f64),
-    Dado { quantidade: f64, faces: f64 },
+    Dado {
+        quantidade: f64,
+        faces: f64,
+        manter: Option<Manter>,
+    },
     Negativo(Box<No>),
     Conta(Operador, Box<No>, Box<No>),
 }
@@ -144,11 +179,15 @@ fn somar(no: &No, sinal: f64, dados: &mut Vec<Jogada>, modificador: &mut f64) ->
             somar(b, -sinal, dados, modificador)
         }
         No::Negativo(de) => somar(de, -sinal, dados, modificador),
-        No::Dado { quantidade, faces } => {
+        No::Dado {
+            quantidade,
+            faces,
+            manter,
+        } => {
             if sinal < 0.0 {
                 return Err(Erro::DadoForaDaSoma);
             }
-            dados.push(jogada_de(*quantidade, *faces)?);
+            dados.push(jogada_de(*quantidade, *faces, *manter)?);
             Ok(())
         }
         outro => {
@@ -158,7 +197,7 @@ fn somar(no: &No, sinal: f64, dados: &mut Vec<Jogada>, modificador: &mut f64) ->
     }
 }
 
-fn jogada_de(quantidade: f64, faces: f64) -> Result<Jogada, Erro> {
+fn jogada_de(quantidade: f64, faces: f64, manter: Option<Manter>) -> Result<Jogada, Erro> {
     let faces = FACES
         .into_iter()
         .find(|&f| f64::from(f) == faces)
@@ -170,9 +209,11 @@ fn jogada_de(quantidade: f64, faces: f64) -> Result<Jogada, Erro> {
         return Err(Erro::MuitosDados);
     }
 
+    // Num dado so, o maior e o menor sao ele: a leitura e a mesma de `1d20`.
     Ok(Jogada {
         quantidade: quantidade as u32,
         faces,
+        manter: manter.filter(|_| quantidade > 1.0),
     })
 }
 
@@ -279,9 +320,30 @@ fn dado_em(entrada: &[char], i: usize) -> Option<(Simbolo, usize)> {
     while j < entrada.len() && entrada[j].is_whitespace() {
         j += 1;
     }
-    let (faces, fim) = numero_em(entrada, j)?;
+    let (faces, mut fim) = numero_em(entrada, j)?;
 
-    Some((Simbolo::Dado { quantidade, faces }, fim))
+    // O que fica do termo, logo depois: `6d20>`, `2d20 <`.
+    let mut k = fim;
+    while k < entrada.len() && entrada[k].is_whitespace() {
+        k += 1;
+    }
+    let manter = match entrada.get(k) {
+        Some('>') => Some(Manter::Maior),
+        Some('<') => Some(Manter::Menor),
+        _ => None,
+    };
+    if manter.is_some() {
+        fim = k + 1;
+    }
+
+    Some((
+        Simbolo::Dado {
+            quantidade,
+            faces,
+            manter,
+        },
+        fim,
+    ))
 }
 
 /// Descida recursiva: soma > produto > unario > atomo.
@@ -337,7 +399,15 @@ impl Leitor<'_> {
 
         match simbolo {
             Simbolo::Numero(valor) => Ok(No::Numero(valor)),
-            Simbolo::Dado { quantidade, faces } => Ok(No::Dado { quantidade, faces }),
+            Simbolo::Dado {
+                quantidade,
+                faces,
+                manter,
+            } => Ok(No::Dado {
+                quantidade,
+                faces,
+                manter,
+            }),
             Simbolo::Abre => {
                 let dentro = self.soma()?;
                 if !matches!(self.olhar(), Some(Simbolo::Fecha)) {
@@ -372,6 +442,14 @@ mod tests {
                     .map(|par| Jogada {
                         quantidade: par[0].as_u64().unwrap() as u32,
                         faces: par[1].as_u64().unwrap() as u32,
+                        // O terceiro, quando ha: `>` o maior, `<` o menor.
+                        manter: par.get(2).and_then(Value::as_str).map(|sinal| {
+                            if sinal == ">" {
+                                Manter::Maior
+                            } else {
+                                Manter::Menor
+                            }
+                        }),
                     })
                     .collect(),
                 modificador: caso["modificador"].as_i64().unwrap(),
@@ -388,6 +466,19 @@ mod tests {
             let erro = ler(texto).map(|_| ()).map_err(Erro::nome);
             assert_eq!(erro, Err(caso["erro"].as_str().unwrap()), "{texto:?}");
         }
+    }
+
+    #[test]
+    fn descarta_todos_menos_o_que_fica() {
+        assert_eq!(descartados(20, &[3, 17, 9], Some(Manter::Maior)), [true, false, true]);
+        assert_eq!(descartados(20, &[3, 17, 9], Some(Manter::Menor)), [false, true, true]);
+        // No empate, fica o primeiro.
+        assert_eq!(descartados(20, &[17, 17], Some(Manter::Maior)), [false, true]);
+        // O zero do d10 vale dez: e o maior.
+        assert_eq!(descartados(10, &[9, 0], Some(Manter::Maior)), [true, false]);
+        // Sem regra, ou um dado so, nenhum sai.
+        assert_eq!(descartados(20, &[3, 17], None), [false, false]);
+        assert_eq!(descartados(20, &[3], Some(Manter::Maior)), [false]);
     }
 
     #[test]

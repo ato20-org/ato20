@@ -107,6 +107,14 @@ export function definirTags(tipo: TipoDeMolde, id: string, tags: string[]): Prom
   return call<string[]>("compendio_tags", { tipo, id, tags });
 }
 
+/**
+ * A aura de um personagem -- molde ou em jogo -- ou de um item da campanha,
+ * `{plugin}/{aura}`, ou `null` para tirar. Ver `compendio::definir_aura`.
+ */
+export function definirAura(tipo: "personagem" | "item", id: string, aura: string | null): Promise<void> {
+  return call<void>("compendio_aura", { tipo, id, aura });
+}
+
 /** As mesmas tags, no Compêndio do ATO20: a única coisa que se mexe lá sem trazer. */
 export function definirTagsNoAto20(
   tipo: TipoDeMolde,

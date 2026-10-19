@@ -45,6 +45,8 @@ import { t } from "@/lib/i18n/personagens";
 import { normaliza } from "@/lib/search";
 import { useMoldeDeDetalhes, useMoldeDeDetalhesStore } from "@/lib/store/use-molde-de-detalhes-store";
 import { cn } from "@/lib/utils";
+import { temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
+import { TextoComRolagens } from "@/components/mestre/texto-com-rolagens";
 import {
   criarDetalhe,
   editarDetalhe,
@@ -619,7 +621,11 @@ const LinhaDeDetalhe = memo(function LinhaDeDetalhe({
         </MenuDoDetalhe>
       </div>
       <div className="flex min-w-0 items-center gap-0.5">
-        <ValorDoDetalhe detalhe={detalhe} onGravar={(valor) => onGravar({ valor })} />
+        <ValorDoDetalhe
+          detalhe={detalhe}
+          rotuloDaRolagem={rotuloDaRolagem}
+          onGravar={(valor) => onGravar({ valor })}
+        />
         {rolavel ? (
           <RolagemDoDetalhe
             detalhe={detalhe}
@@ -842,9 +848,17 @@ const EntradaDeLista = memo(function EntradaDeLista({
             </div>
           ) : resumo || detalhe.descricao ? (
             <div className="space-y-0.5 text-xs">
-              {resumo ? <p className="font-medium">{resumo}</p> : null}
+              {/* As rolagens entre chaves viram o botão de rolar: "Dano:
+                  {2d10+50} Sangue". Ver `TextoComRolagens`. */}
+              {resumo ? (
+                <p className="font-medium">
+                  <TextoComRolagens texto={resumo} rotulo={rotuloDaRolagem} />
+                </p>
+              ) : null}
               {detalhe.descricao ? (
-                <p className="text-muted-foreground whitespace-pre-line">{detalhe.descricao}</p>
+                <p className="text-muted-foreground whitespace-pre-line">
+                  <TextoComRolagens texto={detalhe.descricao} rotulo={rotuloDaRolagem} />
+                </p>
               ) : null}
             </div>
           ) : (
@@ -919,8 +933,26 @@ export function CampoDeTexto({
   );
 }
 
-/** O valor no controle do tipo. */
-export function ValorDoDetalhe({ detalhe, onGravar }: { detalhe: Detalhe; onGravar: (valor: string | number) => void }) {
+/**
+ * O valor no controle do tipo.
+ *
+ * O texto com rolagem entre chaves ("{6d20>+35}") aparece como o botão de
+ * rolar, e não como o campo: o campo mostraria as chaves cruas, e a perícia
+ * não rolaria de lugar nenhum. Clicar fora do botão abre o campo, e sair dele
+ * volta ao botão. Só quando quem chama dá o `rotuloDaRolagem` -- é ele que vai
+ * ao fio.
+ */
+export function ValorDoDetalhe({
+  detalhe,
+  rotuloDaRolagem,
+  onGravar,
+}: {
+  detalhe: Detalhe;
+  rotuloDaRolagem?: string;
+  onGravar: (valor: string | number) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+
   if (detalhe.tipo === "numero") {
     return <CampoDeNumero detalhe={detalhe} onGravar={onGravar} />;
   }
@@ -951,12 +983,34 @@ export function ValorDoDetalhe({ detalhe, onGravar }: { detalhe: Detalhe; onGrav
     );
   }
 
+  const texto =
+    typeof detalhe.valor === "string" ? detalhe.valor : detalhe.valor === undefined ? "" : String(detalhe.valor);
+
+  if (rotuloDaRolagem && !editando && temRolagemNoTexto(texto)) {
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={t.detalhes.valor(detalhe.rotulo)}
+        onClick={() => setEditando(true)}
+        onKeyDown={(evento) => {
+          if (evento.key === "Enter" || evento.key === "F2") setEditando(true);
+        }}
+        className="hover:bg-accent/50 min-w-0 flex-1 cursor-text truncate rounded px-1 py-0.5 text-xs"
+      >
+        <TextoComRolagens texto={texto} rotulo={rotuloDaRolagem} />
+      </span>
+    );
+  }
+
   return (
     <CampoDeTexto
-      valor={typeof detalhe.valor === "string" ? detalhe.valor : detalhe.valor === undefined ? "" : String(detalhe.valor)}
+      valor={texto}
       maximo={MAX_TEXTO}
       rotulo={t.detalhes.valor(detalhe.rotulo)}
       placeholder={t.detalhes.vazioDoTexto}
+      autoFocus={editando}
+      onFim={() => setEditando(false)}
       onGravar={onGravar}
       className="min-w-0 flex-1 text-xs"
     />

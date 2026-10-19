@@ -1,5 +1,6 @@
 import {
   entraNaSoma,
+  regraDosDescartados,
   textoDoResultado,
   tipoDado,
   valorDaRolagem,
@@ -150,7 +151,7 @@ export function aplicarNoFio(
  * nada soma — a moeda sozinha não é número.
  */
 export function totalDaRolagem(rolagem: RolagemNoFio): number | null {
-  const somam = rolagem.dados.filter((dado) => entraNaSoma(dado.faces));
+  const somam = rolagem.dados.filter((dado) => entraNaSoma(dado));
   if (somam.length === 0) return null;
 
   return (
@@ -173,7 +174,8 @@ export function notacaoDaRolagem(rolagem: RolagemNoFio): string {
     // "d20", "Moeda": o nome do saquinho, com a quantidade na frente quando há
     // mais de um. A moeda não vira "1Moeda".
     if (faces === 2) return quantos === 1 ? nome : t.dados.moedas(quantos);
-    return `${quantos}${nome}`;
+    // Com descartados, a regra vai junto: `6d20>`. Ver `regraDosDescartados`.
+    return `${quantos}${nome}${regraDosDescartados(rolagem.dados, faces)}`;
   });
 
   const modificador = rolagem.modificador ?? 0;

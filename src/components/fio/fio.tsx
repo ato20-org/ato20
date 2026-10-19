@@ -355,7 +355,11 @@ function RolagemView({
               t={t}
             />
           ) : (
-            <DadoParado key={i} faces={dado.faces} valor={dado.valor} tamanho={tamanho} />
+            // O descartado aparece apagado: caiu, e não conta. Ver
+            // `Dado.descartado`.
+            <span key={i} className={cn(dado.descartado && "opacity-35")}>
+              <DadoParado faces={dado.faces} valor={dado.valor} tamanho={tamanho} />
+            </span>
           ),
         )}
         {resto > 0 ? (

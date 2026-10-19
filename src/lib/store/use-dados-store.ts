@@ -209,6 +209,8 @@ type DadosStore = {
     valor?: number,
     /** A rolagem com nome de que o dado faz parte. Ver `Lance`. */
     lance?: Lance,
+    /** Cai, e não conta: não foi o maior do termo. Ver `Dado.descartado`. */
+    descartado?: boolean,
   ) => Dado | null;
   /**
    * O teto de dados da mesa, em uso agora. Ver `TETO_DA_MESA`.
@@ -348,7 +350,7 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
    * girar. Ver o comentário de `Dado`: é o que torna a jogada conferível, e é o
    * que deixa publicar para a mesa ser um clique em vez de sincronizar física.
    */
-  lancar(faces, x, y, impulso, semente, valorDeFora, lance) {
+  lancar(faces, x, y, impulso, semente, valorDeFora, lance, descartado) {
     // Mesa cheia não recebe dado. Devolve `null` em vez de lançar exceção
     // porque encher a mesa não é erro de programa, é a mesa estando cheia --
     // quem chamou avisa quem jogou. Ver `TETO_DA_MESA`.
@@ -379,6 +381,7 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
       semente: semente ?? crypto.getRandomValues(new Uint32Array(1))[0],
       lancadoEm: agora,
       ...(lance && { lance }),
+      ...(descartado && { descartado }),
     };
 
     set((state) => ({
@@ -386,7 +389,7 @@ export const useDadosStore = create<DadosStore>((set, get) => ({
       historico: {
         ...state.historico,
         [mesa]: [
-          { id: dado.id, faces, valor, quando: agora, ...(lance && { lance }) },
+          { id: dado.id, faces, valor, quando: agora, ...(lance && { lance }), ...(descartado && { descartado }) },
           ...state.historico[mesa],
         ].slice(0, HISTORICO),
       },

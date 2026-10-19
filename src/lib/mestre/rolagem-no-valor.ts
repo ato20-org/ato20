@@ -4,7 +4,7 @@ import {
 } from "@/lib/mestre/expressao-de-rolagem";
 
 /** Os caracteres que uma expressão de rolagem usa. Ver `lerExpressaoDeRolagem`. */
-const DA_EXPRESSAO = /^[\d\s dD+\-*/×÷()]+/;
+const DA_EXPRESSAO = /^[\d\s dD+\-*/×÷()<>]+/;
 
 /**
  * A expressão de dado com que um valor COMEÇA, e o resto dele.

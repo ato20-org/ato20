@@ -329,7 +329,7 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
    * conta como zero está errada para a mesa que jogou. Ver `valorDaRolagem`.
    */
   const pousados = dados
-    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
+    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado))
     .map((dado) => valorDaRolagem(dado.faces, dado.valor));
 
   /**

@@ -666,6 +666,9 @@ const DadoNaMesa = memo(function DadoNaMesa({
   const x = sugado ? sugado.x : quadro.x;
   const y = sugado ? sugado.y : quadro.y;
   const nitidez = sugado ? sugado.nitidez : quadro.nitidez;
+  // O descartado apaga ao POUSAR, e não antes: no ar ninguém sabe quem fica, e
+  // apagar logo contaria o resultado. Ver `Dado.descartado`.
+  const apagado = dado.descartado && (agora - dado.lancadoEm) / 1000 >= duracaoDaQueda(dado);
   const sombra = sugado ? sugado.sombra : quadro.sombra;
 
   const desenho = desenharDado({
@@ -711,7 +714,7 @@ const DadoNaMesa = memo(function DadoNaMesa({
               `scale(${quadro.escala * quadro.esmagaX} ${quadro.escala * quadro.esmagaY}) ` +
               `translate(${-x} ${-y})`
         }
-        opacity={sugado ? sugado.opacidade : undefined}
+        opacity={sugado ? sugado.opacidade : apagado ? 0.4 : undefined}
       >
         <DadoFacetas
           tipo={tipo}

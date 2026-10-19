@@ -96,7 +96,12 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 11 is the current one: it added
+that asks for more than it has.** Version 12 is the current one: it added
+`bestiario`, the ready-made sheets a plugin brings to the Compendium (see
+[Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)), and
+`auras`, the color, emblem and light a plugin marks folders, cards,
+characters and items with (see [Auras](#auras-the-plugins-color-emblem-and-light)),
+which an earlier ATO20 would silently ignore. Version 11 added
 `estilosDeAtributos` and the system's `estiloDosAtributos` (see
 [Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual)), which an
 earlier ATO20 would silently ignore, leaving the sheet on cards without saying
@@ -1136,6 +1141,159 @@ for **API 10**:
 A plugin with a system **and** a PDF sheet closes the loop: use the system's
 groups and labels in the sheet, and the imported character lands right in the
 template.
+
+## Plugin bestiary: ready-made sheets in the Compendium
+
+A plugin brings ready-made sheets -- a system's threats, an adventure's NPCs
+-- and they show up in the campaign Compendium's Bestiary, after the GM's own
+templates: each collection is a folder, in a section named after the plugin,
+and a click opens it. The folder belongs to the plugin, not to the GM: it
+can't be renamed or moved, and it goes away with the plugin. While searching,
+the folders give way to the matching sheets, one section per collection. It is also
+just the manifest, and asks for **API 12**. The manifest declares the
+collection; the sheets live in a file next to it:
+
+```json
+"apiVersao": 12,
+"contribui": {
+  "bestiario": [{
+    "id": "threats",
+    "titulo": { "pt-BR": "Ameaças", "en": "Threats" },
+    "arquivo": "bestiary/threats.json",
+    "sistema": "ordem"
+  }]
+}
+```
+
+```json
+{
+  "grupos": [
+    { "nome": "Combat" },
+    { "nome": "Attacks", "exibicao": "lista" }
+  ],
+  "moldes": [{
+    "id": "blood-zombie",
+    "nome": "Blood Zombie",
+    "tags": ["Blood", "VD 40"],
+    "fonte": "Rulebook",
+    "miniatura": "bestiary/blood-zombie.webp",
+    "atributos": [{ "sigla": "AGI", "valor": 1 }, { "sigla": "FOR", "valor": 3 }],
+    "medidores": [{ "nome": "HP", "maximo": 45 }],
+    "detalhes": [
+      { "grupo": "Combat", "rotulo": "Defense", "tipo": "numero", "valor": 19 },
+      { "grupo": "Attacks", "rotulo": "Bite", "valor": "2d6+5 slashing",
+        "rolagem": "2d20+10", "descricao": "Standard. Attack." }
+    ]
+  }]
+}
+```
+
+- **Read-only, and always copied.** Clicking the plugin card opens the whole
+  sheet, read only, without bringing anything: browsing the threats doesn't
+  fill the campaign Compendium with copies. The card and the sheet have "Put
+  in play" and "Bring to the campaign". Bringing copies the sheet into the
+  campaign Compendium, where it is edited like any template; putting it in
+  play -- with the button or by dragging the card to the map -- comes out of
+  that template, brought right then if it wasn't there yet. The fourth goblin
+  doesn't bring the sheet again: the brought template remembers where it came
+  from (`doPlugin`), and bringing the same sheet again returns the same
+  template. Updating the plugin doesn't touch what the campaign already brought.
+- **The threat starts clean.** It doesn't get the campaign's default meters,
+  attributes and details -- an agent's NEX and Rank. It gets what the sheet
+  says.
+- **The meter wears the campaign.** The sheet's HP comes out with the color and
+  style of the campaign's HP template; only the maximum is the sheet's. `cor`
+  and `estilo` apply when the campaign has no template with that name.
+- **Groups live in the file**, not in each sheet. Bringing adds to the
+  campaign's template only the groups the sheet uses -- without their default
+  details --, and the detail keeps the group name as the campaign spells it.
+  Use your `sistema`'s groups and the threat lands on the usual sheet.
+- **`rolagem`** is the detail's roll expression, read by the same parser that
+  rolls at the table. Whether the detail gets the d20 is up to the campaign's
+  template (`rolavel`), by label.
+- **Rolls inside text:** in a text `valor` and in `descricao`, an expression
+  between braces becomes the roll button, on the GM's sheet and in the
+  bestiary preview: `"Damage: {2d10+50} Blood"`. Clicking rolls at the table
+  and posts to the feed with the sheet's name and the detail's label. A brace
+  that isn't an expression stays text, and on the phone the braces go away,
+  with no button (the daemon rolls there, and it only reads `rolagem`).
+- **Keep the highest, or the lowest:** `>` or `<` right after a dice term
+  keeps only its highest or lowest die. `6d20>+45` is six d20, the highest of
+  them plus 45, the Ordem test. `2d20<` is disadvantage. The other dice still
+  fall, dimmed, and stay out of the sum on the table, in the tray, in the
+  history and in the feed. It works in `rolagem` and between braces.
+- **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
+  URL with a site name. The file goes into the campaign's library when brought;
+  the URL is downloaded then, by the GM's machine, and the sheet comes in
+  without the image that didn't arrive, with a warning. The card only draws
+  images from the folder: it doesn't go to the network before anyone asks. One
+  image stands in for the missing other -- without a token the card couldn't be
+  dragged. Up to 2 MB, in the meter style's formats; a downloaded one goes
+  through the same limit, with its type checked from the bytes.
+- **`fonte`** shows on the card: the book, the supplement, the collection of
+  whoever made the sheet. It's where the credit stays in sight.
+- **`sistema`** is only a label: the id of a system from the same plugin.
+  Bringing doesn't apply the system.
+- **`aura`**, on the collection, is the id of an aura from the same plugin: it
+  paints the folder and frames each sheet's card. A sheet can bring its own (`"aura"` on the template), over the
+  collection's, and the brought sheet takes its aura into the campaign. See
+  [Auras](#auras-the-plugins-color-emblem-and-light).
+- **Checked on install, in full.** The file, each sheet and each image in the
+  folder: what saving would silently cut becomes an error at install time.
+  The limits are the campaign's (12 attributes, 6 meters, 16 groups, 200
+  details, 16 tags), plus 500 sheets and 4 MB per file, 60 characters in the
+  name and 120 in the source. A text detail holds up to 80 characters; the rest
+  goes in `descricao`, up to 2,000. A file that breaks after install shows in
+  the section with the reason, and the other collections carry on.
+- **Plugin off, collection out.** Turning it on and off shows and hides the
+  section right away.
+
+## Auras: the plugin's color, emblem and light
+
+An aura is the mark a plugin paints something with: a bestiary collection's
+folder, each sheet's card, and the campaign character or item that receives
+it. Ordem gives one to each element -- the Blood folder red, with the cross on
+its front, and the threat's card with red light running along its border --;
+a D&D plugin would give a golden "Legendary" to an item.
+Declared once and pointed to by id, like a meter style. Asks for **API 12**:
+
+```json
+"auras": [{
+  "id": "blood",
+  "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+  "cor": "#b3121f",
+  "emblema": "bestiary/elements/blood.webp",
+  "luz": { "efeito": "fluxo", "cores": ["#dc2626"] }
+}],
+"bestiario": [{ "id": "blood", "titulo": "Blood", "arquivo": "bestiary/blood.json", "aura": "blood" }]
+```
+
+- **`cor`** paints the folder and the card's border, in hex.
+- **`emblema`** is an image from the plugin folder, drawn on the front of the
+  folder. Raster, up to 2 MB, in the meter style formats, checked on install.
+  Pick the emblem's ink for contrast with `cor`: white on a dark folder, dark
+  on a light one. It stays on the GM's screen: the daemon doesn't publish it.
+- **`luz`** lights the border of the card under the pointer. The window
+  opened on the folder doesn't light up: around a grid of cards with colored
+  borders, it would be too much. The effect belongs to the CORE, from a
+  closed list, and the plugin picks which and in what colors (1 to 4):
+  - `fixa`: a steady glow.
+  - `pulso`: a glow that slowly breathes.
+  - `fluxo`: a throbbing glow, with light running along the four edges.
+  - `cintilar`: one glow per color, each flickering at its own pace.
+
+  Closed because of the GM's machine: each effect is a layer painted once,
+  with only its opacity or position animated -- what the GPU does without
+  repainting the window. Whoever asked the system for reduced motion gets a
+  steady light. A card only animates under the pointer; the others keep the
+  border and a steady glow.
+- **In the campaign**, the aura is `{plugin}/{id}`. A sheet brought from the
+  bestiary takes its own, and so does the copy in play. The GM gives, changes
+  or removes the aura of a template, an item or a character in play through
+  the "Aura" menu, which lists the enabled plugins' auras. In the Compendium
+  it is the card's border, and in the Characters list, the ring around the
+  face. With the plugin disabled it disappears from the screen and stays
+  saved, and comes back with it.
 
 ## Plugin-drawn attributes: the ritual
 

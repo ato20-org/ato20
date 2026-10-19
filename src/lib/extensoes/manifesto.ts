@@ -38,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 11;
+export const API_VERSAO = 12;
 
 /**
  * O que uma extensão diz de si.
@@ -109,6 +109,46 @@ export type Contribuicoes = {
   /** Ausente em lista lida por um Rust anterior à API 10. */
   fichasPdf?: FichaPdfDeclarada[];
   sistemas?: SistemaDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 12. */
+  bestiario?: ColecaoDoBestiarioDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 12. */
+  auras?: AuraDeclarada[];
+};
+
+/**
+ * Uma coleção de fichas prontas para o Compêndio. O manifesto só a declara: as
+ * fichas moram no `arquivo`, e quem as lê é o Rust (`bestiario.rs`). Espelho de
+ * `extensoes::ColecaoDoBestiario`.
+ */
+export type ColecaoDoBestiarioDeclarada = {
+  id: string;
+  titulo: string;
+  arquivo: string;
+  /** O sistema do mesmo plugin a que as fichas servem. Só etiqueta. */
+  sistema?: string | null;
+  /** A aura do mesmo plugin que pinta a pasta da coleção. Ver `AuraDeclarada`. */
+  aura?: string | null;
+};
+
+/** Os efeitos de luz que o núcleo sabe desenhar. Espelho de `extensoes::EFEITOS_DE_LUZ`. */
+export type EfeitoDeLuz = "fixa" | "pulso" | "fluxo" | "cintilar";
+
+/** A luz de uma aura. Ver `LuzDaAura`. */
+export type LuzDeclarada = { efeito: EfeitoDeLuz; cores: string[] };
+
+/**
+ * Uma aura: a cor, o emblema e a luz com que o plugin marca uma coisa -- a
+ * pasta de uma coleção do bestiário, a borda do card de uma ficha, e o
+ * personagem ou item da campanha que a recebe
+ * (`{plugin}/{id}`). Espelho de `extensoes::Aura`.
+ */
+export type AuraDeclarada = {
+  id: string;
+  titulo: string;
+  cor: string;
+  /** Uma imagem da pasta do plugin, na frente da pasta. */
+  emblema?: string | null;
+  luz?: LuzDeclarada | null;
 };
 
 /**
@@ -537,6 +577,8 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       })),
       fichasPdf: c.fichasPdf?.map(titulo),
       sistemas: c.sistemas?.map(titulo),
+      bestiario: c.bestiario?.map(titulo),
+      auras: c.auras?.map(titulo),
     },
   };
 }

@@ -7,10 +7,12 @@ import { textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
 import { cn } from "@/lib/utils";
 import {
   entraNaSoma,
+  regraDosDescartados,
   textoDoResultado,
   tipoDado,
   valorDaRolagem,
   type Dado,
+  type FacesDado,
   type Lance,
   type Rolagem,
 } from "@/types/dado";
@@ -151,7 +153,7 @@ function LinhaDeLance({
   const caindo = naOrdem.some((rolagem) => noAr.has(rolagem.id));
 
   const valores = naOrdem
-    .filter((rolagem) => entraNaSoma(rolagem.faces))
+    .filter((rolagem) => entraNaSoma(rolagem))
     .map((rolagem) => valorDaRolagem(rolagem.faces, rolagem.valor));
   const total = valores.reduce((soma, valor) => soma + valor, 0) + lance.modificador;
 
@@ -161,8 +163,12 @@ function LinhaDeLance({
     if (!porFaces.has(rolagem.faces)) faces.push(rolagem.faces);
     porFaces.set(rolagem.faces, (porFaces.get(rolagem.faces) ?? 0) + 1);
   }
+  // Com descartados, a regra vai junto: `6d20>+45`, e não uma conta que não
+  // bate com a soma dos seis. Ver `regraDosDescartados`.
   const notacao =
-    faces.map((lados) => `${porFaces.get(lados)}d${lados}`).join("+") + textoDoModificador(lance.modificador);
+    faces
+      .map((lados) => `${porFaces.get(lados)}d${lados}${regraDosDescartados(naOrdem, lados as FacesDado)}`)
+      .join("+") + textoDoModificador(lance.modificador);
   const conta = `${valores.join(" + ")} ${textoDoModificador(lance.modificador)} = ${total}`.replace("  ", " ");
 
   return (
@@ -171,7 +177,7 @@ function LinhaDeLance({
         {naOrdem.slice(0, BOLINHAS_DO_LANCE).map((rolagem) => (
           <span
             key={rolagem.id}
-            className="size-2.5 rounded-full border border-white/20"
+            className={cn("size-2.5 rounded-full border border-white/20", rolagem.descartado && "opacity-30")}
             style={{ background: tipoDado(rolagem.faces).hex }}
           />
         ))}

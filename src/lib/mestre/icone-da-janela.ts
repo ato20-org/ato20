@@ -87,6 +87,9 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     // As cópias: o que se guardou daqui para levar a outra mesa.
     case "compendio-ato20":
       return BookCopy;
+    // Ficha, como a do personagem: é a mesma coisa, só que ainda do plugin.
+    case "ficha-do-plugin":
+      return ScrollText;
     // Os mesmos das abas do Compêndio, que é de onde as duas mais abrem.
     case "efeito":
       return Sparkles;

@@ -23,7 +23,12 @@ describe("lerExpressaoDeRolagem", () => {
     "%j",
     (texto, dados, modificador) => {
       expect(lida(texto)).toEqual({
-        dados: dados.map(([quantidade, faces]) => ({ quantidade, faces })),
+        // O terceiro, quando há, é o que fica do termo: `>` o maior, `<` o menor.
+        dados: dados.map(([quantidade, faces, manter]) => ({
+          quantidade,
+          faces,
+          ...(manter && { manter: manter === ">" ? "maior" : "menor" }),
+        })),
         modificador,
       });
     },

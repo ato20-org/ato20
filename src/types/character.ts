@@ -103,6 +103,18 @@ export type Personagem = {
   compendio?: boolean;
   /** As tags do Compêndio, para filtrar o bestiário. Espelho de `Personagem::tags`. */
   tags?: string[];
+  /**
+   * De que ficha de plugin este molde foi trazido, `{plugin}/{coleção}/{ficha}`.
+   * Só no molde: é de onde o próximo goblin arrastado do plugin sai, sem trazer
+   * a ficha de novo. Espelho de `Personagem::do_plugin`.
+   */
+  doPlugin?: string;
+  /**
+   * A aura de plugin, `{plugin}/{aura}`: a borda do card e o anel do rosto. Vem
+   * com a ficha trazida do bestiário, e o mestre a troca pelo menu. Espelho de
+   * `Personagem::aura`; ver `useAura`.
+   */
+  aura?: string;
   criadoEm: number;
 };
 

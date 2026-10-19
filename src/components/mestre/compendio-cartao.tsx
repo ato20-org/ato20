@@ -5,9 +5,11 @@ import {
   Fragment,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
@@ -27,6 +29,7 @@ import {
   ItensDeMover,
   TresPontos,
 } from "@/components/mestre/arvore-de-pastas";
+import { LuzDaAura } from "@/components/mestre/luz-da-aura";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -36,6 +39,7 @@ import {
 import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ehElemento } from "@/lib/dom";
+import type { AuraDoPlugin } from "@/lib/extensoes/auras";
 import { t } from "@/lib/i18n/mestre";
 import { aoApertarF2, useRenomearPeloMenu } from "@/hooks/use-renomear-pelo-menu";
 import { t as textoDasPastas } from "@/lib/i18n/arquivos";
@@ -51,6 +55,7 @@ import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import type { FiltroDoCompendio } from "@/lib/mestre/compendio";
 import { MINIATURA } from "@/lib/miniatura";
 import { cn } from "@/lib/utils";
+import { imagemDoBestiario } from "@/lib/vault/bestiario";
 import { imagemDoCompendio, type TipoDeMolde } from "@/lib/vault/compendio";
 import type { Medidor } from "@/types/character";
 import type { ListaDePastasDoCompendio, Pasta } from "@/types/scene";
@@ -199,6 +204,7 @@ export function Cartao({
   tinta,
   titulo,
   imagem,
+  aura,
   naMao = false,
   onAbrir,
   onPointerDown,
@@ -237,6 +243,13 @@ export function Cartao({
   tinta?: string;
   titulo?: string;
   imagem: ReactNode;
+  /**
+   * A aura de plugin da coisa: a borda na cor dela, com um brilho parado, e a
+   * luz da aura só no card sob a mão. Parada nos outros pela conta de sempre:
+   * quarenta e oito cards animando a borda são quarenta e oito camadas a
+   * compor por quadro. Ver `LuzDaAura`.
+   */
+  aura?: AuraDoPlugin | null;
   naMao?: boolean;
   onAbrir?: () => void;
   onPointerDown?: (event: ReactPointerEvent) => void;
@@ -300,6 +313,7 @@ export function Cartao({
               onPointerDown && "cursor-grab touch-none active:cursor-grabbing",
               naMao && "opacity-40",
             )}
+            style={aura ? { borderColor: aura.cor } : undefined}
             onPointerDown={onPointerDown}
             // Menus sob demanda: o menu de três pontos e a dica da ação são
             // componentes pesados de montar, e uma grade de 48 cards montava
@@ -352,6 +366,17 @@ export function Cartao({
             {conteudo}
           </div>
         )}
+
+        {aura ? (
+          <>
+            <span
+              aria-hidden
+              className="luz-camada opacity-60"
+              style={{ "--luz-cor": aura.cor, "--luz-alcance": "16px" } as CSSProperties}
+            />
+            {emCima && aura.luz ? <LuzDaAura luz={aura.luz} alcance={22} /> : null}
+          </>
+        ) : null}
 
         {/* Sobre a imagem, com fundo próprio: o retrato pode ser claro ou
             escuro, e o botão tem de aparecer nos dois. */}
@@ -440,6 +465,47 @@ export function AcaoDaLinha({
  * alcança a ida ao Rust. Ver `imagemDoCompendio`.
  */
 export function ImagemDaMaquina({ assetId }: { assetId: string }) {
+  return <ImagemPedida chave={assetId} pedir={() => imagemDoCompendio(assetId)} />;
+}
+
+/**
+ * A miniatura de uma imagem da pasta de um plugin, do mesmo jeito: pedida
+ * perto da vista, pelo IPC. `onUrl` entrega o endereço a quem precisa dele
+ * fora do desenho -- o card, que o põe na sombra do arrasto. Ver
+ * `imagemDoBestiario`.
+ */
+export function ImagemDoPlugin({
+  extensaoId,
+  caminho,
+  onUrl,
+}: {
+  extensaoId: string;
+  caminho: string;
+  onUrl?: (url: string | null) => void;
+}) {
+  return (
+    <ImagemPedida
+      chave={`${extensaoId}/${caminho}`}
+      pedir={() => imagemDoBestiario(extensaoId, caminho)}
+      onUrl={onUrl}
+    />
+  );
+}
+
+/**
+ * Uma imagem que vem por IPC, pedida quando a linha chega perto da vista. A
+ * `chave` diz quando é outra imagem; `pedir` e `onUrl` são lidos no efeito
+ * (`useEffectEvent`), e trocar de função a cada render não pede de novo.
+ */
+function ImagemPedida({
+  chave,
+  pedir,
+  onUrl,
+}: {
+  chave: string;
+  pedir: () => Promise<string>;
+  onUrl?: (url: string | null) => void;
+}) {
   const ancora = useRef<HTMLSpanElement>(null);
   const [perto, setPerto] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -464,13 +530,16 @@ export function ImagemDaMaquina({ assetId }: { assetId: string }) {
     return () => observador.disconnect();
   }, [perto]);
 
+  const pedirAgora = useEffectEvent(pedir);
+  const avisar = useEffectEvent((endereco: string | null) => onUrl?.(endereco));
+
   useEffect(() => {
     if (!perto) return;
 
     let ativo = true;
     let criada: string | null = null;
 
-    void imagemDoCompendio(assetId).then(
+    void pedirAgora().then(
       (endereco) => {
         if (!ativo) {
           URL.revokeObjectURL(endereco);
@@ -478,15 +547,19 @@ export function ImagemDaMaquina({ assetId }: { assetId: string }) {
         }
         criada = endereco;
         setUrl(endereco);
+        avisar(endereco);
       },
       () => {},
     );
 
     return () => {
       ativo = false;
-      if (criada) URL.revokeObjectURL(criada);
+      if (criada) {
+        URL.revokeObjectURL(criada);
+        avisar(null);
+      }
     };
-  }, [perto, assetId]);
+  }, [perto, chave]);
 
   return (
     <span ref={ancora} className="absolute inset-0">
@@ -819,6 +892,68 @@ function CartaoDaPasta({
 }
 
 /**
+ * A pasta de uma coleção do bestiário de um plugin: o mesmo card da pasta do
+ * mestre, pintado com a aura da coleção -- a cor na pasta e o emblema na
+ * frente dela -- e só de leitura. Um clique entra; não se renomeia, não se
+ * move e não se desfaz, porque não é do mestre: é do plugin, e some com ele.
+ *
+ * Embaixo do nome, quantas fichas e de que plugin: é pela pasta que o mestre
+ * sabe de onde a ameaça veio, e a quem dar o crédito.
+ */
+export function CartaoDaColecao({
+  nome,
+  plugin,
+  total,
+  aura,
+  onAbrir,
+}: {
+  nome: string;
+  plugin: string;
+  total: number;
+  aura: AuraDoPlugin | null;
+  onAbrir: () => void;
+}) {
+  const formato = FORMATO_DA_PASTA.compendio;
+
+  return (
+    <li
+      className="group bg-card hover:border-foreground/25 relative isolate flex min-w-0 flex-col overflow-hidden rounded-lg border transition-colors select-none"
+      style={aura ? { borderColor: aura.cor } : undefined}
+    >
+      <button
+        type="button"
+        className={cn(
+          "bg-muted/60 focus-visible:ring-ring flex w-full items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-inset",
+          formato.area,
+        )}
+        title={texto.abrirPasta(nome)}
+        onClick={onAbrir}
+      >
+        <span className={cn("relative", formato.icone)}>
+          <IconeDePasta vazia={total === 0} cor={aura?.cor} className="w-full" />
+          {/* O emblema na FRENTE da pasta: o centro dela fica a 59% da altura
+              do desenho, abaixo da aba. */}
+          {aura?.emblema ? (
+            <span className="absolute top-[59%] left-1/2 aspect-square w-[42%] -translate-x-1/2 -translate-y-1/2">
+              <ImagemDoPlugin extensaoId={aura.extensao} caminho={aura.emblema} />
+            </span>
+          ) : null}
+        </span>
+      </button>
+
+      <span className="flex min-w-0 flex-col gap-0.5 p-2">
+        <span className="truncate text-xs font-medium" title={nome}>
+          {nome}
+        </span>
+        <span className="text-muted-foreground truncate text-[10px] tabular-nums">
+          {texto.naPastaDoPlugin(total, plugin)}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+/**
  * O ícone de pasta, desenhado como o do sistema: a aba de trás mais escura e a
  * frente clara por cima. Desenhado, e não o traço do lucide, para ler de longe
  * como PASTA, e não como mais um botão. A vazia fica apagada.
@@ -827,12 +962,18 @@ function CartaoDaPasta({
  * condição, a do efeito --, e uma pasta azul disputava com eles. Do tema, e
  * não um cinza fixo, para continuar cinza no claro e no escuro.
  */
-function IconeDePasta({ vazia, className }: { vazia: boolean; className?: string }) {
+function IconeDePasta({ vazia, cor, className }: { vazia: boolean; cor?: string; className?: string }) {
   return (
     <svg
       viewBox="0 0 64 52"
       aria-hidden
-      className={cn("text-muted-foreground aspect-64/52 drop-shadow-sm", vazia && "opacity-50", className)}
+      className={cn(
+        "aspect-64/52 drop-shadow-sm",
+        !cor && "text-muted-foreground",
+        vazia && "opacity-50",
+        className,
+      )}
+      style={cor ? { color: cor } : undefined}
     >
       <path
         d="M4 7a5 5 0 0 1 5-5h13.6a5 5 0 0 1 3.7 1.6L30 7.5h25a5 5 0 0 1 5 5V45a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"
@@ -853,10 +994,39 @@ function IconeDePasta({ vazia, className }: { vazia: boolean; className?: string
  * área que rola, como o filtro: é controle da lista, e fica à vista no fundo
  * de uma pasta comprida.
  */
-export function TrilhaDoCompendio({ raiz, pastas }: { raiz: string; pastas: Pasta[] }) {
+export function TrilhaDoCompendio({
+  raiz,
+  pastas,
+  colecao,
+}: {
+  raiz: string;
+  pastas: Pasta[];
+  /**
+   * A pasta de um plugin aberta, que não é do board: a trilha é a raiz e ela,
+   * e voltar a fecha. Ver `CartaoDaColecao`.
+   */
+  colecao?: { nome: string; onFechar: () => void };
+}) {
   const { lista, pastaAberta, abrirPasta } = useNavegacaoDoCompendio();
   const trilha = trilhaDaPasta(pastas, pastaAberta);
   const mae = trilha.at(-2)?.id;
+
+  if (colecao) {
+    return (
+      <nav aria-label={texto.trilha} className="flex min-w-0 shrink-0 items-center gap-0.5 px-2 pb-1.5">
+        <Button variant="ghost" size="icon-xs" aria-label={texto.voltar} title={texto.voltar} onClick={colecao.onFechar}>
+          <ArrowLeft />
+        </Button>
+        <PassoDaTrilha alvo={{}} pastaId={undefined} atual={false} onClick={colecao.onFechar}>
+          {raiz}
+        </PassoDaTrilha>
+        <ChevronRight className="text-muted-foreground size-3 shrink-0" aria-hidden />
+        <PassoDaTrilha alvo={{}} pastaId="" atual onClick={() => {}}>
+          {colecao.nome}
+        </PassoDaTrilha>
+      </nav>
+    );
+  }
 
   return (
     <nav aria-label={texto.trilha} className="flex min-w-0 shrink-0 items-center gap-0.5 px-2 pb-1.5">
