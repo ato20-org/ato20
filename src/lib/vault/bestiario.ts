@@ -58,6 +58,44 @@ export async function imagemDoBestiario(extensaoId: string, caminho: string): Pr
   return URL.createObjectURL(new Blob([bytes]));
 }
 
+/** Um detalhe da ficha, com o valor desta ameaça. Espelho de `bestiario::DetalheDoMolde`. */
+export type DetalheDaFichaDoPlugin = {
+  grupo: string;
+  rotulo: string;
+  tipo?: "texto" | "numero" | "escolha";
+  valor?: string | number | null;
+  opcoes?: string[];
+  descricao?: string | null;
+  rolagem?: string | null;
+};
+
+/**
+ * A ficha inteira de um plugin, para a prévia: o que o card não mostra.
+ * Espelho de `bestiario::FichaCompleta`.
+ */
+export type FichaCompletaDoPlugin = {
+  /** Os grupos do arquivo, na ordem dele, com a exibição de cada um. */
+  grupos: Array<{ nome: string; exibicao?: "linhas" | "lista" }>;
+  molde: {
+    id: string;
+    nome: string;
+    tags: string[];
+    fonte?: string | null;
+    retrato?: string | null;
+    miniatura?: string | null;
+    atributos: Array<{ sigla: string; valor: number; descricao?: string | null }>;
+    medidores: Array<{ nome: string; maximo: number; cor?: string | null }>;
+    detalhes: DetalheDaFichaDoPlugin[];
+  };
+  /** O id da aura, do mesmo plugin: a da ficha, ou a da coleção. */
+  aura?: string | null;
+};
+
+/** Lê a ficha inteira, sem trazer nada para a campanha. */
+export function fichaDoBestiario(ficha: QualFicha): Promise<FichaCompletaDoPlugin> {
+  return call<FichaCompletaDoPlugin>("bestiario_ficha", ficha);
+}
+
 /** O que voltou de trazer uma ficha. Espelho de `compendio::TrazidoDoPlugin`. */
 export type TrazidoDoPlugin = {
   /** O molde no Compêndio da campanha. */

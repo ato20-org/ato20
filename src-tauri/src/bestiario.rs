@@ -683,6 +683,37 @@ pub fn ler(dir: &Path, extensao: &str, colecao: &str) -> AppResult<(ColecaoDoBes
     Ok((declarada, bestiario))
 }
 
+/// A ficha inteira de um plugin, para LER sem trazer: a previa que o card do
+/// Compendio abre. Os grupos vao junto, porque e por eles que a ficha se divide
+/// e se desenha -- a lista de Acoes, as linhas de Combate.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FichaCompleta {
+    pub grupos: Vec<GrupoDoSistema>,
+    pub molde: MoldeDoBestiario,
+    /// A aura da ficha: a dela, ou a da colecao. So o id, como no `Resumo`.
+    pub aura: Option<String>,
+}
+
+/// Le uma ficha da colecao instalada, sem gravar nada: ver a ameaca nao a poe
+/// na campanha. Trazer e outro gesto (`compendio::trazer_do_plugin`).
+pub fn ficha(dir: &Path, extensao: &str, colecao: &str, molde: &str) -> AppResult<FichaCompleta> {
+    let (declarada, bestiario) = ler(dir, extensao, colecao)?;
+    let achado = bestiario.moldes.into_iter().find(|m| m.id == molde).ok_or_else(|| {
+        AppError::Recusado(crate::texto!(
+            "o bestiario {colecao:?} nao tem mais a ficha {molde:?}",
+            "the bestiary {colecao:?} no longer has the sheet {molde:?}"
+        ))
+    })?;
+    let aura = achado.aura(&declarada).map(str::to_string);
+
+    Ok(FichaCompleta {
+        grupos: bestiario.grupos,
+        molde: achado,
+        aura,
+    })
+}
+
 /// O arquivo de imagem de um plugin, se ele for uma imagem que cabe.
 ///
 /// Qualquer imagem da pasta, e nao so as que uma ficha cita: conferir contra
@@ -1157,6 +1188,13 @@ mod tests {
         assert_eq!(listadas[0].aura.as_deref(), Some("sangue"));
         let auras: Vec<_> = listadas[0].moldes.iter().map(|m| m.aura.as_deref()).collect();
         assert_eq!(auras, [Some("sangue"), Some("lendario")]);
+
+        // A previa le a ficha inteira, com a aura dela, sem trazer nada.
+        let diabo = ficha(&dir, "ordem", "ameacas", "diabo").unwrap();
+        assert_eq!(diabo.molde.nome, "O Diabo");
+        assert_eq!(diabo.aura.as_deref(), Some("lendario"));
+        assert_eq!(ficha(&dir, "ordem", "ameacas", "zumbi").unwrap().aura.as_deref(), Some("sangue"));
+        assert!(ficha(&dir, "ordem", "ameacas", "nenhuma").is_err());
 
         // A ficha que aponta uma aura que o plugin nao declara nao instala.
         escrever(

@@ -302,6 +302,7 @@ pub fn run() {
             commands::compendio_maquina_tags,
             commands::bestiario_listar,
             commands::bestiario_imagem,
+            commands::bestiario_ficha,
             commands::bestiario_trazer,
             commands::bestiario_por_em_jogo,
             commands::character_rename,

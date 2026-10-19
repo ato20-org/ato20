@@ -1088,8 +1088,9 @@ function useBestiarioDosPlugins(): ColecaoDoPlugin[] {
 
 /**
  * O bestiário dos plugins, depois das fichas da campanha. Só de leitura, como
- * o Compêndio do ATO20, e sem clique de abrir pela mesma razão: seria ler uma
- * ficha que nenhuma janela edita. Trazer copia a ficha para o Compêndio da
+ * o Compêndio do ATO20: o clique abre a ficha numa prévia que não grava nada
+ * (`FichaDoPluginBody`), e não na ficha de sempre, que lê e grava pelo id de
+ * um personagem da campanha. Trazer copia a ficha para o Compêndio da
  * campanha, onde ela se edita; pôr em jogo -- pelo botão ou arrastando para o
  * mapa -- sai do molde que ela deixa lá. Ver `compendio::trazer_do_plugin`.
  *
@@ -1203,8 +1204,9 @@ function FichasDoPlugin({
 }
 
 /**
- * Uma ficha de plugin, como card: arrastar para o mapa põe em jogo, o botão
- * também, e o menu traz para a campanha sem pôr em jogo.
+ * Uma ficha de plugin, como card: clicar abre a ficha só para ler, arrastar
+ * para o mapa põe em jogo, o botão também, e o menu traz para a campanha sem
+ * pôr em jogo.
  *
  * Arrasta mesmo sem imagem na pasta: a ficha que aponta a imagem por URL só a
  * baixa ao chegar na campanha, e a peça nasce com ela. Enquanto isso a sombra
@@ -1222,6 +1224,7 @@ const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
   aura: AuraDoPlugin | null;
 }) {
   const arrastar = useTokenDrag();
+  const abrir = useAbrirJanela();
   const { recarregar } = useCharacters();
   // O endereço da miniatura do card, para a sombra do arrasto.
   const [url, setUrl] = useState<string | null>(null);
@@ -1254,8 +1257,18 @@ const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
     }, falhou);
   }
 
+  // A prévia: a ficha inteira, só de leitura, sem trazer nada. Ver
+  // `FichaDoPluginBody`.
+  function abrirFicha() {
+    abrir({ tipo: "ficha-do-plugin", ...qual, nome: ficha.nome });
+  }
+
   const itens = ({ Item }: Kit) => (
     <>
+      <Item onClick={abrirFicha}>
+        <Maximize2 />
+        {texto.abrir}
+      </Item>
       <Item onClick={porAgora}>
         <UserPlus />
         {texto.porEmJogo}
@@ -1275,6 +1288,7 @@ const CartaoDaFichaDoPlugin = memo(function CartaoDaFichaDoPlugin({
       titulo={texto.dicaDoPlugin(ficha.nome)}
       aura={aura}
       naMao={naMao}
+      onAbrir={abrirFicha}
       imagem={
         ficha.imagem ? (
           <ImagemDoPlugin extensaoId={extensaoId} caminho={ficha.imagem} onUrl={setUrl} />

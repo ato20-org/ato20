@@ -35,6 +35,11 @@ export type ConteudoJanela =
   // O Compêndio do ATO20: o que a MÁQUINA guarda para qualquer campanha. Janela
   // à parte, como a Estante, e sem campo -- só há um.
   | { tipo: "compendio-ato20" }
+  // Uma ficha do bestiário de um plugin, para LER sem trazer: a prévia que o
+  // card do Compêndio abre. Pelos três ids, como o trazer; o nome vai junto
+  // para a aba ter título antes de a ficha chegar, como o do livro. Ver
+  // `FichaDoPluginBody`.
+  | { tipo: "ficha-do-plugin"; extensaoId: string; colecaoId: string; moldeId: string; nome: string }
   // Um efeito da campanha no editor dele: o de área ou o de personagem, em jogo
   // ou guardado no Compêndio -- a mesma lista, `useEfeitosDaCampanhaStore`.
   // Pelo id, como o item: o título é rótulo, e renomear o fogo não pode abrir
@@ -128,6 +133,9 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return "compendio";
     case "compendio-ato20":
       return "compendio-ato20";
+    // Sem o nome: ele é rótulo, não identidade, como o título do livro.
+    case "ficha-do-plugin":
+      return `ficha-do-plugin:${conteudo.extensaoId}/${conteudo.colecaoId}/${conteudo.moldeId}`;
     case "efeito":
       return `efeito:${conteudo.efeitoId}`;
     case "condicao":

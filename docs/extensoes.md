@@ -1100,8 +1100,10 @@ num arquivo ao lado dele:
 }
 ```
 
-- **Só de leitura, e sempre copiado.** O card do plugin tem "Pôr em jogo" e,
-  no menu, "Trazer para a campanha". Trazer copia a ficha para o Compêndio da
+- **Só de leitura, e sempre copiado.** Clicar no card do plugin abre a ficha
+  inteira só para ler, sem trazer nada: folhear as ameaças não enche o
+  Compêndio da campanha de cópias. O card e a ficha têm "Pôr em jogo" e
+  "Trazer para a campanha". Trazer copia a ficha para o Compêndio da
   campanha, onde ela se edita como qualquer molde; pôr em jogo -- pelo botão
   ou arrastando o card para o mapa -- sai desse molde, trazido na hora se
   ainda não estava. O quarto goblin não traz a ficha de novo: o molde trazido

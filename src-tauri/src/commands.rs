@@ -1426,6 +1426,26 @@ pub async fn bestiario_imagem(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+/// A ficha inteira de um plugin ligado, para a previa: ver a ameaca sem
+/// traze-la para a campanha. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn bestiario_ficha(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    molde_id: String,
+) -> AppResult<bestiario::FichaCompleta> {
+    if !extensao_ligada(&state, &extensao_id)? {
+        return Err(AppError::Recusado(crate::texto!(
+            "o plugin {extensao_id:?} esta desligado",
+            "the plugin {extensao_id:?} is turned off"
+        )));
+    }
+
+    let dir = state.extensoes.clone();
+    em_segundo_plano(move || bestiario::ficha(&dir, &extensao_id, &colecao_id, &molde_id)).await
+}
+
 /// Traz a ficha do plugin para o Compendio da campanha aberta.
 ///
 /// Em tres tempos, e o do meio fora de qualquer trava: o download da imagem

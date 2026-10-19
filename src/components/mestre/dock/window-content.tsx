@@ -5,6 +5,7 @@ import { AnexoBody, AssetBody } from "@/components/mestre/attachment-window";
 import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { CompendioBody, CompendioDoAto20Body } from "@/components/mestre/compendio-window";
+import { FichaDoPluginBody } from "@/components/mestre/ficha-do-plugin";
 import {
   CondicaoBody,
   FundoDaCondicao,
@@ -189,6 +190,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.compendio, subtitulo: t.janelas.compendioSub };
     case "compendio-ato20":
       return { titulo: t.janelas.compendioAto20, subtitulo: t.janelas.compendioAto20Sub };
+    case "ficha-do-plugin":
+      return { titulo: conteudo.nome, subtitulo: t.janelas.fichaDoPluginSub };
     case "efeito":
       return rotuloDoEfeito;
     case "condicao":
@@ -369,6 +372,10 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
     case "efeito":
     case "condicao":
       return 600;
+    // A ficha de uma ameaça tem ações e poderes de parágrafo inteiro: rola por
+    // dentro, como o editor.
+    case "ficha-do-plugin":
+      return 600;
     default:
       return undefined;
   }
@@ -395,6 +402,10 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // estreita o bastante para caber ao lado da ficha de quem o carrega.
     case "item":
       return 400;
+    // A prévia da ficha do plugin: o retrato ao lado do nome e dos botões, e
+    // as ações em texto corrido embaixo.
+    case "ficha-do-plugin":
+      return 440;
     // Larga o bastante para o editor abrir em duas colunas: a prévia parada à
     // esquerda, as camadas rolando à direita. Abaixo de 32rem ele empilha, e a
     // prévia sai da vista assim que o mestre desce até a luz.
@@ -449,6 +460,7 @@ export function larguraMinima(conteudo: ConteudoJanela): number {
       return 360;
     case "anexo":
     case "asset":
+    case "ficha-do-plugin":
     case "efeito":
     case "condicao":
       return 320;
@@ -520,6 +532,14 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
     // Da MÁQUINA, e não da campanha: a mesma de qualquer mesa, como a Estante.
     case "compendio-ato20":
       return <CompendioDoAto20Body />;
+    case "ficha-do-plugin":
+      return (
+        <FichaDoPluginBody
+          extensaoId={conteudo.extensaoId}
+          colecaoId={conteudo.colecaoId}
+          moldeId={conteudo.moldeId}
+        />
+      );
     case "item":
       return <ItemBody itemId={conteudo.itemId} personagemId={conteudo.personagemId} />;
     case "efeito":

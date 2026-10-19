@@ -1188,8 +1188,10 @@ collection; the sheets live in a file next to it:
 }
 ```
 
-- **Read-only, and always copied.** The plugin card has "Put in play" and, in
-  its menu, "Bring to the campaign". Bringing copies the sheet into the
+- **Read-only, and always copied.** Clicking the plugin card opens the whole
+  sheet, read only, without bringing anything: browsing the threats doesn't
+  fill the campaign Compendium with copies. The card and the sheet have "Put
+  in play" and "Bring to the campaign". Bringing copies the sheet into the
   campaign Compendium, where it is edited like any template; putting it in
   play -- with the button or by dragging the card to the map -- comes out of
   that template, brought right then if it wasn't there yet. The fourth goblin
