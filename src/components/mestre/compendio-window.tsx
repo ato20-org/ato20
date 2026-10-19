@@ -73,7 +73,6 @@ import {
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { EditorDeTags } from "@/components/mestre/editor-de-tags";
 import { ItensDeAura } from "@/components/mestre/itens-de-aura";
-import { LuzDaAura } from "@/components/mestre/luz-da-aura";
 import { ImagemDoItem, imagemDesenhada } from "@/components/mestre/imagem-do-item";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
@@ -626,7 +625,6 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     daCampanha && tipo === "bestiario" && !filtrando(filtro) && colecaoAberta
       ? (doPlugin.find((colecao) => chaveContribuicao(colecao.extensao, colecao.id) === colecaoAberta) ?? null)
       : null;
-  const auraDaPastaDoPlugin = pastaDoPlugin?.aura ? (auras[chaveContribuicao(pastaDoPlugin.extensao, pastaDoPlugin.aura)] ?? null) : null;
 
   // Estáveis: vão a cada card, e um card em `memo` não pode receber uma
   // função nova a cada letra da busca.
@@ -661,7 +659,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   const textosDoApagar = textosDeApagar(aApagar);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* As abas de sempre, as da ficha: sublinhadas, à esquerda, com a borda
           de ponta a ponta. Eram pílulas, e eram a única janela com elas. */}
       <Tabs value={tipo} onValueChange={(valor) => trocarTipo(valor as Tipo)} className="shrink-0 gap-0">
@@ -839,15 +837,6 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
         )}
       </AreaDeRolagemDoCompendio>
       </NavegacaoDoCompendioProvider>
-
-      {/* As bordas da janela acendem com a luz da aura da pasta aberta: o
-          Sangue corre, a Energia pisca. Por cima de tudo e sem pegar clique.
-          Ver `LuzDaAura`. */}
-      {auraDaPastaDoPlugin?.luz ? (
-        <span aria-hidden className="pointer-events-none absolute inset-0 z-10">
-          <LuzDaAura luz={auraDaPastaDoPlugin.luz} />
-        </span>
-      ) : null}
 
       <EditorDeTags
         edicao={editandoTags}

@@ -733,8 +733,8 @@
   }
 }
 
-/* A LUZ de uma aura de plugin (`extensoes::Aura`): as bordas da janela aberta
-   numa pasta do bestiário, e a borda do card sob a mão. Ver `LuzDaAura`.
+/* A LUZ de uma aura de plugin (`extensoes::Aura`): a borda do card sob a mão.
+   Ver `LuzDaAura`.
 
    Cada camada é um brilho de borda PINTADO UMA VEZ (`box-shadow` inset, ou o
    gradiente do cometa), e o que anima é só a opacidade ou a posição dela --
@@ -743,7 +743,7 @@
    janela inteira custa um quadro por quadro.
 
    A cor vem inline (`--luz-cor`), e o alcance do brilho também
-   (`--luz-alcance`): largo na janela, curto no card. */
+   (`--luz-alcance`): curto no card, e um pouco maior na luz sob a mão. */
 .luz-camada {
   position: absolute;
   inset: 0;

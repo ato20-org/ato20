@@ -488,9 +488,8 @@ pub struct ColecaoDoBestiario {
     /// o Compendio dizer de onde elas sao; trazer nao aplica o sistema.
     #[serde(default)]
     pub sistema: Option<String>,
-    /// A aura do MESMO plugin que pinta a pasta da colecao, acende a janela
-    /// aberta nela e emoldura o card de cada ficha. A ficha pode trazer a
-    /// dela, por cima desta. Ver `Aura`.
+    /// A aura do MESMO plugin que pinta a pasta da colecao e emoldura o card
+    /// de cada ficha. A ficha pode trazer a dela, por cima desta. Ver `Aura`.
     #[serde(default)]
     pub aura: Option<String>,
 }
@@ -515,8 +514,8 @@ pub const MAX_CORES_DA_LUZ: usize = 4;
 ///
 /// Declarada uma vez e apontada por id, como o estilo de medidor, porque e a
 /// MESMA marca em lugares diferentes. No bestiario, a colecao a aponta, e ela
-/// pinta a pasta da colecao com a `cor` e o `emblema`, acende as bordas da
-/// janela aberta nela com a `luz` e emoldura o card de cada ficha. Na campanha,
+/// pinta a pasta da colecao com a `cor` e o `emblema` e emoldura o card de
+/// cada ficha, com a `luz` no card sob a mao. Na campanha,
 /// a ficha trazida leva a aura junto (`{plugin}/{id}`), e o mestre pode dar a
 /// aura de um plugin a qualquer personagem ou item -- a borda dourada do item
 /// lendario.
@@ -534,8 +533,9 @@ pub struct Aura {
     /// como as do estilo de medidor, e no mesmo teto.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub emblema: Option<String>,
-    /// A luz da janela aberta na pasta, e da borda do card sob a mao. Sem ela,
-    /// a aura so pinta.
+    /// A luz da borda do card sob a mao. Sem ela, a aura so pinta. So no card,
+    /// e nao na janela aberta na pasta: as bordas do Compendio acesas em volta
+    /// dos cards de borda colorida eram informacao demais.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub luz: Option<Luz>,
 }

@@ -5,9 +5,12 @@ import type { CSSProperties } from "react";
 import type { LuzDeclarada } from "@/lib/extensoes/manifesto";
 
 /**
- * A LUZ de uma aura de plugin, por cima da caixa que a recebe: as bordas da
- * janela aberta numa pasta do bestiário, ou a borda do card sob a mão. A caixa
- * precisa ser `relative`; a luz não pega clique. Ver `extensoes::Aura`.
+ * A LUZ de uma aura de plugin, por cima da caixa que a recebe: a borda do card
+ * sob a mão. A caixa precisa ser `relative`; a luz não pega clique. Ver
+ * `extensoes::Aura`.
+ *
+ * Só no card, e não na janela aberta na pasta: as bordas do Compêndio acesas
+ * em volta de uma grade de cards de borda colorida eram informação demais.
  *
  * Os efeitos são do núcleo, e cada um é camada pintada uma vez com opacidade
  * ou posição animada -- ver `.luz-camada` no `globals.css`:
@@ -20,7 +23,7 @@ import type { LuzDeclarada } from "@/lib/extensoes/manifesto";
  * Com várias cores, a `fixa` e o `pulso` sobrepõem uma camada por cor, e o
  * `fluxo` alterna as cores entre as bordas.
  */
-export function LuzDaAura({ luz, alcance = 32 }: { luz: LuzDeclarada; alcance?: number }) {
+export function LuzDaAura({ luz, alcance = 22 }: { luz: LuzDeclarada; alcance?: number }) {
   const cores = luz.cores.length > 0 ? luz.cores : ["#ffffff"];
   const estilo = (cor: string, extra?: Record<string, string>) =>
     ({ "--luz-cor": cor, "--luz-alcance": `${alcance}px`, ...extra }) as CSSProperties;
@@ -47,7 +50,7 @@ export function LuzDaAura({ luz, alcance = 32 }: { luz: LuzDeclarada; alcance?: 
     case "cintilar":
       return (
         <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-          {/* A base, para a janela não apagar de todo entre as piscadas. */}
+          {/* A base, para a borda não apagar de todo entre as piscadas. */}
           <span className="luz-camada opacity-30" style={estilo(cores[0])} />
           {cores.map((cor, indice) => (
             <span

@@ -1133,7 +1133,7 @@ num arquivo ao lado dele:
 - **`sistema`** é só etiqueta: o id de um sistema do mesmo plugin. Trazer
   não aplica o sistema.
 - **`aura`**, na coleção, é o id de uma aura do mesmo plugin: ela pinta a
-  pasta, acende a janela aberta nela e emoldura o card de cada ficha. A ficha
+  pasta e emoldura o card de cada ficha. A ficha
   pode trazer a dela (`"aura"` no molde), por cima da da coleção, e a ficha
   trazida leva a aura junto para a campanha. Ver
   [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin).
@@ -1150,10 +1150,10 @@ num arquivo ao lado dele:
 ## Auras: a cor, o emblema e a luz do plugin
 
 Uma aura é a marca com que o plugin pinta uma coisa: a pasta de uma coleção do
-bestiário, a janela aberta nela, o card de cada ficha, e o personagem ou o
-item da campanha que a recebe. O Ordem dá uma a cada elemento -- a pasta de
-Sangue vermelha, com a cruz na frente, e a janela que acende em vermelho
-correndo pelas bordas --; um plugin de D&D daria a "Lendário" dourada a um item.
+bestiário, o card de cada ficha, e o personagem ou o item da campanha que a
+recebe. O Ordem dá uma a cada elemento -- a pasta de Sangue vermelha, com a
+cruz na frente, e o card da ameaça com a luz vermelha correndo pela borda --;
+um plugin de D&D daria a "Lendário" dourada a um item.
 Declarada uma vez e apontada por id, como o estilo de medidor. Pede a
 **API 12**:
 
@@ -1174,9 +1174,10 @@ Declarada uma vez e apontada por id, como o estilo de medidor. Pede a
   instalação. Escolha a tinta do emblema pelo contraste com a `cor`: branca na
   pasta escura, escura na clara. Fica na tela do mestre: o daemon não a
   publica na rede.
-- **`luz`** é a das bordas da janela aberta na pasta, e a da borda do card sob
-  a mão. O efeito é do NÚCLEO, de uma lista fechada, e o plugin escolhe qual e
-  com que cores (de 1 a 4):
+- **`luz`** é a da borda do card sob a mão. A janela aberta na pasta não
+  acende: em volta de uma grade de cards de borda colorida, seria informação
+  demais. O efeito é do NÚCLEO, de uma lista fechada, e o plugin escolhe qual
+  e com que cores (de 1 a 4):
   - `fixa`: o brilho parado.
   - `pulso`: o brilho que respira devagar.
   - `fluxo`: o brilho latejando, com a luz correndo pelas quatro bordas.

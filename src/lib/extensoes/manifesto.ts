@@ -138,8 +138,8 @@ export type LuzDeclarada = { efeito: EfeitoDeLuz; cores: string[] };
 
 /**
  * Uma aura: a cor, o emblema e a luz com que o plugin marca uma coisa -- a
- * pasta de uma coleção do bestiário, a janela aberta nela, a borda do card de
- * uma ficha, e o personagem ou item da campanha que a recebe
+ * pasta de uma coleção do bestiário, a borda do card de uma ficha, e o
+ * personagem ou item da campanha que a recebe
  * (`{plugin}/{id}`). Espelho de `extensoes::Aura`.
  */
 export type AuraDeclarada = {

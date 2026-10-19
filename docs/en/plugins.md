@@ -1222,8 +1222,7 @@ collection; the sheets live in a file next to it:
 - **`sistema`** is only a label: the id of a system from the same plugin.
   Bringing doesn't apply the system.
 - **`aura`**, on the collection, is the id of an aura from the same plugin: it
-  paints the folder, lights up the window opened on it and frames each
-  sheet's card. A sheet can bring its own (`"aura"` on the template), over the
+  paints the folder and frames each sheet's card. A sheet can bring its own (`"aura"` on the template), over the
   collection's, and the brought sheet takes its aura into the campaign. See
   [Auras](#auras-the-plugins-color-emblem-and-light).
 - **Checked on install, in full.** The file, each sheet and each image in the
@@ -1239,10 +1238,10 @@ collection; the sheets live in a file next to it:
 ## Auras: the plugin's color, emblem and light
 
 An aura is the mark a plugin paints something with: a bestiary collection's
-folder, the window opened on it, each sheet's card, and the campaign character
-or item that receives it. Ordem gives one to each element -- the Blood folder
-red, with the cross on its front, and the window lighting up in red running
-along its edges --; a D&D plugin would give a golden "Legendary" to an item.
+folder, each sheet's card, and the campaign character or item that receives
+it. Ordem gives one to each element -- the Blood folder red, with the cross on
+its front, and the threat's card with red light running along its border --;
+a D&D plugin would give a golden "Legendary" to an item.
 Declared once and pointed to by id, like a meter style. Asks for **API 12**:
 
 ```json
@@ -1261,9 +1260,10 @@ Declared once and pointed to by id, like a meter style. Asks for **API 12**:
   folder. Raster, up to 2 MB, in the meter style formats, checked on install.
   Pick the emblem's ink for contrast with `cor`: white on a dark folder, dark
   on a light one. It stays on the GM's screen: the daemon doesn't publish it.
-- **`luz`** lights the edges of the window opened on the folder, and the
-  border of the card under the pointer. The effect belongs to the CORE, from
-  a closed list, and the plugin picks which and in what colors (1 to 4):
+- **`luz`** lights the border of the card under the pointer. The window
+  opened on the folder doesn't light up: around a grid of cards with colored
+  borders, it would be too much. The effect belongs to the CORE, from a
+  closed list, and the plugin picks which and in what colors (1 to 4):
   - `fixa`: a steady glow.
   - `pulso`: a glow that slowly breathes.
   - `fluxo`: a throbbing glow, with light running along the four edges.

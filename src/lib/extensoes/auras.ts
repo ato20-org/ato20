@@ -9,8 +9,8 @@ import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
  * As auras dos plugins ligados, pela chave `{plugin}/{id}` -- a mesma que o
  * molde trazido guarda em `aura`. Ver `extensoes::Aura`.
  *
- * Só do Mestre, e não do `useDeclarativoStore`: a aura pinta pasta, card e
- * janela do Compêndio, e nada disso chega à TV nem ao celular.
+ * Só do Mestre, e não do `useDeclarativoStore`: a aura pinta a pasta e o card
+ * do Compêndio, e nada disso chega à TV nem ao celular.
  */
 export type AuraDoPlugin = AuraDeclarada & {
   chave: string;
