@@ -94,6 +94,10 @@ pub struct MoldeDoBestiario {
     /// A peca no mapa. Mesma forma do retrato.
     #[serde(default)]
     pub miniatura: Option<String>,
+    /// Uma aura do plugin, por cima da da colecao: o chefe dourado no meio
+    /// dos goblins. Ver `extensoes::Aura`.
+    #[serde(default)]
+    pub aura: Option<String>,
     #[serde(default)]
     pub atributos: Vec<AtributoDoSistema>,
     #[serde(default)]
@@ -166,6 +170,11 @@ impl<'a> Imagem<'a> {
 }
 
 impl MoldeDoBestiario {
+    /// A aura desta ficha: a dela, ou a da colecao.
+    pub fn aura<'a>(&'a self, colecao: &'a ColecaoDoBestiario) -> Option<&'a str> {
+        self.aura.as_deref().or(colecao.aura.as_deref())
+    }
+
     /// O retrato e a miniatura, nessa ordem, os que existem.
     pub fn imagens(&self) -> impl Iterator<Item = Imagem<'_>> {
         [&self.retrato, &self.miniatura]
@@ -293,6 +302,15 @@ fn validar_molde(molde: &MoldeDoBestiario, grupos: &[String]) -> Result<(), Text
                 "tem a tag {tag:?}; ela precisa ter de 1 a {} letras",
                 "has the tag {tag:?}; it must have 1 to {} characters",
                 crate::compendio::MAX_LETRAS_DA_TAG
+            ));
+        }
+    }
+
+    if let Some(aura) = &molde.aura {
+        if !extensoes::id_valido(aura) {
+            return Err(crate::texto!(
+                "aponta a aura {aura:?}; o id e so minusculas, digitos e hifen",
+                "points to the aura {aura:?}; the id is only lowercase letters, digits and hyphens"
             ));
         }
     }
@@ -586,6 +604,17 @@ pub fn validar_pasta(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
         let bestiario = ler_arquivo(&pasta.join(&colecao.arquivo), colecao)?;
 
         for molde in &bestiario.moldes {
+            if let Some(aura) = &molde.aura {
+                if !manifesto.contribui.auras.iter().any(|a| &a.id == aura) {
+                    return Err(AppError::ExtensaoInvalida(crate::texto!(
+                        "a ficha {:?} do bestiario {:?} aponta a aura {aura:?}, que o plugin nao declara em `auras`",
+                        "the sheet {:?} in the bestiary {:?} points to the aura {aura:?}, which the plugin does not declare in `auras`",
+                        molde.id,
+                        colecao.id
+                    )));
+                }
+            }
+
             for imagem in molde.imagens() {
                 let Imagem::Arquivo(rel) = imagem else {
                     continue;
@@ -833,6 +862,9 @@ pub struct Resumo {
     /// imagem por URL fica de fora: o card nao vai a rede antes de alguem
     /// pedir para trazer.
     pub imagem: Option<String>,
+    /// A aura do card: a da ficha, ou a da colecao. So o id: a definicao vem
+    /// do manifesto, que a tela ja tem.
+    pub aura: Option<String>,
 }
 
 /// Uma colecao de um plugin ligado, pronta para o Compendio.
@@ -843,6 +875,8 @@ pub struct Listada {
     pub id: String,
     pub titulo: TextoDePlugin,
     pub sistema: Option<String>,
+    /// A aura da pasta da colecao. Ver `extensoes::Aura`.
+    pub aura: Option<String>,
     pub moldes: Vec<Resumo>,
     /// O arquivo que quebrou depois de instalado. A colecao aparece com o
     /// motivo, e as outras nao somem por causa dela -- como `extensoes::listar`.
@@ -864,7 +898,10 @@ pub fn listar(dir: &Path, ligada: impl Fn(&str) -> bool) -> AppResult<Vec<Listad
                 .and_then(|caminho| ler_arquivo(&caminho, colecao));
 
             let (moldes, erro) = match lida {
-                Ok(bestiario) => (bestiario.moldes.iter().map(resumo).collect(), None),
+                Ok(bestiario) => (
+                    bestiario.moldes.iter().map(|molde| resumo(molde, colecao)).collect(),
+                    None,
+                ),
                 Err(AppError::ExtensaoInvalida(motivo)) => (Vec::new(), Some(motivo)),
                 Err(cause) => (
                     Vec::new(),
@@ -880,6 +917,7 @@ pub fn listar(dir: &Path, ligada: impl Fn(&str) -> bool) -> AppResult<Vec<Listad
                 id: colecao.id.clone(),
                 titulo: colecao.titulo.clone(),
                 sistema: colecao.sistema.clone(),
+                aura: colecao.aura.clone(),
                 moldes,
                 erro,
             });
@@ -889,7 +927,7 @@ pub fn listar(dir: &Path, ligada: impl Fn(&str) -> bool) -> AppResult<Vec<Listad
     Ok(listadas)
 }
 
-fn resumo(molde: &MoldeDoBestiario) -> Resumo {
+fn resumo(molde: &MoldeDoBestiario, colecao: &ColecaoDoBestiario) -> Resumo {
     let arquivo = |valor: &Option<String>| match valor.as_deref().map(Imagem::de) {
         Some(Imagem::Arquivo(rel)) => Some(rel.to_string()),
         _ => None,
@@ -901,6 +939,7 @@ fn resumo(molde: &MoldeDoBestiario) -> Resumo {
         tags: crate::compendio::normalizar_tags(molde.tags.clone()),
         fonte: molde.fonte.as_deref().map(str::trim).map(str::to_string),
         imagem: arquivo(&molde.miniatura).or_else(|| arquivo(&molde.retrato)),
+        aura: molde.aura(colecao).map(str::to_string),
     }
 }
 
@@ -1085,5 +1124,47 @@ mod tests {
         assert_eq!(resumo.imagem.as_deref(), Some("bestiario/zumbi.webp"));
         assert_eq!(resumo.tags, ["Sangue", "VD 40"]);
         assert!(listadas[0].erro.is_none());
+    }
+
+    #[test]
+    fn a_aura_da_colecao_vale_para_a_ficha_e_a_dela_vence() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-ordem");
+        escrever(
+            &pasta,
+            "manifest.json",
+            r##"{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":12,
+                "contribui":{"auras":[{"id":"sangue","titulo":"Sangue","cor":"#b3121f","emblema":"bestiario/sangue.webp"},
+                                      {"id":"lendario","titulo":"Lendário","cor":"#d4a72c"}],
+                             "bestiario":[{"id":"ameacas","titulo":"Ameaças","arquivo":"bestiario/ameacas.json","aura":"sangue"}]}}"##,
+        );
+        escrever(&pasta, "bestiario/zumbi.webp", "webp");
+        escrever(
+            &pasta,
+            "bestiario/ameacas.json",
+            r#"{"moldes":[{"id":"zumbi","nome":"Zumbi","miniatura":"bestiario/zumbi.webp"},
+                          {"id":"diabo","nome":"O Diabo","aura":"lendario"}]}"#,
+        );
+
+        // O emblema e conferido na importacao, como as imagens das fichas.
+        let erro = extensoes::importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("bestiario/sangue.webp"), "{erro}");
+        escrever(&pasta, "bestiario/sangue.webp", "webp");
+        extensoes::importar(&dir, &pasta).unwrap();
+
+        let listadas = listar(&dir, |_| true).unwrap();
+        assert_eq!(listadas[0].aura.as_deref(), Some("sangue"));
+        let auras: Vec<_> = listadas[0].moldes.iter().map(|m| m.aura.as_deref()).collect();
+        assert_eq!(auras, [Some("sangue"), Some("lendario")]);
+
+        // A ficha que aponta uma aura que o plugin nao declara nao instala.
+        escrever(
+            &pasta,
+            "bestiario/ameacas.json",
+            r#"{"moldes":[{"id":"zumbi","nome":"Zumbi","aura":"morte"}]}"#,
+        );
+        let erro = extensoes::importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("morte"), "{erro}");
     }
 }

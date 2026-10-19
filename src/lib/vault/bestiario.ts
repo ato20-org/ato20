@@ -21,6 +21,8 @@ export type FichaDoPlugin = {
   fonte?: string | null;
   /** O arquivo da pasta do plugin que o card desenha. Ver `imagemDoBestiario`. */
   imagem?: string | null;
+  /** O id da aura do card, do mesmo plugin: a da ficha, ou a da coleção. */
+  aura?: string | null;
 };
 
 /** Uma coleção de um plugin ligado. Espelho de `bestiario::Listada`. */
@@ -29,6 +31,8 @@ export type ColecaoDoPlugin = {
   id: string;
   titulo: TextoDePlugin;
   sistema?: string | null;
+  /** O id da aura da pasta da coleção, do mesmo plugin. */
+  aura?: string | null;
   fichas: FichaDoPlugin[];
   /** O arquivo que quebrou depois de instalado. As outras coleções seguem. */
   erro?: MotivoDoRust | null;
