@@ -29,14 +29,14 @@ own phone.
 On Linux, the AppImage runs without installing anything:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.9.0/ato20_1.9.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.10.0/ato20_1.10.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 On Windows, from PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.9.0/ato20_1.9.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.10.0/ato20_1.10.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -166,6 +166,7 @@ The rest of the documentation is in Portuguese:
 | [O daemon](docs/daemon.md) | The daemon: routes, the table code, the write token |
 | [Jogadores](docs/jogadores.md) | Players: table and sheet, the token in place of RLS, attachments |
 | [Retratos de personagem](docs/retratos.md) | Character portraits: the portrait tied to the camera, and the live portrait |
+| [A IA na campanha](docs/mcp.md) | AI on the campaign: MCP, turning it on, the tools, why it runs inside the app, who gets in |
 | [Desenvolvimento](docs/desenvolvimento.md) | Development: running, measuring, how it is built, tests |
 | [Empacotar](docs/empacotar.md) | Packaging: the packages, the icon and the Flatpak |
 

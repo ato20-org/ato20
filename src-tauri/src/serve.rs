@@ -27,6 +27,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
 pub(crate) mod expressao;
+pub mod mcp;
 mod page;
 
 use crate::error::{AppError, AppResult};
@@ -414,6 +415,8 @@ pub struct Daemon {
     sem_variante: Mutex<HashSet<String>>,
     /// Os erros de codigo da mesa. Ver `limitar_codigo`.
     tentativas: Tentativas,
+    /// O cano do MCP ate a janela, e o token dele. Ver `mcp`.
+    mcp: Arc<mcp::Ponte>,
 }
 
 impl Daemon {
@@ -451,7 +454,16 @@ impl Daemon {
             mini_gate: tokio::sync::Semaphore::new(2),
             sem_variante: Mutex::new(HashSet::new()),
             tentativas: Tentativas::new(),
+            // Desligado ate quem sobe o daemon dizer outra coisa: os testes
+            // que nao tratam do MCP nao precisam saber dele.
+            mcp: Arc::new(mcp::Ponte::new(None)),
         }
+    }
+
+    /// O cano do MCP que a janela tambem segura. Ver `mcp::Ponte`.
+    fn com_mcp(mut self, ponte: Arc<mcp::Ponte>) -> Self {
+        self.mcp = ponte;
+        self
     }
 
     /// Onde o daemon acha as pastas dos plugins, para servir as paginas deles.
@@ -514,6 +526,7 @@ pub fn spawn(
     web_root: Option<PathBuf>,
     estante: PathBuf,
     extensoes: PathBuf,
+    mcp: Arc<mcp::Ponte>,
 ) -> AppResult<Started> {
     let listener = bind()?;
     let port = listener.local_addr()?.port();
@@ -522,7 +535,11 @@ pub fn spawn(
     let token = uuid::Uuid::new_v4().simple().to_string();
     let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
 
-    let state = Arc::new(Daemon::new(vault, token.clone(), web_root, estante).com_extensoes(extensoes));
+    let state = Arc::new(
+        Daemon::new(vault, token.clone(), web_root, estante)
+            .com_extensoes(extensoes)
+            .com_mcp(mcp),
+    );
     let evidence = Arc::clone(&state.evidence);
 
     std::thread::Builder::new()
@@ -927,6 +944,16 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 )),
         )
         .route("/debug/palco", get(debug_palco_get).post(debug_palco_post))
+        // O MCP. Os portoes sao do proprio handler, e nao uma camada como o
+        // `require_token`: a recusa tem de sair em JSON-RPC, que e o que o
+        // cliente do protocolo sabe mostrar. Ver `mcp`.
+        .route(
+            "/mcp",
+            post(mcp::receber)
+                .get(mcp::sem_fluxo)
+                .delete(mcp::sem_fluxo)
+                .layer(DefaultBodyLimit::max(mcp::CORPO_MAX)),
+        )
         .route("/saude", get(|| async { "ok" }))
         // As telas mudaram de nome, e os enderecos antigos continuam de pe.
         //

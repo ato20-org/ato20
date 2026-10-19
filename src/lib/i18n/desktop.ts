@@ -25,6 +25,7 @@ const pt = {
       versao: "Versão",
       teclado: "Teclado",
       plugins: "Plugins",
+      mcp: "IA",
       sobre: "Sobre",
     },
     ajustesAjuda:
@@ -115,6 +116,25 @@ const pt = {
         confirmarTexto:
           "Este plugin executa código, com o alcance da janela do Mestre: lê e muda a campanha aberta. Instale só se você confia em quem o escreveu.",
       },
+    },
+    mcp: {
+      ajuda: "Uma IA desta máquina mexendo na campanha aberta, pelo MCP.",
+      ligar: "Deixar uma IA mexer nas campanhas",
+      ligarExplicacao:
+        "Liga o MCP: um programa de IA desta máquina, como o Claude Code ou o Cursor, passa a ler e a mudar a campanha aberta: criar notas, cenas, personagens e itens, e escrever no fio da mesa. Ele não apaga nada. Só programas com o token entram, e só desta máquina.",
+      claudeCode: "Claude Code",
+      claudeCodeExplicacao: "Rode no terminal, uma vez:",
+      outros: "Outros clientes",
+      outrosExplicacao:
+        "Endereço HTTP do MCP, com o token no cabeçalho Authorization. A maioria aceita esta configuração:",
+      copiar: "Copiar",
+      copiado: "Copiado",
+      trocarToken: "Trocar o token",
+      trocarTokenExplicacao:
+        "O token antigo para de valer na hora, e todo cliente configurado com ele precisa do novo.",
+      precisaAberto:
+        "O ATO20 precisa estar aberto para o cliente conectar. Se o cliente abriu antes, reconecte por ele (no Claude Code, /mcp).",
+      erro: "Não deu para ler o estado do MCP.",
     },
     sobre: {
       saudacao:
@@ -240,6 +260,7 @@ const en: typeof pt = {
       versao: "Version",
       teclado: "Keyboard",
       plugins: "Plugins",
+      mcp: "AI",
       sobre: "About",
     },
     ajustesAjuda:
@@ -330,6 +351,25 @@ const en: typeof pt = {
         confirmarTexto:
           "This plugin runs code, with the same access as the GM window: it reads and changes the open campaign. Only install it if you trust whoever wrote it.",
       },
+    },
+    mcp: {
+      ajuda: "An AI on this machine working on the open campaign, through MCP.",
+      ligar: "Let an AI work on your campaigns",
+      ligarExplicacao:
+        "Turns MCP on: an AI program on this machine, like Claude Code or Cursor, can read and change the open campaign: create notes, scenes, characters and items, and write in the table chat. It deletes nothing. Only programs with the token get in, and only from this machine.",
+      claudeCode: "Claude Code",
+      claudeCodeExplicacao: "Run this in a terminal, once:",
+      outros: "Other clients",
+      outrosExplicacao:
+        "The MCP HTTP address, with the token in the Authorization header. Most clients take this configuration:",
+      copiar: "Copy",
+      copiado: "Copied",
+      trocarToken: "Change the token",
+      trocarTokenExplicacao:
+        "The old token stops working right away, and every client set up with it needs the new one.",
+      precisaAberto:
+        "ATO20 has to be open for the client to connect. If the client started first, reconnect from it (in Claude Code, /mcp).",
+      erro: "Couldn't read the MCP state.",
     },
     sobre: {
       saudacao:

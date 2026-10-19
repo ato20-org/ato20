@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   Blocks,
+  Bot,
   Box,
   Keyboard,
   Minus,
@@ -42,6 +43,7 @@ import { atalhosPorGrupo, rotuloDoGrupo } from "@/lib/mestre/atalhos";
 import { t } from "@/lib/i18n/desktop";
 import { rico } from "@/lib/i18n/rico";
 import { SecaoIdioma } from "@/components/desktop/secao-idioma";
+import { SecaoMcp } from "@/components/desktop/secao-mcp";
 import { Sobre } from "@/components/desktop/sobre";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
@@ -65,6 +67,7 @@ const SECOES = [
   { chave: "versao", titulo: t.configuracoes.secoes.versao, icone: History },
   { chave: "teclado", titulo: t.configuracoes.secoes.teclado, icone: Keyboard },
   { chave: "plugins", titulo: t.configuracoes.secoes.plugins, icone: Puzzle },
+  { chave: "mcp", titulo: t.configuracoes.secoes.mcp, icone: Bot },
   { chave: "sobre", titulo: t.configuracoes.secoes.sobre, icone: Info },
 ] as const;
 
@@ -161,6 +164,7 @@ export function ConfiguracoesDialog() {
               {secao === "versao" ? <PainelVersao /> : null}
               {secao === "teclado" ? <PainelTeclado /> : null}
               {secao === "plugins" ? <PainelPlugins /> : null}
+              {secao === "mcp" ? <PainelMcp /> : null}
               {secao === "sobre" ? <PainelSobre /> : null}
             </div>
           </ScrollArea>
@@ -375,6 +379,15 @@ function PainelVersao() {
 
       <TituloSecao>{t.configuracoes.versao.historico}</TituloSecao>
       <HistoricoDeVersoes />
+    </>
+  );
+}
+
+function PainelMcp() {
+  return (
+    <>
+      <TituloSecao ajuda={t.configuracoes.mcp.ajuda}>{t.configuracoes.secoes.mcp}</TituloSecao>
+      <SecaoMcp />
     </>
   );
 }

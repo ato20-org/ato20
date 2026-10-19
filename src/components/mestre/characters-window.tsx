@@ -84,7 +84,7 @@ import {
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
-import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { centeredBox } from "@/lib/geometry/transform";
 import { comum } from "@/lib/i18n/comum";
 import { t as textoDoMestre } from "@/lib/i18n/mestre";
 import { t } from "@/lib/i18n/personagens";
@@ -102,6 +102,7 @@ import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { entregarItem } from "@/lib/mestre/entregar-item";
+import { tamanhoDoToken } from "@/lib/mestre/tamanho-na-cena";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import {
   createCharacter,
@@ -129,39 +130,6 @@ import { useAura } from "@/lib/extensoes/auras";
 import { ItensDeAura } from "@/components/mestre/itens-de-aura";
 import { definirAura } from "@/lib/vault/compendio";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
-
-/**
- * Tamanho de um token cuja imagem nao declara dimensao.
- *
- * Menor que o do acervo (480x270, medida de mapa): token e figura de pessoa
- * sobre a grade, e nascer do tamanho de um mapa faria o mestre encolher toda
- * vez.
- *
- * Em pe, e nao quadrado. Era quadrado, e o resultado era uma pessoa esticada
- * na largura -- e o gizmo do item trava a proporcao, entao redimensionar depois
- * mantinha o erro: o token nascia quadrado e continuava quadrado para sempre. A
- * unica saida era apagar e por de novo.
- *
- * Continua sendo chute, porque sem a medida do arquivo nao ha o que preservar.
- * Chute de figura em pe erra menos que chute de quadrado, e e usado so quando o
- * acervo nao sabe a dimensao -- ver `PorNoMapa`, que exige o registro do
- * acervo justamente para nao precisar chutar.
- */
-const TAMANHO_PADRAO = { x: 140, y: 187 };
-
-/**
- * Com que tamanho o token entra no mapa, em unidades de cena.
- *
- * Uma funcao e nao duas contas porque os dois gestos que poem o token -- o
- * botao, que poe no centro, e o arrasto, que poe onde a mao soltou -- tem de
- * concordar: o arrasto ainda multiplica isto pelo que a roda pediu, e uma base
- * diferente faria a roda parada dar um token de outro tamanho que o botao.
- */
-export function tamanhoDoToken(miniatura: AssetMeta | undefined) {
-  return miniatura?.naturalWidth && miniatura.naturalHeight
-    ? fitInitialSize(miniatura.naturalWidth, miniatura.naturalHeight)
-    : TAMANHO_PADRAO;
-}
 
 /**
  * A lista de personagens da campanha.

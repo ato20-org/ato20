@@ -71,6 +71,45 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.10.0",
+    data: "2026-10-19",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O clima na mesa: chuva, tempestade, neve, neblina, cinzas e brasas",
+          en: "Weather on the table: rain, storm, snow, fog, ash and embers",
+        },
+        detalhe: {
+          pt: "O ambiente cobre a cena inteira, por cima da tela da mesa, e não anda nem amplia com a câmera. Nas Configurações do mapa se escolhe o ambiente, a intensidade e o vento. No Compêndio, a aba Ambiente, dentro de Efeitos, traz os seis prontos e cria outros, com as camadas que caem, o véu e o relâmpago, e o card tem Pôr nesta cena. Mexer num ambiente do Compêndio muda a chuva da tela da mesa na hora. Você vê o clima na metade e sem relâmpago, e ele some enquanto você arrasta alguma coisa.",
+          en: "Weather covers the whole scene, over the spectator window, and doesn't move or zoom with the camera. Map settings pick the weather, its intensity and the wind. In the Compendium, the Weather tab under Effects brings the six ready-made ones and creates new ones, with falling layers, a veil and lightning, and each card has Put in this scene. Changing a weather in the Compendium changes the rain in the spectator window right away. You see it at half strength and without lightning, and it hides while you drag something.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas do Mestre saem do ATO20, para o segundo monitor",
+          en: "GM windows can leave ATO20 for a second monitor",
+        },
+        detalhe: {
+          pt: "A ficha, o Compêndio, o chat, as Rolagens, a Mesa: arraste o cabeçalho de uma janela, ou a aba de uma atracada, para fora do ATO20 e solte, ou use o ↗ do cabeçalho. Ela vira uma janela do sistema e funciona como dentro, e o que se abre a partir dela abre solto também. O ↙ traz de volta, e a próxima abre no mesmo lugar e no mesmo tamanho. Os atalhos, como desfazer, ainda só valem na janela principal.",
+          en: "The sheet, the Compendium, the chat, Rolls, the Table: drag a window's header, or a docked tab, outside ATO20 and drop it, or use the ↗ in the header. It becomes a system window that works just like inside, and whatever opens from it opens detached too. The ↙ brings it back, and the next one opens in the same place and size. Shortcuts, like undo, still only work in the main window.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Uma IA deste computador pode mexer na campanha aberta",
+          en: "An AI on this computer can work on the open campaign",
+        },
+        detalhe: {
+          pt: "Em Configurações, IA, a opção Deixar uma IA mexer nas campanhas liga o MCP: um programa como o Claude Code ou o Cursor passa a criar notas, cenas, personagens e itens, pôr tokens no mapa, dar itens e ler e escrever no fio da mesa, e o que ele faz aparece na hora. Ele não apaga nada, não põe cena no ar e não rola dado. Vem desligado, só entra quem tem o token, e só deste computador. A tela mostra o comando do Claude Code pronto para copiar.",
+          en: "In Settings, AI, Let an AI work on your campaigns turns MCP on: a program like Claude Code or Cursor can create notes, scenes, characters and items, place tokens on the map, give items, and read and write in the table chat, and what it does shows up right away. It deletes nothing, puts no scene On air and rolls no dice. It starts off, only programs with the token get in, and only from this computer. The screen shows the Claude Code command ready to copy.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.9.0",
     data: "2026-10-16",
     mudancas: [

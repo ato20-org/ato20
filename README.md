@@ -29,14 +29,14 @@ celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.9.0/ato20_1.9.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.10.0/ato20_1.10.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.9.0/ato20_1.9.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.10.0/ato20_1.10.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -156,6 +156,7 @@ repetindo antes de acreditar.
 | [Jogadores](docs/jogadores.md) | Mesa e ficha, o token no lugar da RLS, os anexos |
 | [Retratos de personagem](docs/retratos.md) | O retrato preso à câmera, e o retrato ao vivo |
 | [Plugins](docs/extensoes.md) | Temas, plugins de funcionalidade e a API |
+| [A IA na campanha](docs/mcp.md) | O MCP: ligar, as ferramentas, por que roda dentro do aplicativo, quem entra |
 | [Desenvolvimento](docs/desenvolvimento.md) | Rodar, medir, como está construído, testes |
 | [Empacotar](docs/empacotar.md) | Os pacotes, o ícone e o Flatpak |
 
