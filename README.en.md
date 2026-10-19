@@ -166,6 +166,7 @@ The rest of the documentation is in Portuguese:
 | [O daemon](docs/daemon.md) | The daemon: routes, the table code, the write token |
 | [Jogadores](docs/jogadores.md) | Players: table and sheet, the token in place of RLS, attachments |
 | [Retratos de personagem](docs/retratos.md) | Character portraits: the portrait tied to the camera, and the live portrait |
+| [A IA na campanha](docs/mcp.md) | AI on the campaign: MCP, turning it on, the tools, why it runs inside the app, who gets in |
 | [Desenvolvimento](docs/desenvolvimento.md) | Development: running, measuring, how it is built, tests |
 | [Empacotar](docs/empacotar.md) | Packaging: the packages, the icon and the Flatpak |
 

@@ -156,6 +156,7 @@ repetindo antes de acreditar.
 | [Jogadores](docs/jogadores.md) | Mesa e ficha, o token no lugar da RLS, os anexos |
 | [Retratos de personagem](docs/retratos.md) | O retrato preso à câmera, e o retrato ao vivo |
 | [Plugins](docs/extensoes.md) | Temas, plugins de funcionalidade e a API |
+| [A IA na campanha](docs/mcp.md) | O MCP: ligar, as ferramentas, por que roda dentro do aplicativo, quem entra |
 | [Desenvolvimento](docs/desenvolvimento.md) | Rodar, medir, como está construído, testes |
 | [Empacotar](docs/empacotar.md) | Os pacotes, o ícone e o Flatpak |
 

@@ -280,7 +280,7 @@ fn hash_token(token: &str) -> String {
 }
 
 /// Um token novo, do CSPRNG do sistema.
-fn new_token() -> AppResult<String> {
+pub(crate) fn new_token() -> AppResult<String> {
     let mut bytes = [0u8; 32];
 
     getrandom::fill(&mut bytes).map_err(|cause| {

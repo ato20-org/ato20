@@ -100,6 +100,15 @@ type CampaignStore = {
    * plugin, se o mestre escolheu um.
    */
   create: (nome: string, sistema?: { extensaoId: string; sistemaId: string } | null) => Promise<void>;
+  /**
+   * Cria a campanha numa pasta-mãe já escolhida. É o `create` sem o seletor:
+   * quem chama de fora da porta (o MCP) já sabe onde.
+   */
+  criarEm: (
+    parent: string,
+    nome: string,
+    sistema?: { extensaoId: string; sistemaId: string } | null,
+  ) => Promise<void>;
   /** Tira da lista de recentes. Não apaga nada do disco. */
   forget: (path: string) => Promise<void>;
   /**
@@ -333,8 +342,15 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
       const parent = await pickFolder(t.dialogos.ondeCriar);
       if (!parent) return;
 
-      // Depois do seletor, nunca antes: enquanto o diálogo do sistema está aberto
-      // não há trabalho em curso, e o que a pessoa tem de ver é o diálogo.
+      await get().criarEm(parent, nome, sistema);
+    },
+
+    async criarEm(parent, nome, sistema) {
+      if (get().busy) return;
+
+      // Depois do seletor do `create`, nunca antes: enquanto o diálogo do
+      // sistema está aberto não há trabalho em curso, e o que a pessoa tem de
+      // ver é o diálogo.
       set({ busy: true, status: "abrindo", error: null });
 
       try {

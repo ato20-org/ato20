@@ -13,6 +13,7 @@ import { PanelsMenu } from "@/components/mestre/panels-menu";
 import { CampaignBoot } from "@/components/mestre/campaign-boot";
 import { CampanhaPerdida } from "@/components/mestre/campanha-perdida";
 import { CampaignSplash } from "@/components/mestre/campaign-splash";
+import { McpDoMestre } from "@/components/mestre/mcp-do-mestre";
 import { MestreGate } from "@/components/mestre/mestre-gate";
 import { PresencaDoMestre } from "@/components/mestre/presenca-do-mestre";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,8 @@ export function Mestre() {
     <div className="flex h-dvh flex-col overflow-hidden">
       {/* Fora do `Conteudo`: o título e o Discord valem para a porta também. */}
       <PresencaDoMestre />
+      {/* E o MCP, pelo mesmo motivo: abrir uma campanha é pedido da porta. */}
+      <McpDoMestre />
       <WindowChrome
         // A campanha na ponta esquerda, junto do nome: ela é o que a janela é,
         // e não um controle de gesto que dispute espaço com a barra de

@@ -389,6 +389,42 @@ impl AppDb {
     }
 }
 
+impl AppDb {
+    /// Uma preferencia da maquina, da tabela `prefs`.
+    ///
+    /// A tabela ficou de pe para isto: o comentario em `migrate` dizia que uma
+    /// preferencia de maquina e o tipo de coisa que volta a aparecer, e voltou
+    /// com o MCP. Mora aqui, e nao no `configuracoes.json` da maquina, porque
+    /// aquele arquivo viaja no pacote quando o mestre marca "a configuracao do
+    /// ATO20" -- e o token do MCP nao pode ir junto. Ver `mcp`.
+    pub fn pref(&self, chave: &str) -> AppResult<Option<String>> {
+        let conn = self.conn.lock().expect("banco envenenado");
+        let mut stmt = conn.prepare("select valor from prefs where chave = ?1")?;
+        let mut linhas = stmt.query([chave])?;
+
+        Ok(match linhas.next()? {
+            Some(linha) => Some(linha.get(0)?),
+            None => None,
+        })
+    }
+
+    /// Grava a preferencia, ou a apaga com `None`.
+    pub fn definir_pref(&self, chave: &str, valor: Option<&str>) -> AppResult<()> {
+        let conn = self.conn.lock().expect("banco envenenado");
+
+        match valor {
+            Some(valor) => conn.execute(
+                "insert into prefs (chave, valor) values (?1, ?2)
+                 on conflict(chave) do update set valor = excluded.valor",
+                [chave, valor],
+            )?,
+            None => conn.execute("delete from prefs where chave = ?1", [chave])?,
+        };
+
+        Ok(())
+    }
+}
+
 fn migrate(conn: &Connection) -> AppResult<()> {
     let current: i64 = conn.query_row("pragma user_version", [], |row| row.get(0))?;
 
@@ -511,6 +547,20 @@ mod tests {
         let db = AppDb::open(&dir.path().join("ato20.db")).unwrap();
 
         (dir, db)
+    }
+
+    #[test]
+    fn a_preferencia_grava_troca_e_some() {
+        let (_dir, db) = banco();
+
+        assert_eq!(db.pref("mcp.token").unwrap(), None);
+
+        db.definir_pref("mcp.token", Some("um")).unwrap();
+        db.definir_pref("mcp.token", Some("dois")).unwrap();
+        assert_eq!(db.pref("mcp.token").unwrap().as_deref(), Some("dois"));
+
+        db.definir_pref("mcp.token", None).unwrap();
+        assert_eq!(db.pref("mcp.token").unwrap(), None);
     }
 
     fn livro(id: &str) -> Livro {

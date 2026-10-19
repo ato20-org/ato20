@@ -34,7 +34,7 @@ import {
 } from "@/components/mestre/acoes-do-item";
 import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
-import { tamanhoDoToken } from "@/components/mestre/characters-window";
+import { tamanhoDoToken } from "@/lib/mestre/tamanho-na-cena";
 import {
   AcaoDaLinha,
   ArvoreDoCompendio,

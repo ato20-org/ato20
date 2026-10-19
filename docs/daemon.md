@@ -25,6 +25,7 @@ GET   /sala/pings              os pings que os jogadores marcaram no mapa, em SS
 POST  /sala/publicar           o Mestre anuncia; token + loopback
 GET   /debug/palco             o que as telas mediram de si; loopback
 POST  /debug/palco
+POST  /mcp                     o MCP: uma IA desta maquina mexendo na campanha; token do MCP + loopback
 GET   /saude
 ```
 
@@ -264,3 +265,6 @@ um cabeçalho que o HTML não sabe mandar.
 O livro é a exceção, e a diferença é de público, não de risco de escrita: o material da
 cena é o que a mesa tem de ver, e um manual de regras é do mestre. Quem pede é o leitor do
 Mestre, que manda o token pelo `httpHeaders` do pdf.js.
+
+O `POST /mcp` tem portão e token próprios, e o token dele é da máquina, e não da abertura: quem
+o usa é um cliente de IA que o guarda na configuração dele. Ver [A IA na campanha](mcp.md).
