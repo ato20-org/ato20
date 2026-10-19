@@ -100,6 +100,47 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.10.0" date="2026-10-19">
+      <description>
+        <p>
+          ATO20 1.10 adds weather over the whole scene, GM windows that detach
+          to a second monitor, and an AI on this computer that can work on the
+          open campaign through MCP.
+        </p>
+        <ul>
+          <li>
+            Weather on the table: rain, storm, snow, fog, ash and embers.
+            Weather covers the whole scene, over the spectator window, and
+            doesn't move or zoom with the camera. Map settings pick the weather,
+            its intensity and the wind. In the Compendium, the Weather tab under
+            Effects brings the six ready-made ones and creates new ones, with
+            falling layers, a veil and lightning, and each card has Put in this
+            scene. Changing a weather in the Compendium changes the rain in the
+            spectator window right away. You see it at half strength and without
+            lightning, and it hides while you drag something.
+          </li>
+          <li>
+            GM windows can leave ATO20 for a second monitor. The sheet, the
+            Compendium, the chat, Rolls, the Table: drag a window's header, or a
+            docked tab, outside ATO20 and drop it, or use the arrow in the
+            header. It becomes a system window that works just like inside, and
+            whatever opens from it opens detached too. The return arrow brings
+            it back, and the next one opens in the same place and size.
+            Shortcuts, like undo, still only work in the main window.
+          </li>
+          <li>
+            An AI on this computer can work on the open campaign. In Settings,
+            AI, Let an AI work on your campaigns turns MCP on: a program like
+            Claude Code or Cursor can create notes, scenes, characters and
+            items, place tokens on the map, give items, and read and write in
+            the table chat, and what it does shows up right away. It deletes
+            nothing, puts no scene On air and rolls no dice. It starts off, only
+            programs with the token get in, and only from this computer. The
+            screen shows the Claude Code command ready to copy.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.9.0" date="2026-10-16">
       <description>
         <p>
