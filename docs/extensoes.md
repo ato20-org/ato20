@@ -1122,6 +1122,17 @@ num arquivo ao lado dele:
 - **`rolagem`** é a expressão do detalhe, lida pelo mesmo leitor que rola na
   mesa. Se o detalhe ganha o d20 quem diz é o molde da campanha
   (`rolavel`), pelo rótulo.
+- **Rolagem no meio do texto:** no `valor` de texto e na `descricao`, uma
+  expressão entre chaves vira o botão de rolar, na ficha do Mestre e na
+  prévia do bestiário: `"Dano: {2d10+50} Sangue"`. O clique joga na mesa e
+  anuncia no fio com o nome da ficha e o rótulo do detalhe. A chave que não é
+  expressão continua texto, e no celular as chaves somem, sem botão (quem
+  rola lá é o daemon, e ele só lê a `rolagem`).
+- **Ficar com o maior, ou o menor:** `>` ou `<` logo depois de um termo de
+  dados ficam só com o maior ou o menor dele. `6d20>+45` são seis d20, o
+  maior deles e mais 45, o teste do Ordem. `2d20<` é a desvantagem. Os outros
+  dados caem mesmo assim, apagados, e ficam fora da soma na mesa, no saquinho,
+  no histórico e no fio. Vale na `rolagem` e entre chaves.
 - **`retrato` e `miniatura`** são um arquivo da pasta do plugin ou uma URL
   `https` com o nome de um site. O arquivo vai ao acervo da campanha ao
   trazer; a URL é baixada nessa hora, pela máquina do mestre, e a ficha entra

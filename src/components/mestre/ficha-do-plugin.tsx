@@ -6,6 +6,7 @@ import { Download, Skull, UserPlus } from "lucide-react";
 
 import { GradeDeAtributos } from "@/components/mestre/atributos-personagem";
 import { Etiqueta, falhou, ImagemDoPlugin } from "@/components/mestre/compendio-cartao";
+import { TextoComRolagens } from "@/components/mestre/texto-com-rolagens";
 import { Button } from "@/components/ui/button";
 import { useCharacters } from "@/hooks/use-characters";
 import { useAura } from "@/lib/extensoes/auras";
@@ -175,13 +176,13 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
           {grupo.exibicao === "lista" ? (
             <ul className="flex flex-col gap-2">
               {detalhes.map((detalhe) => (
-                <ItemDaLista key={detalhe.rotulo} detalhe={detalhe} />
+                <ItemDaLista key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
               ))}
             </ul>
           ) : (
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
               {detalhes.map((detalhe) => (
-                <Linha key={detalhe.rotulo} detalhe={detalhe} />
+                <Linha key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
               ))}
             </dl>
           )}
@@ -198,17 +199,23 @@ function valorDe(detalhe: DetalheDaFichaDoPlugin): string | null {
     : String(detalhe.valor);
 }
 
-/** Uma linha de grupo em linhas: o rótulo e o valor, e a descrição embaixo. */
-function Linha({ detalhe }: { detalhe: DetalheDaFichaDoPlugin }) {
+/**
+ * Uma linha de grupo em linhas: o rótulo e o valor, e a descrição embaixo. As
+ * rolagens entre chaves rolam daqui mesmo, com o nome da ameaça no fio: dá
+ * para jogar a Percepção do Diabo sem trazê-lo. Ver `TextoComRolagens`.
+ */
+function Linha({ detalhe, rotulo }: { detalhe: DetalheDaFichaDoPlugin; rotulo: string }) {
   const valor = valorDe(detalhe);
 
   return (
     <>
       <dt className="text-muted-foreground">{detalhe.rotulo}</dt>
       <dd className="min-w-0">
-        {valor ?? "—"}
+        {valor ? <TextoComRolagens texto={valor} rotulo={rotulo} /> : "—"}
         {detalhe.descricao ? (
-          <p className="text-muted-foreground mt-0.5 whitespace-pre-line">{detalhe.descricao}</p>
+          <p className="text-muted-foreground mt-0.5 whitespace-pre-line">
+            <TextoComRolagens texto={detalhe.descricao} rotulo={rotulo} />
+          </p>
         ) : null}
       </dd>
     </>
@@ -216,7 +223,7 @@ function Linha({ detalhe }: { detalhe: DetalheDaFichaDoPlugin }) {
 }
 
 /** Um item de grupo em lista: a ação, o poder. O nome, o tipo dela e o texto. */
-function ItemDaLista({ detalhe }: { detalhe: DetalheDaFichaDoPlugin }) {
+function ItemDaLista({ detalhe, rotulo }: { detalhe: DetalheDaFichaDoPlugin; rotulo: string }) {
   const valor = valorDe(detalhe);
 
   return (
@@ -226,7 +233,9 @@ function ItemDaLista({ detalhe }: { detalhe: DetalheDaFichaDoPlugin }) {
         {valor ? <Etiqueta>{valor}</Etiqueta> : null}
       </span>
       {detalhe.descricao ? (
-        <p className="text-muted-foreground mt-1 whitespace-pre-line">{detalhe.descricao}</p>
+        <p className="text-muted-foreground mt-1 whitespace-pre-line">
+          <TextoComRolagens texto={detalhe.descricao} rotulo={rotulo} />
+        </p>
       ) : null}
     </li>
   );

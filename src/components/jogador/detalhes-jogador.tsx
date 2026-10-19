@@ -26,6 +26,7 @@ import {
 } from "@/lib/player/detalhes";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { cn } from "@/lib/utils";
+import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
 import { rotulosDoDado } from "@/types/dado";
 import { doGrupo, gruposDaFicha, type GrupoDeDetalhes } from "@/types/detalhe";
 
@@ -251,7 +252,7 @@ function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
         vazio && "text-muted-foreground",
       )}
     >
-      {vazio ? t.personagens.detalheVazio : String(detalhe.valor)}
+      {vazio ? t.personagens.detalheVazio : textoSemChaves(String(detalhe.valor))}
     </span>
   );
 }
@@ -281,7 +282,7 @@ function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string })
       <PopoverContent side="bottom" align="end" className="w-64 space-y-1">
         <p className="text-xs font-medium">{rotulo}</p>
         <p className="text-muted-foreground text-xs leading-snug whitespace-pre-line">
-          {descricao}
+          {textoSemChaves(descricao)}
         </p>
       </PopoverContent>
     </Popover>
@@ -306,7 +307,9 @@ function EntradaDoJogador({
   // `null` = o toque ainda não decidiu, e vale o `abrir` da busca.
   const [escolha, setEscolha] = useState<boolean | null>(null);
   const aberta = escolha ?? abrir;
-  const resumo = detalhe.valor === undefined ? "" : String(detalhe.valor);
+  // Sem as chaves: no celular a rolagem do meio do texto não tem botão -- quem
+  // rola é o daemon, e ele só lê a `rolagem` do detalhe. Ver `textoSemChaves`.
+  const resumo = detalhe.valor === undefined ? "" : textoSemChaves(String(detalhe.valor));
 
   const cabeca = (
     <>
@@ -346,7 +349,7 @@ function EntradaDoJogador({
 
       {aberta && detalhe.descricao ? (
         <p className="text-muted-foreground pb-1 pl-5 text-xs leading-snug whitespace-pre-line">
-          {detalhe.descricao}
+          {textoSemChaves(detalhe.descricao)}
         </p>
       ) : null}
     </li>

@@ -1211,6 +1211,17 @@ collection; the sheets live in a file next to it:
 - **`rolagem`** is the detail's roll expression, read by the same parser that
   rolls at the table. Whether the detail gets the d20 is up to the campaign's
   template (`rolavel`), by label.
+- **Rolls inside text:** in a text `valor` and in `descricao`, an expression
+  between braces becomes the roll button, on the GM's sheet and in the
+  bestiary preview: `"Damage: {2d10+50} Blood"`. Clicking rolls at the table
+  and posts to the feed with the sheet's name and the detail's label. A brace
+  that isn't an expression stays text, and on the phone the braces go away,
+  with no button (the daemon rolls there, and it only reads `rolagem`).
+- **Keep the highest, or the lowest:** `>` or `<` right after a dice term
+  keeps only its highest or lowest die. `6d20>+45` is six d20, the highest of
+  them plus 45, the Ordem test. `2d20<` is disadvantage. The other dice still
+  fall, dimmed, and stay out of the sum on the table, in the tray, in the
+  history and in the feed. It works in `rolagem` and between braces.
 - **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
   URL with a site name. The file goes into the campaign's library when brought;
   the URL is downloaded then, by the GM's machine, and the sheet comes in
