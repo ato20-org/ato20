@@ -263,6 +263,13 @@ type SceneLayerProps = {
    * (ver `animarSo`).
    */
   ambienteEscondido?: boolean;
+  /**
+   * O escuro do mapa na força da mesa, e não na do mestre (ver
+   * `ESCURIDAO_DO_MESTRE`). É o Mestre vendo pelo token: o que ele não
+   * enxerga sai coberto por inteiro, e o breu dentro da linha de visão tem de
+   * ser o mesmo breu. Ver `VisaoDoToken`.
+   */
+  escuroDaMesa?: boolean;
 };
 
 /**
@@ -309,6 +316,7 @@ export function SceneLayer({
   semItens,
   ambienteFraco,
   ambienteEscondido,
+  escuroDaMesa = false,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
   // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
@@ -571,7 +579,7 @@ export function SceneLayer({
           portaNaMao={portaNaMao}
           escuridao={scene.escuridao}
           corDoEscuro={scene.corDoEscuro}
-          variant={variant}
+          variant={escuroDaMesa ? "mesa" : variant}
           smooth={smooth}
           naMao={naMao}
           // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
