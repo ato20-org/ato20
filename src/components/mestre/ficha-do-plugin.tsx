@@ -7,13 +7,21 @@ import { Download, Skull, UserPlus } from "lucide-react";
 import { GradeDeAtributos } from "@/components/mestre/atributos-personagem";
 import { Etiqueta, falhou, ImagemDoPlugin } from "@/components/mestre/compendio-cartao";
 import { TextoComRolagens } from "@/components/mestre/texto-com-rolagens";
+import {
+  AtributosEmImagem,
+  CAIXA_DO_LUGAR,
+  estiloDoLugar,
+  useEstiloDosAtributos,
+} from "@/components/playground/atributos-em-imagem";
 import { Button } from "@/components/ui/button";
 import { useCharacters } from "@/hooks/use-characters";
+import { repartirAtributos } from "@/lib/atributos-em-imagem";
 import { useAura } from "@/lib/extensoes/auras";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { t } from "@/lib/i18n/mestre";
 import { avisarDoTrazido } from "@/lib/mestre/bestiario";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
+import type { EstiloDeAtributosPublicado } from "@/lib/sync/declarativo";
 import {
   fichaDoBestiario,
   porEmJogoDoBestiario,
@@ -76,6 +84,10 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
   const { recarregar } = useCharacters();
   const { molde, grupos } = ficha;
   const aura = useAura(ficha.aura ? chaveContribuicao(qual.extensaoId, ficha.aura) : null);
+  // O desenho dos atributos que a campanha escolheu (o ritual do Ordem): as
+  // siglas com lugar na imagem vão para ela, o resto fica na grade. Sem estilo,
+  // ou numa campanha de outro sistema, cai na grade de sempre.
+  const estilo = useEstiloDosAtributos();
   // O retrato, ou a peça: o que for arquivo da pasta. A imagem por URL só é
   // baixada ao trazer, como no card.
   const imagem = [molde.retrato, molde.miniatura].find((valor) => valor && !valor.includes("://"));
@@ -156,18 +168,7 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
       ) : null}
 
       {molde.atributos.length > 0 ? (
-        <GradeDeAtributos>
-          {molde.atributos.map((atributo) => (
-            <li
-              key={atributo.sigla}
-              className="bg-muted/40 flex flex-col items-center rounded-md border px-1 pt-1.5 pb-1"
-              title={atributo.descricao ?? undefined}
-            >
-              <span className="text-muted-foreground text-[10px] font-medium uppercase">{atributo.sigla}</span>
-              <span className="text-lg leading-tight font-semibold tabular-nums">{atributo.valor}</span>
-            </li>
-          ))}
-        </GradeDeAtributos>
+        <AtributosDoMolde atributos={molde.atributos} estilo={estilo} />
       ) : null}
 
       {porGrupo.map(({ grupo, detalhes }) => (
@@ -188,6 +189,62 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
           )}
         </section>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Os atributos do molde na prévia, só de leitura. Com o estilo que a campanha
+ * escolheu (o ritual do Ordem), as siglas com lugar vão para a imagem e o resto
+ * para a grade embaixo; sem estilo, ou com a imagem que não carrega, fica só a
+ * grade. O número é texto, e não campo: a prévia não grava. Ver
+ * `AtributosEmImagem` e `AtributosPersonagem`.
+ */
+function AtributosDoMolde({
+  atributos,
+  estilo,
+}: {
+  atributos: FichaCompletaDoPlugin["molde"]["atributos"];
+  estilo: EstiloDeAtributosPublicado | null;
+}) {
+  const grade = (lista: FichaCompletaDoPlugin["molde"]["atributos"]) => (
+    <GradeDeAtributos>
+      {lista.map((atributo) => (
+        <li
+          key={atributo.sigla}
+          className="bg-muted/40 flex flex-col items-center rounded-md border px-1 pt-1.5 pb-1"
+          title={atributo.descricao ?? undefined}
+        >
+          <span className="text-muted-foreground text-[10px] font-medium uppercase">{atributo.sigla}</span>
+          <span className="text-lg leading-tight font-semibold tabular-nums">{atributo.valor}</span>
+        </li>
+      ))}
+    </GradeDeAtributos>
+  );
+
+  if (!estilo) return grade(atributos);
+
+  const { noLugar, fora } = repartirAtributos(atributos, estilo.lugares);
+
+  return (
+    <div className="space-y-2">
+      <AtributosEmImagem
+        estilo={estilo}
+        reserva={noLugar.length > 0 ? grade(noLugar.map(({ atributo }) => atributo)) : null}
+      >
+        {noLugar.map(({ atributo, lugar }) => (
+          <span
+            key={atributo.sigla}
+            className={CAIXA_DO_LUGAR}
+            style={estiloDoLugar(lugar, estilo)}
+            title={atributo.descricao ?? undefined}
+          >
+            {atributo.valor}
+          </span>
+        ))}
+      </AtributosEmImagem>
+
+      {fora.length > 0 ? grade(fora) : null}
     </div>
   );
 }
