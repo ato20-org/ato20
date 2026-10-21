@@ -125,12 +125,21 @@ export type Personagem = {
  * mestre. Sem teto e sem forma -- o atributo não sobe e desce na cena, ele é
  * o número que se consulta. Inteiro, e pode ser negativo (o modificador).
  *
+ * Ou um DADO: a AGI d8 do Savage Worlds guarda a expressão em `rolagem`, e a
+ * ficha mostra e rola o dado. O `valor` continua lá, para o plugin que só
+ * conhece número.
+ *
  * O espelho em Rust é `vault::characters::Atributo`.
  */
 export type Atributo = {
   id: string;
   sigla: string;
   valor: number;
+  /**
+   * O dado que o atributo É, quando é um: `1d8`, `1d12+1`. Lida pelo mesmo
+   * leitor das rolagens (`lerExpressaoDeRolagem`). Ausente = o número.
+   */
+  rolagem?: string;
   /** O que ele quer dizer, no hover do cartão. Ausente quando não há. */
   descricao?: string;
 };
@@ -138,6 +147,8 @@ export type Atributo = {
 export type PatchAtributo = {
   sigla?: string;
   valor?: number;
+  /** `""` apaga o dado, e o atributo volta a ser o número. */
+  rolagem?: string;
   /** `""` apaga. */
   descricao?: string;
 };
