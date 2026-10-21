@@ -1,7 +1,7 @@
 "use client";
 
 import { Backpack, FolderOpen, IdCard, MessagesSquare, NotebookPen, Search } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { AnotacoesJogador } from "@/components/jogador/anotacoes-jogador";
 import { ChatJogador } from "@/components/jogador/chat-jogador";
@@ -12,6 +12,7 @@ import { MyCharacters } from "@/components/jogador/my-characters";
 import { usePersonagensDoJogador } from "@/hooks/use-personagens-do-jogador";
 import { t } from "@/lib/i18n/jogador";
 import { useFioStore } from "@/lib/store/use-fio-store";
+import { useFocoNoDetalhe } from "@/lib/store/use-foco-no-detalhe";
 import { cn } from "@/lib/utils";
 
 type Aba = "personagem" | "mochila" | "chat" | "anotacoes" | "arquivos";
@@ -54,6 +55,18 @@ export function BarraLateralDoJogador({
   const [aba, setAba] = useState<Aba>("personagem");
   const [buscando, setBuscando] = useState(false);
   const naoLidas = useFioStore((state) => state.naoLidas);
+
+  // A busca achou um detalhe e mandou a ficha mostrá-lo: volta para a aba
+  // Personagem, senão o salto e a piscada aconteceriam numa aba escondida. Pelo
+  // `pedido`, que só sobe, e não pelo alvo, que a ficha apaga ao atender. Ver
+  // `useFocoNoDetalhe`.
+  const pedidoDeFoco = useFocoNoDetalhe((state) => state.pedido);
+  const focoVisto = useRef(pedidoDeFoco);
+  useEffect(() => {
+    if (pedidoDeFoco === focoVisto.current) return;
+    focoVisto.current = pedidoDeFoco;
+    setAba("personagem");
+  }, [pedidoDeFoco]);
   const personagens = usePersonagensDoJogador(codigo);
   const soChat = personagens !== null && personagens.length === 0;
 

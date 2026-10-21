@@ -3,13 +3,14 @@
 import { Package, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { BotaoDeRolar } from "@/components/jogador/detalhes-jogador";
+import { BotaoDeRolarDoAchado, detalheRola } from "@/components/jogador/detalhes-jogador";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { t } from "@/lib/i18n/jogador";
 import { myCharacters } from "@/lib/player/characters";
 import { detalhesDoPersonagem, type DetalheDoJogador } from "@/lib/player/detalhes";
 import { myInventory } from "@/lib/player/inventory";
 import { normaliza } from "@/lib/search";
+import { useFocoNoDetalhe } from "@/lib/store/use-foco-no-detalhe";
 import { cn } from "@/lib/utils";
 import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
 import type { Personagem } from "@/types/character";
@@ -55,13 +56,13 @@ export function BuscaDoJogador({
         className="flex h-[min(30rem,85dvh)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
       >
         <DialogTitle className="sr-only">{t.personagens.buscar}</DialogTitle>
-        {aberta ? <ConteudoDaBusca codigo={codigo} /> : null}
+        {aberta ? <ConteudoDaBusca codigo={codigo} onFechar={onFechar} /> : null}
       </DialogContent>
     </Dialog>
   );
 }
 
-function ConteudoDaBusca({ codigo }: { codigo: string }) {
+function ConteudoDaBusca({ codigo, onFechar }: { codigo: string; onFechar: () => void }) {
   const [texto, setTexto] = useState("");
   const [acervo, setAcervo] = useState<Acervo | null>(null);
   const [aberto, setAberto] = useState<string | null>(null);
@@ -150,6 +151,7 @@ function ConteudoDaBusca({ codigo }: { codigo: string }) {
                   deQuem={variosPersonagens ? achado.personagem.nome : undefined}
                   aberta={aberto === chave}
                   onAlternar={() => setAberto((atual) => (atual === chave ? null : chave))}
+                  onFechar={onFechar}
                 />
               );
             })}
@@ -162,8 +164,10 @@ function ConteudoDaBusca({ codigo }: { codigo: string }) {
 
 /**
  * Um achado: o nome e o valor, de onde é (o grupo da ficha, ou a mochila), e a
- * descrição -- duas linhas, e inteira ao tocar. O detalhe que rola traz o dado
- * ali mesmo: achar a Luta é para rolar a Luta.
+ * descrição. Tocar no detalhe leva à ficha, no lugar dele, que pisca para o
+ * olho pousar -- achar a Luta é para encontrar a Luta. O que rola ganha o botão
+ * "rolar" ao lado, que sorteia sem sair da busca. O item abre a descrição no
+ * lugar, que é tudo o que a busca sabe dele.
  */
 function LinhaDoAchado({
   codigo,
@@ -171,6 +175,7 @@ function LinhaDoAchado({
   deQuem,
   aberta,
   onAlternar,
+  onFechar,
 }: {
   codigo: string;
   achado: Achado;
@@ -178,28 +183,45 @@ function LinhaDoAchado({
   deQuem?: string;
   aberta: boolean;
   onAlternar: () => void;
+  /** Fecha a busca depois de mandar a ficha mostrar o detalhe. */
+  onFechar: () => void;
 }) {
+  const focar = useFocoNoDetalhe((state) => state.focar);
+
   const ehDetalhe = achado.tipo === "detalhe";
   const nome = ehDetalhe ? achado.detalhe.rotulo : achado.item.nome;
-  // A conta com sigla perde as chaves também: ver `textoSemChaves`.
+  // Os atributos DESTE personagem -- a busca junta vários --, para a sigla da
+  // conta desenhar o dado certo. Ver `textoSemChaves` e `BotaoDeRolarDoAchado`.
   const atributos = achado.personagem.atributos;
-  const valor = ehDetalhe
-    ? achado.detalhe.valor === undefined || achado.detalhe.valor === ""
-      ? ""
-      : textoSemChaves(String(achado.detalhe.valor), atributos)
-    : achado.item.quantidade > 1
-      ? `×${achado.item.quantidade}`
-      : "";
   const descricao = ehDetalhe ? achado.detalhe.descricao : achado.item.descricao;
   const origem = ehDetalhe ? achado.detalhe.grupo : t.mochila.titulo;
+
+  // O dado do detalhe vira o botão "rolar"; então o valor dele não precisa
+  // repetir a conta em texto. Sem dado, o valor é o que a linha tem a mostrar.
+  const rola = ehDetalhe && detalheRola(achado.detalhe, atributos);
+  const valor = !ehDetalhe
+    ? achado.item.quantidade > 1
+      ? `×${achado.item.quantidade}`
+      : ""
+    : rola || achado.detalhe.valor === undefined || achado.detalhe.valor === ""
+      ? ""
+      : textoSemChaves(String(achado.detalhe.valor), atributos);
+
+  // O detalhe leva à ficha e pisca; o item abre a descrição no lugar.
+  const aoTocar = ehDetalhe
+    ? () => {
+        focar({ personagemId: achado.personagem.id, detalheId: achado.detalhe.id });
+        onFechar();
+      }
+    : onAlternar;
 
   return (
     <li className="hover:bg-accent/50 rounded-md">
       <div className="flex min-w-0 items-center gap-2 px-2.5 py-2">
         <button
           type="button"
-          onClick={onAlternar}
-          aria-expanded={descricao ? aberta : undefined}
+          onClick={aoTocar}
+          aria-expanded={!ehDetalhe && descricao ? aberta : undefined}
           className="min-w-0 flex-1 text-left"
         >
           <span className="flex min-w-0 items-baseline gap-2">
@@ -215,7 +237,9 @@ function LinhaDoAchado({
             <span
               className={cn(
                 "text-muted-foreground mt-0.5 block text-xs leading-snug whitespace-pre-line",
-                !aberta && "line-clamp-2",
+                // O item abre ao tocar; o detalhe não abre aqui -- ele leva à
+                // ficha --, então sua descrição fica sempre nas duas linhas.
+                (ehDetalhe || !aberta) && "line-clamp-2",
               )}
             >
               {textoSemChaves(descricao, atributos)}
@@ -223,13 +247,18 @@ function LinhaDoAchado({
           ) : null}
         </button>
 
+        {ehDetalhe ? (
+          <BotaoDeRolarDoAchado
+            codigo={codigo}
+            personagemId={achado.personagem.id}
+            detalhe={achado.detalhe}
+            atributos={atributos}
+          />
+        ) : null}
+
         <span className="text-muted-foreground shrink-0 self-start rounded border px-1.5 py-0.5 text-[10px]">
           {deQuem ? `${deQuem} · ${origem}` : origem}
         </span>
-
-        {ehDetalhe ? (
-          <BotaoDeRolar codigo={codigo} personagemId={achado.personagem.id} detalhe={achado.detalhe} />
-        ) : null}
       </div>
     </li>
   );

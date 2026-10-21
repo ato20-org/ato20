@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight, Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -27,13 +27,15 @@ import {
   detalhesDoPersonagem,
   rolarAtributo,
   rolarDetalhe,
+  rolarNoTexto,
   type DetalheDoJogador,
   type FichaDeDetalhes,
   type RolagemDoDetalhe,
 } from "@/lib/player/detalhes";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
+import { useFocoNoDetalhe } from "@/lib/store/use-foco-no-detalhe";
 import { cn } from "@/lib/utils";
-import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
+import { pedacosComRolagens, temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
 import { facesParaDesenhar } from "@/lib/mestre/valor-do-atributo";
 import { rotulosDoDado } from "@/types/dado";
 import { doGrupo, gruposDaFicha, type GrupoDeDetalhes } from "@/types/detalhe";
@@ -65,9 +67,9 @@ export function DetalhesDoJogador({
   codigo: string;
   personagemId: string;
   /**
-   * Os atributos do personagem, para a conta com sigla perder as chaves como
-   * as outras: "Ataque: {AGId20>+5}" lê "Ataque: AGId20>+5". Ver
-   * `textoSemChaves`.
+   * Os atributos do personagem, para a conta com sigla virar o botão de rolar
+   * como as outras: "Ataque: {AGId20>+5}" mostra tantos d20 quanto a AGI. Ver
+   * `TextoDoDetalhe`.
    */
   atributos?: ReadonlyArray<AtributoDaConta>;
   /**
@@ -113,6 +115,51 @@ export function DetalhesDoJogador({
       ativo = false;
     };
   }, [codigo, personagemId, versao]);
+
+  // A busca pede que a ficha mostre um detalhe: abre o grupo dele, rola até ele
+  // e o faz piscar. Ver `useFocoNoDetalhe`. Só o personagem do alvo atende, e o
+  // `consumir` apaga o pedido para não reacender ao voltar para a aba.
+  const alvo = useFocoNoDetalhe((estado) => estado.alvo);
+  const consumir = useFocoNoDetalhe((estado) => estado.consumir);
+
+  useEffect(() => {
+    if (!ficha || !alvo || alvo.personagemId !== personagemId) return;
+
+    const grupos = gruposDaFicha(ficha.grupos, ficha.detalhes).filter(
+      (grupo) => doGrupo(ficha.detalhes, grupo).length > 0,
+    );
+    const grupoDoAlvo = grupos.find((grupo) =>
+      doGrupo(ficha.detalhes, grupo).some((detalhe) => detalhe.id === alvo.detalheId),
+    );
+    // O Mestre apagou o detalhe entre a busca e o toque: nada a mostrar.
+    if (!grupoDoAlvo) {
+      consumir();
+      return;
+    }
+
+    const detalheId = alvo.detalheId;
+    const grupoId = grupoDoAlvo.id;
+    let tentativas = 0;
+    // Nas abas, abre a do grupo (na pilha ele já está) e, quando o detalhe
+    // entra no DOM, rola até ele e o acende. O `setAtivo` troca a aba num
+    // render à parte, então tenta por alguns quadros. Dentro do quadro, e não
+    // no corpo do efeito, para não encadear renders.
+    const rolarEAcender = () => {
+      if (abas && tentativas === 0) setAtivo(grupoId);
+      const noDom = document.querySelector(`[data-detalhe-id="${detalheId}"]`);
+      if (noDom instanceof HTMLElement) {
+        noDom.scrollIntoView({ block: "center", behavior: "smooth" });
+        // Reinicia a animação se ele já tinha piscado numa busca anterior.
+        noDom.classList.remove("detalhe-em-destaque");
+        void noDom.offsetWidth;
+        noDom.classList.add("detalhe-em-destaque");
+        return;
+      }
+      if (tentativas++ < 10) requestAnimationFrame(rolarEAcender);
+    };
+    requestAnimationFrame(rolarEAcender);
+    consumir();
+  }, [alvo, ficha, personagemId, abas, consumir]);
 
   if (!ficha) return null;
 
@@ -206,6 +253,9 @@ function GrupoDoJogador({
   const rolar = (detalhe: DetalheDoJogador) => (
     <BotaoDeRolar codigo={codigo} personagemId={personagemId} detalhe={detalhe} />
   );
+  // A conta entre chaves no texto do detalhe, pelo daemon. Ver `TextoDoDetalhe`.
+  const pedirNoTexto = (detalhe: DetalheDoJogador) => (conta: string) =>
+    rolarNoTexto(codigo, personagemId, detalhe.id, conta);
 
   return (
     <section className="space-y-1.5">
@@ -222,6 +272,7 @@ function GrupoDoJogador({
               key={detalhe.id}
               detalhe={detalhe}
               rolar={rolar(detalhe)}
+              pedir={pedirNoTexto(detalhe)}
               // Achado pela descrição: ela já abre, que é onde está o que se
               // procurou. O nome sozinho não abre -- "golpe" quer a lista.
               abrir={Boolean(busca && detalhe.descricao && normaliza(detalhe.descricao).includes(busca))}
@@ -236,6 +287,7 @@ function GrupoDoJogador({
           {detalhes.map((detalhe) => (
             <li
               key={detalhe.id}
+              data-detalhe-id={detalhe.id}
               className="bg-background/40 flex min-w-0 flex-col rounded-md border px-2 py-1"
             >
               <div className="flex min-w-0 items-center gap-1">
@@ -243,11 +295,15 @@ function GrupoDoJogador({
                   {detalhe.rotulo}
                 </span>
                 {detalhe.descricao ? (
-                  <Descricao rotulo={detalhe.rotulo} descricao={detalhe.descricao} />
+                  <Descricao
+                    rotulo={detalhe.rotulo}
+                    descricao={detalhe.descricao}
+                    pedir={pedirNoTexto(detalhe)}
+                  />
                 ) : null}
               </div>
               <div className="flex min-w-0 items-center justify-between gap-1">
-                <Valor detalhe={detalhe} />
+                <Valor detalhe={detalhe} pedir={pedirNoTexto(detalhe)} />
                 {rolar(detalhe)}
               </div>
             </li>
@@ -258,9 +314,11 @@ function GrupoDoJogador({
   );
 }
 
+/** Pede ao daemon uma conta do texto do detalhe, como ela está escrita. */
+type PedirNoTexto = (conta: string) => Promise<RolagemDoDetalhe>;
+
 /** O valor, ou as reticências do vazio. Número em algarismos de mesma largura. */
-function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
-  const atributos = useAtributosDasRolagens();
+function Valor({ detalhe, pedir }: { detalhe: DetalheDoJogador; pedir: PedirNoTexto }) {
   const vazio = detalhe.valor === undefined || detalhe.valor === "";
 
   return (
@@ -271,7 +329,11 @@ function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
         vazio && "text-muted-foreground",
       )}
     >
-      {vazio ? t.personagens.detalheVazio : textoSemChaves(String(detalhe.valor), atributos)}
+      {vazio ? (
+        t.personagens.detalheVazio
+      ) : (
+        <TextoDoDetalhe texto={String(detalhe.valor)} rotulo={detalhe.rotulo} pedir={pedir} />
+      )}
     </span>
   );
 }
@@ -283,9 +345,15 @@ function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
  * excesso que a ficha do Mestre acabou de perder. Toque, e não passar o mouse:
  * no celular não há "passar".
  */
-function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string }) {
-  const atributos = useAtributosDasRolagens();
-
+function Descricao({
+  rotulo,
+  descricao,
+  pedir,
+}: {
+  rotulo: string;
+  descricao: string;
+  pedir: PedirNoTexto;
+}) {
   return (
     <Popover>
       <PopoverTrigger
@@ -303,7 +371,7 @@ function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string })
       <PopoverContent side="bottom" align="end" className="w-64 space-y-1">
         <p className="text-xs font-medium">{rotulo}</p>
         <p className="text-muted-foreground text-xs leading-snug whitespace-pre-line">
-          {textoSemChaves(descricao, atributos)}
+          <TextoDoDetalhe texto={descricao} rotulo={rotulo} pedir={pedir} />
         </p>
       </PopoverContent>
     </Popover>
@@ -318,20 +386,28 @@ function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string })
 function EntradaDoJogador({
   detalhe,
   rolar,
+  pedir,
   abrir,
 }: {
   detalhe: DetalheDoJogador;
   rolar: React.ReactNode;
+  pedir: PedirNoTexto;
   /** Aberta de saída, enquanto o toque não decidir o contrário. */
   abrir: boolean;
 }) {
   // `null` = o toque ainda não decidiu, e vale o `abrir` da busca.
   const [escolha, setEscolha] = useState<boolean | null>(null);
   const aberta = escolha ?? abrir;
-  // Sem as chaves: no celular a rolagem do meio do texto não tem botão -- quem
-  // rola é o daemon, e ele só lê a `rolagem` do detalhe. Ver `textoSemChaves`.
   const atributos = useAtributosDasRolagens();
-  const resumo = detalhe.valor === undefined ? "" : textoSemChaves(String(detalhe.valor), atributos);
+  const valor = detalhe.valor === undefined ? "" : String(detalhe.valor);
+  const resumo = valor ? (
+    <span className="text-muted-foreground min-w-0 truncate text-xs">
+      <TextoDoDetalhe texto={valor} rotulo={detalhe.rotulo} pedir={pedir} />
+    </span>
+  ) : null;
+  // O resumo com conta sai do botão de abrir: botão dentro de botão não é
+  // HTML, e o toque no dado abriria a descrição em vez de rolar.
+  const resumoFora = Boolean(detalhe.descricao) && temRolagemNoTexto(valor, atributos);
 
   const cabeca = (
     <>
@@ -345,36 +421,78 @@ function EntradaDoJogador({
         />
       ) : null}
       <span className="min-w-0 truncate text-sm font-medium">{detalhe.rotulo}</span>
-      {resumo ? (
-        <span className="text-muted-foreground min-w-0 truncate text-xs">{resumo}</span>
-      ) : null}
+      {resumoFora ? null : resumo}
     </>
   );
 
   return (
-    <li className="min-w-0">
+    <li data-detalhe-id={detalhe.id} className="min-w-0">
       <div className="flex min-w-0 items-center gap-1">
         {detalhe.descricao ? (
           <button
             type="button"
             aria-expanded={aberta}
             onClick={() => setEscolha(!aberta)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left"
+            className={cn(
+              "flex min-w-0 items-center gap-1.5 py-1 text-left",
+              !resumoFora && "flex-1",
+            )}
           >
             {cabeca}
           </button>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-1.5 py-1">{cabeca}</div>
         )}
+        {resumoFora ? <span className="flex min-w-0 flex-1">{resumo}</span> : null}
         {rolar}
       </div>
 
       {aberta && detalhe.descricao ? (
         <p className="text-muted-foreground pb-1 pl-5 text-xs leading-snug whitespace-pre-line">
-          {textoSemChaves(detalhe.descricao, atributos)}
+          <TextoDoDetalhe texto={detalhe.descricao} rotulo={detalhe.rotulo} pedir={pedir} />
         </p>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * Um texto do detalhe com as contas entre chaves viradas no botão de rolar,
+ * como na ficha do Mestre (`TextoComRolagens`): "Soco com mão livre {1d4}"
+ * mostra o d4 no lugar das chaves, e o toque rola pelo daemon. O resto é
+ * texto, como o mestre escreveu; a chave que não lê fica com as chaves.
+ *
+ * O toque manda só QUAL conta, como está escrita, e quem a confere na ficha e
+ * sorteia é o daemon -- ver `rolarNoTexto`. As siglas leem os atributos do
+ * personagem (`AtributosDasRolagens`), e o desenho é só para mostrar: quem
+ * rola relê a AGI de agora.
+ */
+export function TextoDoDetalhe({
+  texto,
+  rotulo,
+  pedir,
+}: {
+  texto: string;
+  rotulo: string;
+  pedir: PedirNoTexto;
+}) {
+  const atributos = useAtributosDasRolagens();
+  const pedacos = useMemo(() => pedacosComRolagens(texto, atributos), [texto, atributos]);
+
+  return pedacos.map((pedaco, i) =>
+    pedaco.tipo === "texto" ? (
+      <Fragment key={i}>{pedaco.texto}</Fragment>
+    ) : (
+      <BotaoDaExpressao
+        key={i}
+        expressao={pedaco.expressao}
+        rotulo={rotulo}
+        pedir={() => pedir(pedaco.texto)}
+        // Na linha da frase, e não como bloco: uma frase com três contas não
+        // pode virar três linhas.
+        className="text-foreground inline-flex align-middle"
+      />
+    ),
   );
 }
 
@@ -396,13 +514,87 @@ export function BotaoDeRolar({
   detalhe: DetalheDoJogador;
 }) {
   if (!detalhe.rolagem) return null;
+  const leitura = lerExpressaoDeRolagem(detalhe.rolagem);
+  if (!leitura.ok) return null;
 
   return (
     <BotaoDaExpressao
-      rolagem={detalhe.rolagem}
+      expressao={leitura.expressao}
       rotulo={detalhe.rotulo}
       pedir={() => rolarDetalhe(codigo, personagemId, detalhe.id)}
     />
+  );
+}
+
+/**
+ * O que um detalhe rola, quando rola: a `rolagem` que o Mestre atribuiu, ou,
+ * na falta dela, a primeira conta escrita entre chaves no valor. `null` quando
+ * não há dado -- um número, um texto sem conta. É o mesmo que o `BotaoDeRolar`
+ * e a busca perguntam, num lugar só.
+ */
+function rolagemDoAchado(
+  detalhe: DetalheDoJogador,
+  atributos: ReadonlyArray<AtributoDaConta> | undefined,
+): { expressao: ExpressaoDeRolagem; conta: string | null } | null {
+  if (detalhe.rolagem) {
+    const leitura = lerExpressaoDeRolagem(detalhe.rolagem);
+    // `conta` nula: quem rola é `rolarDetalhe`, que relê a `rolagem` da ficha.
+    if (leitura.ok) return { expressao: leitura.expressao, conta: null };
+  }
+  const valor = detalhe.valor === undefined || detalhe.valor === "" ? "" : String(detalhe.valor);
+  const pedaco = pedacosComRolagens(valor, atributos).find((p) => p.tipo === "rolagem");
+  if (pedaco?.tipo === "rolagem") return { expressao: pedaco.expressao, conta: pedaco.texto };
+  return null;
+}
+
+/** Esse detalhe tem o que rolar? Ver `rolagemDoAchado`. */
+export function detalheRola(
+  detalhe: DetalheDoJogador,
+  atributos?: ReadonlyArray<AtributoDaConta>,
+): boolean {
+  return rolagemDoAchado(detalhe, atributos) !== null;
+}
+
+/**
+ * O botão de rolar do achado da busca: o dado DESTE detalhe com a palavra
+ * "rolar" ao lado, para o toque na lista ser óbvio -- o resto do item leva à
+ * ficha. Rola o que o detalhe tem (ver `rolagemDoAchado`), e `null` quando não
+ * há dado. O dado é só para mostrar; quem sorteia relê a ficha, no daemon.
+ */
+export function BotaoDeRolarDoAchado({
+  codigo,
+  personagemId,
+  detalhe,
+  atributos,
+}: {
+  codigo: string;
+  personagemId: string;
+  detalhe: DetalheDoJogador;
+  atributos?: ReadonlyArray<AtributoDaConta>;
+}) {
+  const rolagem = rolagemDoAchado(detalhe, atributos);
+  if (!rolagem) return null;
+  const { expressao, conta } = rolagem;
+
+  return (
+    <BotaoDaExpressao
+      expressao={expressao}
+      rotulo={detalhe.rotulo}
+      pedir={() =>
+        conta === null
+          ? rolarDetalhe(codigo, personagemId, detalhe.id)
+          : rolarNoTexto(codigo, personagemId, detalhe.id, conta)
+      }
+      className="gap-1.5"
+    >
+      <DadosDaExpressao expressao={expressao} />
+      {expressao.modificador !== 0 ? (
+        <span className="text-xs font-medium tabular-nums">
+          {textoDoModificador(expressao.modificador)}
+        </span>
+      ) : null}
+      <span className="text-xs font-medium">{t.personagens.rolar}</span>
+    </BotaoDaExpressao>
   );
 }
 
@@ -428,10 +620,12 @@ export function BotaoDoAtributo({
   children?: React.ReactNode;
 }) {
   if (!atributo.rolagem) return null;
+  const leitura = lerExpressaoDeRolagem(atributo.rolagem);
+  if (!leitura.ok) return null;
 
   return (
     <BotaoDaExpressao
-      rolagem={atributo.rolagem}
+      expressao={leitura.expressao}
       rotulo={atributo.sigla}
       pedir={() => rolarAtributo(codigo, personagemId, atributo.id)}
       className={className}
@@ -442,16 +636,20 @@ export function BotaoDoAtributo({
   );
 }
 
-/** O botão de uma expressão que o daemon sorteia: o detalhe, ou o atributo. */
+/**
+ * O botão de uma expressão que o daemon sorteia: o detalhe, o atributo, ou a
+ * conta do texto. A expressão é só para mostrar, já lida por quem chama -- a
+ * que não se lê não ganha botão, porque o daemon a recusaria do mesmo jeito.
+ */
 function BotaoDaExpressao({
-  rolagem,
+  expressao,
   rotulo,
   pedir,
   className,
   style,
   children,
 }: {
-  rolagem: string;
+  expressao: ExpressaoDeRolagem;
   rotulo: string;
   pedir: () => Promise<RolagemDoDetalhe>;
   className?: string;
@@ -459,10 +657,6 @@ function BotaoDaExpressao({
   children?: React.ReactNode;
 }) {
   const [rolando, setRolando] = useState(false);
-
-  const leitura = lerExpressaoDeRolagem(rolagem);
-  if (!leitura.ok) return null;
-  const { expressao } = leitura;
 
   function rolar() {
     // ANTES de pedir, pela razão de `aoArremessar`: a mesa registra a rolagem
