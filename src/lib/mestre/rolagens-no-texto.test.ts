@@ -54,3 +54,45 @@ describe("os dados que ficam fora da soma", () => {
     expect(regraDosDescartados([{ faces: 6, valor: 3 }], 6)).toBe("");
   });
 });
+
+describe("as siglas da ficha dentro das chaves", () => {
+  const ficha = [
+    { sigla: "AGI", valor: 3 },
+    { sigla: "FOR", valor: 4 },
+  ];
+
+  it("vira o botão com a conta resolvida, e guarda como foi escrita", () => {
+    const [, ataque] = pedacosComRolagens("Ataque: {AGId20>+5}", ficha);
+
+    expect(ataque).toEqual({
+      tipo: "rolagem",
+      texto: "AGId20>+5",
+      expressao: { dados: [{ quantidade: 3, faces: 20, manter: "maior" }], modificador: 5 },
+      siglas: [{ sigla: "AGI", valor: 3 }],
+    });
+  });
+
+  it("a sigla que a ficha não tem deixa as chaves como texto", () => {
+    expect(pedacosComRolagens("Pensar: {1d20+INT}", ficha)).toEqual([
+      { tipo: "texto", texto: "Pensar: {1d20+INT}" },
+    ]);
+    expect(temRolagemNoTexto("{1d20+FOR}")).toBe(false);
+    expect(temRolagemNoTexto("{1d20+FOR}", ficha)).toBe(true);
+  });
+
+  it("no celular, a conta com sigla perde as chaves como as outras", () => {
+    expect(textoSemChaves("Ataque: {AGId20>+5} e {1d6}", ficha)).toBe("Ataque: AGId20>+5 e 1d6");
+  });
+});
+
+describe("a sigla do atributo que é um dado, no texto", () => {
+  it("vira o botão do dado dela", () => {
+    const [, esquiva] = pedacosComRolagens("Esquiva: {AGI+1}", [{ sigla: "AGI", valor: 0, rolagem: "1d8" }]);
+
+    expect(esquiva).toMatchObject({
+      tipo: "rolagem",
+      texto: "AGI+1",
+      expressao: { dados: [{ quantidade: 1, faces: 8 }], modificador: 1 },
+    });
+  });
+});

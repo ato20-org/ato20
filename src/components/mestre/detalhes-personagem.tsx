@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 
 import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
+import { useAtributosDasRolagens } from "@/components/atributos-das-rolagens";
 import { aoTeclar, useMarcarAoFocar } from "@/components/mestre/atributos-personagem";
 import { IconeD20 } from "@/components/mestre/icone-d20";
 import { RolagemDoDetalhe } from "@/components/mestre/rolagem-do-detalhe";
@@ -952,6 +953,7 @@ export function ValorDoDetalhe({
   onGravar: (valor: string | number) => void;
 }) {
   const [editando, setEditando] = useState(false);
+  const atributos = useAtributosDasRolagens();
 
   if (detalhe.tipo === "numero") {
     return <CampoDeNumero detalhe={detalhe} onGravar={onGravar} />;
@@ -986,7 +988,7 @@ export function ValorDoDetalhe({
   const texto =
     typeof detalhe.valor === "string" ? detalhe.valor : detalhe.valor === undefined ? "" : String(detalhe.valor);
 
-  if (rotuloDaRolagem && !editando && temRolagemNoTexto(texto)) {
+  if (rotuloDaRolagem && !editando && temRolagemNoTexto(texto, atributos)) {
     return (
       <span
         role="button"

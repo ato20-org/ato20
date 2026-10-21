@@ -4,6 +4,10 @@ import { ChevronRight, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AtributosDasRolagens,
+  useAtributosDasRolagens,
+} from "@/components/atributos-das-rolagens";
 import { lancarNoVidro } from "@/components/jogador/dados-na-tela";
 import { DadoParado } from "@/components/playground/dado-parado";
 import { Button } from "@/components/ui/button";
@@ -16,19 +20,24 @@ import {
   lerExpressaoDeRolagem,
   textoDaExpressao,
   textoDoModificador,
+  type AtributoDaConta,
   type ExpressaoDeRolagem,
 } from "@/lib/mestre/expressao-de-rolagem";
 import {
   detalhesDoPersonagem,
+  rolarAtributo,
   rolarDetalhe,
   type DetalheDoJogador,
   type FichaDeDetalhes,
+  type RolagemDoDetalhe,
 } from "@/lib/player/detalhes";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { cn } from "@/lib/utils";
 import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
+import { facesParaDesenhar } from "@/lib/mestre/valor-do-atributo";
 import { rotulosDoDado } from "@/types/dado";
 import { doGrupo, gruposDaFicha, type GrupoDeDetalhes } from "@/types/detalhe";
+import type { Atributo } from "@/types/character";
 
 /** Quantos dados de um termo se desenham antes do "×N". Como na ficha do Mestre. */
 const DADOS_A_VISTA = 5;
@@ -51,9 +60,16 @@ export function DetalhesDoJogador({
   busca = "",
   abas = false,
   topoDasAbas = 53,
+  atributos,
 }: {
   codigo: string;
   personagemId: string;
+  /**
+   * Os atributos do personagem, para a conta com sigla perder as chaves como
+   * as outras: "Ataque: {AGId20>+5}" lê "Ataque: AGId20>+5". Ver
+   * `textoSemChaves`.
+   */
+  atributos?: ReadonlyArray<AtributoDaConta>;
   /**
    * O que o jogador procura, já sem acento nem caixa (`normaliza`). Vazio =
    * tudo. Casa no rótulo, no valor e na descrição -- e no nome do grupo, que é
@@ -110,49 +126,51 @@ export function DetalhesDoJogador({
     if (!grupo) return null;
 
     return (
-      <section className="space-y-2">
-        {/* Presas logo abaixo da busca (`topoDasAbas`), com o fundo de quem
-            embrulha o cartão -- ver `--fundo-da-busca`. */}
-        <div
-          role="tablist"
-          aria-label={t.personagens.gruposDaFicha}
-          style={{ top: topoDasAbas }}
-          className="sticky z-[5] -mx-3 flex gap-1.5 overflow-x-auto border-b bg-[var(--fundo-da-busca,var(--color-background))] px-3 py-2"
-        >
-          {grupos.map((atual) => (
-            <button
-              key={atual.id}
-              type="button"
-              role="tab"
-              aria-selected={atual.id === grupo.id}
-              onClick={() => setAtivo(atual.id)}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-1 text-xs font-medium",
-                atual.id === grupo.id
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {atual.nome}
-            </button>
-          ))}
-        </div>
+      <AtributosDasRolagens atributos={atributos}>
+        <section className="space-y-2">
+          {/* Presas logo abaixo da busca (`topoDasAbas`), com o fundo de quem
+              embrulha o cartão -- ver `--fundo-da-busca`. */}
+          <div
+            role="tablist"
+            aria-label={t.personagens.gruposDaFicha}
+            style={{ top: topoDasAbas }}
+            className="sticky z-[5] -mx-3 flex gap-1.5 overflow-x-auto border-b bg-[var(--fundo-da-busca,var(--color-background))] px-3 py-2"
+          >
+            {grupos.map((atual) => (
+              <button
+                key={atual.id}
+                type="button"
+                role="tab"
+                aria-selected={atual.id === grupo.id}
+                onClick={() => setAtivo(atual.id)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3 py-1 text-xs font-medium",
+                  atual.id === grupo.id
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                {atual.nome}
+              </button>
+            ))}
+          </div>
 
-        <GrupoDoJogador
-          key={grupo.id}
-          codigo={codigo}
-          personagemId={personagemId}
-          grupo={grupo}
-          detalhes={doGrupo(ficha.detalhes, grupo)}
-          busca=""
-          semTitulo
-        />
-      </section>
+          <GrupoDoJogador
+            key={grupo.id}
+            codigo={codigo}
+            personagemId={personagemId}
+            grupo={grupo}
+            detalhes={doGrupo(ficha.detalhes, grupo)}
+            busca=""
+            semTitulo
+          />
+        </section>
+      </AtributosDasRolagens>
     );
   }
 
   return (
-    <>
+    <AtributosDasRolagens atributos={atributos}>
       {achadosNosDetalhes(gruposDaFicha(ficha.grupos, ficha.detalhes), ficha.detalhes, busca).map(
         ({ grupo, detalhes }) => (
           <GrupoDoJogador
@@ -165,7 +183,7 @@ export function DetalhesDoJogador({
           />
         ),
       )}
-    </>
+    </AtributosDasRolagens>
   );
 }
 
@@ -242,6 +260,7 @@ function GrupoDoJogador({
 
 /** O valor, ou as reticências do vazio. Número em algarismos de mesma largura. */
 function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
+  const atributos = useAtributosDasRolagens();
   const vazio = detalhe.valor === undefined || detalhe.valor === "";
 
   return (
@@ -252,7 +271,7 @@ function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
         vazio && "text-muted-foreground",
       )}
     >
-      {vazio ? t.personagens.detalheVazio : textoSemChaves(String(detalhe.valor))}
+      {vazio ? t.personagens.detalheVazio : textoSemChaves(String(detalhe.valor), atributos)}
     </span>
   );
 }
@@ -265,6 +284,8 @@ function Valor({ detalhe }: { detalhe: DetalheDoJogador }) {
  * no celular não há "passar".
  */
 function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string }) {
+  const atributos = useAtributosDasRolagens();
+
   return (
     <Popover>
       <PopoverTrigger
@@ -282,7 +303,7 @@ function Descricao({ rotulo, descricao }: { rotulo: string; descricao: string })
       <PopoverContent side="bottom" align="end" className="w-64 space-y-1">
         <p className="text-xs font-medium">{rotulo}</p>
         <p className="text-muted-foreground text-xs leading-snug whitespace-pre-line">
-          {textoSemChaves(descricao)}
+          {textoSemChaves(descricao, atributos)}
         </p>
       </PopoverContent>
     </Popover>
@@ -309,7 +330,8 @@ function EntradaDoJogador({
   const aberta = escolha ?? abrir;
   // Sem as chaves: no celular a rolagem do meio do texto não tem botão -- quem
   // rola é o daemon, e ele só lê a `rolagem` do detalhe. Ver `textoSemChaves`.
-  const resumo = detalhe.valor === undefined ? "" : textoSemChaves(String(detalhe.valor));
+  const atributos = useAtributosDasRolagens();
+  const resumo = detalhe.valor === undefined ? "" : textoSemChaves(String(detalhe.valor), atributos);
 
   const cabeca = (
     <>
@@ -349,7 +371,7 @@ function EntradaDoJogador({
 
       {aberta && detalhe.descricao ? (
         <p className="text-muted-foreground pb-1 pl-5 text-xs leading-snug whitespace-pre-line">
-          {textoSemChaves(detalhe.descricao)}
+          {textoSemChaves(detalhe.descricao, atributos)}
         </p>
       ) : null}
     </li>
@@ -373,10 +395,72 @@ export function BotaoDeRolar({
   personagemId: string;
   detalhe: DetalheDoJogador;
 }) {
+  if (!detalhe.rolagem) return null;
+
+  return (
+    <BotaoDaExpressao
+      rolagem={detalhe.rolagem}
+      rotulo={detalhe.rotulo}
+      pedir={() => rolarDetalhe(codigo, personagemId, detalhe.id)}
+    />
+  );
+}
+
+/**
+ * O atributo que é um dado -- a AGI d8 --, rolado pelo daemon como o detalhe.
+ * O número não tem botão: não há o que sortear. Desenha um dado por TIPO, e
+ * não um por dado (ver `DesenhoDoDadoNoCelular`). Com `children`, o botão é o
+ * que vem dentro -- o dado e o "d8" no círculo do ritual.
+ */
+export function BotaoDoAtributo({
+  codigo,
+  personagemId,
+  atributo,
+  className,
+  style,
+  children,
+}: {
+  codigo: string;
+  personagemId: string;
+  atributo: Atributo;
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+}) {
+  if (!atributo.rolagem) return null;
+
+  return (
+    <BotaoDaExpressao
+      rolagem={atributo.rolagem}
+      rotulo={atributo.sigla}
+      pedir={() => rolarAtributo(codigo, personagemId, atributo.id)}
+      className={className}
+      style={style}
+    >
+      {children ?? <DesenhoDoDadoNoCelular rolagem={atributo.rolagem} lado="18px" />}
+    </BotaoDaExpressao>
+  );
+}
+
+/** O botão de uma expressão que o daemon sorteia: o detalhe, ou o atributo. */
+function BotaoDaExpressao({
+  rolagem,
+  rotulo,
+  pedir,
+  className,
+  style,
+  children,
+}: {
+  rolagem: string;
+  rotulo: string;
+  pedir: () => Promise<RolagemDoDetalhe>;
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+}) {
   const [rolando, setRolando] = useState(false);
 
-  if (!detalhe.rolagem) return null;
-  const leitura = lerExpressaoDeRolagem(detalhe.rolagem);
+  const leitura = lerExpressaoDeRolagem(rolagem);
   if (!leitura.ok) return null;
   const { expressao } = leitura;
 
@@ -387,7 +471,7 @@ export function BotaoDeRolar({
     if (recusaPorMesaCheia()) return;
 
     setRolando(true);
-    rolarDetalhe(codigo, personagemId, detalhe.id)
+    pedir()
       .then(({ lance, rolagens }) => lancarNoVidro(rolagens, lance))
       .catch((cause: unknown) => {
         toast.error(cause instanceof Error ? cause.message : t.erros.dadoNaoChegou);
@@ -399,17 +483,42 @@ export function BotaoDeRolar({
     <button
       type="button"
       disabled={rolando}
-      aria-label={t.personagens.rolarDetalhe(detalhe.rotulo, textoDaExpressao(expressao))}
+      aria-label={t.personagens.rolarDetalhe(rotulo, textoDaExpressao(expressao))}
       onClick={rolar}
-      className="hover:bg-accent active:bg-accent focus-visible:ring-ring flex shrink-0 items-center gap-1 rounded px-1 py-0.5 outline-none focus-visible:ring-2 disabled:opacity-60"
+      className={cn(
+        "hover:bg-accent active:bg-accent focus-visible:ring-ring flex shrink-0 items-center gap-1 rounded px-1 py-0.5 outline-none focus-visible:ring-2 disabled:opacity-60",
+        className,
+      )}
+      style={style}
     >
-      <DadosDaExpressao expressao={expressao} />
-      {expressao.modificador !== 0 ? (
-        <span className="text-xs font-medium tabular-nums">
-          {textoDoModificador(expressao.modificador)}
-        </span>
-      ) : null}
+      {children ?? (
+        <>
+          <DadosDaExpressao expressao={expressao} />
+          {expressao.modificador !== 0 ? (
+            <span className="text-xs font-medium tabular-nums">
+              {textoDoModificador(expressao.modificador)}
+            </span>
+          ) : null}
+        </>
+      )}
     </button>
+  );
+}
+
+/**
+ * O dado de um atributo, parado na face mais alta: UM por tipo de dado, como no
+ * Mestre -- "8d4" é um d4, e o oito está no texto. `lado` é CSS, para o círculo
+ * do ritual medi-lo em `em`. Ver `facesParaDesenhar`.
+ */
+export function DesenhoDoDadoNoCelular({ rolagem, lado }: { rolagem: string; lado: string }) {
+  return (
+    <span className="flex shrink-0 items-center justify-center gap-[0.1em]" style={{ height: lado }}>
+      {facesParaDesenhar(rolagem).map((faces) => (
+        <span key={faces} className="block [&>svg]:size-full" style={{ width: lado, height: lado }}>
+          <DadoParado faces={faces} valor={Math.max(...rotulosDoDado(faces))} tamanho={18} />
+        </span>
+      ))}
+    </span>
   );
 }
 

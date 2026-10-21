@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Download, Skull, UserPlus } from "lucide-react";
 
+import { AtributosDasRolagens } from "@/components/atributos-das-rolagens";
 import { GradeDeAtributos } from "@/components/mestre/atributos-personagem";
 import { Etiqueta, falhou, ImagemDoPlugin } from "@/components/mestre/compendio-cartao";
 import { TextoComRolagens } from "@/components/mestre/texto-com-rolagens";
@@ -171,24 +172,28 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
         <AtributosDoMolde atributos={molde.atributos} estilo={estilo} />
       ) : null}
 
-      {porGrupo.map(({ grupo, detalhes }) => (
-        <section key={grupo.nome} aria-label={grupo.nome} className="flex flex-col gap-1.5">
-          <h3 className="text-muted-foreground text-xs font-medium">{grupo.nome}</h3>
-          {grupo.exibicao === "lista" ? (
-            <ul className="flex flex-col gap-2">
-              {detalhes.map((detalhe) => (
-                <ItemDaLista key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
-              ))}
-            </ul>
-          ) : (
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              {detalhes.map((detalhe) => (
-                <Linha key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
-              ))}
-            </dl>
-          )}
-        </section>
-      ))}
+      {/* As siglas entre chaves leem os atributos desta ameaça: o bestiário
+          escreve a regra uma vez, e cada ficha rola com os dela. */}
+      <AtributosDasRolagens atributos={molde.atributos}>
+        {porGrupo.map(({ grupo, detalhes }) => (
+          <section key={grupo.nome} aria-label={grupo.nome} className="flex flex-col gap-1.5">
+            <h3 className="text-muted-foreground text-xs font-medium">{grupo.nome}</h3>
+            {grupo.exibicao === "lista" ? (
+              <ul className="flex flex-col gap-2">
+                {detalhes.map((detalhe) => (
+                  <ItemDaLista key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
+                ))}
+              </ul>
+            ) : (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                {detalhes.map((detalhe) => (
+                  <Linha key={detalhe.rotulo} detalhe={detalhe} rotulo={`${molde.nome} · ${detalhe.rotulo}`} />
+                ))}
+              </dl>
+            )}
+          </section>
+        ))}
+      </AtributosDasRolagens>
     </div>
   );
 }

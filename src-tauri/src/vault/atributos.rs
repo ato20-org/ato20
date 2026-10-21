@@ -48,6 +48,7 @@ impl Modelo {
             id: uuid::Uuid::new_v4().to_string(),
             sigla: self.sigla.clone(),
             valor: self.valor,
+            rolagem: None,
             descricao: self.descricao.clone(),
         }
     }

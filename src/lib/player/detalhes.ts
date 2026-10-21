@@ -68,3 +68,23 @@ export async function rolarDetalhe(
 
   return (await response.json()) as RolagemDoDetalhe;
 }
+
+/**
+ * Rola o atributo que é um dado -- a AGI d8 -- pelo daemon, pela razão de
+ * `rolarDetalhe`: o corpo vai vazio, e o dado sai da ficha. Ver
+ * `roll_attribute`.
+ */
+export async function rolarAtributo(
+  codigo: string,
+  personagemId: string,
+  atributoId: string,
+): Promise<RolagemDoDetalhe> {
+  const response = await fetch(
+    `/eu/personagens/${encodeURIComponent(personagemId)}/atributos/${encodeURIComponent(atributoId)}/rolar`,
+    { method: "POST", headers: authorized(codigo) },
+  );
+
+  if (!response.ok) throw await fail(response, t.erros.dadoNaoChegou);
+
+  return (await response.json()) as RolagemDoDetalhe;
+}

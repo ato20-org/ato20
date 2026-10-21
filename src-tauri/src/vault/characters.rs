@@ -257,8 +257,9 @@ impl Default for Estilo {
 /// e desce no meio da cena como a vida. E o numero que se consulta.
 ///
 /// `valor` e inteiro, e cobre o 4 do Ordem, o 16 do D&D e o 60 do Chamado de
-/// Cthulhu. Dado como valor ("d8") fica de fora: texto livre perderia a conta
-/// que um plugin faria com ele para rolar.
+/// Cthulhu. O atributo que E um dado -- a AGI d8 do Savage Worlds -- guarda a
+/// expressao em `rolagem`, ao lado do numero, e nao no lugar dele: o plugin que
+/// so conhece numero continua lendo um, e a ficha antiga le igual.
 ///
 /// O espelho em TypeScript e `Atributo`, em `types/character.ts`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -267,6 +268,15 @@ pub struct Atributo {
     pub id: String,
     pub sigla: String,
     pub valor: i64,
+    /// O dado que o atributo E, quando e um: `1d8`, `1d12+1`. Presente, a ficha
+    /// mostra e rola o dado, e `{AGI}` entre chaves rola ele; o `valor` fica
+    /// guardado para o plugin que so le numero.
+    ///
+    /// A expressao e do leitor do TS (`expressao-de-rolagem.ts`), como a do
+    /// detalhe, e o celular a rola por `serve::roll_attribute`. Ausente nas
+    /// fichas de antes dele.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolagem: Option<String>,
     /// O que o atributo quer dizer, para quem nao conhece o sistema: "VIG --
     /// Vigor, a resistencia do corpo". Aparece no hover do cartao.
     ///
@@ -1295,6 +1305,14 @@ pub fn ajustar_atributo(atributo: &mut Atributo) {
     let teto = MAX_VALOR_ATRIBUTO;
     atributo.valor = atributo.valor.clamp(-teto, teto);
 
+    // Vazia vira ausente, e o atributo volta a ser o numero. Ver `ajustar` do
+    // detalhe, que corta a expressao do mesmo jeito.
+    atributo.rolagem = atributo
+        .rolagem
+        .as_deref()
+        .map(|texto| texto_curto(texto, super::detalhes::MAX_ROLAGEM))
+        .filter(|texto| !texto.is_empty());
+
     // Vazia vira ausente: um balao em branco no hover seria pior que nenhum.
     atributo.descricao = atributo
         .descricao
@@ -1320,6 +1338,7 @@ pub fn criar_atributo(vault: &Vault, id: &str, sigla: &str, valor: i64) -> AppRe
         id: uuid::Uuid::new_v4().to_string(),
         sigla: sigla.to_string(),
         valor,
+        rolagem: None,
         descricao: None,
     };
     ajustar_atributo(&mut atributo);
@@ -1340,6 +1359,8 @@ pub fn criar_atributo(vault: &Vault, id: &str, sigla: &str, valor: i64) -> AppRe
 pub struct PatchAtributo {
     pub sigla: Option<String>,
     pub valor: Option<i64>,
+    /// `Some("")` apaga o dado, e o atributo volta a ser o numero.
+    pub rolagem: Option<String>,
     /// `Some("")` apaga a descricao.
     pub descricao: Option<String>,
 }
@@ -1368,6 +1389,9 @@ pub fn editar_atributo(
     }
     if let Some(valor) = patch.valor {
         atributo.valor = valor;
+    }
+    if let Some(rolagem) = patch.rolagem {
+        atributo.rolagem = Some(rolagem);
     }
     if let Some(descricao) = patch.descricao {
         atributo.descricao = Some(descricao);
@@ -2972,6 +2996,54 @@ mod tests {
     }
 
     #[test]
+    fn atributo_vira_dado_e_volta_ao_numero() {
+        let (_tmp, vault) = vault();
+        let p = create(&vault, "Edgar").unwrap();
+        let agi = criar_atributo(&vault, &p.id, "AGI", 2).unwrap();
+        assert_eq!(agi.rolagem, None);
+
+        let dado = editar_atributo(
+            &vault,
+            &p.id,
+            &agi.id,
+            PatchAtributo {
+                rolagem: Some("1d8".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // O numero fica guardado, para o plugin que so le numero.
+        assert_eq!(dado.rolagem.as_deref(), Some("1d8"));
+        assert_eq!(dado.valor, 2);
+        assert_eq!(
+            load(&vault).unwrap()[0].atributos[0].rolagem.as_deref(),
+            Some("1d8")
+        );
+
+        let numero = editar_atributo(
+            &vault,
+            &p.id,
+            &agi.id,
+            PatchAtributo {
+                valor: Some(3),
+                rolagem: Some("   ".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(numero.rolagem, None);
+        assert_eq!(numero.valor, 3);
+    }
+
+    #[test]
+    fn atributo_de_antes_do_dado_le_igual_e_nao_grava_o_campo() {
+        let lido: Atributo =
+            serde_json::from_str(r#"{"id":"a","sigla":"FOR","valor":3}"#).unwrap();
+        assert_eq!(lido.rolagem, None);
+        assert!(!serde_json::to_string(&lido).unwrap().contains("rolagem"));
+    }
+
+    #[test]
     fn atributo_tem_teto_e_remove() {
         let (_tmp, vault) = vault();
         let p = create(&vault, "Edgar").unwrap();
@@ -2997,6 +3069,7 @@ mod tests {
             id: uuid::Uuid::new_v4().to_string(),
             sigla: sigla.to_string(),
             valor: 1,
+            rolagem: None,
             descricao: None,
         };
 

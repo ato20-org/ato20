@@ -271,7 +271,13 @@ const pt = {
     exemploDeDescricao: "Vigor: a resistência do corpo.",
     renomear: (sigla: string) => `Renomear ${sigla}`,
     /** O hover do número no desenho de um plugin, onde não há cartão. */
-    dicaNoLugar: "Clique para mudar o número. Botão direito: sigla, descrição, apagar.",
+    dicaNoLugar:
+      "Clique para mudar o número, ou escreva um dado (d8). Botão direito: sigla, descrição, apagar.",
+    /** O mesmo hover, quando o atributo é um dado: o clique rola. */
+    dicaDoDadoNoLugar: "Clique para rolar. Botão direito: mudar o dado, sigla, descrição, apagar.",
+    mudarValor: (sigla: string) => `Mudar o valor de ${sigla}`,
+    /** O que o campo do valor aceita, no balão do desenho. */
+    exemploDeValor: "Um número, ou um dado: d8, d12+1",
   },
 
   /** Os detalhes da ficha: Identidade, Perícias, Poderes. Ver `vault/detalhes.rs`. */
@@ -307,6 +313,7 @@ const pt = {
     exemploDeRolagem: "1d20+5",
     rolar: (rotulo: string, expressao: string) => `Rolar ${rotulo}: ${expressao}`,
     ficaOMaior: "↑ fica com o maior dado do termo, e ↓ com o menor",
+    comAtributos: (escrita: string, valores: string) => `${escrita}, com ${valores}`,
     editarRolagem: (rotulo: string) => `Editar a rolagem de ${rotulo}`,
     opcoes: (rotulo: string) => `Opções de ${rotulo}`,
     /** O menu de três pontos do detalhe. */
@@ -838,7 +845,11 @@ const en: typeof pt = {
     editarDescricao: "Click to edit.",
     exemploDeDescricao: "Vigor: how tough the body is.",
     renomear: (sigla) => `Rename ${sigla}`,
-    dicaNoLugar: "Click to change the number. Right-click: abbreviation, description, delete.",
+    dicaNoLugar:
+      "Click to change the number, or type a die (d8). Right-click: abbreviation, description, delete.",
+    dicaDoDadoNoLugar: "Click to roll. Right-click: change the die, abbreviation, description, delete.",
+    mudarValor: (sigla) => `Change the value of ${sigla}`,
+    exemploDeValor: "A number, or a die: d8, d12+1",
   },
 
   detalhes: {
@@ -873,6 +884,7 @@ const en: typeof pt = {
     exemploDeRolagem: "1d20+5",
     rolar: (rotulo, expressao) => `Roll ${rotulo}: ${expressao}`,
     ficaOMaior: "↑ keeps the highest die of the term, and ↓ the lowest",
+    comAtributos: (escrita, valores) => `${escrita}, with ${valores}`,
     editarRolagem: (rotulo) => `Edit the roll for ${rotulo}`,
     opcoes: (rotulo) => `Options for ${rotulo}`,
     menu: {

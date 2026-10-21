@@ -1082,6 +1082,7 @@ pub fn trazer_do_plugin(
                 id: uuid::Uuid::new_v4().to_string(),
                 sigla: atributo.sigla.clone(),
                 valor: atributo.valor,
+                rolagem: None,
                 descricao,
             };
             characters::ajustar_atributo(&mut novo);
