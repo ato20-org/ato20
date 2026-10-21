@@ -638,7 +638,10 @@ export const SOLIDOS: Record<FacesDado, Solido> = (() => {
         vertices,
         faces,
         leitura: "face",
-        tamanhoNumero: tamanhoQueCabe(grandes, digitos),
+        // Folga menor que o padrão: a palavra `COROA` tem cinco letras e, no
+        // padrão, ocupava quase toda a face redonda da moeda, encostando na
+        // borda. Com menos folga ela respira, e `CARA` fica confortável junto.
+        tamanhoNumero: tamanhoQueCabe(grandes, digitos, 0.73),
         limiarNumero: 0.34,
         sublinha: false,
       };
@@ -812,20 +815,23 @@ export type NumeroDesenhado = {
 };
 
 /**
- * A cor do número, com a MESMA luz que bate na face.
+ * A cor do número: o difuso da face, mas SEM o realce especular.
  *
- * Porque é o que ele é: tinta gravada na face, recebendo a luz da face. Antes
- * era a tinta chapada com um `opacity` por cima para "recuar" nas faces
- * escuras, e isso errava nos dois sentidos — apagava o número em vez de
- * escurecê-lo, e no dado de tinta ESCURA sobre corpo claro fazia o contrário do
- * pretendido: reduzia justamente o contraste que sustentava a leitura, e o d4
- * ficava sem número visível.
+ * É tinta gravada na face, e recebe a luz da face — mas só a parte que preserva
+ * contraste. O difuso é multiplicativo, então tinta e corpo escurecem na mesma
+ * proporção e o número se lê em qualquer luz. O especular (`screen`) não: ele
+ * comprime em direção ao branco, e clareia a tinta ESCURA mais do que o corpo —
+ * na face mais iluminada do d4 (osso com tinta escura) o número ia a cinza e
+ * sumia. Realce é da superfície da resina; passar por cima do que está gravado
+ * embaixo não é brilho, é apagar o número.
  *
- * Passando os dois pela mesma conta, o contraste entre tinta e corpo sobrevive
- * em qualquer luz, porque os dois escurecem na mesma proporção.
+ * Nas tintas CLARAS (a maioria dos dados) quase não muda: já clareiam até perto
+ * do branco pelo difuso, e o especular tinha pouco a acrescentar. Quem ganha é a
+ * tinta escura — o d4 e a moeda.
  */
 export function corDaTinta(tinta: string, luz: number): string {
-  return corDaFace(tinta, luz);
+  const [r, g, b] = difuso(tinta, luz);
+  return `rgb(${Math.round(r)} ${Math.round(g)} ${Math.round(b)})`;
 }
 
 export type FaceDesenhada = {
@@ -1766,25 +1772,37 @@ function suavizarSaida(p: number): number {
  * O realce entra por SCREEN, não por soma crua. Screen clareia na direção do
  * branco e nunca o ultrapassa, então a face mais iluminada ganha brilho em vez
  * de QUEIMAR num cromado chapado — era o que a soma mais o `clamp` fazia no
- * dado claro, estourando os três canais e apagando o número gravado embaixo.
- * Brilho que apaga o que está gravado não é brilho, é queimado. Por ser seguro
- * contra o estouro, o branco pode subir a quarenta e dois por cento e o realce
- * aparecer de fato — a soma crua ficou presa nos dezesseis justamente para não
- * queimar o dado claro.
+ * dado claro, estourando os três canais numa mancha lisa sem relevo. Por ser
+ * seguro contra o estouro, o branco pode subir a quarenta e dois por cento e o
+ * realce aparecer de fato — a soma crua ficou presa nos dezesseis justamente
+ * para não queimar o dado claro. O número NÃO leva este realce: é da superfície
+ * da resina, e sobre a tinta ele só apagaria o contraste — ver `corDaTinta`.
  *
  * Aqui e não no componente porque são dois componentes: o dado que rola no
  * tabuleiro e o dado parado do saquinho. Eles têm de ser o MESMO dado, e uma
  * segunda cópia desta conta é onde eles começariam a divergir.
  */
-export function corDaFace(hex: string, luz: number): string {
+/**
+ * O difuso: a cor escurecida pela luz, MULTIPLICATIVAMENTE.
+ *
+ * Piso de ambiente 0,40 e ganho 0,75 no lado iluminado. Por ser multiplicativo,
+ * preserva a RAZÃO entre duas cores — tinta e corpo escurecem na mesma
+ * proporção —, e é isso que mantém o contraste do número em qualquer luz. O
+ * realce especular (ver `corDaFace`) NÃO tem essa propriedade, e é por isso que
+ * a tinta não o leva. Devolve os canais crus, para quem chama arredondar.
+ */
+function difuso(hex: string, luz: number): [number, number, number] {
   const n = parseInt(hex.slice(1), 16);
-  const intensidade = 0.4 + 0.75 * luz;
+  const i = 0.4 + 0.75 * luz;
+  const c = (v: number) => Math.min(255, v * i);
+  return [c((n >> 16) & 255), c((n >> 8) & 255), c(n & 255)];
+}
+
+export function corDaFace(hex: string, luz: number): string {
   const brilho = luz ** 4 * 0.42 * 255;
-
   // Screen: 255 − (255−base)·(255−realce)/255. Clareia sem passar do branco.
-  const screen = (base: number) => 255 - ((255 - base) * (255 - brilho)) / 255;
-  const canal = (valor: number) =>
-    Math.round(screen(Math.min(255, valor * intensidade)));
-
-  return `rgb(${canal((n >> 16) & 255)} ${canal((n >> 8) & 255)} ${canal(n & 255)})`;
+  const screen = (base: number) =>
+    Math.round(255 - ((255 - base) * (255 - brilho)) / 255);
+  const [r, g, b] = difuso(hex, luz);
+  return `rgb(${screen(r)} ${screen(g)} ${screen(b)})`;
 }
