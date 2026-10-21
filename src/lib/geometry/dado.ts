@@ -433,16 +433,21 @@ function poliedro(brutos: readonly Vec3[]): {
  * fonte só, e o rótulo mais largo tem de caber na face mais apertada. É por isso
  * que o `20` do d20 manda no tamanho do `7` dele.
  */
-function tamanhoQueCabe(faces: readonly Face[], digitos: number) {
+function tamanhoQueCabe(faces: readonly Face[], digitos: number, folga = 0.86) {
   // Medidas de um algarismo em corpos de fonte, para fonte de sistema em peso
   // 700: avanço perto de 0,62 de largura e maiúscula perto de 0,72 de altura.
   const meiaDiagonal = Math.hypot(0.31 * digitos, 0.36);
 
-  // Oitenta e seis por cento do raio inscrito. Sai de ter acertado o d20 à mão
-  // primeiro — `0,40` de corpo com raio inscrito `0,30` — e não de gosto.
+  // `folga` é a fração do raio inscrito que o número ocupa. Oitenta e seis por
+  // cento no geral — acertado no d20 à mão (`0,40` de corpo com raio inscrito
+  // `0,30`), e é o que mantém o algarismo DENTRO da própria face. O recorte pela
+  // silhueta (ver `DadoFacetas`) impede o número de sair do DADO, mas não da
+  // face: passar deste ponto faz o número cruzar a aresta para a face vizinha, e
+  // num dado de faces grandes (d6, d8, d%, moeda) isso lê como número grande
+  // demais vazando. O d20, de faces pequenas, pede mais — ver `SOLIDOS`.
   const menorRaio = Math.min(...faces.map((face) => face.raioInterno));
 
-  return (menorRaio * 0.86) / meiaDiagonal;
+  return (menorRaio * folga) / meiaDiagonal;
 }
 
 /** Numera as faces de modo que as opostas somem sempre o mesmo. */
@@ -646,11 +651,12 @@ export const SOLIDOS: Record<FacesDado, Solido> = (() => {
         faces,
         leitura: "apice",
         numerosDoVertice: rotulos,
-        // Quase tudo o que cabe no centro, apesar de serem três por face: as
-        // faces do d4 são vistas de esguelha de cima, e o número já chega
-        // encurtado. Medido no tamanho em que o dado aparece no tabuleiro, e não
-        // ampliado — era ali que ele estava ilegível.
-        tamanhoNumero: tamanhoQueCabe(faces, digitos) * 0.95,
+        // Folga menor que o padrão: o número do d4 fica junto do CANTO (66% do
+        // caminho até o vértice, ver `desenharDado`), não no meio da face, então
+        // no tamanho do padrão ele cruzava a aresta e lia como grande demais.
+        // Aqui a referência não é o círculo inscrito e sim o espaço do canto.
+        // Medido no tamanho em que o dado aparece no tabuleiro.
+        tamanhoNumero: tamanhoQueCabe(faces, digitos, 0.66),
         limiarNumero: 0.15,
         sublinha: false,
       };
@@ -659,11 +665,20 @@ export const SOLIDOS: Record<FacesDado, Solido> = (() => {
 
     numerarOpostas(faces, rotulos);
 
+    // Folga por sólido. O d20, de faces pequenas, pede o número MAIOR: no padrão
+    // ele saía miúdo no tamanho do tabuleiro — era a queixa —, e as faces
+    // pequenas o absorvem sem vazar. O d10 pede MENOR: a pipa é estreita e o
+    // número de um dígito, centrado no centroide (que na pipa fica longe do
+    // centro do círculo inscrito), cruzava a aresta para a face vizinha. O d%,
+    // de pipa igual mas rótulo de dois dígitos (mais largo e mais baixo), cabe
+    // no padrão. Os demais ficam no padrão.
+    const folga = tipo.faces === 20 ? 0.97 : tipo.faces === 10 ? 0.66 : 0.86;
+
     montados[tipo.faces] = {
       vertices,
       faces,
       leitura: "face",
-      tamanhoNumero: tamanhoQueCabe(faces, digitos),
+      tamanhoNumero: tamanhoQueCabe(faces, digitos, folga),
       limiarNumero: 0.34,
       sublinha: rotulos.includes(6) && rotulos.includes(9),
     };
@@ -1737,16 +1752,25 @@ function suavizarSaida(p: number): number {
  * número nenhum em duas das três faces visíveis. O piso tem de servir ao dado
  * mais claro do jogo, não ao mais escuro.
  *
+ * O ganho do lado iluminado é SETENTA e cinco por cento, e subiu dos sessenta
+ * de antes. É o "falta iluminação": com sessenta, a face de frente para a luz
+ * mal passava do tom cru, e o dado parecia um decalque fosco em vez de resina
+ * sob a luz da sala. O ganho só SOBE a partir do mesmo piso — a face na sombra
+ * continua idêntica, só a iluminada acende —, então o d4 não perde nada.
+ *
  * E com um toque de branco no topo, pelo CUBO da luz: é o brilho de resina
  * polida, e é o que separa "polígono colorido" de "dado". O cubo concentra o
  * brilho na face mais virada para a luz em vez de clarear todas — clarear
  * todas é o mesmo que não sombrear nenhuma.
  *
- * Dezesseis por cento de branco, e não trinta e dois. Trinta e dois servia
- * enquanto todo dado era saturado; num dado claro, a face mais iluminada
- * ESTOURAVA — somava branco sobre o que já era quase branco, saturava nos três
- * canais e virava uma mancha chapada de cromado, sem número legível dentro.
- * Brilho que apaga o que está gravado embaixo dele não é brilho, é queimado.
+ * O realce entra por SCREEN, não por soma crua. Screen clareia na direção do
+ * branco e nunca o ultrapassa, então a face mais iluminada ganha brilho em vez
+ * de QUEIMAR num cromado chapado — era o que a soma mais o `clamp` fazia no
+ * dado claro, estourando os três canais e apagando o número gravado embaixo.
+ * Brilho que apaga o que está gravado não é brilho, é queimado. Por ser seguro
+ * contra o estouro, o branco pode subir a quarenta e dois por cento e o realce
+ * aparecer de fato — a soma crua ficou presa nos dezesseis justamente para não
+ * queimar o dado claro.
  *
  * Aqui e não no componente porque são dois componentes: o dado que rola no
  * tabuleiro e o dado parado do saquinho. Eles têm de ser o MESMO dado, e uma
@@ -1754,11 +1778,13 @@ function suavizarSaida(p: number): number {
  */
 export function corDaFace(hex: string, luz: number): string {
   const n = parseInt(hex.slice(1), 16);
-  const intensidade = 0.4 + 0.6 * luz;
-  const brilho = luz ** 3 * 0.16;
+  const intensidade = 0.4 + 0.75 * luz;
+  const brilho = luz ** 4 * 0.42 * 255;
 
+  // Screen: 255 − (255−base)·(255−realce)/255. Clareia sem passar do branco.
+  const screen = (base: number) => 255 - ((255 - base) * (255 - brilho)) / 255;
   const canal = (valor: number) =>
-    Math.round(Math.min(255, valor * intensidade + 255 * brilho));
+    Math.round(screen(Math.min(255, valor * intensidade)));
 
   return `rgb(${canal((n >> 16) & 255)} ${canal((n >> 8) & 255)} ${canal(n & 255)})`;
 }
