@@ -250,6 +250,12 @@ const pt = {
   transformHandles: {
     espelhar: "Espelhar na horizontal",
     abrirFicha: "Abrir a ficha do personagem",
+    verPeloToken: "Ver o que o token vê",
+    voltarAVerTudo: "Voltar a ver tudo",
+    verPeloTokenDica:
+      "Ver pelo token: o que as paredes e as portas escondem dele fica coberto, e o escuro do mapa fica como a mesa vê. Só você vê.",
+    vendoPeloTokenDica:
+      "Vendo o que este token vê. Clique aqui, ou fora dele, para voltar a ver tudo.",
     negrito: "Negrito",
     italico: "Itálico",
     sublinhado: "Sublinhado",
@@ -546,6 +552,12 @@ const en: typeof pt = {
   transformHandles: {
     espelhar: "Flip horizontally",
     abrirFicha: "Open the character sheet",
+    verPeloToken: "See what this token sees",
+    voltarAVerTudo: "See everything again",
+    verPeloTokenDica:
+      "See through this token: whatever walls and doors hide from it is covered, and the map's darkness looks as the table sees it. Only you see this.",
+    vendoPeloTokenDica:
+      "Seeing what this token sees. Click here, or away from it, to see everything again.",
     negrito: "Bold",
     italico: "Italic",
     sublinhado: "Underline",

@@ -34,6 +34,7 @@ import {
   Radio,
   RadioTower,
   PanelTopDashed,
+  ScanEye,
   Trash2,
   Underline,
   type LucideIcon,
@@ -482,6 +483,15 @@ type TransformHandlesProps = {
    */
   onOpenSheet?: () => void;
   /**
+   * Presente = mostra o OLHO, que põe o palco do mestre a ver pelo token: o
+   * que as paredes e as portas escondem dele fica coberto. Só em token, pela
+   * razão da ficha.
+   *
+   * Um par estado/ação como o teto: aceso = vendo pelo token. Ver
+   * `VisaoDoToken`.
+   */
+  visao?: { ligada: boolean; onToggle: () => void };
+  /**
    * Presente = a peça é um ITEM da campanha, e a fileira ganha o que é dele: o
    * nome, que abre o item, e o botão de mostrá-lo na mesa.
    *
@@ -527,6 +537,7 @@ export function TransformHandles({
   onDelete,
   onFlip,
   onOpenSheet,
+  visao,
   item: doItem,
   onGestureStart,
   onGestureEnd,
@@ -717,6 +728,7 @@ export function TransformHandles({
           redimensionamento, e ficariam competindo com as alças nas bordas. */}
       {onFlip ||
       onOpenSheet ||
+      visao ||
       doItem ||
       opacidade ||
       sombra ||
@@ -947,6 +959,49 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>{t.transformHandles.abrirFicha}</TooltipContent>
+            </Tooltip>
+          ) : null}
+
+          {/* Ao lado da ficha: os dois são do personagem que o token é. */}
+          {visao ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={
+                      visao.ligada
+                        ? t.transformHandles.voltarAVerTudo
+                        : t.transformHandles.verPeloToken
+                    }
+                    aria-pressed={visao.ligada}
+                    className={cn(
+                      "pointer-events-auto grid shrink-0 touch-none place-items-center rounded-full",
+                      visao.ligada ? "bg-amber-500 text-neutral-950" : cor.botao,
+                    )}
+                    style={{ width: HANDLE_PX * 2, height: HANDLE_PX * 2 }}
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      visao.onToggle();
+                    }}
+                  >
+                    <ScanEye
+                      style={{
+                        width: HANDLE_PX * 1.2,
+                        height: HANDLE_PX * 1.2,
+                      }}
+                    />
+                  </button>
+                }
+              />
+              <TooltipContent>
+                <p className="text-muted-foreground max-w-56">
+                  {visao.ligada
+                    ? t.transformHandles.vendoPeloTokenDica
+                    : t.transformHandles.verPeloTokenDica}
+                </p>
+              </TooltipContent>
             </Tooltip>
           ) : null}
 

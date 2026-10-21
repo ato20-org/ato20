@@ -22,6 +22,7 @@ import { RodaDaLanterna } from "@/components/mestre/roda-da-lanterna";
 import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
 import { PortaMarcadores } from "@/components/mestre/porta-marcadores";
+import { VisaoDoToken } from "@/components/mestre/visao-do-token";
 import {
   AncorasDeSeta,
   RAIO_DE_ENCAIXE_PX,
@@ -793,6 +794,22 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     single?.personagemId && personagemExiste(single.personagemId)
       ? single.personagemId
       : undefined;
+
+  /**
+   * O token por cujo olho o palco do mestre está vendo, ou `null`. É o olho do
+   * gizmo: ver `VisaoDoToken`.
+   *
+   * Da sessão, e não da cena: é prévia do mestre, e nem a TV nem o disco
+   * sabem dela. Vale enquanto o token está na mão, sozinho: clicar fora, pegar
+   * outro ou apagá-lo volta a ver tudo. Uma visão que sobrevivesse à seleção
+   * deixaria o mapa coberto sem nenhum botão à vista para descobri-lo.
+   */
+  const [visaoDe, setVisaoDe] = useState<string | null>(null);
+  const tokenNaMao = personagemDoItem ? single : undefined;
+  // Ajuste no próprio render, e não num efeito: o quadro em que a seleção muda
+  // já sai sem a visão, em vez de pintar uma vez a sombra do token que saiu.
+  if (visaoDe !== null && tokenNaMao?.id !== visaoDe) setVisaoDe(null);
+  const vendoPor = tokenNaMao && tokenNaMao.id === visaoDe ? tokenNaMao : undefined;
 
   /**
    * O item da campanha que a peça selecionada é, quando é um.
@@ -3365,6 +3382,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           animarSo={efeitosAnimados}
           // No arrasto, a chuva sai da frente: ver `ambienteEscondido`.
           ambienteEscondido={emGesto}
+          // Vendo pelo token, o breu é o da mesa. Ver `VisaoDoToken`.
+          escuroDaMesa={Boolean(vendoPor)}
           medidorSelecionadoId={selectedMedidorId}
           onMedidorPointerDown={
             panMode || aiming ? undefined : onMedidorPointerDown
@@ -3373,6 +3392,17 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
             panMode || aiming ? undefined : onMedidorAlcaPointerDown
           }
         />
+
+      {/* O que o token na mão não vê, coberto. Antes de tudo o que é do
+          mestre: o alfinete, a parede e a porta ficam por cima da sombra, e a
+          parede que tapa continua à vista. Ver `VisaoDoToken`. */}
+      {vendoPor ? (
+        <VisaoDoToken
+          scene={scene}
+          token={vendoPor}
+          portaNaMao={gestoPorta?.portaId}
+        />
+      ) : null}
 
       {/* Irmão do `SceneLayer`, e de propósito FORA dele: o `SceneLayer` é o
           mesmo componente do Espectador e do Jogador, e um ponto de anotação
@@ -3674,6 +3704,18 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
                     tipo: "personagem",
                     personagemId: personagemDoItem,
                   })
+              : undefined
+          }
+          // O olho: o palco passa a ver pelo token. Ver `VisaoDoToken`.
+          visao={
+            tokenNaMao
+              ? {
+                  ligada: Boolean(vendoPor),
+                  onToggle: () =>
+                    setVisaoDe((atual) =>
+                      atual === tokenNaMao.id ? null : tokenNaMao.id,
+                    ),
+                }
               : undefined
           }
           // A peça de item ganha o nome dele, que abre o item, e o botão de
