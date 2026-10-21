@@ -191,6 +191,15 @@ export type Face = {
    * tamanhos por sólido. Ver `tamanhoQueCabe`.
    */
   raioInterno: number;
+  /**
+   * Distância do centro do sólido ao plano desta face — o inraio, medido nela.
+   *
+   * É o que separa a face da frente da face de trás numa câmera de PERSPECTIVA.
+   * Numa projeção ortográfica bastava o sinal de `normal.z`; com a câmera perto
+   * (ver `DISTANCIA`) a conta é `DISTANCIA·normal.z > distanciaPlano`. Ver o
+   * culling em `desenharDado`.
+   */
+  distanciaPlano: number;
   /** O número gravado no centro. Ausente no d4, que numera os vértices. */
   numero?: number;
 };
@@ -405,7 +414,7 @@ function poliedro(brutos: readonly Vec3[]): {
       );
     }
 
-    faces.push({ indices, normal, centro, u, v, raioInterno });
+    faces.push({ indices, normal, centro, u, v, raioInterno, distanciaPlano: d });
   }
 
   return { vertices, faces };
@@ -825,10 +834,11 @@ export type FaceDesenhada = {
 /**
  * O dado, pronto para virar SVG.
  *
- * Devolve SÓ as faces viradas para a câmera. Num sólido convexo isso basta e
- * não precisa de ordenação por profundidade: duas faces de frente nunca se
- * sobrepõem na projeção. É o que permite desenhar sessenta e dois triângulos,
- * quadrados, pipas e pentágonos sem um z-buffer.
+ * Devolve SÓ as faces viradas para a câmera, pelo culling de PERSPECTIVA (ver
+ * dentro). Com o corte certo, num sólido convexo as faces da frente ladrilham a
+ * silhueta sem se sobreporem, e não é preciso ordenar por profundidade — é o que
+ * permite desenhar sessenta e dois triângulos, quadrados, pipas e pentágonos sem
+ * um z-buffer. O corte frouxo (ortográfico) quebrava justamente essa premissa.
  */
 export function desenharDado({
   faces: quantasFaces,
@@ -866,7 +876,22 @@ export function desenharDado({
 
   for (const [indiceFace, face] of solido.faces.entries()) {
     const normal = girar(orientacao, face.normal);
-    if (normal.z <= 0.001) continue;
+    // Culling em PERSPECTIVA, não em ortográfica. A face é visível quando a
+    // câmera está do lado de fora do plano dela: a câmera está em
+    // (0, 0, DISTANCIA) no espaço do sólido, logo
+    //   dot(normal, câmera − centro) > 0  ⟺  DISTANCIA·normal.z > normal·centro,
+    // e `normal·centro` é invariante à rotação — é a `distanciaPlano` da face.
+    //
+    // O critério antigo, `normal.z > 0`, é o da projeção ORTOGRÁFICA. Com a
+    // câmera a só quatro raios ele deixava passar as faces logo ATRÁS da
+    // silhueta — normal.z entre zero e distanciaPlano/DISTANCIA, que no d20 vai
+    // até uns 0,2. São faces de trás que, sem z-buffer e sem ordenar por
+    // profundidade, pintavam por cima das da frente: é a face que "fica
+    // transparente e deixa ver a de trás", pior com o dado girando de esguelha
+    // na mão. Com o corte certo, a silhueta é ladrilhada só pelas faces da
+    // frente, que num convexo nunca se sobrepõem — e segue sem precisar de
+    // z-buffer.
+    if (DISTANCIA * normal.z <= face.distanciaPlano) continue;
 
     const vertices: number[] = [];
     for (const i of face.indices) {
