@@ -1081,6 +1081,12 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/detalhes/{detalheId}/rolar",
             post(roll_detail),
         )
+        // O atributo que e um dado (a AGI d8), pela mesma razao: quem sorteia
+        // e o daemon. Ver `roll_attribute`.
+        .route(
+            "/personagens/{id}/atributos/{atributoId}/rolar",
+            post(roll_attribute),
+        )
         .route(
             "/personagens/{id}/inventario/{itemId}/imagem",
             // Desligado pelo mesmo motivo de `/anexos`: quem conta os bytes e o
@@ -3971,15 +3977,74 @@ async fn roll_detail(
         }
     };
 
+    rolar_da_ficha(&state, &player, &texto, &nome, rotulo, &detalhe_id)
+}
+
+/// `POST /eu/personagens/{id}/atributos/{atributoId}/rolar` -- o jogador rola a
+/// AGI d8 do proprio personagem.
+///
+/// O corpo vazio pela razao do `roll_detail`: o dado sai da ficha, e nao do
+/// celular. So rola o atributo que E um dado (`Atributo::rolagem`); o numero
+/// nao tem o que sortear.
+async fn roll_attribute(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, atributo_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+    let lido = (|| -> AppResult<Option<(String, String, String)>> {
+        let Some(personagem) = characters::load(&vault)?.into_iter().find(|p| p.id == id) else {
+            return Ok(None);
+        };
+        let Some(atributo) = personagem
+            .atributos
+            .into_iter()
+            .find(|a| a.id == atributo_id)
+        else {
+            return Ok(None);
+        };
+        Ok(atributo
+            .rolagem
+            .map(|rolagem| (rolagem, personagem.nome, atributo.sigla)))
+    })();
+
+    let (texto, nome, sigla) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o atributo que nao existe e para o que e numero: o
+        // celular so oferece o dado nos que sao dado.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "este atributo nao rola"),
+        Err(cause) => {
+            log::error!("rolagem do atributo {atributo_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o atributo");
+        }
+    };
+
+    rolar_da_ficha(&state, &player, &texto, &nome, sigla, &atributo_id)
+}
+
+/// Sorteia uma expressao da ficha em nome do jogador: a linha no fio, os dados
+/// na bandeja e a resposta com o lance. E o miolo do `roll_detail` e do
+/// `roll_attribute`, que so diferem em de onde a expressao vem.
+///
+/// `rotulo` e o do detalhe ou a sigla; o nome do personagem vai na frente,
+/// como o Mestre escreve. `de_onde` e o id, para o log.
+fn rolar_da_ficha(
+    state: &Arc<Daemon>,
+    player: &players::Player,
+    texto: &str,
+    nome: &str,
+    rotulo: String,
+    de_onde: &str,
+) -> Response {
     // A expressao foi gravada pelo Mestre, que a leu com o leitor do TS. Ela
     // so falha aqui se os dois leitores divergirem, ou se o arquivo foi
     // escrito por fora.
     let Ok(expressao) = expressao::ler(&texto) else {
-        log::warn!("detalhe {detalhe_id}: a expressao {texto:?} nao serve");
-        return fail(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "a expressao deste detalhe nao serve",
-        );
+        log::warn!("{de_onde}: a expressao {texto:?} nao serve");
+        return fail(StatusCode::UNPROCESSABLE_ENTITY, "esta expressao nao serve");
     };
 
     let rotulo: String = if nome.is_empty() {
@@ -6387,6 +6452,68 @@ mod tests {
             fio_gravado(&state).is_empty(),
             "rolagem recusada entrou no fio"
         );
+    }
+
+    #[tokio::test]
+    async fn rola_so_o_atributo_que_e_dado_e_que_e_dele() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (agi, forca) = no_vault(&state, |vault| {
+            let agi = characters::criar_atributo(vault, &personagem, "AGI", 0).expect("agi");
+            characters::editar_atributo(
+                vault,
+                &personagem,
+                &agi.id,
+                characters::PatchAtributo {
+                    rolagem: Some("1d8+1".into()),
+                    ..Default::default()
+                },
+            )
+            .expect("dado");
+            let forca = characters::criar_atributo(vault, &personagem, "FOR", 3).expect("for");
+            (agi.id, forca.id)
+        });
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "POST",
+                &format!("/eu/personagens/{personagem}/atributos/{agi}/rolar"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["rotulo"], "Corvo · AGI");
+        assert_eq!(rolagem["lance"]["modificador"], 1);
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 1);
+        assert_eq!(dados[0]["faces"], 8);
+        assert_eq!(fio_gravado(&state).len(), 1);
+
+        for (token, atributo) in [
+            // O numero nao tem o que sortear.
+            (&token_a, &forca),
+            // Atributo que nao existe.
+            (&token_a, &"chute".to_string()),
+            // Personagem de outro jogador.
+            (&token_b, &agi),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/atributos/{atributo}/rolar"),
+                    None,
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{atributo}");
+        }
+        assert_eq!(fio_gravado(&state).len(), 1, "rolagem recusada entrou no fio");
     }
 
     // --- inventario ---------------------------------------------------------
