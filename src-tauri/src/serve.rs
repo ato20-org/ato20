@@ -1081,6 +1081,12 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/detalhes/{detalheId}/rolar",
             post(roll_detail),
         )
+        // A conta escrita entre chaves no texto do detalhe ("Soco {1d4}"): o
+        // celular diz qual, e o daemon a confere na ficha. Ver `roll_in_text`.
+        .route(
+            "/personagens/{id}/detalhes/{detalheId}/rolar-no-texto",
+            post(roll_in_text),
+        )
         // O atributo que e um dado (a AGI d8), pela mesma razao: quem sorteia
         // e o daemon. Ver `roll_attribute`.
         .route(
@@ -3977,7 +3983,87 @@ async fn roll_detail(
         }
     };
 
-    rolar_da_ficha(&state, &player, &texto, &nome, rotulo, &detalhe_id)
+    rolar_da_ficha(&state, &player, &texto, &[], &nome, rotulo, &detalhe_id)
+}
+
+/// O que o celular manda para rolar uma conta do texto do detalhe: ela COMO
+/// ESTA ESCRITA, sem as chaves -- `1d4`, `AGId20>+5`.
+#[derive(Debug, Deserialize)]
+struct RolarNoTextoBody {
+    texto: String,
+}
+
+/// `POST /eu/personagens/{id}/detalhes/{detalheId}/rolar-no-texto` -- o jogador
+/// rola uma conta que o mestre escreveu entre chaves no valor ou na descricao
+/// do detalhe: "Soco com mao livre {1d4}".
+///
+/// O corpo diz QUAL conta, e nao e a conta que vale: o daemon so rola a que
+/// esta escrita entre chaves NAQUELE detalhe, e a le de novo. E o que guarda a
+/// razao do corpo vazio de `roll_detail` -- um cliente modificado que pedisse
+/// `1d20+50` recebe 404, porque ninguem escreveu `{1d20+50}` ali. As siglas
+/// (`{AGId20>+5}`) valem os atributos da ficha agora, e nao os que o celular
+/// tinha na tela.
+async fn roll_in_text(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, detalhe_id)): AxumPath<(String, String)>,
+    axum::Json(body): axum::Json<RolarNoTextoBody>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+    let pedida = body.texto.trim();
+
+    let lido = (|| -> AppResult<Option<(String, Vec<characters::Atributo>, String)>> {
+        let Some(detalhe) = detalhes::load(&vault, &id)?
+            .into_iter()
+            .find(|d| d.id == detalhe_id)
+        else {
+            return Ok(None);
+        };
+        // O numero nao tem chave; o texto e a escolha guardam texto.
+        let valor = detalhe.valor.as_ref().and_then(serde_json::Value::as_str);
+        let escrita = [valor, detalhe.descricao.as_deref()]
+            .into_iter()
+            .flatten()
+            .any(|texto| {
+                expressao::entre_chaves(texto)
+                    .into_iter()
+                    .any(|conta| conta.trim() == pedida)
+            });
+        if !escrita {
+            return Ok(None);
+        }
+        let (nome, atributos) = characters::load(&vault)?
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| (p.nome, p.atributos))
+            .unwrap_or_default();
+        Ok(Some((nome, atributos, detalhe.rotulo)))
+    })();
+
+    let (nome, atributos, rotulo) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o detalhe que nao existe e para a conta que nao
+        // esta nele: o mestre pode ter apagado a conta entre a tela abrir e o
+        // toque.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "esta conta nao esta na ficha"),
+        Err(cause) => {
+            log::error!("rolagem no texto do detalhe {detalhe_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o detalhe");
+        }
+    };
+    let siglas: Vec<expressao::AtributoDaConta> = atributos
+        .iter()
+        .map(|atributo| expressao::AtributoDaConta {
+            sigla: &atributo.sigla,
+            valor: atributo.valor,
+            rolagem: atributo.rolagem.as_deref(),
+        })
+        .collect();
+
+    rolar_da_ficha(&state, &player, pedida, &siglas, &nome, rotulo, &detalhe_id)
 }
 
 /// `POST /eu/personagens/{id}/atributos/{atributoId}/rolar` -- o jogador rola a
@@ -4022,19 +4108,23 @@ async fn roll_attribute(
         }
     };
 
-    rolar_da_ficha(&state, &player, &texto, &nome, sigla, &atributo_id)
+    rolar_da_ficha(&state, &player, &texto, &[], &nome, sigla, &atributo_id)
 }
 
 /// Sorteia uma expressao da ficha em nome do jogador: a linha no fio, os dados
-/// na bandeja e a resposta com o lance. E o miolo do `roll_detail` e do
-/// `roll_attribute`, que so diferem em de onde a expressao vem.
+/// na bandeja e a resposta com o lance. E o miolo do `roll_detail`, do
+/// `roll_attribute` e do `roll_in_text`, que so diferem em de onde a expressao
+/// vem.
 ///
-/// `rotulo` e o do detalhe ou a sigla; o nome do personagem vai na frente,
-/// como o Mestre escreve. `de_onde` e o id, para o log.
+/// `atributos` sao os que as siglas leem -- so a conta do texto as tem; a
+/// `rolagem` gravada le sem elas. `rotulo` e o do detalhe ou a sigla; o nome
+/// do personagem vai na frente, como o Mestre escreve. `de_onde` e o id, para
+/// o log.
 fn rolar_da_ficha(
     state: &Arc<Daemon>,
     player: &players::Player,
     texto: &str,
+    atributos: &[expressao::AtributoDaConta],
     nome: &str,
     rotulo: String,
     de_onde: &str,
@@ -4042,7 +4132,7 @@ fn rolar_da_ficha(
     // A expressao foi gravada pelo Mestre, que a leu com o leitor do TS. Ela
     // so falha aqui se os dois leitores divergirem, ou se o arquivo foi
     // escrito por fora.
-    let Ok(expressao) = expressao::ler(&texto) else {
+    let Ok(expressao) = expressao::ler_com(texto, atributos) else {
         log::warn!("{de_onde}: a expressao {texto:?} nao serve");
         return fail(StatusCode::UNPROCESSABLE_ENTITY, "esta expressao nao serve");
     };
@@ -6514,6 +6604,79 @@ mod tests {
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{atributo}");
         }
         assert_eq!(fio_gravado(&state).len(), 1, "rolagem recusada entrou no fio");
+    }
+
+    #[tokio::test]
+    async fn rola_so_a_conta_que_esta_escrita_no_texto_do_detalhe() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let soco = no_vault(&state, |vault| {
+            characters::criar_atributo(vault, &personagem, "AGI", 3).expect("agi");
+            detalhes::criar(
+                vault,
+                &personagem,
+                detalhes::NovoDetalhe {
+                    grupo: "Ataques".into(),
+                    rotulo: "Soco".into(),
+                    tipo: detalhes::Tipo::Texto,
+                    valor: Some(serde_json::json!("{1d4}")),
+                    opcoes: Vec::new(),
+                    descricao: Some("Soco com mao livre { AGId20>+2 }".into()),
+                    rolagem: None,
+                },
+            )
+            .expect("soco")
+            .id
+        });
+        let rolar = |token: &str, detalhe: &str, texto: &str| {
+            como(
+                token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/detalhes/{detalhe}/rolar-no-texto"),
+                Some(&serde_json::json!({ "texto": texto }).to_string()),
+            )
+        };
+
+        // A do valor, e a da descricao com a sigla lida na ficha: tres d20.
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&token_a, &soco, "1d4"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["rotulo"], "Corvo · Soco");
+        assert_eq!(rolagem["rolagens"].as_array().expect("rolagens").len(), 1);
+        assert_eq!(rolagem["rolagens"][0]["faces"], 4);
+
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&token_a, &soco, "AGId20>+2"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["modificador"], 2);
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 3);
+        assert_eq!(dados.iter().filter(|d| d["descartado"] == true).count(), 2);
+        assert_eq!(fio_gravado(&state).len(), 2);
+
+        for (token, detalhe, texto) in [
+            // A conta que ninguem escreveu ali.
+            (&token_a, soco.as_str(), "1d20+50"),
+            // Detalhe que nao existe.
+            (&token_a, "chute", "1d4"),
+            // Personagem de outro jogador.
+            (&token_b, soco.as_str(), "1d4"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(rolar(token, detalhe, texto))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{texto}");
+        }
+        assert_eq!(fio_gravado(&state).len(), 2, "rolagem recusada entrou no fio");
     }
 
     // --- inventario ---------------------------------------------------------

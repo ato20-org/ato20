@@ -46,5 +46,39 @@
     { "texto": "5>+1d20", "erro": "sintaxe" },
     { "texto": "-2d20>", "erro": "dado-fora-da-soma" },
     { "texto": "21d20>", "erro": "muitos-dados" }
-  ]
+  ],
+  "comAtributos": {
+    "ficha": [
+      { "sigla": "FOR", "valor": 4 },
+      { "sigla": "AGI", "valor": 3 },
+      { "sigla": "AG", "valor": 9 },
+      { "sigla": "DES", "valor": -2 },
+      { "sigla": "VIG", "valor": 0 },
+      { "sigla": "ESP", "valor": 0, "rolagem": "1d8" },
+      { "sigla": "D", "valor": 2 }
+    ],
+    "aceitas": [
+      { "texto": "1d20+FOR", "dados": [[1, 20]], "modificador": 4 },
+      { "texto": "2d6+FOR*2", "dados": [[2, 6]], "modificador": 8 },
+      { "texto": "1d4+(FOR+AGI)/2", "dados": [[1, 4]], "modificador": 3 },
+      { "texto": "AGId20>+5", "dados": [[3, 20, ">"]], "modificador": 5 },
+      { "texto": "AGI d20 >", "dados": [[3, 20, ">"]], "modificador": 0 },
+      { "texto": "1d20+for", "dados": [[1, 20]], "modificador": 4 },
+      { "texto": "1d20+AG", "dados": [[1, 20]], "modificador": 9 },
+      { "texto": "1d20+DES", "dados": [[1, 20]], "modificador": -2 },
+      { "texto": "1d20-DES", "dados": [[1, 20]], "modificador": 2 },
+      { "texto": "d20", "dados": [[1, 20]], "modificador": 0 },
+      { "texto": "Dd6", "dados": [[2, 6]], "modificador": 0 },
+      { "texto": "ESP", "dados": [[1, 8]], "modificador": 0 },
+      { "texto": "1d20+ESP+FOR", "dados": [[1, 20], [1, 8]], "modificador": 4 },
+      { "texto": "6d20>+45", "dados": [[6, 20, ">"]], "modificador": 45 }
+    ],
+    "recusadas": [
+      { "texto": "VIGd20>", "erro": "sintaxe" },
+      { "texto": "DESd20", "erro": "sintaxe" },
+      { "texto": "1d20+INT", "erro": "sintaxe" },
+      { "texto": "ESPd20", "erro": "sintaxe" },
+      { "texto": "ESP*2", "erro": "dado-fora-da-soma" }
+    ]
+  }
 }
