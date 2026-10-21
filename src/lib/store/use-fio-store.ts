@@ -29,14 +29,6 @@ type FioStore = EstadoDoFio & {
    * avisar.
    */
   naoLidas: number;
-  /**
-   * A última mensagem ao vivo de OUTRA pessoa.
-   *
-   * É o que a janela de Chat do Mestre observa para se abrir sozinha, como a de
-   * Rolagens faz com o dado: o recado do jogador nasce do outro lado da mesa, e
-   * o Mestre pode estar de olho no mapa. Ver `useJanelaDoChat`.
-   */
-  ultimaMensagemDeFora: string | undefined;
   /** O fio está à vista agora? Com ele aberto, nada fica por ler. */
   lendo: boolean;
 
@@ -56,7 +48,6 @@ export const useFioStore = create<FioStore>((set) => ({
   ...FIO_VAZIO,
   aoVivo: new Set(),
   naoLidas: 0,
-  ultimaMensagemDeFora: undefined,
   lendo: false,
 
   receber: (registro, minha) =>
@@ -93,7 +84,6 @@ export const useFioStore = create<FioStore>((set) => ({
         chegando,
         aoVivo,
         naoLidas: deFora && !state.lendo ? state.naoLidas + 1 : state.naoLidas,
-        ultimaMensagemDeFora: deFora ? registro.id : state.ultimaMensagemDeFora,
       };
     }),
 
@@ -104,7 +94,6 @@ export const useFioStore = create<FioStore>((set) => ({
       ...FIO_VAZIO,
       aoVivo: new Set(),
       naoLidas: 0,
-      ultimaMensagemDeFora: undefined,
     }),
 
   ler: (lendo) =>

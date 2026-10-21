@@ -51,11 +51,9 @@ import { t as textoDaBancada } from "@/lib/i18n/bancada";
 import { t } from "@/lib/i18n/cenas";
 import { usePanMode } from "@/hooks/use-pan-mode";
 import { usePublisher } from "@/hooks/use-scene-broadcast";
-import { useJanelaDeRolagens } from "@/hooks/use-janela-de-rolagens";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useSomDosDados } from "@/hooks/use-som-dos-dados";
 import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
-import { useJanelaDoChat } from "@/hooks/use-janela-do-chat";
 import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
@@ -385,15 +383,8 @@ export function MestreShell() {
   // E o fio da campanha: o que a mesa escreve e o que ela rolou, gravado pelo
   // daemon. Ver `useFioDaMesa`.
   useFioDaMesa();
-  // E a janela que as mostra, que aparece sozinha quando alguém rola: o dado
-  // chega do outro lado da mesa, e ninguém desta bancada pediu por ele. Ver
-  // `useJanelaDeRolagens`.
-  useJanelaDeRolagens();
   // E o barulho deles, os do tabuleiro e os que chegam. Ver `useSomDosDados`.
   useSomDosDados();
-  // E a do chat, pelo mesmo motivo, quando um jogador escreve. Ver
-  // `useJanelaDoChat`.
-  useJanelaDoChat();
   useMestreShortcuts();
   useSpacePan();
 
