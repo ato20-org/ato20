@@ -34,7 +34,8 @@ import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
 import { BlocosDePlugin } from "./blocos-de-plugin";
-import { DetalhesDoJogador } from "./detalhes-jogador";
+import { BotaoDoAtributo, DesenhoDoDadoNoCelular, DetalhesDoJogador } from "./detalhes-jogador";
+import { textoDoValor } from "@/lib/mestre/valor-do-atributo";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
 import {
@@ -373,8 +374,17 @@ function CharacterCard({
             <span className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
               {atributo.sigla}
             </span>
-            <span className="text-xl leading-tight font-medium tabular-nums">
-              {atributo.valor}
+            {/* O atributo que é um dado rola daqui, pelo daemon, como o
+                detalhe: o dado em cima do texto, como no Mestre. Ver
+                `BotaoDoAtributo`. */}
+            <BotaoDoAtributo codigo={codigo} personagemId={personagem.id} atributo={atributo} />
+            <span
+              className={cn(
+                "leading-tight font-medium tabular-nums",
+                textoDoValor(atributo).length > 4 ? "text-sm" : "text-xl",
+              )}
+            >
+              {textoDoValor(atributo)}
             </span>
           </li>
         ))}
@@ -394,16 +404,40 @@ function CharacterCard({
           reserva={cartoesDeAtributo(noLugar.map(({ atributo }) => atributo))}
           className="max-w-56"
         >
-          {noLugar.map(({ atributo, lugar }) => (
-            <span
-              key={atributo.id}
-              title={atributo.descricao ? `${atributo.sigla}: ${atributo.descricao}` : atributo.sigla}
-              className={CAIXA_DO_LUGAR}
-              style={estiloDoLugar(lugar, estiloDosAtributos)}
-            >
-              {atributo.valor}
-            </span>
-          ))}
+          {noLugar.map(({ atributo, lugar }) =>
+            atributo.rolagem ? (
+              // O dado no círculo é o botão: tocar rola. Encolhe quando passa
+              // de três letras, como no Mestre.
+              <BotaoDoAtributo
+                key={atributo.id}
+                codigo={codigo}
+                personagemId={personagem.id}
+                atributo={atributo}
+                className={cn(CAIXA_DO_LUGAR, "flex-col justify-center gap-0 px-0 py-0 leading-none")}
+                style={estiloDoLugar(lugar, estiloDosAtributos)}
+              >
+                {/* O dado em cima do texto, os dois na altura da caixa do
+                    número, como no Mestre (ver `DadoNoLugar`). */}
+                <DesenhoDoDadoNoCelular rolagem={atributo.rolagem} lado="0.55em" />
+                <span
+                  style={{
+                    fontSize: `${0.75 * (textoDoValor(atributo).length > 3 ? 3 / textoDoValor(atributo).length : 1)}em`,
+                  }}
+                >
+                  {textoDoValor(atributo)}
+                </span>
+              </BotaoDoAtributo>
+            ) : (
+              <span
+                key={atributo.id}
+                title={atributo.descricao ? `${atributo.sigla}: ${atributo.descricao}` : atributo.sigla}
+                className={CAIXA_DO_LUGAR}
+                style={estiloDoLugar(lugar, estiloDosAtributos)}
+              >
+                {atributo.valor}
+              </span>
+            ),
+          )}
         </AtributosEmImagem>
         {cartoesDeAtributo(fora)}
       </>
@@ -783,7 +817,12 @@ function CharacterCard({
             <p className="text-muted-foreground hidden text-xs only:block">
               {t.personagens.nadaEncontrado(busca.trim())}
             </p>
-            <DetalhesDoJogador codigo={codigo} personagemId={personagem.id} busca={termo} />
+            <DetalhesDoJogador
+              codigo={codigo}
+              personagemId={personagem.id}
+              atributos={personagem.atributos}
+              busca={termo}
+            />
             <InventarioJogador codigo={codigo} personagemId={personagem.id} busca={termo} />
           </div>
         </>
@@ -822,6 +861,7 @@ function CharacterCard({
           <DetalhesDoJogador
             codigo={codigo}
             personagemId={personagem.id}
+            atributos={personagem.atributos}
             abas
             topoDasAbas={comBusca ? 53 : 0}
           />

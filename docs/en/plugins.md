@@ -290,6 +290,12 @@ conditions and attributes included, hidden ones too: the reader is the GM, and t
 one who decides what the table sees. `assinar` notifies on every reread of the
 cast.
 
+An attribute that is a **die** (the AGI d8 of a dice-as-attributes system)
+carries `rolagem`, its expression (`"1d8"`, `"1d12+1"`), next to `valor`.
+`valor` is still a number, the one the GM wrote before switching to the die:
+a plugin that only knows numbers keeps reading one. One that knows dice reads
+`rolagem`, with the same parser as the sheet's rolls.
+
 **Meters are adjusted in batches.** `ajustarMedidor(personagemId, medidorId,
 patch)` called ten times in the same loop becomes **one** write and **one**
 reread. The math that justifies it: each write to the character index is a full
@@ -1222,6 +1228,16 @@ collection; the sheets live in a file next to it:
   them plus 45, the Ordem test. `2d20<` is disadvantage. The other dice still
   fall, dimmed, and stay out of the sum on the table, in the tray, in the
   history and in the feed. It works in `rolagem` and between braces.
+- **An attribute's abbreviation between braces:** inside the braces, the
+  abbreviation of one of the sheet's attributes stands for its number when
+  rolling. `{1d20+FOR}` adds FOR, and `{AGId20>+5}` rolls as many d20 as AGI
+  and keeps the highest, the Ordem test. The rule is written once and each
+  threat rolls with its own attributes. Case doesn't matter, and an
+  abbreviation the sheet doesn't have leaves the braces as text. Zero or
+  negative quantities don't roll: what the system does with a zero attribute
+  is up to the plugin. An attribute that is a die goes in as the die: with
+  AGI d8, `{AGI+1}` rolls 1d8+1. Braces only: `rolagem` doesn't take
+  abbreviations yet, because the daemon is what rolls a detail from the phone.
 - **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
   URL with a site name. The file goes into the campaign's library when brought;
   the URL is downloaded then, by the GM's machine, and the sheet comes in

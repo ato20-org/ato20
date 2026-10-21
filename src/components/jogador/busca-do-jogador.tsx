@@ -181,10 +181,12 @@ function LinhaDoAchado({
 }) {
   const ehDetalhe = achado.tipo === "detalhe";
   const nome = ehDetalhe ? achado.detalhe.rotulo : achado.item.nome;
+  // A conta com sigla perde as chaves também: ver `textoSemChaves`.
+  const atributos = achado.personagem.atributos;
   const valor = ehDetalhe
     ? achado.detalhe.valor === undefined || achado.detalhe.valor === ""
       ? ""
-      : textoSemChaves(String(achado.detalhe.valor))
+      : textoSemChaves(String(achado.detalhe.valor), atributos)
     : achado.item.quantidade > 1
       ? `×${achado.item.quantidade}`
       : "";
@@ -216,7 +218,7 @@ function LinhaDoAchado({
                 !aberta && "line-clamp-2",
               )}
             >
-              {textoSemChaves(descricao)}
+              {textoSemChaves(descricao, atributos)}
             </span>
           ) : null}
         </button>

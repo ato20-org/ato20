@@ -42,8 +42,22 @@ export type ErroDaExpressao =
   | "divisao-por-zero"
   | "modificador-grande";
 
+/**
+ * Um atributo que a conta pode ler pela sigla: `{1d20+FOR}`, `{AGId20>+5}`.
+ * Só a ficha onde o texto mora passa os dela -- ver `AtributosDasRolagens`.
+ *
+ * Com `rolagem`, o atributo É um dado (a AGI d8), e a sigla na conta rola ele:
+ * `{AGI+2}` é 1d8+2. Ver `Atributo.rolagem`.
+ */
+export type AtributoDaConta = { sigla: string; valor: number; rolagem?: string };
+
 export type LeituraDaExpressao =
-  | { ok: true; expressao: ExpressaoDeRolagem }
+  | {
+      ok: true;
+      expressao: ExpressaoDeRolagem;
+      /** As siglas que a conta leu, com o valor que valeram. Ausente = nenhuma. */
+      siglas?: AtributoDaConta[];
+    }
   | { ok: false; erro: ErroDaExpressao };
 
 /** O teto do modificador. Espelha `MODIFICADOR_MAX`, em `vault/fio.rs`. */
@@ -76,12 +90,22 @@ class ErroDeLeitura extends Error {
  * sempre, e parênteses. A divisão arredonda para BAIXO, que é a regra do
  * Tormenta e do D&D ("arredonde para baixo") -- e a única que dá o mesmo
  * número a quem faz a conta de cabeça na mesa. `×` e `÷` valem como `*` e `/`.
+ *
+ * Com `atributos`, a sigla de cada um vale o número dele: como parcela
+ * (`1d20+FOR`) e como quantidade de dados (`AGId20>+5`). Sem eles -- o campo de
+ * rolagem do detalhe, a paleta --, sigla é letra solta e a leitura recusa,
+ * como sempre recusou: o leitor do daemon não sabe de sigla, e os dois têm de
+ * aceitar as mesmas coisas. Ver `serve/expressao.rs`.
  */
-export function lerExpressaoDeRolagem(texto: string): LeituraDaExpressao {
+export function lerExpressaoDeRolagem(
+  texto: string,
+  atributos?: ReadonlyArray<AtributoDaConta>,
+): LeituraDaExpressao {
   if (texto.trim() === "") return { ok: false, erro: "vazia" };
 
   try {
-    const simbolos = simbolosDe(texto);
+    const usadas = new Map<string, AtributoDaConta>();
+    const simbolos = simbolosDe(texto, siglasDaConta(atributos), usadas);
     const leitor = new Leitor(simbolos);
     const arvore = leitor.soma();
     if (!leitor.acabou()) throw new ErroDeLeitura("sintaxe");
@@ -94,7 +118,7 @@ export function lerExpressaoDeRolagem(texto: string): LeituraDaExpressao {
     if (total > MAX_DADOS_POR_JOGADA) throw new ErroDeLeitura("muitos-dados");
     if (Math.abs(expressao.modificador) > MAX_MODIFICADOR) throw new ErroDeLeitura("modificador-grande");
 
-    return { ok: true, expressao };
+    return usadas.size > 0 ? { ok: true, expressao, siglas: [...usadas.values()] } : { ok: true, expressao };
   } catch (causa) {
     if (causa instanceof ErroDeLeitura) return { ok: false, erro: causa.motivo };
     throw causa;
@@ -183,7 +207,32 @@ function avaliar(no: No): number {
   }
 }
 
-function simbolosDe(texto: string): Simbolo[] {
+/**
+ * As siglas que a conta procura, da mais comprida para a mais curta: com AG e
+ * AGI na ficha, "AGI" é a AGI, e não a AG seguida de um I.
+ */
+function siglasDaConta(atributos: ReadonlyArray<AtributoDaConta> | undefined): AtributoDaConta[] {
+  return (atributos ?? [])
+    .map((atributo) => ({ ...atributo, sigla: atributo.sigla.trim() }))
+    .filter(({ sigla, valor, rolagem }) => sigla !== "" && (rolagem ? true : Number.isInteger(valor)))
+    .sort((a, b) => b.sigla.length - a.sigla.length);
+}
+
+/**
+ * A sigla que começa em `i`, sem diferenciar maiúscula: o livro escreve FOR, e
+ * quem digita depressa escreve for.
+ */
+function siglaEm(entrada: string, i: number, siglas: ReadonlyArray<AtributoDaConta>): AtributoDaConta | undefined {
+  return siglas.find(
+    ({ sigla }) => entrada.slice(i, i + sigla.length).toLocaleUpperCase("pt-BR") === sigla.toLocaleUpperCase("pt-BR"),
+  );
+}
+
+function simbolosDe(
+  texto: string,
+  siglas: ReadonlyArray<AtributoDaConta>,
+  usadas: Map<string, AtributoDaConta>,
+): Simbolo[] {
   const simbolos: Simbolo[] = [];
   const entrada = texto.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-");
   let i = 0;
@@ -209,6 +258,45 @@ function simbolosDe(texto: string): Simbolo[] {
     // Número, ou dado: `20`, `d20`, `2d6`, `2 d 6`, e o dado com o que fica
     // dele: `6d20>`, `2d20 <`.
     const casou = /^(\d*)\s*([dD])\s*(\d+)(?:\s*([<>]))?|^(\d+)/.exec(entrada.slice(i));
+
+    // A sigla de um atributo, DEPOIS do dado: onde as duas leituras servem --
+    // uma sigla "D" diante de `d20` --, o dado vence, e a conta escrita antes
+    // de a ficha ter a sigla continua lendo o mesmo.
+    const sigla = casou ? undefined : siglaEm(entrada, i, siglas);
+    if (sigla) {
+      usadas.set(sigla.sigla, sigla);
+      i += sigla.sigla.length;
+
+      // Colada no dado, ela é a QUANTIDADE: `AGId20>` são tantos d20 quanto a
+      // AGI. Zero ou menos não rola -- `jogadaDe` recusa --, e o que cada
+      // sistema faz com atributo zero é regra dele, que mora em plugin.
+      const dado = /^\s*[dD]\s*(\d+)(?:\s*([<>]))?/.exec(entrada.slice(i));
+
+      // O atributo que É um dado entra como a expressão dele entre
+      // parênteses: `{AGI+2}` com AGI d8 é `(1d8)+2`, e a soma o espalha como
+      // qualquer termo. Dado não conta dados -- `AGId20` com AGI d8 não
+      // diz nada --, e a expressão gravada não lê sigla, para uma não chamar
+      // a outra.
+      if (sigla.rolagem) {
+        if (dado) throw new ErroDeLeitura("sintaxe");
+        simbolos.push({ tipo: "abre" }, ...simbolosDe(sigla.rolagem, [], new Map()), { tipo: "fecha" });
+        continue;
+      }
+
+      if (dado) {
+        simbolos.push({
+          tipo: "dado",
+          quantidade: sigla.valor,
+          faces: Number(dado[1]),
+          ...(dado[2] && { manter: dado[2] === ">" ? ("maior" as const) : ("menor" as const) }),
+        });
+        i += dado[0].length;
+      } else {
+        simbolos.push({ tipo: "numero", valor: sigla.valor });
+      }
+      continue;
+    }
+
     if (!casou) throw new ErroDeLeitura("sintaxe");
 
     if (casou[2]) {

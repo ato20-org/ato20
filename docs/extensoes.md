@@ -261,6 +261,12 @@ existe de fábrica, e é de propósito — o que existe é o alcance.
 condições e atributos incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
 o que a mesa vê. `assinar` avisa a cada releitura do elenco.
 
+O atributo que é um **dado** (a AGI d8 de um sistema de dados como atributo)
+traz `rolagem`, a expressão dele (`"1d8"`, `"1d12+1"`), ao lado do `valor`. O
+`valor` continua sendo número, e é o que o mestre escreveu antes de trocar
+pelo dado: o plugin que só conhece número segue lendo um. Quem sabe de dado lê
+a `rolagem`, com o mesmo leitor das rolagens da ficha.
+
 **Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
 patch)` chamado dez vezes no mesmo laço vira **uma** gravação e **uma**
 releitura. A conta que justifica: cada gravação no índice de personagens é uma
@@ -1133,6 +1139,16 @@ num arquivo ao lado dele:
   maior deles e mais 45, o teste do Ordem. `2d20<` é a desvantagem. Os outros
   dados caem mesmo assim, apagados, e ficam fora da soma na mesa, no saquinho,
   no histórico e no fio. Vale na `rolagem` e entre chaves.
+- **A sigla do atributo entre chaves:** dentro das chaves, a sigla de um
+  atributo da ficha vale o número dele na hora de rolar. `{1d20+FOR}` soma a
+  FOR, e `{AGId20>+5}` rola tantos d20 quanto a AGI e fica o maior, o teste
+  do Ordem. A regra é escrita uma vez e cada ameaça rola com os atributos
+  dela. A sigla não diferencia maiúscula, e a que a ficha não tem deixa as
+  chaves como texto. Quantidade zero ou negativa não rola: o que o sistema
+  faz com atributo zero fica com o plugin. O atributo que é um dado entra
+  como o dado: com AGI d8, `{AGI+1}` rola 1d8+1. Só entre chaves: na
+  `rolagem` a sigla ainda não vale, porque quem rola o detalhe pelo celular
+  é o daemon.
 - **`retrato` e `miniatura`** são um arquivo da pasta do plugin ou uma URL
   `https` com o nome de um site. O arquivo vai ao acervo da campanha ao
   trazer; a URL é baixada nessa hora, pela máquina do mestre, e a ficha entra
