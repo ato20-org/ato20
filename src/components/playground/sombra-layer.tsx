@@ -3,6 +3,7 @@
 import { memo, useMemo } from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useGiroDesenrolado } from "@/hooks/use-giro-desenrolado";
 import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import { useSilhueta } from "@/hooks/use-silhueta";
 import { paredesComPortas } from "@/lib/geometry/porta";
@@ -15,6 +16,7 @@ import {
   vultoDaFigura,
 } from "@/lib/geometry/sombra";
 import type { Variante } from "@/lib/vault/assets";
+import { cn } from "@/lib/utils";
 import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
@@ -66,15 +68,28 @@ const SEM_PAREDES: Parede[] = [];
  * A tabela que reprovou `drop-shadow` está em `ManchaDaSombra`: 37,3 fps contra
  * 59,4 sem sombra. A silhueta não filtra nada em tempo de quadro -- é uma
  * imagem no compositor, como o token, e o desfoque dela já é pixel assado.
+ *
+ * ## A mesma transição do token
+ *
+ * Na TV o token desliza entre as amostras do Mestre (`.scene-smooth-item`), e a
+ * sombra tem de deslizar junto: sem a classe ela saltava a 10 Hz na frente de
+ * um token que ainda vinha chegando. Anda no compasso dele porque o sol é uma
+ * direção, e não um ponto -- mover o item só troca o `translate`, a matriz que
+ * deita fica a mesma, e as duas transições interpolam a mesma reta.
  */
 const SombraDaFigura = memo(function SombraDaFigura({
   item,
   sol,
   variante,
+  smooth,
+  naMao,
 }: {
   item: CanvasItem;
   sol?: Sol;
   variante?: Variante;
+  smooth: boolean;
+  /** O dedo do jogador segura o token, e ele parou de interpolar. Ver `CanvasItemView.naMao`. */
+  naMao: boolean;
 }) {
   // A MESMA url do token, e por isso a mesma variante: o arquivo já foi
   // buscado para desenhar a figura, e pedir outro tamanho aqui seria um
@@ -89,11 +104,17 @@ const SombraDaFigura = memo(function SombraDaFigura({
     [item, sol, silhueta],
   );
 
+  // O giro desenrolado do token, para a sombra girar pelo mesmo arco que ele.
+  const giro = useGiroDesenrolado(item.rotation);
+  const suave = smooth && "scene-smooth-item";
+  const parada = naMao ? "none" : undefined;
+
   if (vulto && silhueta) {
     return (
       <div
-        className="absolute top-0 left-0"
+        className={cn("absolute top-0 left-0", suave)}
         style={{
+          transition: parada,
           width: vulto.largura,
           height: vulto.altura,
           opacity: vulto.forca,
@@ -126,12 +147,11 @@ const SombraDaFigura = memo(function SombraDaFigura({
             O espelhamento acompanha pela mesma razão -- a sombra é da figura
             virada, não da original. */}
         <div
-          className="absolute inset-0"
-          style={
-            item.rotation
-              ? { transform: `rotate(${item.rotation}deg)` }
-              : undefined
-          }
+          className={cn("absolute inset-0", suave)}
+          style={{
+            transform: giro ? `rotate(${giro}deg)` : undefined,
+            transition: parada,
+          }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -163,8 +183,9 @@ const SombraDaFigura = memo(function SombraDaFigura({
 
   return (
     <div
-      className="absolute top-0 left-0 rounded-[50%]"
+      className={cn("absolute top-0 left-0 rounded-[50%]", suave)}
       style={{
+        transition: parada,
         width: mancha.largura,
         height: mancha.altura,
         transform: `translate(${mancha.x - mancha.largura / 2}px, ${mancha.y - mancha.altura / 2}px)`,
@@ -202,6 +223,8 @@ export function SombraLayer({
   portaNaMao,
   sol,
   variante,
+  smooth = false,
+  naMao,
 }: {
   items: CanvasItem[];
   paredes?: Parede[];
@@ -216,6 +239,10 @@ export function SombraLayer({
   sol?: Sol;
   /** O tamanho de arquivo que os itens desta tela desenham. Ver `Variante`. */
   variante?: Variante;
+  /** O mesmo `smooth` dos itens: a sombra desliza com o token. Ver `SombraDaFigura`. */
+  smooth?: boolean;
+  /** O item que o dedo do jogador segura. Ver `SceneLayer.naMao`. */
+  naMao?: string;
 }) {
   // O giro aqui, e não no `SceneLayer`: é esta camada e a da luz que mudam
   // enquanto a folha gira, e o resto do palco não tem por que redesenhar.
@@ -259,6 +286,8 @@ export function SombraLayer({
           item={item}
           sol={sol}
           variante={variante}
+          smooth={smooth}
+          naMao={item.id === naMao}
         />
       ))}
 
