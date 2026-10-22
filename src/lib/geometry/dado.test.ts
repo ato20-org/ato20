@@ -129,3 +129,18 @@ describe("culling em perspectiva", () => {
     expect(ortografico).toBeGreaterThan(desenho.length);
   });
 });
+
+describe("ordem determinística dos vértices", () => {
+  // Cada face começa no vértice de MENOR índice. O índice é inteiro e igual em
+  // qualquer motor de JS, então a ordem — e com ela o `points` do polígono — sai
+  // idêntica no SSR (Node) e no cliente (WebKitGTK). Sem esta âncora, o corte em
+  // ±π do `atan2` girava a lista de uma posição entre os motores e dava hydration
+  // mismatch, visível na borda da moeda. Ver `poliedro`.
+  it("ancora cada face no vértice de menor índice", () => {
+    for (const solido of Object.values(SOLIDOS)) {
+      for (const face of solido.faces) {
+        expect(face.indices[0]).toBe(Math.min(...face.indices));
+      }
+    }
+  });
+});
