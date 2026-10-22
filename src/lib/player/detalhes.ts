@@ -70,6 +70,34 @@ export async function rolarDetalhe(
 }
 
 /**
+ * Rola uma conta escrita entre chaves no valor ou na descrição do detalhe --
+ * o `{1d4}` de "Soco com mão livre {1d4}".
+ *
+ * O corpo diz QUAL conta, como o mestre a escreveu (`AGId20>+5`), e não o que
+ * rolar: o daemon só aceita a que está entre chaves naquele detalhe, e lê as
+ * siglas com os atributos da ficha dele. Ver `roll_in_text`.
+ */
+export async function rolarNoTexto(
+  codigo: string,
+  personagemId: string,
+  detalheId: string,
+  texto: string,
+): Promise<RolagemDoDetalhe> {
+  const response = await fetch(
+    `/eu/personagens/${encodeURIComponent(personagemId)}/detalhes/${encodeURIComponent(detalheId)}/rolar-no-texto`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", ...authorized(codigo) },
+      body: JSON.stringify({ texto }),
+    },
+  );
+
+  if (!response.ok) throw await fail(response, t.erros.dadoNaoChegou);
+
+  return (await response.json()) as RolagemDoDetalhe;
+}
+
+/**
  * Rola o atributo que é um dado -- a AGI d8 -- pelo daemon, pela razão de
  * `rolarDetalhe`: o corpo vai vazio, e o dado sai da ficha. Ver
  * `roll_attribute`.

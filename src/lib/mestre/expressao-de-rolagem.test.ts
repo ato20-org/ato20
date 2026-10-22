@@ -42,6 +42,34 @@ describe("lerExpressaoDeRolagem", () => {
   );
 });
 
+// As siglas também: o celular rola a conta do texto da ficha pelo daemon
+// (`roll_in_text`), e o leitor de lá lê `{AGId20>+5}` com a mesma ficha.
+describe("lerExpressaoDeRolagem com a ficha do JSON", () => {
+  const { ficha } = casos.comAtributos;
+
+  it.each(casos.comAtributos.aceitas.map((caso) => [caso.texto, caso.dados, caso.modificador] as const))(
+    "%j",
+    (texto, dados, modificador) => {
+      const leitura = lerExpressaoDeRolagem(texto, ficha);
+      expect(leitura.ok && leitura.expressao).toEqual({
+        dados: dados.map(([quantidade, faces, manter]) => ({
+          quantidade,
+          faces,
+          ...(manter && { manter: manter === ">" ? "maior" : "menor" }),
+        })),
+        modificador,
+      });
+    },
+  );
+
+  it.each(casos.comAtributos.recusadas.map((caso) => [caso.texto, caso.erro] as const))(
+    "%j é recusada por %s",
+    (texto, erro) => {
+      expect(lerExpressaoDeRolagem(texto, ficha)).toEqual({ ok: false, erro });
+    },
+  );
+});
+
 describe("textoDaExpressao", () => {
   it("escreve a forma curta", () => {
     expect(textoDaExpressao(lida("1d20+5-2*5/2"))).toBe("1d20");

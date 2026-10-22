@@ -228,6 +228,15 @@
     animation: scene-fade-in 200ms ease-out both;
   }
 
+  /* O detalhe que a busca mandou mostrar, achado na ficha: um anel que pisca
+     duas vezes para o olho pousar nele depois do salto. Aplicada à mão quando
+     o foco chega -- ver o efeito de `useFocoNoDetalhe` em `DetalhesDoJogador`.
+     Quem pediu menos movimento recebe só o salto, sem o anel. */
+  .detalhe-em-destaque {
+    animation: detalhe-em-destaque 0.85s ease-in-out 2;
+    border-radius: 0.375rem;
+  }
+
   /* Os efeitos de condição na figura. Ver `FiguraComEfeitos`.
 
      Os três animam só `opacity` e `transform`, que o compositor anima fora da
@@ -415,6 +424,18 @@
 @keyframes scene-fade-in {
   from {
     opacity: 0;
+  }
+}
+
+/* O anel do detalhe em destaque, do nada ao anel e de volta: dois ciclos
+   deixam duas piscadas. Ver `.detalhe-em-destaque`. */
+@keyframes detalhe-em-destaque {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  45% {
+    box-shadow: 0 0 0 2px var(--color-ring);
   }
 }
 
