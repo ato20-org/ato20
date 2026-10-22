@@ -4,6 +4,7 @@ import { memo, type PointerEvent as ReactPointerEvent } from "react";
 
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
+import { useGiroDesenrolado } from "@/hooks/use-giro-desenrolado";
 import type { EfeitoPedido } from "@/lib/condicao";
 import type { Variante } from "@/lib/vault/assets";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,11 @@ export const CanvasItemView = memo(function CanvasItemView({
   onPointerDown,
 }: CanvasItemViewProps) {
   const url = useAssetUrl(item.assetId, variante);
+  // No espectador a transição de `transform` (ver `.scene-smooth-item`) levaria
+  // o salto de 359° para 0° pelo arco longo, e o token daria uma volta inteira
+  // ao passar pela base. No Mestre não há transição, e o desenrolado desenha
+  // igual ao bruto.
+  const rotation = useGiroDesenrolado(item.rotation);
   // Item travado continua clicável — é o único jeito de selecioná-lo para
   // destravar. O que o travamento bloqueia é o arrasto, decidido no Mestre.
   const interactive = Boolean(onPointerDown);
@@ -92,7 +98,7 @@ export const CanvasItemView = memo(function CanvasItemView({
       // `rotate` depois do `translate`, e a origem segue o centro do próprio
       // item, então girar continua sendo em torno do centro.
       style={{
-        transform: `translate(${item.x}px, ${item.y}px) rotate(${item.rotation}deg)`,
+        transform: `translate(${item.x}px, ${item.y}px) rotate(${rotation}deg)`,
         width: item.width,
         height: item.height,
         zIndex: item.z,

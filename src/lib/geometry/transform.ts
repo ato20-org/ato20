@@ -235,6 +235,23 @@ export function normalizeAngle(degrees: number): number {
   return ((degrees % 360) + 360) % 360;
 }
 
+/**
+ * O representante de `alvo` mais próximo de `anterior`, somando voltas inteiras.
+ *
+ * O giro viaja normalizado em 0–360 (`normalizeAngle`), então cruzar a base
+ * salta de 359° para 0°. Uma transição de CSS sobre `rotate()` não sabe que giro
+ * é cíclico: ela interpola esse salto pelo arco longo, e o token dá uma volta
+ * inteira na TV. Aqui devolvemos um ângulo que pode passar de 360° (ou ficar
+ * negativo), mas que fica sempre a menos de meia-volta de `anterior` — mesmo
+ * desenho (`rotate(370deg)` == `rotate(10deg)`) e a transição anda só o arco
+ * curto. Quem chama guarda o resultado e o passa como `anterior` na amostra
+ * seguinte. Ver `useGiroDesenrolado`.
+ */
+export function desenrolarAngulo(anterior: number, alvo: number): number {
+  const delta = ((((alvo - anterior + 180) % 360) + 360) % 360) - 180;
+  return anterior + delta;
+}
+
 export function snapAngle(degrees: number, step = ROTATION_SNAP_DEGREES): number {
   return Math.round(degrees / step) * step;
 }
