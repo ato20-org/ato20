@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionAudio } from "@/components/playground/session-audio";
+import { AvisoDeConexao } from "@/components/playground/aviso-de-conexao";
 import { CenaDeEsguelha } from "@/components/playground/cena-de-esguelha";
 import { ControlesDeZoom } from "@/components/playground/controles-de-zoom";
 import {
@@ -51,6 +52,7 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
     iniciativa,
     synced,
     stalled,
+    conexao,
   } = useSubscription(codigo);
   // A vez, para a marca nos retratos. Ver `useVezDaMesaStore`.
   useDefinirVezDaMesa(iniciativa?.vezDe ?? null);
@@ -165,6 +167,8 @@ export function EspectadorStage({ codigo }: { codigo: string }) {
           cortina (`z-20`) pintavam por cima dele sempre que a tela sobrava em
           cima e embaixo, e o botão continuava clicável sem aparecer. */}
       <SoundToggle className="absolute top-3 right-3 z-30 opacity-40 hover:opacity-100" />
+
+      <AvisoDeConexao conexao={conexao} />
 
       {/* Fora do ajuste de imagem, como o som. Some com a evidência no ar: ela
           cobre o mapa, e o botão ficaria sobre a imagem que a mesa foi chamada

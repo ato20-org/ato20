@@ -223,6 +223,13 @@ const pt = {
     aguardando: "Aguardando o Mestre…",
   },
 
+  /** A tarja de quem assiste quando o fio cai no meio da sessão. Ver `AvisoDeConexao`. */
+  conexao: {
+    reconectando: "Sem conexão com a mesa. Reconectando…",
+    mesaFechada: "O mestre fechou a mesa. Esperando ela abrir de novo…",
+    recusado: "Esta tela não é mais da mesa aberta. Peça o link novo ao mestre.",
+  },
+
   /** O zoom de quem assiste, no canto do mapa. Ver `ControlesDeZoom`. */
   zoom: {
     rotulo: "Zoom do mapa",
@@ -525,6 +532,12 @@ const en: typeof pt = {
     nadaNoAr: "The GM hasn't put anything on air.",
     semResposta: "No answer. The GM screen needs to be open.",
     aguardando: "Waiting for the GM…",
+  },
+
+  conexao: {
+    reconectando: "Lost connection to the table. Reconnecting…",
+    mesaFechada: "The GM closed the table. Waiting for it to reopen…",
+    recusado: "This screen no longer belongs to the open table. Ask the GM for the new link.",
   },
 
   zoom: {

@@ -3,6 +3,7 @@
 import { Maximize, Minimize } from "lucide-react";
 
 import { CenaDoJogador } from "@/components/jogador/cena-do-jogador";
+import { AvisoDeConexao } from "@/components/playground/aviso-de-conexao";
 import { ControlesDeZoom } from "@/components/playground/controles-de-zoom";
 import {
   CortinaDeCorte,
@@ -15,6 +16,7 @@ import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
+import type { EstadoDaConexao } from "@/lib/sync/channel";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
 import type { EfeitoDisparado } from "@/types/efeito-disparado";
@@ -59,6 +61,7 @@ export function JogadorStage({
   laser,
   synced,
   stalled,
+  conexao,
   expandida,
   onTelaCheia,
 }: {
@@ -88,6 +91,8 @@ export function JogadorStage({
   laser: LaserNaMesa | null;
   synced: boolean;
   stalled: boolean;
+  /** O fio com o daemon no meio da sessão. Ver `Subscription.conexao`. */
+  conexao: EstadoDaConexao | null;
   /** A moldura cobre a tela. Ver `JogadorShell`. */
   expandida: boolean;
   onTelaCheia: () => void;
@@ -181,6 +186,10 @@ export function JogadorStage({
             faixa preta lateral do mapa, e com cena carregada uma camada dele
             pintava por cima -- o som, mais para dentro, escapava. */}
         <SoundToggle className="absolute top-2 right-12 z-30" />
+
+        {/* Abaixo do som e da tela cheia: no celular estreito, a tarja no topo
+            passaria por cima dos dois. */}
+        <AvisoDeConexao conexao={conexao} className="top-14" />
 
         <button
           type="button"

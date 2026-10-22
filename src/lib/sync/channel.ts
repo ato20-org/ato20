@@ -222,7 +222,33 @@ export const SCENE_BROADCAST_INTERVAL_MS = 100;
 export interface SceneChannel {
   /** Só o Mestre chama. Num canal de espectador é inerte. */
   publish(state: LiveState): void;
-  /** Devolve a função de cancelamento. */
-  subscribe(handler: (state: LiveState) => void): () => void;
+  /**
+   * Devolve a função de cancelamento. `aoMudarConexao` ouve cada troca do
+   * `EstadoDaConexao` -- só o canal de espectador fala nele.
+   */
+  subscribe(
+    handler: (state: LiveState) => void,
+    aoMudarConexao?: (estado: EstadoDaConexao) => void,
+  ): () => void;
   close(): void;
 }
+
+/**
+ * Como está o fio entre quem assiste e o daemon. Ver o vigia em
+ * `createSubscriberChannel`.
+ */
+export type EstadoDaConexao =
+  /** O fluxo está aberto e dando sinal de vida. */
+  | "no-ar"
+  /** Caiu, ou emudeceu sem fechar, e está tentando de novo. */
+  | "reconectando"
+  /**
+   * O daemon responde, mas sem campanha aberta: o Mestre fechou o app e voltou,
+   * ou está trocando de campanha. Continua tentando.
+   */
+  | "mesa-fechada"
+  /**
+   * A campanha aberta é outra, e o código desta tela não vale nela. Desistiu:
+   * insistir só gastaria as tentativas que o daemon conta contra quem erra.
+   */
+  | "recusado";

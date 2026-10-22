@@ -12,7 +12,7 @@ import { seguirIdiomaDaMesa } from "@/lib/i18n/da-mesa";
 import { idioma } from "@/lib/i18n/idioma";
 import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
-import type { LiveState } from "@/lib/sync/channel";
+import type { EstadoDaConexao, LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
 import type { LaserNaMesa } from "@/types/laser";
@@ -290,6 +290,11 @@ export type Subscription = {
   synced: boolean;
   /** Passou tempo demais sem nada. */
   stalled: boolean;
+  /**
+   * O fio com o daemon DEPOIS de aberto: `stalled` cobre a primeira espera, e
+   * isto cobre a queda no meio da sessão. `null` até a primeira conexão.
+   */
+  conexao: EstadoDaConexao | null;
 };
 
 /**
@@ -314,6 +319,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
   });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
+  const [conexao, setConexao] = useState<EstadoDaConexao | null>(null);
 
   useEffect(() => {
     const channel = createSubscriber(codigo, base);
@@ -326,7 +332,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
       setLive(state);
       setSynced(true);
       setStalled(false);
-    });
+    }, setConexao);
 
     // Sem pedido nem reenvio: o daemon manda o estado atual na conexão. O que
     // resta é o relógio que distingue "esperando" de "algo está errado".
@@ -370,5 +376,6 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     iniciativa: live.iniciativa ?? null,
     synced,
     stalled,
+    conexao,
   };
 }
