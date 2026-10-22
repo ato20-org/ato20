@@ -81,7 +81,10 @@ export const TIPOS_DADO: readonly TipoDado[] = [
   { faces: 100, nome: "d%", hex: "#0f766e", tinta: "#ccfbf1", escala: 1.02 },
   { faces: 8, nome: "d8", hex: "#15803d", tinta: "#dcfce7", escala: 0.92 },
   { faces: 6, nome: "d6", hex: "#b45309", tinta: "#fef3c7", escala: 0.82 },
-  { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#44403c", escala: 1.22 },
+  // Tinta quase preta, e não o cinza-escuro de antes: é osso CLARO, e no cinza
+  // o número nascia com pouco contraste. O dado mais claro do jogo precisa da
+  // tinta mais escura para o número se ler.
+  { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#1c1917", escala: 1.22 },
   // Por último, porque não é dado. Dourada, com a tinta escura: moeda é a
   // única coisa do saquinho que a mesa reconhece pelo brilho antes da forma.
   { faces: 2, nome: t.dados.moeda, hex: "#ca8a04", tinta: "#422006", escala: 1.1 },
