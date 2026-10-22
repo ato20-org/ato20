@@ -183,8 +183,9 @@ webkit2gtk = "2.0"
 # Cada teste do vault precisa de uma campanha propria num diretorio que se
 # apague sozinho: testes que compartilham pasta passam isolados e falham juntos.
 tempfile = "3"
-# `#[tokio::test]` para exercitar o router sem abrir porta.
-tokio = { version = "1", features = ["rt", "macros"] }
+# `#[tokio::test]` para exercitar o router sem abrir porta. `test-util` pelo
+# relogio pausado: o batimento do `/sala/live` se confere sem dormir 5 s.
+tokio = { version = "1", features = ["rt", "macros", "test-util"] }
 
 # As DEPENDENCIAS otimizadas mesmo em `tauri dev`; o codigo do aplicativo
 # continua em debug, com os simbolos e a compilacao rapida de sempre.
