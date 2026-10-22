@@ -381,6 +381,21 @@ function poliedro(brutos: readonly Vec3[]): {
     };
     noPlano.sort((a, b) => angulo(a) - angulo(b));
 
+    // Ancora o começo no vértice de MENOR índice, preservando a ordem cíclica.
+    // O `atan2` acima tem o corte em ±π: o vértice bem atrás da base provisória
+    // sai com ângulo perto de +π num motor e de −π noutro, e cai ora no fim ora
+    // no começo do array — a lista inteira gira de uma posição. Mesma face, mesmo
+    // polígono, mas `points` diferente. No SSR (V8 do Node) e no cliente (o
+    // JavaScriptCore do WebKitGTK) isso dava hydration mismatch, visível na borda
+    // da moeda. O índice do vértice é inteiro e idêntico nos dois motores, então
+    // ancorar nele torna a saída determinística. Rotação preserva a ordem
+    // cíclica, então `u` continua numa aresta e o enrolamento, de fora.
+    const inicio = noPlano.reduce(
+      (menor, item, i) => (item.indice < noPlano[menor].indice ? i : menor),
+      0,
+    );
+    noPlano.push(...noPlano.splice(0, inicio));
+
     /**
      * `u` acompanha uma ARESTA, não a direção de um canto.
      *
