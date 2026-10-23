@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { pedacosComRolagens, temRolagemNoTexto, textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
+import {
+  lerReguaDoTexto,
+  MAX_METROS_DA_REGUA,
+  numeroDaRegua,
+  pedacosComRolagens,
+  temReguaNoTexto,
+  temRolagemNoTexto,
+  textoSemChaves,
+} from "@/lib/mestre/rolagens-no-texto";
 import { descartadosDe, entraNaSoma, regraDosDescartados } from "@/types/dado";
 
 describe("as rolagens entre chaves no texto da ficha", () => {
@@ -96,3 +104,51 @@ describe("a sigla do atributo que é um dado, no texto", () => {
     });
   });
 });
+
+describe("a régua entre chaves", () => {
+  it("m é a régua reta, e ° o círculo com o número no raio", () => {
+    expect(lerReguaDoTexto("9m")).toEqual({ forma: "linha", metros: 9 });
+    expect(lerReguaDoTexto("6°")).toEqual({ forma: "circulo", metros: 6 });
+    // O ordinal do teclado brasileiro vale como o grau, e a unidade não
+    // diferencia maiúscula.
+    expect(lerReguaDoTexto("6º")).toEqual({ forma: "circulo", metros: 6 });
+    expect(lerReguaDoTexto(" 9 M ")).toEqual({ forma: "linha", metros: 9 });
+  });
+
+  it("lê a vírgula e o ponto", () => {
+    expect(lerReguaDoTexto("1,5m")).toEqual({ forma: "linha", metros: 1.5 });
+    expect(lerReguaDoTexto("1.5°")).toEqual({ forma: "circulo", metros: 1.5 });
+  });
+
+  it("não é régua o que não é só número e unidade, nem o zero, nem o enorme", () => {
+    for (const texto of ["m", "9", "9 metros", "9km", "-3m", "9m+1", "1d20m", "0m", "0,0°", "1,234m"]) {
+      expect(lerReguaDoTexto(texto)).toBeNull();
+    }
+    expect(lerReguaDoTexto(`${MAX_METROS_DA_REGUA}m`)).not.toBeNull();
+    expect(lerReguaDoTexto(`${MAX_METROS_DA_REGUA + 1}m`)).toBeNull();
+  });
+
+  it("vira um pedaço ao lado das rolagens, guardando como foi escrita", () => {
+    const pedacos = pedacosComRolagens("Anda {9m}, explode {1,5°} e causa {2d6}");
+
+    expect(pedacos.map((pedaco) => [pedaco.tipo, pedaco.texto])).toEqual([
+      ["texto", "Anda "],
+      ["regua", "9m"],
+      ["texto", ", explode "],
+      ["regua", "1,5°"],
+      ["texto", " e causa "],
+      ["rolagem", "2d6"],
+    ]);
+    const explode = pedacos[3]!;
+    expect(explode).toEqual({ tipo: "regua", texto: "1,5°", forma: "circulo", metros: 1.5 });
+    expect(explode.tipo === "regua" && numeroDaRegua(explode)).toBe("1,5");
+  });
+
+  it("a régua não é rolagem, e no celular perde as chaves", () => {
+    expect(temReguaNoTexto("Deslocamento: {9m}")).toBe(true);
+    expect(temRolagemNoTexto("Deslocamento: {9m}")).toBe(false);
+    expect(temReguaNoTexto("{9 metros}")).toBe(false);
+    expect(textoSemChaves("Deslocamento: {9m}, {nada}")).toBe("Deslocamento: 9m, {nada}");
+  });
+});
+

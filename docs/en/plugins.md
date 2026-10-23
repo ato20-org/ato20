@@ -1223,6 +1223,15 @@ collection; the sheets live in a file next to it:
   and posts to the feed with the sheet's name and the detail's label. A brace
   that isn't an expression stays text, and on the phone the braces go away,
   with no button (the daemon rolls there, and it only reads `rolagem`).
+- **A ruler inside text:** in the same places, a number with `m` between
+  braces becomes the measure button: `"Movement: {9m}"` puts a nine-meter
+  straight ruler on the map, and `"Blast: {6°}"` a circle with a six-meter
+  radius (`º` works as `°`). The ruler starts at the token of the sheet's
+  character, or at the center of what the GM is looking at when there's none
+  on the scene, like a bestiary sheet, with its measure locked: the tip turns
+  and the size stays, until the gizmo's padlock frees it. It's a ruler like the
+  toolbar's: the table sees it, and Ctrl+Z removes it. Commas work (`{1,5m}`), up to 300 m. On
+  the phone only the measure shows, with no button.
 - **Keep the highest, or the lowest:** `>` or `<` right after a dice term
   keeps only its highest or lowest die. `6d20>+45` is six d20, the highest of
   them plus 45, the Ordem test. `2d20<` is disadvantage. The other dice still

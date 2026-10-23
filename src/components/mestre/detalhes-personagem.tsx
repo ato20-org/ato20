@@ -46,7 +46,7 @@ import { t } from "@/lib/i18n/personagens";
 import { normaliza } from "@/lib/search";
 import { useMoldeDeDetalhes, useMoldeDeDetalhesStore } from "@/lib/store/use-molde-de-detalhes-store";
 import { cn } from "@/lib/utils";
-import { temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
+import { temReguaNoTexto, temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
 import { TextoComRolagens } from "@/components/mestre/texto-com-rolagens";
 import {
   criarDetalhe,
@@ -939,7 +939,7 @@ export function CampoDeTexto({
  *
  * O texto com rolagem entre chaves ("{6d20>+35}") aparece como o botão de
  * rolar, e não como o campo: o campo mostraria as chaves cruas, e a perícia
- * não rolaria de lugar nenhum. Clicar fora do botão abre o campo, e sair dele
+ * não rolaria de lugar nenhum. A régua ("{9m}") também, com o botão de medir. Clicar fora do botão abre o campo, e sair dele
  * volta ao botão. Só quando quem chama dá o `rotuloDaRolagem` -- é ele que vai
  * ao fio.
  */
@@ -988,7 +988,7 @@ export function ValorDoDetalhe({
   const texto =
     typeof detalhe.valor === "string" ? detalhe.valor : detalhe.valor === undefined ? "" : String(detalhe.valor);
 
-  if (rotuloDaRolagem && !editando && temRolagemNoTexto(texto, atributos)) {
+  if (rotuloDaRolagem && !editando && (temRolagemNoTexto(texto, atributos) || temReguaNoTexto(texto))) {
     return (
       <span
         role="button"

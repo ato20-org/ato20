@@ -4,8 +4,22 @@ import {
   type ExpressaoDeRolagem,
 } from "@/lib/mestre/expressao-de-rolagem";
 import { MAX_ROLAGEM } from "@/types/detalhe";
+import type { FormaDaRegua } from "@/types/scene";
 
-/** Um pedaço do texto: solto, ou uma rolagem que estava entre chaves. */
+/** As formas de régua que a ficha escreve entre chaves. Ver `lerReguaDoTexto`. */
+export type FormaDaReguaNoTexto = Extract<FormaDaRegua, "linha" | "circulo">;
+
+/** Uma régua escrita entre chaves: a forma, e quanto ela mede. */
+export type ReguaDoTexto = {
+  forma: FormaDaReguaNoTexto;
+  /** O comprimento da linha, ou o raio do círculo. */
+  metros: number;
+};
+
+/**
+ * Um pedaço do texto: solto, ou uma rolagem ou uma régua que estavam entre
+ * chaves.
+ */
 export type PedacoDoTexto =
   | { tipo: "texto"; texto: string }
   | {
@@ -16,7 +30,12 @@ export type PedacoDoTexto =
       expressao: ExpressaoDeRolagem;
       /** As siglas que a conta leu, e quanto valeram. Ver `lerExpressaoDeRolagem`. */
       siglas?: AtributoDaConta[];
-    };
+    }
+  | ({
+      tipo: "regua";
+      /** Como o autor escreveu, sem as chaves: `9m`, `1,5°`. */
+      texto: string;
+    } & ReguaDoTexto);
 
 /**
  * Uma rolagem entre chaves, numa linha só e do tamanho de uma `rolagem` de
@@ -24,11 +43,42 @@ export type PedacoDoTexto =
  */
 const ENTRE_CHAVES = new RegExp(`\\{([^{}\\n]{1,${MAX_ROLAGEM}})\\}`, "g");
 
+/** Até quanto a régua da ficha mede, em metros. Ver `lerReguaDoTexto`. */
+export const MAX_METROS_DA_REGUA = 300;
+
 /**
- * O texto da ficha em pedaços: o que é texto, e as rolagens escritas entre
- * chaves, que a tela desenha como o botão de rolar -- "Dano: {2d10+50}
- * Sangue". Só vira rolagem o que o leitor de expressões lê; o resto, com as
- * chaves e tudo, continua texto, como o autor escreveu.
+ * O número e a unidade, e mais nada: `9m`, `1,5 m`, `3°`. O `º` (o ordinal)
+ * vale como o `°` porque é o que o teclado brasileiro tem à mão, e na tela os
+ * dois são o mesmo sinal: recusar um deles seria uma régua que não aparece sem
+ * dizer por quê.
+ */
+const REGUA = /^(\d{1,3}(?:[.,]\d{1,2})?)\s*(m|°|º)$/i;
+
+/**
+ * A régua que o texto entre chaves pede: `m` é a régua reta -- "Deslocamento:
+ * {9m}" --, e `°` o círculo, com o número no raio -- "Explosão: {6°}". `null`
+ * quando não é régua.
+ *
+ * Com teto, e não por gosto: a régua desenha uma marca por metro (e o círculo
+ * um anel), e um `{99999m}` escrito por engano seriam cem mil nós no palco de
+ * quem clicou. Acima dele, as chaves ficam texto, como a conta que não se lê.
+ */
+export function lerReguaDoTexto(texto: string): ReguaDoTexto | null {
+  const achado = REGUA.exec(texto.trim());
+  if (!achado) return null;
+
+  const metros = Number(achado[1]!.replace(",", "."));
+  if (!(metros > 0) || metros > MAX_METROS_DA_REGUA) return null;
+
+  return { forma: achado[2]!.toLowerCase() === "m" ? "linha" : "circulo", metros };
+}
+
+/**
+ * O texto da ficha em pedaços: o que é texto, e as rolagens e réguas escritas
+ * entre chaves, que a tela desenha como botões -- "Dano: {2d10+50} Sangue",
+ * "Deslocamento: {9m}". Só vira botão o que o leitor de expressões ou o de
+ * réguas lê; o resto, com as chaves e tudo, continua texto, como o autor
+ * escreveu.
  *
  * `atributos` são os da ficha onde o texto mora: com eles, `{1d20+FOR}` lê a
  * FOR dela. A sigla que a ficha não tem deixa as chaves como texto.
@@ -41,16 +91,22 @@ export function pedacosComRolagens(
   let desde = 0;
 
   for (const achado of texto.matchAll(ENTRE_CHAVES)) {
+    const escrito = achado[1]!.trim();
     const leitura = lerExpressaoDeRolagem(achado[1]!, atributos);
-    if (!leitura.ok) continue;
+    const regua = leitura.ok ? null : lerReguaDoTexto(escrito);
+    if (!leitura.ok && !regua) continue;
 
     if (achado.index > desde) pedacos.push({ tipo: "texto", texto: texto.slice(desde, achado.index) });
-    pedacos.push({
-      tipo: "rolagem",
-      texto: achado[1]!.trim(),
-      expressao: leitura.expressao,
-      ...(leitura.siglas && { siglas: leitura.siglas }),
-    });
+    pedacos.push(
+      leitura.ok
+        ? {
+            tipo: "rolagem",
+            texto: escrito,
+            expressao: leitura.expressao,
+            ...(leitura.siglas && { siglas: leitura.siglas }),
+          }
+        : { tipo: "regua", texto: escrito, ...regua! },
+    );
     desde = achado.index + achado[0].length;
   }
   if (desde < texto.length) pedacos.push({ tipo: "texto", texto: texto.slice(desde) });
@@ -63,8 +119,22 @@ export function temRolagemNoTexto(texto: string, atributos?: ReadonlyArray<Atrib
   return pedacosComRolagens(texto, atributos).some((pedaco) => pedaco.tipo === "rolagem");
 }
 
+/** O texto tem alguma régua entre chaves? Ver `lerReguaDoTexto`. */
+export function temReguaNoTexto(texto: string): boolean {
+  return pedacosComRolagens(texto).some((pedaco) => pedaco.tipo === "regua");
+}
+
 /**
- * O texto sem as chaves das rolagens, para onde não há botão: o celular, que
+ * O número da régua como o autor o escreveu, sem a unidade: `1,5` de `1,5m`.
+ * É o que o botão mostra -- a vírgula de quem escreveu, e não o ponto do
+ * `Number`.
+ */
+export function numeroDaRegua(pedaco: Extract<PedacoDoTexto, { tipo: "regua" }>): string {
+  return pedaco.texto.slice(0, -1).trim();
+}
+
+/**
+ * O texto sem as chaves das rolagens e das réguas, para onde não há botão: o celular, que
  * só rola o que o daemon lê da ficha. "Dano: {2d10+50}" lê "Dano: 2d10+50".
  * Com os `atributos` do personagem, a conta com sigla perde as chaves também,
  * escrita como o autor a escreveu: "Ataque: AGId20>+5".

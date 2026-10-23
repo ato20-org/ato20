@@ -1134,6 +1134,15 @@ num arquivo ao lado dele:
   anuncia no fio com o nome da ficha e o rótulo do detalhe. A chave que não é
   expressão continua texto, e no celular as chaves somem, sem botão (quem
   rola lá é o daemon, e ele só lê a `rolagem`).
+- **Régua no meio do texto:** no mesmo lugar, um número com `m` entre chaves
+  vira o botão de medir: `"Deslocamento: {9m}"` põe no mapa a régua reta de
+  nove metros, e `"Explosão: {6°}"` o círculo de seis metros de raio (o `º`
+  vale como o `°`). A régua nasce no token de quem é a ficha, ou no centro do
+  que o mestre está olhando quando ele não está na cena, como a ficha do
+  bestiário, com a medida travada: a ponta gira e o tamanho fica, até o
+  cadeado do gizmo soltar. É uma régua como as da barra: a mesa vê, e o Ctrl+Z
+  tira. Aceita
+  vírgula (`{1,5m}`) e vai até 300 m. No celular aparece só a medida, sem botão.
 - **Ficar com o maior, ou o menor:** `>` ou `<` logo depois de um termo de
   dados ficam só com o maior ou o menor dele. `6d20>+45` são seis d20, o
   maior deles e mais 45, o teste do Ordem. `2d20<` é a desvantagem. Os outros
