@@ -199,7 +199,7 @@ export function BarraDosGrupos({
       >
         {/* As siglas entre chaves leem os atributos DESTE personagem:
             "Ataque: {AGId20>+5}". Ver `AtributosDasRolagens`. */}
-        <AtributosDasRolagens atributos={personagem.atributos}>
+        <AtributosDasRolagens atributos={personagem.atributos} personagemId={personagem.id}>
           {buscando ? (
             <AchadosNaFicha busca={busca} {...propsDosDetalhes} />
           ) : (

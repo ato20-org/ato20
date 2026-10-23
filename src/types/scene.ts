@@ -1610,6 +1610,17 @@ export type Regua = {
   cor: string;
   /** Só o cone: abertura total em graus. Ausente = `ABERTURA_CONE_PADRAO`. */
   abertura?: number;
+  /**
+   * A medida travada: a ponta GIRA em volta da origem, e o tamanho não muda.
+   * Ausente = livre, as duas pontas esticam.
+   *
+   * Não é o `locked` dos outros elementos, e de propósito: travado lá quer
+   * dizer "não move, não gira, não apaga", e os filtros de quem anda leem
+   * aquele campo. A régua travada continua andando e saindo: o que fica é o
+   * número -- a de nove metros que a ficha pôs aponta para qualquer lado e
+   * segue com nove. Ver `girarPonta`.
+   */
+  travada?: boolean;
 };
 
 export type NovaRegua = Omit<Regua, "id">;

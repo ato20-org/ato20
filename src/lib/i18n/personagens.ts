@@ -314,6 +314,13 @@ const pt = {
     rolar: (rotulo: string, expressao: string) => `Rolar ${rotulo}: ${expressao}`,
     ficaOMaior: "↑ fica com o maior dado do termo, e ↓ com o menor",
     comAtributos: (escrita: string, valores: string) => `${escrita}, com ${valores}`,
+    /** A régua entre chaves. Ver `ReguaNoTexto`. */
+    medida: (metros: string) => `${metros} m`,
+    medirLinha: (rotulo: string, metros: string) => `Medir ${rotulo}: régua de ${metros} m`,
+    medirCirculo: (rotulo: string, metros: string) => `Medir ${rotulo}: círculo de ${metros} m de raio`,
+    reguaSemMapa: "A régua mede no mapa: abra um no palco.",
+    reguaSemGrade: "Sem grade, a régua não sabe quanto vale um metro.",
+    reguaSemGradeSaida: "Ligue a grade nas configurações do mapa, no canto de cima.",
     editarRolagem: (rotulo: string) => `Editar a rolagem de ${rotulo}`,
     opcoes: (rotulo: string) => `Opções de ${rotulo}`,
     /** O menu de três pontos do detalhe. */
@@ -885,6 +892,12 @@ const en: typeof pt = {
     rolar: (rotulo, expressao) => `Roll ${rotulo}: ${expressao}`,
     ficaOMaior: "↑ keeps the highest die of the term, and ↓ the lowest",
     comAtributos: (escrita, valores) => `${escrita}, with ${valores}`,
+    medida: (metros) => `${metros} m`,
+    medirLinha: (rotulo, metros) => `Measure ${rotulo}: ${metros} m ruler`,
+    medirCirculo: (rotulo, metros) => `Measure ${rotulo}: circle of ${metros} m radius`,
+    reguaSemMapa: "The ruler measures on a map: open one on the stage.",
+    reguaSemGrade: "Without a grid, the ruler doesn't know how long a meter is.",
+    reguaSemGradeSaida: "Turn on the grid in the map settings, in the top corner.",
     editarRolagem: (rotulo) => `Edit the roll for ${rotulo}`,
     opcoes: (rotulo) => `Options for ${rotulo}`,
     menu: {

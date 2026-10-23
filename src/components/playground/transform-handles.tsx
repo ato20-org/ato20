@@ -429,8 +429,12 @@ type TransformHandlesProps = {
    * Um par estado/ação como o olho e o teto: o cadeado MOSTRA se está travado,
    * e é por ele mesmo que se destrava -- por isso a coisa travada continua
    * selecionável.
+   *
+   * `soOTamanho` é a trava da régua, que tranca a MEDIDA e mais nada: ela
+   * continua andando, girando e saindo, então a lixeira fica, e a dica diz o
+   * que a trava faz ali. Ver `Regua.travada`.
    */
-  trava?: { travada: boolean; onToggle: () => void };
+  trava?: { travada: boolean; onToggle: () => void; soOTamanho?: boolean };
   /**
    * Presente = mostra o botão da ALTURA, que abre a régua ao lado da caixa.
    *
@@ -1615,9 +1619,13 @@ export function TransformHandles({
                   <button
                     type="button"
                     aria-label={
-                      travada
-                        ? t.transformHandles.destravar
-                        : t.transformHandles.travar
+                      trava.soOTamanho
+                        ? travada
+                          ? t.transformHandles.destravarMedida
+                          : t.transformHandles.travarMedida
+                        : travada
+                          ? t.transformHandles.destravar
+                          : t.transformHandles.travar
                     }
                     aria-pressed={travada}
                     className={cn(
@@ -1650,14 +1658,18 @@ export function TransformHandles({
                 }
               />
               <TooltipContent>
-                {travada
-                  ? t.transformHandles.travadoDica
-                  : t.transformHandles.travarDica}
+                {trava.soOTamanho
+                  ? travada
+                    ? t.transformHandles.medidaTravadaDica
+                    : t.transformHandles.travarMedidaDica
+                  : travada
+                    ? t.transformHandles.travadoDica
+                    : t.transformHandles.travarDica}
               </TooltipContent>
             </Tooltip>
           ) : null}
 
-          {onDelete && !travada ? (
+          {onDelete && (!travada || trava?.soOTamanho) ? (
             <Tooltip>
               <TooltipTrigger
                 render={

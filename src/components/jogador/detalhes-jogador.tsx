@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Info } from "lucide-react";
+import { ChevronRight, Circle, Info, Ruler } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -35,7 +35,7 @@ import {
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { useFocoNoDetalhe } from "@/lib/store/use-foco-no-detalhe";
 import { cn } from "@/lib/utils";
-import { pedacosComRolagens, temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
+import { numeroDaRegua, pedacosComRolagens, temRolagemNoTexto } from "@/lib/mestre/rolagens-no-texto";
 import { facesParaDesenhar } from "@/lib/mestre/valor-do-atributo";
 import { rotulosDoDado } from "@/types/dado";
 import { doGrupo, gruposDaFicha, type GrupoDeDetalhes } from "@/types/detalhe";
@@ -466,6 +466,9 @@ function EntradaDoJogador({
  * sorteia é o daemon -- ver `rolarNoTexto`. As siglas leem os atributos do
  * personagem (`AtributosDasRolagens`), e o desenho é só para mostrar: quem
  * rola relê a AGI de agora.
+ *
+ * A régua entre chaves ("{9m}") aparece como a medida, sem botão: quem põe
+ * régua no mapa é o Mestre, e o celular não mexe na cena.
  */
 export function TextoDoDetalhe({
   texto,
@@ -479,21 +482,39 @@ export function TextoDoDetalhe({
   const atributos = useAtributosDasRolagens();
   const pedacos = useMemo(() => pedacosComRolagens(texto, atributos), [texto, atributos]);
 
-  return pedacos.map((pedaco, i) =>
-    pedaco.tipo === "texto" ? (
-      <Fragment key={i}>{pedaco.texto}</Fragment>
-    ) : (
-      <BotaoDaExpressao
-        key={i}
-        expressao={pedaco.expressao}
-        rotulo={rotulo}
-        pedir={() => pedir(pedaco.texto)}
-        // Na linha da frase, e não como bloco: uma frase com três contas não
-        // pode virar três linhas.
-        className="text-foreground inline-flex align-middle"
-      />
-    ),
-  );
+  return pedacos.map((pedaco, i) => {
+    switch (pedaco.tipo) {
+      case "texto":
+        return <Fragment key={i}>{pedaco.texto}</Fragment>;
+      case "rolagem":
+        return (
+          <BotaoDaExpressao
+            key={i}
+            expressao={pedaco.expressao}
+            rotulo={rotulo}
+            pedir={() => pedir(pedaco.texto)}
+            // Na linha da frase, e não como bloco: uma frase com três contas não
+            // pode virar três linhas.
+            className="text-foreground inline-flex align-middle"
+          />
+        );
+      case "regua": {
+        const numero = numeroDaRegua(pedaco);
+        const Icone = pedaco.forma === "linha" ? Ruler : Circle;
+
+        return (
+          <span
+            key={i}
+            title={(pedaco.forma === "linha" ? t.personagens.reguaLinha : t.personagens.reguaCirculo)(numero)}
+            className="text-foreground inline-flex items-center gap-0.5 align-middle tabular-nums"
+          >
+            <Icone aria-hidden className="size-3.5 shrink-0" />
+            {t.personagens.medida(numero)}
+          </span>
+        );
+      }
+    }
+  });
 }
 
 /**

@@ -19,7 +19,6 @@ import { createElement, useEffect, useMemo } from "react";
 import { BarreiraDeExtensao } from "@/components/mestre/barreira-de-extensao";
 import { BotaoDoDisparo } from "@/components/mestre/disparo-control";
 import { BotaoDeElementos } from "@/components/mestre/pilula-de-desenho";
-import { ReguaControl } from "@/components/mestre/regua-control";
 import { PostitControl } from "@/components/mestre/postit-control";
 import { Button } from "@/components/ui/button";
 import {
@@ -475,19 +474,20 @@ export function ReguaDoMapa({ scene }: { scene: Scene }) {
 /**
  * O risco e o controle da ferramenta do mapa que está na mão, ou nada.
  *
- * Postit e régua de medir são as duas do mapa com preferência antes do gesto --
- * a cor do papel, a forma do medidor. O ponto não tem o que perguntar antes.
+ * Só o postit pergunta aqui, a cor do papel. A régua de medir perguntava a
+ * forma e a cor num popover desta borda; foi para o painel do canto de baixo,
+ * que também serve à régua já colocada. Ver `PainelDaRegua`. O ponto não tem o
+ * que perguntar antes.
  */
 function ControleDoMapa() {
   const tool = useToolStore((state) => state.tool);
 
-  if (tool !== "postit" && tool !== "regua") return null;
+  if (tool !== "postit") return null;
 
   return (
     <>
       <span className="bg-border my-1 h-px w-5" />
-      {tool === "postit" ? <PostitControl lado="left" /> : null}
-      <ReguaControl lado="left" />
+      <PostitControl lado="left" />
     </>
   );
 }
