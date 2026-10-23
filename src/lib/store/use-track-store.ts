@@ -152,7 +152,12 @@ type TrackStore = SessionAudio & {
    */
   adicionarMacro: (assetId: string) => void;
   removerMacro: (id: string) => void;
-  /** O mesmo que a tecla faz, sem tecla. Ver `acionarPad`. */
+  /**
+   * Põe a tecla na macro, ou a tira com `null`. Recusa a que já é de outra
+   * macro -- quem grava já mostra de quem ela é; isto é a guarda.
+   */
+  definirTeclaDaMacro: (id: string, tecla: string | null) => void;
+  /** O que a tecla do pad faz, pelo clique ou pela tecla da macro. Ver `acionarPad`. */
   acionarMacro: (id: string) => void;
 
   /**
@@ -408,6 +413,29 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   removerMacro(id) {
     gravar(set, get, {
       macros: get().macros.filter((macro) => macro.id !== id),
+    });
+  },
+
+  definirTeclaDaMacro(id, tecla) {
+    const { macros } = get();
+
+    // Uma tecla, um som: a regra do pad, do outro lado. Duas macros na mesma
+    // tecla seriam uma que toca e outra que nunca toca -- a tabela de atalhos
+    // só executa a primeira que casa.
+    if (tecla !== null && macros.some((macro) => macro.id !== id && macro.tecla === tecla)) {
+      return;
+    }
+
+    gravar(set, get, {
+      macros: macros.map((macro) =>
+        macro.id !== id
+          ? macro
+          : // Sem tecla volta a ser a macro de antes, sem o campo: o
+            // `trilha.json` não ganha um `"tecla": null` por som da lista.
+            tecla === null
+            ? { id: macro.id, assetId: macro.assetId }
+            : { ...macro, tecla },
+      ),
     });
   },
 

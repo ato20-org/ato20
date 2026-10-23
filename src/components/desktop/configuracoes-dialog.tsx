@@ -47,7 +47,9 @@ import { SecaoMcp } from "@/components/desktop/secao-mcp";
 import { Sobre } from "@/components/desktop/sobre";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
 import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
+import { useTrackStore } from "@/lib/store/use-track-store";
 import {
   DEGRAUS_ZOOM,
   usePreferenciasStore,
@@ -406,6 +408,10 @@ function PainelTeclado() {
   // store por fora do React. Sem esta assinatura, ligar uma extensão com a tela
   // aberta não acrescentaria os atalhos dela aqui.
   useExtensoesStore((state) => state.extensoes);
+  // Pelo mesmo motivo, as teclas das macros e o nome de cada som: a linha
+  // "Acionar Trovão" é desenhada a partir dos dois.
+  useTrackStore((state) => state.macros);
+  useAssetsStore((state) => state.audio.assets);
 
   const grupos = atalhosPorGrupo();
 
