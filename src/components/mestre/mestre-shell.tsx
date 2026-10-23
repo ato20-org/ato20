@@ -21,6 +21,7 @@ import { WindowLayer } from "@/components/mestre/window-layer";
 import { OnAirControl } from "@/components/mestre/on-air-control";
 import { MestreStage } from "@/components/mestre/mestre-stage";
 import { MestreToolbar, ReguaDoMapa } from "@/components/mestre/mestre-toolbar";
+import { PainelDaRegua } from "@/components/mestre/painel-da-regua";
 import { PainelDeElementos } from "@/components/mestre/painel-de-elementos";
 import { useFotografoDasCameras } from "@/hooks/use-fotografo-das-cameras";
 import { PainelDeTexto } from "@/components/mestre/painel-de-texto";
@@ -706,13 +707,15 @@ function StageBoundary({
 
             {/* Os painéis do canto: o do pincel com o lápis ou uma das
                 borrachas na mão, o de Elementos com parede, área, forma ou
-                efeito, o de texto com a ferramenta T ou um texto selecionado.
-                Um de cada vez, porque é uma ferramenta de cada vez. Ancorados
-                embaixo, crescem para cima. */}
+                efeito, o de texto com a ferramenta T ou um texto selecionado,
+                o da régua com ela na mão ou uma régua selecionada. Um de cada
+                vez, porque é uma ferramenta de cada vez. Ancorados embaixo,
+                crescem para cima. */}
             <div className="absolute bottom-3 -left-2 flex flex-col items-start gap-2">
               <PainelDoPincel />
               <PainelDeElementos scene={scene} />
               <PainelDeTexto />
+              <PainelDaRegua scene={scene} />
             </div>
           </>
         ) : (

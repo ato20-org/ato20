@@ -19,6 +19,7 @@ import { DadoLayer } from "@/components/mestre/dado-layer";
 import { PinLayer } from "@/components/mestre/pin-layer";
 import { LuzMarcadores } from "@/components/mestre/luz-marcadores";
 import { RodaDaLanterna } from "@/components/mestre/roda-da-lanterna";
+import { GizmoDaRegua } from "@/components/mestre/gizmo-da-regua";
 import { PainelDaLuz } from "@/components/mestre/painel-da-luz";
 import { ParedeLayer } from "@/components/mestre/parede-layer";
 import { PortaMarcadores } from "@/components/mestre/porta-marcadores";
@@ -75,7 +76,7 @@ import {
   portaDoTraco,
 } from "@/lib/geometry/porta";
 import { postitNaArea } from "@/lib/geometry/postit";
-import { reguaVazia, moverRegua } from "@/lib/geometry/regua";
+import { girarPonta, reguaVazia, moverRegua } from "@/lib/geometry/regua";
 import type { PontaDoMedidor } from "@/components/playground/regua-layer";
 import { AlignmentGuides } from "@/components/playground/alignment-guides";
 import { CameraFrame } from "@/components/playground/camera-frame";
@@ -907,6 +908,9 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
   const caixaDaPortaNaMao = selectedPorta
     ? boundsToBox(boundsFromPoints(selectedPorta, pontaDaPorta(selectedPorta, true)))
     : null;
+  const selectedMedidor = selectedMedidorId
+    ? scene.medidores?.find((medidor) => medidor.id === selectedMedidorId)
+    : undefined;
   /**
    * A caixa que cerca o que está na mão, quando é mais de um.
    *
@@ -2018,7 +2022,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
     });
   }
 
-  /** Alça numa ponta: só aquela ponta anda. */
+  /**
+   * Alça numa ponta: só aquela ponta anda. Na régua travada a ponta GIRA em
+   * volta da origem e a medida fica -- a camada nem desenha a alça da origem
+   * nela. Ver `Regua.travada`.
+   */
   function onMedidorAlcaPointerDown(
     event: ReactPointerEvent,
     medidor: Regua,
@@ -2033,9 +2041,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
         updateMedidor(
           scene.id,
           medidor.id,
-          ponta === "origem"
-            ? { x: onde.x, y: onde.y }
-            : { x2: onde.x, y2: onde.y },
+          medidor.travada
+            ? girarPonta(medidor, onde)
+            : ponta === "origem"
+              ? { x: onde.x, y: onde.y }
+              : { x2: onde.x, y2: onde.y },
         );
       },
     });
@@ -3846,6 +3856,13 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           }}
           onDelete={removePortaSelection}
         />
+      ) : null}
+
+      {/* A fileira da régua: forma, cadeado da medida e lixeira. Só com a
+          seta: com a régua na mão, a que está selecionada é a que acabou de
+          nascer, e a fileira andaria junto com o arrasto. Ver `GizmoDaRegua`. */}
+      {selectedMedidor && scene.grid && tool === "select" && !panMode ? (
+        <GizmoDaRegua key={selectedMedidor.id} sceneId={scene.id} regua={selectedMedidor} />
       ) : null}
 
       {/* As alças de vértice da forma em LAÇO. A caixa dela já é governada
