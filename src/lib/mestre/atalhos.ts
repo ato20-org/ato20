@@ -54,6 +54,8 @@ import {
 import { useQuadroStore } from "@/lib/store/use-quadro-store";
 import { selectEditingScene } from "@/lib/store/use-scene-store";
 import { executarComando } from "@/lib/extensoes/carregar";
+import { rotuloDaTecla, teclaDoEvento } from "@/lib/mestre/tecla-de-som";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
 import { usePaletaStore } from "@/lib/store/use-paleta-store";
@@ -827,19 +829,86 @@ export const ATALHOS_BASE: Atalho[] = [
 ];
 
 /**
- * A tabela que vale AGORA: a de fábrica mais os comandos dos plugins.
+ * A tabela que vale AGORA: a de fábrica, as macros que ganharam tecla e os
+ * comandos dos plugins.
  *
  * Os do plugin entram DEPOIS, e isso é a regra inteira de conflito. A ordem da
  * tabela é a precedência -- quem casa primeiro executa --, então um `Ctrl+Z`
  * declarado por uma extensão nunca alcança o desfazer. Não é preciso conferir
  * colisão em lugar nenhum: a ordem já decide, e decide a favor do aplicativo.
  *
+ * As macros ficam no meio. Depois da fábrica, que nem chegam a disputar:
+ * `donoDaTecla` recusa a tecla tomada na hora de gravar. Antes dos plugins,
+ * porque a tecla da macro foi o mestre quem escolheu, olhando o som -- e o
+ * plugin instalado depois que declarar a mesma não pode calar a trovoada dele.
+ *
  * Função e não constante porque a lista depende do que está instalado e
  * habilitado. O listener a chama a cada tecla, e isso é barato: são poucas
  * entradas, e a alternativa seria remontar o ouvinte a cada mudança de plugin.
  */
 export function atalhos(): Atalho[] {
-  return [...ATALHOS_BASE, ...atalhosDeExtensoes()];
+  return [...ATALHOS_BASE, ...atalhosDasMacros(), ...atalhosDeExtensoes()];
+}
+
+/**
+ * As macros que ganharam tecla, como entradas da tabela.
+ *
+ * Pela tabela, e não por um ouvinte próprio, pelo motivo do arquivo inteiro: é
+ * ela que as Configurações e a paleta desenham. Uma tecla de som que não
+ * aparecesse na lista de atalhos seria uma que o mestre esquece que gravou.
+ */
+function atalhosDasMacros(): Atalho[] {
+  const sons = useAssetsStore.getState().audio.assets ?? [];
+
+  return useTrackStore.getState().macros.flatMap((macro): Atalho[] => {
+    const tecla = macro.tecla;
+    if (!tecla) return [];
+
+    const nome = sons.find((som) => som.id === macro.assetId)?.name;
+
+    return [
+      {
+        grupo: "Som",
+        tecla: rotuloDaTecla(tecla),
+        rotulo: nome ? t.atalhos.acionarMacro(nome) : t.atalhos.macroSemArquivo,
+        combina: (evento) => teclaDoEvento(evento) === tecla,
+        executar: () => useTrackStore.getState().acionarMacro(macro.id),
+        // Sempre: F5 recarrega a janela, e Alt+letra abre menu em mais de um
+        // sistema. Uma tecla de som que também faz o que o browser faz com ela
+        // faz as duas coisas erradas.
+        impedirPadrao: true,
+      },
+    ];
+  });
+}
+
+/**
+ * De quem já é a tecla deste evento, para quem vai gravá-la numa macro: o
+ * rótulo do dono, ou `null` com ela livre.
+ *
+ * Pergunta pelos MESMOS `combina` que o listener usa, com o evento de verdade
+ * que o mestre acabou de apertar -- e não por uma lista de teclas escrita à
+ * parte, que diria "livre" para o `F` assim que alguém mudasse como o
+ * enquadrar casa. A macro que está gravando não conta: regravar a própria
+ * tecla não é conflito.
+ */
+export function donoDaTecla(evento: KeyboardEvent, macroId: string): string | null {
+  const dono = [...ATALHOS_BASE, ...atalhosDeExtensoes()].find(({ combina }) =>
+    combina(evento),
+  );
+  if (dono) return dono.rotulo;
+
+  const tecla = teclaDoEvento(evento);
+  const outra = useTrackStore
+    .getState()
+    .macros.find((macro) => macro.id !== macroId && macro.tecla === tecla);
+  if (!outra) return null;
+
+  const nome = useAssetsStore
+    .getState()
+    .audio.assets?.find((som) => som.id === outra.assetId)?.name;
+
+  return nome ? t.atalhos.acionarMacro(nome) : t.atalhos.macroSemArquivo;
 }
 
 /**

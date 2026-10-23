@@ -2087,15 +2087,15 @@ export const PADS = 9;
 /**
  * Um som na lista de macros.
  *
- * O pad sem a tecla, e existe por duas razões que são a mesma: teclado de
+ * O pad fora do numpad, e existe por duas razões que são a mesma: teclado de
  * portátil não tem numpad, e nove é pouco. Quem joga num notebook não alcança
  * pad nenhum pelo teclado, e quem tem vinte efeitos de combate não escolhe
  * quais nove entram.
  *
  * Um som por macro, e não uma lista de ações. "Macro" costuma querer dizer
- * "várias coisas num gesto", e aqui quer dizer só "este som, sem tecla" — o que
- * ela faz ao ser acionada é o que o TIPO do arquivo manda, exatamente como o
- * pad. Ver `acionarPad`.
+ * "várias coisas num gesto", e aqui quer dizer só "este som, na tecla que o
+ * mestre escolher" — o que ela faz ao ser acionada é o que o TIPO do arquivo
+ * manda, exatamente como o pad. Ver `acionarPad`.
  *
  * `id` próprio e não o `assetId` como chave: a lista é reordenável por natureza
  * e o React precisa de identidade estável, e um dia duas macros do mesmo
@@ -2104,7 +2104,19 @@ export const PADS = 9;
  * Da CAMPANHA, como o pad: a lista de efeitos de uma campanha de horror não
  * serve a uma de intriga palaciana.
  */
-export type Macro = { id: string; assetId: string };
+export type Macro = {
+  id: string;
+  assetId: string;
+  /**
+   * A tecla que aciona a macro, na forma de `teclaDoEvento`. Ausente = só o
+   * clique na lista.
+   *
+   * Opcional e não obrigatória: a macro nasceu sem tecla, e é o que toda
+   * campanha anterior a ela tem gravado. Uma tecla, um som -- ver
+   * `definirTeclaDaMacro`.
+   */
+  tecla?: string;
+};
 
 /**
  * Quantos ambientes podem estar acesos ao mesmo tempo.
