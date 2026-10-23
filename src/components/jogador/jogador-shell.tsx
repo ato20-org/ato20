@@ -374,6 +374,7 @@ function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: Layou
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}
+          conexao={live.conexao}
           expandida={expandida}
           onTelaCheia={onTelaCheia}
         />
@@ -416,6 +417,7 @@ function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutP
           laser={live.laser}
           synced={live.synced}
           stalled={live.stalled}
+          conexao={live.conexao}
           expandida={expandida}
           onTelaCheia={onTelaCheia}
         />

@@ -9,6 +9,7 @@ import {
 
 import { pintarAlcance } from "@/components/playground/alcance-da-luz";
 import { useSceneScale } from "@/components/playground/scene-stage";
+import { useGiroDesenrolado } from "@/hooks/use-giro-desenrolado";
 import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
 import { paraCaixa, pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import {
@@ -241,6 +242,10 @@ function AreaDaNevoa({
         : NENHUMA_LANTERNA,
     [region, fechada, lanternas],
   );
+  // Pelo mesmo motivo do `CanvasItemView`: sem isto a `.scene-smooth-fog` faria
+  // a área dar uma volta inteira na TV ao cruzar a base -- e, girando, ela
+  // descobre por um instante o que devia esconder.
+  const rotation = useGiroDesenrolado(region.rotation ?? 0);
 
   // Revelada, a mesa não vê nada. O mestre continua vendo o contorno,
   // senão não teria como esconder a área de novo.
@@ -298,7 +303,7 @@ function AreaDaNevoa({
       // `transform`, e é o que permite cobrir um corredor torto sem
       // cobrir meio mapa junto.
       style={{
-        transform: `translate(${region.x}px, ${region.y}px) rotate(${region.rotation ?? 0}deg)`,
+        transform: `translate(${region.x}px, ${region.y}px) rotate(${rotation}deg)`,
         width: region.width,
         height: region.height,
         zIndex: FOG_Z,

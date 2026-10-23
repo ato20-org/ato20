@@ -1627,6 +1627,17 @@ async fn serve_plugin(
     }
 }
 
+/// De quanto em quanto o `/sala/live` diz que esta vivo, com a cena parada.
+///
+/// Um evento com nome (`vivo`) e com `data`, e nao o comentario do keep-alive
+/// padrao: o navegador nao entrega comentario ao JavaScript, e descarta evento
+/// sem `data`. So assim o vigia de quem assiste (`createSubscriberChannel`)
+/// separa cena parada de fluxo morto -- o socket meio fechado de uma TV que
+/// perdeu o Wi-Fi nao avisa ninguem, e quem so escuta nao tem escrita que
+/// falhe. O relogio zera a cada quadro, entao com a cena andando nao sai
+/// batimento nenhum.
+const BATIMENTO_DA_SALA: Duration = Duration::from_secs(5);
+
 /// `GET /sala/live?codigo=XXXXXX` -- a cena, em SSE.
 ///
 /// SSE e nao WebSocket: o fluxo e de mao unica a 10Hz, o `EventSource` reconecta
@@ -1662,8 +1673,13 @@ async fn live(
     )
     // A rede local derruba conexao ociosa, e celular com a tela apagada e
     // exatamente isso. O keep-alive do SSE e o que mantem o socket vivo entre
-    // duas cenas.
-    .keep_alive(KeepAlive::default()))
+    // duas cenas -- e, com nome e mais curto, o que diz a TV que ele esta vivo.
+    // Ver `BATIMENTO_DA_SALA`.
+    .keep_alive(
+        KeepAlive::new()
+            .interval(BATIMENTO_DA_SALA)
+            .event(Event::default().event("vivo").data("1")),
+    ))
 }
 
 // --- depuracao do palco ------------------------------------------------------
@@ -5742,6 +5758,36 @@ mod tests {
 
         assert!(text.starts_with("data:"), "não é quadro SSE: {text}");
         assert!(text.contains(r#""id":"s1""#), "estado atual não veio: {text}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn live_parado_manda_vivo_com_nome_e_data() {
+        let (_dir, state, codigo) = daemon();
+
+        // Sem nada publicado: o fluxo abre mudo, e o primeiro pedaco so pode
+        // ser o batimento. O relogio pausado anda sozinho ate ele.
+        let sse = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/live?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(sse.status(), StatusCode::OK);
+
+        let antes = tokio::time::Instant::now();
+        let mut body = sse.into_body().into_data_stream();
+        let primeiro = body.next().await.expect("batimento").expect("bytes");
+        let text = String::from_utf8_lossy(&primeiro);
+
+        assert_eq!(antes.elapsed(), BATIMENTO_DA_SALA);
+        // Com nome, para nao cair no `onmessage` como quadro; com `data`,
+        // porque o navegador descarta evento sem ela.
+        assert!(text.contains("event: vivo"), "batimento sem nome: {text:?}");
+        assert!(text.contains("data: 1"), "batimento sem data: {text:?}");
     }
 
     #[tokio::test]

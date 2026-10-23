@@ -491,6 +491,8 @@ export function SceneLayer({
           // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
           // arquivo que o token já baixou. Ver `SombraDaFigura`.
           variante={variante}
+          smooth={smooth}
+          naMao={naMao}
         />
       )}
 
