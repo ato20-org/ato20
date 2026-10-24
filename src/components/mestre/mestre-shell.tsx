@@ -55,6 +55,7 @@ import { usePublisher } from "@/hooks/use-scene-broadcast";
 import { useRolagensDaMesa } from "@/hooks/use-rolagens-da-mesa";
 import { useSomDosDados } from "@/hooks/use-som-dos-dados";
 import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
+import { useEscribaDoHistorico } from "@/hooks/use-escriba-do-historico";
 import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
@@ -384,6 +385,9 @@ export function MestreShell() {
   // E o fio da campanha: o que a mesa escreve e o que ela rolou, gravado pelo
   // daemon. Ver `useFioDaMesa`.
   useFioDaMesa();
+  // E o histórico: o que aconteceu na mesa, gravado com a hora. Ver
+  // `useEscribaDoHistorico`.
+  useEscribaDoHistorico();
   // E o barulho deles, os do tabuleiro e os que chegam. Ver `useSomDosDados`.
   useSomDosDados();
   useMestreShortcuts();

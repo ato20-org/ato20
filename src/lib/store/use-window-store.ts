@@ -82,6 +82,10 @@ export type ConteudoJanela =
   // linhas. Janela própria, e não a de Rolagens: lá é o dado e as regras dele,
   // aqui é a conversa. Ver `ChatBody`.
   | { tipo: "chat" }
+  // O histórico da campanha: o que aconteceu na mesa, com a hora, e o fio
+  // intercalado. Janela própria, e não o chat: lá é a conversa de agora, aqui
+  // é a memória de todas as sessões. Ver `HistoricoBody`.
+  | { tipo: "historico" }
   | { tipo: "cenas" }
   // A mesma lista, filtrada pelo outro tipo de cena. Ver `TipoDeCena`.
   | { tipo: "quadros" }
@@ -164,6 +168,7 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     // mostrarem a mesma lista de cenas.
     case "rolagens":
     case "chat":
+    case "historico":
     case "cenas":
     case "quadros":
     case "galeria":

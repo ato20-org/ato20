@@ -29,6 +29,7 @@ import { MiniplayerBody } from "@/components/mestre/miniplayer-window";
 import { LayerList } from "@/components/mestre/layer-list";
 import { RetratosWindow } from "@/components/mestre/retratos-window";
 import { ChatBody } from "@/components/mestre/chat-window";
+import { HistoricoBody } from "@/components/mestre/historico-window";
 import { RolagensBody } from "@/components/mestre/rolagens-window";
 import { IniciativaBody } from "@/components/mestre/iniciativa-window";
 import { ArquivosList } from "@/components/mestre/arquivos-list";
@@ -95,6 +96,7 @@ export const TELAS_BASE: Array<{ conteudo: ConteudoJanela; titulo: string }> = [
   { conteudo: { tipo: "compendio" }, titulo: t.janelas.compendio },
   { conteudo: { tipo: "rolagens" }, titulo: t.janelas.rolagens },
   { conteudo: { tipo: "chat" }, titulo: t.janelas.chat },
+  { conteudo: { tipo: "historico" }, titulo: t.janelas.historico },
   { conteudo: { tipo: "estante" }, titulo: t.janelas.estante },
   { conteudo: { tipo: "miniplayer" }, titulo: t.janelas.mesa },
 ];
@@ -255,6 +257,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.rolagens, subtitulo: t.janelas.rolagensSub };
     case "chat":
       return { titulo: t.janelas.chat, subtitulo: t.janelas.chatSub };
+    case "historico":
+      return { titulo: t.janelas.historico, subtitulo: t.janelas.historicoSub };
     case "cenas":
       // "Cenas" e não "Mapas": o painel passou a ter as duas naturezas, e o
       // nome antigo escondia os fundos atrás da palavra do vizinho.
@@ -354,6 +358,9 @@ export function alturaPadrao(conteudo: ConteudoJanela): number | undefined {
   switch (conteudo.tipo) {
     case "chat":
       return 420;
+    // Pela mesma razão do chat: a campanha inteira não acaba.
+    case "historico":
+      return 520;
     // Deitada, o quadro cabe na altura que a janela TEM, e sem altura ela
     // cresceria com a lista ao lado -- o quadro ficaria do tamanho do elenco.
     case "retratos":
@@ -601,6 +608,9 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
     // Da CAMPANHA: o fio sobrevive à sessão, e mais ainda a trocar de mapa.
     case "chat":
       return <ChatBody />;
+    // Da CAMPANHA, como o chat: atravessa as sessões e as cenas.
+    case "historico":
+      return <HistoricoBody />;
     case "iniciativa":
       return <IniciativaBody />;
     case "camadas":

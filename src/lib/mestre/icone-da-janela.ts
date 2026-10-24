@@ -6,6 +6,7 @@ import {
   Clapperboard,
   Dices,
   Files,
+  History,
   Image,
   Images,
   Layers,
@@ -54,6 +55,8 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Dices;
     case "chat":
       return MessagesSquare;
+    case "historico":
+      return History;
     case "cenas":
       return Clapperboard;
     case "quadros":
