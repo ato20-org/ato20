@@ -86,7 +86,10 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 12 é a atual: ela acrescentou o `bestiario`, as
+mais do que ele tem.** A 13 é a atual: ela acrescentou os `itens`, as armas,
+proteções e o resto que o plugin traz pronto para o Compêndio (ver
+[Itens do plugin](#itens-do-plugin-armas-e-equipamento-prontos-no-compêndio)),
+que um ATO20 anterior ignoraria calado. A 12 acrescentou o `bestiario`, as
 fichas prontas que o plugin traz para o Compêndio (ver
 [Bestiário do plugin](#bestiário-do-plugin-fichas-prontas-no-compêndio)), e as
 `auras`, a cor, o emblema e a luz com que o plugin marca pastas, cards,
@@ -1192,6 +1195,68 @@ num arquivo ao lado dele:
   seção com o motivo, e as outras coleções seguem.
 - **Plugin desligado, coleção fora.** Ligar e desligar mostra e esconde a
   seção na hora.
+
+## Itens do plugin: armas e equipamento prontos no Compêndio
+
+O plugin traz itens prontos -- as armas de um sistema, as proteções, a munição,
+o que cura -- e eles aparecem na aba Itens do Compêndio da campanha, depois dos
+moldes de item do mestre, pelo mesmo arranjo do bestiário: cada coleção é uma
+pasta, numa seção com o nome do plugin, e na busca as pastas dão lugar aos
+itens que bateram. Pede a **API 13**. O manifesto declara a coleção, com os
+mesmos campos da do bestiário; os itens moram num arquivo ao lado dele:
+
+```json
+"apiVersao": 13,
+"contribui": {
+  "itens": [{
+    "id": "armas",
+    "titulo": { "pt-BR": "Armas", "en": "Weapons" },
+    "arquivo": "itens/armas.json",
+    "sistema": "ordem",
+    "aura": "arsenal"
+  }]
+}
+```
+
+```json
+{
+  "itens": [{
+    "id": "pistola",
+    "nome": "Pistola",
+    "tags": ["Arma de fogo", "Arma simples"],
+    "fonte": "Livro de Regras",
+    "atributos": [
+      { "nome": "Dano", "valor": "1d12 balístico" },
+      { "nome": "Crítico", "valor": "18" },
+      { "nome": "Alcance", "valor": "Curto" }
+    ],
+    "medidores": [{ "nome": "Munição", "maximo": 2 }]
+  }]
+}
+```
+
+- **O item é o da campanha.** `atributos` são os pares de nome e valor da
+  janela do item, na ordem dela, e o card mostra os dois primeiros: ponha
+  ali o que decide entre duas armas sem abrir a janela. `medidores` são os
+  do item, com nome e teto -- o valor é de cada mochila, e nasce cheio. A
+  `descricao` é texto livre, e `imagem` vale como o retrato da ficha do
+  bestiário: um arquivo da pasta ou uma URL `https`.
+- **Só de leitura, e sempre copiado.** Clicar no card abre o item inteiro só
+  para ler. "Pôr em jogo" -- pelo botão, ou arrastando o card com imagem para
+  o mapa, que já põe a peça -- põe o item no catálogo de Itens da campanha;
+  "Trazer para a campanha" o deixa como molde no Compêndio, onde ele se
+  edita. Os dois saem do molde trazido, que guarda de onde veio (`doPlugin`):
+  a segunda pistola não traz o item de novo, e atualizar o plugin não mexe no
+  que a campanha já trouxe. A cópia no catálogo não leva a marca.
+- **`aura`**, na coleção ou no item, pinta a pasta e emoldura o card, e o
+  item trazido a leva para a campanha. Ver
+  [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin).
+- **Conferido na instalação, inteiro**, como o bestiário. Os tetos são os do
+  item da campanha: 120 letras no nome, 4.000 na descrição, 24 atributos (o
+  nome até 40 letras e o valor até 120; o resto vai na `descricao`), 6
+  medidores, 16 tags, mais 500 itens e 4 MB por arquivo e 120 letras na
+  fonte. A coleção que quebra depois de instalada aparece com o motivo, e as
+  outras seguem; plugin desligado, coleção fora.
 
 ## Auras: a cor, o emblema e a luz do plugin
 
