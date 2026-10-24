@@ -388,6 +388,8 @@ pub fn run() {
             commands::inventory_update,
             commands::inventory_remove,
             commands::inventory_move,
+            commands::historico_acrescentar,
+            commands::historico_ler,
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,
