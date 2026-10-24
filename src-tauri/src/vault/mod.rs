@@ -10,6 +10,7 @@ pub mod dados_de_extensao;
 pub mod detalhes;
 pub mod documentos;
 pub mod fio;
+pub mod historico;
 pub mod inventory;
 pub mod itens;
 pub mod migrar;

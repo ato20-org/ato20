@@ -28,7 +28,8 @@ use crate::vault::itens::{self, Item, Portador};
 use crate::vault::dados_de_extensao;
 use crate::vault::{
     assets,
-    atributos, detalhes, documentos, board, characters, condicoes, efeitos, modelos, players, session,
+    atributos, detalhes, documentos, board, characters, condicoes, efeitos, historico, modelos, players,
+    session,
     sistema, variantes, zip,
     CampaignInfo,
     Vault,
@@ -3007,6 +3008,27 @@ pub fn inventory_remove(
     #[allow(non_snake_case)] itemId: String,
 ) -> AppResult<()> {
     state.with_vault(|vault| inventory::remove(vault, &id, &itemId, Autor::Mestre))
+}
+
+/// Acrescenta acontecimentos ao historico da campanha: os que o Mestre viu
+/// mudar nos stores dele, e o marco que ele escreveu. Ver `vault::historico`.
+#[tauri::command]
+pub fn historico_acrescentar(
+    state: State<'_, AppState>,
+    registros: Vec<serde_json::Value>,
+) -> AppResult<()> {
+    state.with_vault(|vault| historico::acrescentar(vault, registros))
+}
+
+/// O historico e o fio, para a janela os intercalar pela hora; com `desde`, so
+/// o que entrou no historico depois. So o Mestre: o fio vem com os sussurros, e
+/// o historico com o que e escondido. Ver `historico::Leitura`.
+#[tauri::command]
+pub fn historico_ler(
+    state: State<'_, AppState>,
+    desde: Option<u64>,
+) -> AppResult<historico::Leitura> {
+    state.with_vault(|vault| historico::ler_para_a_janela(vault, desde))
 }
 
 /// Passa um item de um personagem para outro.

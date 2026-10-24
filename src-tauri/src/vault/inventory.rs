@@ -2,12 +2,13 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use super::atomic::{read_json, write_json};
 use super::characters::{self, Autor};
 use super::itens::{self, AtributoDoItem, Imagem, Item};
 use super::modelos::Modelo;
-use super::{now_ms, Vault};
+use super::{historico, now_ms, Vault};
 use crate::error::{AppError, AppResult};
 
 /// O inventario de um personagem: o que ele carrega, por REFERENCIA.
@@ -370,6 +371,19 @@ pub fn add(vault: &Vault, personagem: &str, autor: Autor, novo: Novo) -> AppResu
     entradas.push(entrada.clone());
     save(vault, personagem, &entradas)?;
 
+    no_historico(
+        vault,
+        "criado",
+        &item,
+        json!({
+            "personagemId": personagem,
+            "personagem": nome_de(vault, personagem),
+            "quantidade": entrada.quantidade,
+            "escondido": entrada.escondido,
+            "autor": autor,
+        }),
+    );
+
     Ok(NoInventario::de(item, &entrada))
 }
 
@@ -435,6 +449,19 @@ pub fn dar(
     };
 
     save(vault, personagem, &entradas)?;
+
+    no_historico(
+        vault,
+        "dado",
+        &item,
+        json!({
+            "personagemId": personagem,
+            "personagem": nome_de(vault, personagem),
+            "quantidade": mais,
+            "escondido": entrada.escondido,
+            "autor": Autor::Mestre,
+        }),
+    );
 
     Ok(NoInventario::de(item, &entrada))
 }
@@ -576,6 +603,24 @@ pub fn update(
         save(vault, personagem, &entradas)?;
     }
 
+    // Da edicao, so a QUANTIDADE e acontecimento: a pocao bebida, a flecha
+    // gasta. Nome, foto e o escondido sao arrumacao da ficha.
+    if entrada.quantidade != antes.quantidade {
+        no_historico(
+            vault,
+            "quantidade",
+            &item,
+            json!({
+                "personagemId": personagem,
+                "personagem": nome_de(vault, personagem),
+                "antes": antes.quantidade,
+                "depois": entrada.quantidade,
+                "escondido": entrada.escondido,
+                "autor": quem,
+            }),
+        );
+    }
+
     Ok(NoInventario::de(item, &entrada))
 }
 
@@ -612,14 +657,66 @@ pub fn remove(vault: &Vault, personagem: &str, item_id: &str, quem: Autor) -> Ap
     };
 
     let mut restantes = entradas;
-    restantes.remove(posicao);
+    let tirada = restantes.remove(posicao);
     save(vault, personagem, &restantes)?;
+
+    // O nome antes de o item poder sair do catalogo, logo abaixo. A entrada
+    // orfa -- item que nao existe mais -- nao tem nome nem historia para contar.
+    if let Some(item) = itens::load(vault)?
+        .into_iter()
+        .find(|item| item.id == item_id)
+    {
+        no_historico(
+            vault,
+            "tirado",
+            &item,
+            json!({
+                "personagemId": personagem,
+                "personagem": nome_de(vault, personagem),
+                "quantidade": tirada.quantidade,
+                "escondido": tirada.escondido,
+                "autor": quem,
+            }),
+        );
+    }
 
     if quem == Autor::Jogador && !carregado_por_alguem(vault, item_id)? {
         itens::remover_destravado(vault, item_id)?;
     }
 
     Ok(())
+}
+
+/// Uma linha `item` no historico da campanha, depois que a mochila ja mudou.
+///
+/// AQUI, e nao na tela do Mestre: e o unico lugar por onde passam o Mestre, o
+/// celular e o MCP, e a mochila de um personagem que nenhuma ficha aberta
+/// mostra nao tem antes e depois para a tela comparar. Os nomes vao
+/// CONGELADOS, como no fio: a espada que mudou de nome continua tendo sido
+/// dada com o nome de entao. Ver `historico::registrar`.
+fn no_historico(vault: &Vault, acao: &str, item: &Item, campos: serde_json::Value) {
+    let mut registro = json!({
+        "acao": acao,
+        "itemId": item.id,
+        "item": item.nome,
+    });
+    if let (serde_json::Value::Object(destino), serde_json::Value::Object(origem)) =
+        (&mut registro, campos)
+    {
+        destino.extend(origem);
+    }
+
+    historico::registrar(vault, "item", registro);
+}
+
+/// O nome do personagem agora, para a linha do historico. Vazio se ele sumiu
+/// no meio do gesto: a linha vale mais sem nome que nao escrita.
+fn nome_de(vault: &Vault, personagem: &str) -> String {
+    characters::load(vault)
+        .ok()
+        .and_then(|todos| todos.into_iter().find(|um| um.id == personagem))
+        .map(|um| um.nome)
+        .unwrap_or_default()
 }
 
 /// Algum inventario ainda tem este item?
@@ -691,6 +788,7 @@ pub fn mover(vault: &Vault, de: &str, para: &str, item_id: &str) -> AppResult<No
 
     let (origem, posicao, item) = conferido(vault, de, item_id, Autor::Mestre)?;
     let movida = origem[posicao].clone();
+    let (quantidade, escondido) = (movida.quantidade, movida.escondido);
 
     let mut destino = load(vault, para)?;
     let entrada = match destino
@@ -713,6 +811,21 @@ pub fn mover(vault: &Vault, de: &str, para: &str, item_id: &str) -> AppResult<No
         .filter(|entrada| entrada.item_id != item_id)
         .collect();
     save(vault, de, &restantes)?;
+
+    no_historico(
+        vault,
+        "passado",
+        &item,
+        json!({
+            "deId": de,
+            "de": nome_de(vault, de),
+            "personagemId": para,
+            "personagem": nome_de(vault, para),
+            "quantidade": quantidade,
+            "escondido": escondido,
+            "autor": Autor::Mestre,
+        }),
+    );
 
     Ok(NoInventario::de(item, &entrada))
 }
@@ -1341,6 +1454,59 @@ mod tests {
                 arquivo: "espada.png".into(),
             })
         );
+    }
+
+    #[test]
+    fn cada_gesto_deixa_uma_linha_no_historico() {
+        let (_tmp, vault, edgar) = vault();
+        let mira = characters::create(&vault, "Mira").unwrap().id;
+
+        let pocao = do_catalogo(&vault, "Pocao");
+        dar(&vault, &edgar, &pocao.id, Some(3)).unwrap();
+        update(
+            &vault,
+            &edgar,
+            &pocao.id,
+            Patch {
+                quantidade: Some(2),
+                ..Patch::default()
+            },
+            Autor::Mestre,
+        )
+        .unwrap();
+        // Editar sem mudar a quantidade nao e acontecimento.
+        update(
+            &vault,
+            &edgar,
+            &pocao.id,
+            Patch {
+                escondido: Some(true),
+                ..Patch::default()
+            },
+            Autor::Mestre,
+        )
+        .unwrap();
+        mover(&vault, &edgar, &mira, &pocao.id).unwrap();
+        remove(&vault, &mira, &pocao.id, Autor::Mestre).unwrap();
+
+        let linhas = historico::ler(&vault).unwrap();
+        let acoes: Vec<&str> = linhas
+            .iter()
+            .map(|linha| linha["acao"].as_str().unwrap())
+            .collect();
+        assert_eq!(acoes, ["dado", "quantidade", "passado", "tirado"]);
+        assert!(linhas.iter().all(|linha| linha["tipo"] == "item"));
+        assert!(linhas.iter().all(|linha| linha["item"] == "Pocao"));
+
+        assert_eq!(linhas[0]["personagem"], "Edgar");
+        assert_eq!(linhas[0]["quantidade"], 3);
+        assert_eq!(linhas[1]["antes"], 3);
+        assert_eq!(linhas[1]["depois"], 2);
+        assert_eq!(linhas[2]["de"], "Edgar");
+        assert_eq!(linhas[2]["personagem"], "Mira");
+        assert_eq!(linhas[2]["escondido"], true);
+        assert_eq!(linhas[3]["personagem"], "Mira");
+        assert_eq!(linhas[3]["autor"], "mestre");
     }
 
     #[test]
