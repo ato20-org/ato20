@@ -11,9 +11,12 @@ import {
   type CSSProperties,
 } from "react";
 
-import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
+import {
+  FiguraComEfeitos,
+  LampejoDoItem,
+} from "@/components/playground/figura-com-efeitos";
 import { useAssetUrl } from "@/hooks/use-asset-url";
-import type { EfeitoPedido } from "@/lib/condicao";
+import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
 import { useCoresDasParedes } from "@/hooks/use-cores-das-paredes";
 import { useLugarDoMapa } from "@/hooks/use-lugar-do-mapa";
 import { usePortasNoGiro } from "@/hooks/use-portas-no-giro";
@@ -150,6 +153,13 @@ import {
  */
 
 /**
+ * O período do balanço do item no ar, em segundos. Espelha `.item-flutuando`,
+ * no `globals.css`, e é daqui que a fase de cada item sai: dois itens lado a
+ * lado não sobem juntos.
+ */
+const PERIODO_DO_FLUTUAR = 3.2;
+
+/**
  * Quanto sobra de uma face que está tapando uma peça.
  *
  * Não zero. A parede tem de continuar LEGÍVEL enquanto deixa passar: o mestre
@@ -262,6 +272,11 @@ export type PecaDoChao = {
   /** Os efeitos pausados: o Mestre só anima o do selecionado. Ver `animarSo`. */
   parado?: boolean;
   /**
+   * A peça é um ITEM da campanha largado na mesa: flutua e lampeja. Ver
+   * `LampejoDoItem`.
+   */
+  item?: boolean;
+  /**
    * A peça é uma CHAMA de pé, e não uma figura: a da área em chamas no 2.5D
    * (ver `chamasDePe`). Toca a FAIXA do fogo, já na cor (ver `faixaDaFolha`),
    * em vez da imagem, e não recebe clique -- quem se seleciona é a área, no
@@ -330,6 +345,27 @@ function PecaEmPe({
   const src = peca.fogo?.fonte ?? peca.url ?? doAcervo;
   const { fogo } = peca;
 
+  const desenho = (
+    <FiguraComEfeitos
+      efeitos={peca.efeitos}
+      url={src}
+      semente={peca.id}
+      alcance={{ livre: true, largura: peca.lado }}
+    >
+      {(fonte) =>
+        fonte ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={fonte}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full select-none"
+          />
+        ) : null
+      }
+    </FiguraComEfeitos>
+  );
+
   return (
     // Um invólucro leva a transformação e as marcas, e a figura vai dentro
     // dele com os efeitos das condições -- o halo da aura passa da caixa, e
@@ -373,25 +409,25 @@ function PecaEmPe({
             } as CSSProperties
           }
         />
-      ) : (
-        <FiguraComEfeitos
-          efeitos={peca.efeitos}
-          url={src}
-          semente={peca.id}
-          alcance={{ livre: true, largura: peca.lado }}
+      ) : peca.item ? (
+        // O item balança no ar dentro de um invólucro, com o lampejo e as
+        // condições: é ele inteiro que sai do chão, e não só a imagem.
+        //
+        // Pelo `top`, e não por `transform`: animação de `transform` faz do
+        // invólucro uma camada composta, e de esguelha a caixa da peça muda de
+        // tamanho a cada quadro da câmera -- a camada era realocada a cada
+        // quadro do voo. Medido no caminho da TV, com o `translate` na própria
+        // peça a memória da webview disparava com cinco itens. O `top` pinta
+        // na camada que a peça já tem. Ver `.item-flutuando` no `globals.css`.
+        <div
+          className="item-flutuando absolute inset-x-0 h-full"
+          style={{ animationDelay: faseDaFigura(peca.id, PERIODO_DO_FLUTUAR) }}
         >
-          {(fonte) =>
-            fonte ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={fonte}
-                alt=""
-                draggable={false}
-                className="pointer-events-none absolute inset-0 h-full w-full select-none"
-              />
-            ) : null
-          }
-        </FiguraComEfeitos>
+          {desenho}
+          <LampejoDoItem url={src} semente={peca.id} parado={peca.parado} />
+        </div>
+      ) : (
+        desenho
       )}
     </div>
   );
