@@ -180,6 +180,8 @@ pub fn duplicar_item(vault: &Vault, id: &str, compendio: bool) -> AppResult<Item
         id: uuid::Uuid::new_v4().to_string(),
         nome: nome_da_copia(&original.nome, &usados),
         compendio,
+        // A marca e de UM molde, como a do personagem em `duplicar`.
+        do_plugin: None,
         criado_em: now_ms(),
         ..original.clone()
     };
@@ -1214,6 +1216,151 @@ pub fn trazer_do_plugin(
     })
 }
 
+// --- itens de plugin --------------------------------------------------------------
+//
+// Os itens de um plugin (`itens_do_plugin.rs`), pelo caminho das fichas: so de
+// leitura, e sempre COPIADOS para o Compendio da campanha, com a marca de onde
+// vieram (`Item::do_plugin`).
+
+/// O que voltou de trazer um item de plugin.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrazidoItemDoPlugin {
+    /// O molde no Compendio da campanha.
+    pub item: Item,
+    /// Ja estava la. Trazer de novo devolve o mesmo, e nao um segundo.
+    pub ja_havia: bool,
+    /// A imagem que nao entrou, com o motivo. O item entra sem ela.
+    pub imagens_de_fora: Vec<crate::error::Texto>,
+}
+
+/// O molde que este item de plugin ja deixou no Compendio da campanha.
+pub fn item_do_plugin(vault: &Vault, chave: &str) -> AppResult<Option<Item>> {
+    Ok(itens::load(vault)?
+        .into_iter()
+        .find(|item| item.compendio && item.do_plugin.as_deref() == Some(chave)))
+}
+
+/// Traz um item de plugin para o Compendio da campanha, como molde.
+///
+/// Monta o item inteiro e grava uma vez. Os atributos e os medidores passam
+/// pelas regras de sempre do catalogo (`itens::atributos_validos`,
+/// `itens::medidores_validos`), e o medidor sem cor ganha a primeira da
+/// paleta, como o da ficha. `imagem` e a imagem ja pronta -- o arquivo da
+/// pasta, os bytes baixados, ou o motivo de nao ter vindo --, e o item entra
+/// sem a que faltou.
+pub fn trazer_item_do_plugin(
+    vault: &Vault,
+    chave: &str,
+    item: &crate::itens_do_plugin::ItemDoPlugin,
+    // A aura do item, ja com o plugin na frente: `ordem-paranormal/arsenal`.
+    aura: Option<String>,
+    imagem: Option<Result<ImagemDoPlugin, crate::error::Texto>>,
+) -> AppResult<TrazidoItemDoPlugin> {
+    use crate::vault::characters::Autor;
+    use crate::vault::modelos::Modelo;
+
+    // Conferido de novo dentro da trava, pela razao de `trazer_do_plugin`.
+    if let Some(item) = item_do_plugin(vault, chave)? {
+        return Ok(TrazidoItemDoPlugin {
+            item,
+            ja_havia: true,
+            imagens_de_fora: Vec::new(),
+        });
+    }
+
+    let mut imagens_de_fora = Vec::new();
+    let no_acervo = match imagem {
+        None => None,
+        Some(Err(motivo)) => {
+            imagens_de_fora.push(motivo);
+            None
+        }
+        Some(Ok(pronta)) => {
+            let importado = match pronta {
+                ImagemDoPlugin::Arquivo(caminho) => assets::import(vault, &[caminho], Some("personagem")),
+                ImagemDoPlugin::Baixada { nome, bytes } => {
+                    assets::import_bytes(vault, &nome, &bytes, Some("personagem"))
+                }
+            };
+            match importado {
+                Ok((aceitos, recusados)) => {
+                    let id = aceitos.into_iter().next().map(|meta| meta.id);
+                    if id.is_none() {
+                        // O acervo explica a recusa numa lingua so; vai nas duas.
+                        imagens_de_fora.extend(recusados.into_iter().map(|motivo| crate::error::Texto {
+                            pt: motivo.clone(),
+                            en: motivo,
+                        }));
+                    }
+                    id
+                }
+                Err(cause) => {
+                    imagens_de_fora.push(crate::error::Texto {
+                        pt: cause.to_string(),
+                        en: cause.to_string(),
+                    });
+                    None
+                }
+            }
+        }
+    };
+
+    let medidores = item
+        .medidores
+        .iter()
+        .map(|medidor| Modelo {
+            id: String::new(),
+            nome: medidor.nome.trim().to_string(),
+            cor: medidor.cor.clone().unwrap_or_else(|| COR_DO_MEDIDOR.to_string()),
+            estilo: medidor.estilo.unwrap_or_default(),
+            maximo: medidor.maximo,
+            escondido: false,
+            estilo_extensao: None,
+            mostrar_nome: None,
+            mostrar_valor: None,
+        })
+        .collect();
+
+    let usados: HashSet<String> = itens::load(vault)?
+        .into_iter()
+        .filter(|item| item.compendio)
+        .map(|item| item.nome)
+        .collect();
+
+    let novo = Item {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: nome_da_copia(item.nome.trim(), &usados),
+        descricao: item.descricao.as_deref().map(str::trim).unwrap_or_default().to_string(),
+        imagem: no_acervo.map(|id| Imagem::Asset { id }),
+        atributos: itens::atributos_validos(item.atributos.clone()),
+        medidores: itens::medidores_validos(medidores),
+        autor: Autor::Mestre,
+        criado_por: None,
+        tags: normalizar_tags(item.tags.clone()),
+        aura,
+        compendio: true,
+        do_plugin: Some(chave.to_string()),
+        criado_em: now_ms(),
+    };
+
+    // O catalogo cheio recusa calado em `adotar`; aqui o mestre pediu um item
+    // e tem de saber por que ele nao veio.
+    if itens::adotar(vault, vec![novo.clone()])? == 0 {
+        return Err(AppError::Recusado(crate::texto!(
+            "a campanha ja tem {} itens",
+            "the campaign already has {} items",
+            itens::MAX_ITENS_NA_CAMPANHA
+        )));
+    }
+
+    Ok(TrazidoItemDoPlugin {
+        item: novo,
+        ja_havia: false,
+        imagens_de_fora,
+    })
+}
+
 /// A miniatura de uma imagem da pasta de um plugin, para o card do bestiario.
 ///
 /// A reducao mora no cache do Compendio do ATO20 (`maquina`), e nao na
@@ -1794,6 +1941,76 @@ mod tests {
         assert!(em_jogo.do_plugin.is_none());
         assert_eq!(em_jogo.aura.as_deref(), Some("ordem/sangue"));
         assert_eq!(molde_do_plugin(&vault, &chave).unwrap().unwrap().id, zumbi.id);
+    }
+
+    #[test]
+    fn o_item_do_plugin_vira_molde_e_a_copia_do_catalogo_nao_leva_a_marca() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        let pistola: crate::itens_do_plugin::ItemDoPlugin = serde_json::from_str(
+            r##"{"id":"pistola","nome":" Pistola 9mm ","descricao":" Arma leve. ","tags":["Arma de fogo","arma de fogo"],
+                 "imagem":"itens/pistola.png",
+                 "atributos":[{"nome":"Dano","valor":"1d12 balístico"},{"nome":"","valor":"sem nome"}],
+                 "medidores":[{"nome":"Cenas","maximo":2},{"nome":"Cargas","maximo":3,"cor":"#22c55e"}]}"##,
+        )
+        .unwrap();
+        let imagem = tmp.path().join("pistola.png");
+        std::fs::write(&imagem, png()).unwrap();
+        let chave = chave_do_plugin("ordem", "armas", "pistola");
+
+        let trazido = trazer_item_do_plugin(
+            &vault,
+            &chave,
+            &pistola,
+            Some("ordem/arsenal".into()),
+            Some(Ok(ImagemDoPlugin::Arquivo(imagem))),
+        )
+        .unwrap();
+        let molde = &trazido.item;
+
+        assert!(!trazido.ja_havia);
+        assert!(trazido.imagens_de_fora.is_empty());
+        assert!(molde.compendio);
+        assert_eq!(molde.nome, "Pistola 9mm");
+        assert_eq!(molde.descricao, "Arma leve.");
+        assert_eq!(molde.do_plugin.as_deref(), Some(chave.as_str()));
+        assert_eq!(molde.aura.as_deref(), Some("ordem/arsenal"));
+        assert_eq!(molde.tags, ["Arma de fogo"]);
+        assert!(matches!(molde.imagem, Some(Imagem::Asset { .. })));
+        // O atributo sem nome sai, como no catalogo; o medidor sem cor ganha a
+        // de fabrica.
+        assert_eq!(molde.atributos.len(), 1);
+        assert_eq!(molde.atributos[0].valor, "1d12 balístico");
+        assert_eq!(molde.medidores[0].cor, COR_DO_MEDIDOR);
+        assert_eq!((molde.medidores[1].maximo, molde.medidores[1].cor.as_str()), (3, "#22c55e"));
+
+        // Trazer de novo devolve o mesmo, sem outra imagem no acervo.
+        let de_novo = trazer_item_do_plugin(&vault, &chave, &pistola, None, None).unwrap();
+        assert!(de_novo.ja_havia);
+        assert_eq!(de_novo.item.id, molde.id);
+        assert_eq!(assets::index(&vault).unwrap().len(), 1);
+
+        // No catalogo, a copia nao leva a marca: a proxima sai do molde.
+        let no_catalogo = duplicar_item(&vault, &molde.id, false).unwrap();
+        assert!(!no_catalogo.compendio);
+        assert!(no_catalogo.do_plugin.is_none());
+        assert_eq!(no_catalogo.aura.as_deref(), Some("ordem/arsenal"));
+        assert_eq!(item_do_plugin(&vault, &chave).unwrap().unwrap().id, molde.id);
+
+        // A imagem que nao veio nao impede o item: ele entra sem ela.
+        let faca: crate::itens_do_plugin::ItemDoPlugin =
+            serde_json::from_str(r#"{"id":"faca","nome":"Faca"}"#).unwrap();
+        let sem = trazer_item_do_plugin(
+            &vault,
+            &chave_do_plugin("ordem", "armas", "faca"),
+            &faca,
+            None,
+            Some(Err(crate::texto!("nao veio", "did not come"))),
+        )
+        .unwrap();
+        assert!(sem.item.imagem.is_none());
+        assert_eq!(sem.imagens_de_fora.len(), 1);
     }
 
     #[test]

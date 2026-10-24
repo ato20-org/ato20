@@ -85,7 +85,13 @@ use crate::error::{AppError, AppResult};
 /// o Compendio, num arquivo ao lado do manifesto. Um ATO20 de API 11 ignoraria
 /// a chave calado, e o plugin instalado so para isso nao mostraria nada;
 /// pedindo 12, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 12;
+///
+/// A 13 acrescentou os `itens` -- as armas, protecoes e o resto que o plugin
+/// traz pronto para o Compendio, num arquivo ao lado do manifesto, como o
+/// bestiario. Um ATO20 de API 12 ignoraria a chave calado, e o plugin
+/// instalado so para isso nao mostraria nada; pedindo 13, ele ouve "atualize o
+/// ATO20".
+pub const API_VERSAO: u32 = 13;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -356,6 +362,9 @@ impl Manifesto {
         for x in &c.bestiario {
             textos.push((caminho("bestiario", &x.id, "titulo"), &x.titulo));
         }
+        for x in &c.itens {
+            textos.push((caminho("itens", &x.id, "titulo"), &x.titulo));
+        }
         for x in &c.auras {
             textos.push((caminho("auras", &x.id, "titulo"), &x.titulo));
         }
@@ -461,6 +470,9 @@ pub struct Contribuicoes {
     /// Fichas prontas para o Compendio. Ver `ColecaoDoBestiario`.
     #[serde(default)]
     pub bestiario: Vec<ColecaoDoBestiario>,
+    /// Itens prontos para o Compendio. Ver `ColecaoDeItens`.
+    #[serde(default)]
+    pub itens: Vec<ColecaoDeItens>,
     /// A cor, o emblema e a luz com que o plugin marca uma coisa. Ver `Aura`.
     #[serde(default)]
     pub auras: Vec<Aura>,
@@ -493,6 +505,13 @@ pub struct ColecaoDoBestiario {
     #[serde(default)]
     pub aura: Option<String>,
 }
+
+/// Uma colecao de itens prontos: as armas de um sistema, as protecoes.
+///
+/// A MESMA declaracao do bestiario -- id, titulo, o arquivo, o sistema e a
+/// aura --, e pela mesma razao de o arquivo ser a parte. O que muda e o que o
+/// arquivo traz: itens, e nao fichas. Ver `itens_do_plugin`.
+pub type ColecaoDeItens = ColecaoDoBestiario;
 
 /// Os efeitos de luz de uma aura. Lista fechada, como os alvos de menu, e por
 /// uma razao a mais: cada um e uma animacao do NUCLEO, escrita para mexer so em
@@ -2056,6 +2075,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             c.bestiario.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
         (
+            "itens",
+            c.itens.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
             "auras",
             c.auras.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
@@ -2120,7 +2143,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
         validar_aura(aura)?;
     }
     for colecao in &c.bestiario {
-        validar_colecao(colecao, &c.sistemas, &c.auras)?;
+        validar_colecao("bestiario", colecao, &c.sistemas, &c.auras)?;
+    }
+    for colecao in &c.itens {
+        validar_colecao("itens", colecao, &c.sistemas, &c.auras)?;
     }
 
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
@@ -2613,20 +2639,26 @@ fn validar_sistema(sistema: &Sistema) -> AppResult<()> {
     Ok(())
 }
 
-/// A colecao do bestiario aponta para um lugar que faz sentido?
+/// A colecao -- do bestiario, ou de itens -- aponta para um lugar que faz
+/// sentido? `grupo` e a chave do manifesto, para o erro dizer onde procurar.
 ///
-/// So a DECLARACAO: o arquivo das fichas e lido e conferido na importacao
-/// (`bestiario::validar_pasta`), e nao aqui. Esta funcao roda em toda
-/// listagem, e abrir quinhentas fichas para listar plugins custaria o que o
-/// arquivo a parte existe para poupar.
-fn validar_colecao(colecao: &ColecaoDoBestiario, sistemas: &[Sistema], auras: &[Aura]) -> AppResult<()> {
+/// So a DECLARACAO: o arquivo e lido e conferido na importacao
+/// (`bestiario::validar_pasta`, `itens_do_plugin::validar_pasta`), e nao aqui.
+/// Esta funcao roda em toda listagem, e abrir quinhentas fichas para listar
+/// plugins custaria o que o arquivo a parte existe para poupar.
+fn validar_colecao(
+    grupo: &str,
+    colecao: &ColecaoDoBestiario,
+    sistemas: &[Sistema],
+    auras: &[Aura],
+) -> AppResult<()> {
     let id = &colecao.id;
     let arquivo = &colecao.arquivo;
 
     if !caminho_relativo_seguro(arquivo) || !arquivo.to_ascii_lowercase().ends_with(".json") {
         return Err(AppError::ExtensaoInvalida(crate::texto!(
-            "o bestiario {id:?} aponta para {arquivo:?}; tem de ser um .json dentro da pasta",
-            "the bestiary {id:?} points to {arquivo:?}; it must be a .json inside the folder"
+            "a colecao {id:?} de `{grupo}` aponta para {arquivo:?}; tem de ser um .json dentro da pasta",
+            "the collection {id:?} in `{grupo}` points to {arquivo:?}; it must be a .json inside the folder"
         )));
     }
 
@@ -2636,8 +2668,8 @@ fn validar_colecao(colecao: &ColecaoDoBestiario, sistemas: &[Sistema], auras: &[
     if let Some(sistema) = &colecao.sistema {
         if !sistemas.iter().any(|s| &s.id == sistema) {
             return Err(AppError::ExtensaoInvalida(crate::texto!(
-                "o bestiario {id:?} e do sistema {sistema:?}, que o plugin nao declara",
-                "the bestiary {id:?} belongs to the system {sistema:?}, which the plugin does not declare"
+                "a colecao {id:?} de `{grupo}` e do sistema {sistema:?}, que o plugin nao declara",
+                "the collection {id:?} in `{grupo}` belongs to the system {sistema:?}, which the plugin does not declare"
             )));
         }
     }
@@ -2647,8 +2679,8 @@ fn validar_colecao(colecao: &ColecaoDoBestiario, sistemas: &[Sistema], auras: &[
     if let Some(aura) = &colecao.aura {
         if !auras.iter().any(|a| &a.id == aura) {
             return Err(AppError::ExtensaoInvalida(crate::texto!(
-                "o bestiario {id:?} aponta a aura {aura:?}, que o plugin nao declara em `auras`",
-                "the bestiary {id:?} points to the aura {aura:?}, which the plugin does not declare in `auras`"
+                "a colecao {id:?} de `{grupo}` aponta a aura {aura:?}, que o plugin nao declara em `auras`",
+                "the collection {id:?} in `{grupo}` points to the aura {aura:?}, which the plugin does not declare in `auras`"
             )));
         }
     }
@@ -3798,6 +3830,7 @@ pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
     validar_imagens_declaradas(origem, &manifesto)?;
     crate::bestiario::validar_pasta(origem, &manifesto)?;
+    crate::itens_do_plugin::validar_pasta(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -5996,6 +6029,53 @@ mod tests {
                 "{colecao} devia ser recusado"
             );
         }
+    }
+
+    /// Um plugin so de itens, com a colecao trocada por quem quer quebrar.
+    fn com_itens(colecao: &str) -> String {
+        format!(
+            r##"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":13,
+            "contribui":{{"auras":[{{"id":"arsenal","titulo":"Arsenal","cor":"#64748b"}}],
+                         "itens":[{colecao}]}}}}"##
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_itens_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_itens(r#"{"id":"armas","titulo":"Armas","arquivo":"itens/armas.json","aura":"arsenal"}"#),
+        )
+        .unwrap();
+
+        let colecao = &m.contribui.itens[0];
+        assert_eq!(colecao.titulo, "Armas");
+        assert_eq!(colecao.arquivo, "itens/armas.json");
+        assert_eq!(colecao.aura.as_deref(), Some("arsenal"));
+        assert!(m.contribui.bestiario.is_empty());
+    }
+
+    #[test]
+    fn colecao_de_itens_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for colecao in [
+            r#"{"id":"armas","titulo":"A","arquivo":"../armas.json"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"itens/armas.txt"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"armas.json","sistema":"ordem"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"armas.json","aura":"sangue"}"#,
+            r#"{"id":"Armas","titulo":"A","arquivo":"armas.json"}"#,
+            r#"{"id":"armas","titulo":"","arquivo":"armas.json"}"#,
+        ] {
+            let erro = ler(base.path(), &com_itens(colecao)).unwrap_err();
+            assert!(matches!(erro, AppError::ExtensaoInvalida(_)), "{colecao} devia ser recusado");
+        }
+
+        // O erro diz em que chave do manifesto a colecao esta.
+        let erro = ler(base.path(), &com_itens(r#"{"id":"armas","titulo":"A","arquivo":"armas.txt"}"#))
+            .unwrap_err();
+        assert!(erro.to_string().contains("`itens`"), "{erro}");
     }
 
     #[test]

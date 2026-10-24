@@ -326,6 +326,7 @@ pub(crate) fn converter_inventario(
                 tags: Vec::new(),
                 aura: None,
                 compendio: false,
+                do_plugin: None,
                 criado_em: antigo.criado_em,
             };
 

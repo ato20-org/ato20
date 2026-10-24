@@ -7,6 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::bestiario;
+use crate::itens_do_plugin;
 use crate::compendio;
 use crate::configuracoes::{self, Escopo};
 use crate::db::{AppDb, Livro, Marcador};
@@ -1436,10 +1437,7 @@ pub async fn bestiario_ficha(
     molde_id: String,
 ) -> AppResult<bestiario::FichaCompleta> {
     if !extensao_ligada(&state, &extensao_id)? {
-        return Err(AppError::Recusado(crate::texto!(
-            "o plugin {extensao_id:?} esta desligado",
-            "the plugin {extensao_id:?} is turned off"
-        )));
+        return Err(plugin_desligado(&extensao_id));
     }
 
     let dir = state.extensoes.clone();
@@ -1458,10 +1456,7 @@ async fn trazer_ficha_do_plugin(
     molde_id: String,
 ) -> AppResult<compendio::TrazidoDoPlugin> {
     if !extensao_ligada(state, &extensao_id)? {
-        return Err(AppError::Recusado(crate::texto!(
-            "o plugin {extensao_id:?} esta desligado",
-            "the plugin {extensao_id:?} is turned off"
-        )));
+        return Err(plugin_desligado(&extensao_id));
     }
 
     let dir = state.extensoes.clone();
@@ -1574,6 +1569,151 @@ pub async fn bestiario_por_em_jogo(
             .await?;
 
     Ok(PostoEmJogo { trazido, personagem })
+}
+
+// --- itens de plugin ------------------------------------------------------------
+//
+// Os itens que um plugin traz, pelo caminho das fichas do bestiario: lidos do
+// DISCO, pelo id, e copiados para o Compendio da campanha. A imagem da pasta
+// do card sai por `bestiario_imagem`, que serve qualquer imagem do plugin. Ver
+// `itens_do_plugin` e `compendio::trazer_item_do_plugin`.
+
+/// As colecoes de itens dos plugins ligados. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn itens_do_plugin_listar(state: State<'_, AppState>) -> AppResult<Vec<itens_do_plugin::Listada>> {
+    let estado: HashMap<String, bool> = state.db.extensoes_estado()?.into_iter().collect();
+    let dir = state.extensoes.clone();
+
+    em_segundo_plano(move || {
+        itens_do_plugin::listar(&dir, |id| estado.get(id).copied().unwrap_or(true))
+    })
+    .await
+}
+
+/// O item inteiro de um plugin ligado, para a previa: ver a arma sem traze-la
+/// para a campanha. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn itens_do_plugin_item(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    item_id: String,
+) -> AppResult<itens_do_plugin::ItemCompleto> {
+    if !extensao_ligada(&state, &extensao_id)? {
+        return Err(plugin_desligado(&extensao_id));
+    }
+
+    let dir = state.extensoes.clone();
+    em_segundo_plano(move || itens_do_plugin::item(&dir, &extensao_id, &colecao_id, &item_id)).await
+}
+
+fn plugin_desligado(extensao_id: &str) -> AppError {
+    AppError::Recusado(crate::texto!(
+        "o plugin {extensao_id:?} esta desligado",
+        "the plugin {extensao_id:?} is turned off"
+    ))
+}
+
+/// Traz o item do plugin para o Compendio da campanha aberta, nos tres tempos
+/// de `trazer_ficha_do_plugin`: o download da imagem fica fora da trava.
+async fn trazer_item_do_plugin(
+    state: &AppState,
+    extensao_id: String,
+    colecao_id: String,
+    item_id: String,
+) -> AppResult<compendio::TrazidoItemDoPlugin> {
+    if !extensao_ligada(state, &extensao_id)? {
+        return Err(plugin_desligado(&extensao_id));
+    }
+
+    let dir = state.extensoes.clone();
+    let (ext, col, id) = (extensao_id.clone(), colecao_id.clone(), item_id.clone());
+    let (item, aura) = em_segundo_plano(move || itens_do_plugin::achar(&dir, &ext, &col, &id)).await?;
+    let chave = compendio::chave_do_plugin(&extensao_id, &colecao_id, &item.id);
+    // A aura vai com o plugin na frente, como a da ficha.
+    let aura = aura.map(|aura| format!("{extensao_id}/{aura}"));
+
+    let shared = state.vault.clone();
+    let procurada = chave.clone();
+    let ja_trazido =
+        em_segundo_plano(move || com_vault(&shared, |vault| compendio::item_do_plugin(vault, &procurada)))
+            .await?;
+    if let Some(item) = ja_trazido {
+        return Ok(compendio::TrazidoItemDoPlugin {
+            item,
+            ja_havia: true,
+            imagens_de_fora: Vec::new(),
+        });
+    }
+
+    let imagem = match item.imagem.as_deref().map(bestiario::Imagem::de) {
+        None => None,
+        Some(bestiario::Imagem::Arquivo(rel)) => Some(
+            bestiario::caminho_da_imagem(&state.extensoes, &extensao_id, rel)
+                .map(compendio::ImagemDoPlugin::Arquivo)
+                .ok_or_else(|| {
+                    crate::texto!(
+                        "a imagem {rel:?} nao esta mais na pasta do plugin",
+                        "the image {rel:?} is no longer in the plugin folder"
+                    )
+                }),
+        ),
+        Some(bestiario::Imagem::Url(url)) => Some(
+            bestiario::baixar_imagem(url, &item.nome)
+                .await
+                .map(|(nome, bytes)| compendio::ImagemDoPlugin::Baixada { nome, bytes }),
+        ),
+    };
+
+    let shared = state.vault.clone();
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| {
+            compendio::trazer_item_do_plugin(vault, &chave, &item, aura, imagem)
+        })
+    })
+    .await
+}
+
+/// O item do plugin entra no Compendio da campanha, como molde. Trazer o
+/// mesmo de novo devolve o que ja esta la.
+#[tauri::command]
+pub async fn itens_do_plugin_trazer(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    item_id: String,
+) -> AppResult<compendio::TrazidoItemDoPlugin> {
+    trazer_item_do_plugin(&state, extensao_id, colecao_id, item_id).await
+}
+
+/// O que voltou de pôr em jogo um item de plugin: o molde, que a tela poe no
+/// Compendio da campanha se ele acabou de chegar, e o item do catalogo.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemPostoEmJogo {
+    pub trazido: compendio::TrazidoItemDoPlugin,
+    pub item: Item,
+}
+
+/// O item do plugin entra no catalogo da campanha: sai do molde que ele deixou
+/// no Compendio, trazido agora se ainda nao estava -- o caminho do molde de
+/// item do mestre (`compendio_item_em_jogo`).
+#[tauri::command]
+pub async fn itens_do_plugin_em_jogo(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    colecao_id: String,
+    item_id: String,
+) -> AppResult<ItemPostoEmJogo> {
+    let trazido = trazer_item_do_plugin(&state, extensao_id, colecao_id, item_id).await?;
+
+    let shared = state.vault.clone();
+    let id = trazido.item.id.clone();
+    let item =
+        em_segundo_plano(move || com_vault(&shared, |vault| compendio::duplicar_item(vault, &id, false)))
+            .await?;
+
+    Ok(ItemPostoEmJogo { trazido, item })
 }
 
 /// O que entrou do outro lado, de cada lista.
