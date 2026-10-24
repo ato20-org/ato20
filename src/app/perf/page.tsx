@@ -614,6 +614,20 @@ function nevoaDaMedida(): FogRegion[] {
   }));
 }
 
+/**
+ * Quantas peças são ITENS da campanha, lido da URL: `?itens=K`.
+ *
+ * Os PRIMEIROS K, pela razão das lanternas. De esguelha o item flutua e
+ * lampeja (ver `LampejoDoItem` e o invólucro em `PecaEmPe`): dois nós a mais
+ * por peça, um deles animando sem parar, e é esse o custo que a medida cobra.
+ * Zero, o padrão, não grava `itemId` em ninguém.
+ */
+function itensDaMedida(): number {
+  if (typeof window === "undefined") return 0;
+
+  return Number(new URLSearchParams(window.location.search).get("itens") ?? 0);
+}
+
 function lanternasDaMedida(): number {
   if (typeof window === "undefined") return 0;
 
@@ -625,6 +639,7 @@ function lanternasDaMedida(): number {
 function montarCena(n: number, cameras = 0, noAr = true): Scene {
   const agora = Date.now();
   const lanternas = lanternasDaMedida();
+  const itens = itensDaMedida();
   const { quantos: comCondicao } = condicoesDaMedida();
   const { quantos: comMedidor } = medidoresDaMedida();
   const comFicha = Math.max(comCondicao, comMedidor);
@@ -648,6 +663,7 @@ function montarCena(n: number, cameras = 0, noAr = true): Scene {
       z: i + 1,
       locked: false,
       ...(i < comFicha ? { personagemId: `perf-personagem-${i}` } : {}),
+      ...(i < itens ? { itemId: `perf-item-da-campanha-${i}` } : {}),
       ...(i < lanternas
         ? {
             luz: {
