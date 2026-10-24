@@ -12,16 +12,23 @@ import { myInventory } from "@/lib/player/inventory";
 import { normaliza } from "@/lib/search";
 import { useFocoNoDetalhe } from "@/lib/store/use-foco-no-detalhe";
 import { cn } from "@/lib/utils";
-import { textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
+import type { AtributoDaConta } from "@/lib/mestre/expressao-de-rolagem";
+import { atributosDaConta, textoSemChaves } from "@/lib/mestre/rolagens-no-texto";
 import type { Personagem } from "@/types/character";
 import type { ItemInventario } from "@/types/inventory";
 
 /** Quantos achados a lista mostra. Mais que isso é digitar mais uma letra. */
 const TETO = 60;
 
-type Achado =
-  | { tipo: "detalhe"; personagem: Personagem; detalhe: DetalheDoJogador }
-  | { tipo: "item"; personagem: Personagem; item: ItemInventario };
+/**
+ * `conta` é o que as chaves leem da ficha DESTE personagem -- a busca junta
+ * vários --: os atributos pela sigla e os detalhes pela menção. Ver
+ * `atributosDaConta`.
+ */
+type Achado = { personagem: Personagem; conta: AtributoDaConta[] } & (
+  | { tipo: "detalhe"; detalhe: DetalheDoJogador }
+  | { tipo: "item"; item: ItemInventario }
+);
 
 /** Tudo em que a busca procura, de todos os personagens do jogador. */
 type Acervo = Achado[];
@@ -78,9 +85,10 @@ function ConteudoDaBusca({ codigo, onFechar }: { codigo: string; onFechar: () =>
             detalhesDoPersonagem(codigo, personagem.id).catch(() => null),
             myInventory(codigo, personagem.id).catch(() => [] as ItemInventario[]),
           ]);
+          const conta = atributosDaConta(personagem.atributos, ficha?.detalhes);
           return [
-            ...(ficha?.detalhes ?? []).map((detalhe) => ({ tipo: "detalhe" as const, personagem, detalhe })),
-            ...itens.map((item) => ({ tipo: "item" as const, personagem, item })),
+            ...(ficha?.detalhes ?? []).map((detalhe) => ({ tipo: "detalhe" as const, personagem, conta, detalhe })),
+            ...itens.map((item) => ({ tipo: "item" as const, personagem, conta, item })),
           ];
         }),
       );
@@ -190,9 +198,9 @@ function LinhaDoAchado({
 
   const ehDetalhe = achado.tipo === "detalhe";
   const nome = ehDetalhe ? achado.detalhe.rotulo : achado.item.nome;
-  // Os atributos DESTE personagem -- a busca junta vários --, para a sigla da
-  // conta desenhar o dado certo. Ver `textoSemChaves` e `BotaoDeRolarDoAchado`.
-  const atributos = achado.personagem.atributos;
+  // A ficha DESTE personagem, para a sigla e a menção da conta desenharem o
+  // dado certo. Ver `textoSemChaves` e `BotaoDeRolarDoAchado`.
+  const atributos = achado.conta;
   const descricao = ehDetalhe ? achado.detalhe.descricao : achado.item.descricao;
   const origem = ehDetalhe ? achado.detalhe.grupo : t.mochila.titulo;
 

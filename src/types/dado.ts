@@ -297,6 +297,21 @@ export type Lance = {
   id: string;
   rotulo?: string;
   modificador: number;
+  /** As siglas que a conta leu, e quanto valiam. Ver `SiglaDoLance`. */
+  siglas?: SiglaDoLance[];
+};
+
+/**
+ * Uma sigla que a conta do lance leu, e quanto valia NA HORA: `{1d20+@AGI}`
+ * rolou com a AGI 1. É o que o histórico mostra ao lado do `+1`, e continua
+ * certo depois de a AGI subir. A sigla de um atributo, ou o rótulo de um
+ * detalhe (`@Luta`). Espelha `fio::Sigla`.
+ */
+export type SiglaDoLance = {
+  sigla: string;
+  valor: number;
+  /** O atributo que É um dado: `1d8`. */
+  rolagem?: string;
 };
 
 /** Uma linha do histórico. */

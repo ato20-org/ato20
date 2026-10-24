@@ -3,7 +3,6 @@
 import { useLayoutEffect, useState, type RefObject } from "react";
 import { Search, X } from "lucide-react";
 
-import { AtributosDasRolagens } from "@/components/atributos-das-rolagens";
 import { AparenciasPersonagem } from "@/components/mestre/aparencias-personagem";
 import { AtributosPersonagem } from "@/components/mestre/atributos-personagem";
 import { CondicoesPersonagem } from "@/components/mestre/condicoes-personagem";
@@ -197,15 +196,14 @@ export function BarraDosGrupos({
         key={buscando ? "busca" : grupo.id}
         className={cn("p-2.5", aoLado && "min-h-0 flex-1 overflow-y-auto")}
       >
-        {/* As siglas entre chaves leem os atributos DESTE personagem:
-            "Ataque: {AGId20>+5}". Ver `AtributosDasRolagens`. */}
-        <AtributosDasRolagens atributos={personagem.atributos} personagemId={personagem.id}>
-          {buscando ? (
-            <AchadosNaFicha busca={busca} {...propsDosDetalhes} />
-          ) : (
-            <GrupoAberto grupo={grupo} {...propsDosDetalhes} />
-          )}
-        </AtributosDasRolagens>
+        {/* As siglas entre chaves leem os atributos DESTE personagem, e a
+            menção os detalhes dele: "Ataque: {AGId20>+@Luta}". Quem os dá é a
+            janela, em volta (`AtributosDasRolagens`). */}
+        {buscando ? (
+          <AchadosNaFicha busca={busca} {...propsDosDetalhes} />
+        ) : (
+          <GrupoAberto grupo={grupo} {...propsDosDetalhes} />
+        )}
       </div>
     </aside>
   );

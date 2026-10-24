@@ -172,9 +172,10 @@ function Ficha({ qual, ficha }: { qual: QualFicha; ficha: FichaCompletaDoPlugin 
         <AtributosDoMolde atributos={molde.atributos} estilo={estilo} />
       ) : null}
 
-      {/* As siglas entre chaves leem os atributos desta ameaça: o bestiário
-          escreve a regra uma vez, e cada ficha rola com os dela. */}
-      <AtributosDasRolagens atributos={molde.atributos}>
+      {/* As siglas entre chaves leem os atributos desta ameaça, e a menção
+          os detalhes dela: o bestiário escreve a regra uma vez, e cada ficha
+          rola com os dela. */}
+      <AtributosDasRolagens atributos={molde.atributos} detalhes={molde.detalhes}>
         {porGrupo.map(({ grupo, detalhes }) => (
           <section key={grupo.nome} aria-label={grupo.nome} className="flex flex-col gap-1.5">
             <h3 className="text-muted-foreground text-xs font-medium">{grupo.nome}</h3>

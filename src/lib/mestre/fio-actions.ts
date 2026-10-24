@@ -7,7 +7,7 @@ import {
 } from "@/lib/configuracoes/registro";
 import { t } from "@/lib/i18n/mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
-import type { Dado } from "@/types/dado";
+import type { Dado, SiglaDoLance } from "@/types/dado";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
 
 /**
@@ -120,11 +120,12 @@ export function definirDadosAbertos(abertos: boolean): void {
  * memória dele, não a jogada.
  *
  * `rotulo` e `modificador` são da rolagem que tem nome -- "Dante · Luta",
- * `+10` --, a da ficha. A do saquinho e a da paleta vão sem os dois.
+ * `+10` --, a da ficha, e `siglas` as que a conta dela leu. A do saquinho e a
+ * da paleta vão sem os três.
  */
 export function anunciarDadosNoFio(
   dados: readonly Dado[],
-  { rotulo, modificador }: { rotulo?: string; modificador?: number } = {},
+  { rotulo, modificador, siglas }: { rotulo?: string; modificador?: number; siglas?: SiglaDoLance[] } = {},
 ): void {
   if (dados.length === 0) return;
 
@@ -137,6 +138,7 @@ export function anunciarDadosNoFio(
         dados: dados.map(({ faces, valor, descartado }) => ({ faces, valor, ...(descartado && { descartado }) })),
         ...(modificador ? { modificador } : {}),
         ...(rotulo ? { rotulo } : {}),
+        ...(siglas ? { siglas } : {}),
       },
       para: abertos ? undefined : { tipo: "mestre" },
     }).catch(() => {

@@ -273,11 +273,14 @@ const pt = {
     /** O hover do número no desenho de um plugin, onde não há cartão. */
     dicaNoLugar:
       "Clique para mudar o número, ou escreva um dado (d8). Botão direito: sigla, descrição, apagar.",
-    /** O mesmo hover, quando o atributo é um dado: o clique rola. */
-    dicaDoDadoNoLugar: "Clique para rolar. Botão direito: mudar o dado, sigla, descrição, apagar.",
-    mudarValor: (sigla: string) => `Mudar o valor de ${sigla}`,
-    /** O que o campo do valor aceita, no balão do desenho. */
-    exemploDeValor: "Um número, ou um dado: d8, d12+1",
+    /** O mesmo hover, quando o atributo é um dado: o desenho rola, o texto se edita. */
+    dicaDoDadoNoLugar:
+      "Clique no dado para rolar, ou no texto para mudar (um número tira o dado). Botão direito: sigla, descrição, apagar.",
+    /** A fórmula do dado com menção, no hover do círculo: o círculo mostra o resultado. */
+    formula: (formula: string) => `Fórmula: ${formula}`,
+    /** O valor que não se lê: nem número, nem dado, ou a menção que a ficha não tem. */
+    valorNaoLido: (texto: string) =>
+      `Não deu para ler “${texto}”. Escreva um número, ou um dado: d8, d20+@NEX (só o que é número).`,
   },
 
   /** Os detalhes da ficha: Identidade, Perícias, Poderes. Ver `vault/detalhes.rs`. */
@@ -854,9 +857,11 @@ const en: typeof pt = {
     renomear: (sigla) => `Rename ${sigla}`,
     dicaNoLugar:
       "Click to change the number, or type a die (d8). Right-click: abbreviation, description, delete.",
-    dicaDoDadoNoLugar: "Click to roll. Right-click: change the die, abbreviation, description, delete.",
-    mudarValor: (sigla) => `Change the value of ${sigla}`,
-    exemploDeValor: "A number, or a die: d8, d12+1",
+    dicaDoDadoNoLugar:
+      "Click the die to roll, or the text to change it (a number removes the die). Right-click: abbreviation, description, delete.",
+    formula: (formula) => `Formula: ${formula}`,
+    valorNaoLido: (texto) =>
+      `Couldn't read “${texto}”. Type a number, or a die: d8, d20+@NEX (numbers only).`,
   },
 
   detalhes: {

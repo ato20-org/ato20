@@ -18,6 +18,7 @@ import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { normaliza } from "@/lib/search";
 import {
   lerExpressaoDeRolagem,
+  nomesDoDadoDoAtributo,
   textoDaExpressao,
   textoDoModificador,
   type AtributoDaConta,
@@ -63,12 +64,16 @@ export function DetalhesDoJogador({
   abas = false,
   topoDasAbas = 53,
   atributos,
+  ficha,
 }: {
   codigo: string;
   personagemId: string;
+  /** Lida por quem chama, que a divide com os atributos. Ver `useFichaDoJogador`. */
+  ficha: FichaDeDetalhes | null;
   /**
    * Os atributos do personagem, para a conta com sigla virar o botão de rolar
-   * como as outras: "Ataque: {AGId20>+5}" mostra tantos d20 quanto a AGI. Ver
+   * como as outras: "Ataque: {AGId20>+5}" mostra tantos d20 quanto a AGI. A
+   * menção aos detalhes ("{1d20+@Luta}") lê a própria ficha. Ver
    * `TextoDoDetalhe`.
    */
   atributos?: ReadonlyArray<AtributoDaConta>;
@@ -91,30 +96,8 @@ export function DetalhesDoJogador({
    */
   topoDasAbas?: number;
 }) {
-  const [ficha, setFicha] = useState<FichaDeDetalhes | null>(null);
   /** O grupo da aba escolhida, pelo id. `null` = o primeiro. */
   const [ativo, setAtivo] = useState<string | null>(null);
-  // Relê quando o Mestre mexe no elenco: gravar um detalhe sobe essa versão.
-  const versao = useFichasVersaoStore((state) => state.versao);
-
-  useEffect(() => {
-    let ativo = true;
-
-    void detalhesDoPersonagem(codigo, personagemId).then(
-      (lida) => {
-        if (ativo) setFicha(lida);
-      },
-      () => {
-        // Sem a ficha os detalhes somem, e o resto do cartão continua: o
-        // celular no Wi-Fi da casa volta ao recarregar.
-        if (ativo) setFicha(null);
-      },
-    );
-
-    return () => {
-      ativo = false;
-    };
-  }, [codigo, personagemId, versao]);
 
   // A busca pede que a ficha mostre um detalhe: abre o grupo dele, rola até ele
   // e o faz piscar. Ver `useFocoNoDetalhe`. Só o personagem do alvo atende, e o
@@ -173,7 +156,7 @@ export function DetalhesDoJogador({
     if (!grupo) return null;
 
     return (
-      <AtributosDasRolagens atributos={atributos}>
+      <AtributosDasRolagens atributos={atributos} detalhes={ficha.detalhes}>
         <section className="space-y-2">
           {/* Presas logo abaixo da busca (`topoDasAbas`), com o fundo de quem
               embrulha o cartão -- ver `--fundo-da-busca`. */}
@@ -217,7 +200,7 @@ export function DetalhesDoJogador({
   }
 
   return (
-    <AtributosDasRolagens atributos={atributos}>
+    <AtributosDasRolagens atributos={atributos} detalhes={ficha.detalhes}>
       {achadosNosDetalhes(gruposDaFicha(ficha.grupos, ficha.detalhes), ficha.detalhes, busca).map(
         ({ grupo, detalhes }) => (
           <GrupoDoJogador
@@ -464,8 +447,8 @@ function EntradaDoJogador({
  *
  * O toque manda só QUAL conta, como está escrita, e quem a confere na ficha e
  * sorteia é o daemon -- ver `rolarNoTexto`. As siglas leem os atributos do
- * personagem (`AtributosDasRolagens`), e o desenho é só para mostrar: quem
- * rola relê a AGI de agora.
+ * personagem, e a menção os detalhes (`AtributosDasRolagens`), e o desenho é
+ * só para mostrar: quem rola relê a AGI e a Luta de agora.
  *
  * A régua entre chaves ("{9m}") aparece como a medida, sem botão: quem põe
  * régua no mapa é o Mestre, e o celular não mexe na cena.
@@ -620,6 +603,47 @@ export function BotaoDeRolarDoAchado({
 }
 
 /**
+ * Os detalhes do personagem, lidos do daemon, e relidos quando o Mestre mexe
+ * no elenco. Um hook, e não a leitura dentro de `DetalhesDoJogador`: o dado
+ * dos atributos ("d20-@NEX") lê a mesma ficha, e o cartão a lê uma vez só.
+ */
+export function useFichaDoJogador(codigo: string, personagemId: string): FichaDeDetalhes | null {
+  const [ficha, setFicha] = useState<FichaDeDetalhes | null>(null);
+  // Relê quando o Mestre mexe no elenco: gravar um detalhe sobe essa versão.
+  const versao = useFichasVersaoStore((state) => state.versao);
+
+  useEffect(() => {
+    let ativo = true;
+
+    void detalhesDoPersonagem(codigo, personagemId).then(
+      (lida) => {
+        if (ativo) setFicha(lida);
+      },
+      () => {
+        // Sem a ficha os detalhes somem, e o resto do cartão continua: o
+        // celular no Wi-Fi da casa volta ao recarregar.
+        if (ativo) setFicha(null);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [codigo, personagemId, versao]);
+
+  return ficha;
+}
+
+/**
+ * O que o dado de um atributo lê da ficha em volta: os números, para
+ * "d20-@NEX". Ver `nomesDoDadoDoAtributo`.
+ */
+function useNomesDoDado(): ReadonlyArray<AtributoDaConta> {
+  const nomes = useAtributosDasRolagens();
+  return useMemo(() => nomesDoDadoDoAtributo(nomes), [nomes]);
+}
+
+/**
  * O atributo que é um dado -- a AGI d8 --, rolado pelo daemon como o detalhe.
  * O número não tem botão: não há o que sortear. Desenha um dado por TIPO, e
  * não um por dado (ver `DesenhoDoDadoNoCelular`). Com `children`, o botão é o
@@ -640,8 +664,11 @@ export function BotaoDoAtributo({
   style?: React.CSSProperties;
   children?: React.ReactNode;
 }) {
+  // A menção ("d20-@NEX") lê a ficha do cartão em volta; quem rola relê a de
+  // agora, no daemon.
+  const nomes = useNomesDoDado();
   if (!atributo.rolagem) return null;
-  const leitura = lerExpressaoDeRolagem(atributo.rolagem);
+  const leitura = lerExpressaoDeRolagem(atributo.rolagem, nomes);
   if (!leitura.ok) return null;
 
   return (
@@ -726,9 +753,11 @@ function BotaoDaExpressao({
  * do ritual medi-lo em `em`. Ver `facesParaDesenhar`.
  */
 export function DesenhoDoDadoNoCelular({ rolagem, lado }: { rolagem: string; lado: string }) {
+  const nomes = useNomesDoDado();
+
   return (
     <span className="flex shrink-0 items-center justify-center gap-[0.1em]" style={{ height: lado }}>
-      {facesParaDesenhar(rolagem).map((faces) => (
+      {facesParaDesenhar(rolagem, nomes).map((faces) => (
         <span key={faces} className="block [&>svg]:size-full" style={{ width: lado, height: lado }}>
           <DadoParado faces={faces} valor={Math.max(...rotulosDoDado(faces))} tamanho={18} />
         </span>

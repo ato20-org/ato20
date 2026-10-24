@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   File,
   FileAudio,
@@ -34,7 +34,15 @@ import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
 import { BlocosDePlugin } from "./blocos-de-plugin";
-import { BotaoDoAtributo, DesenhoDoDadoNoCelular, DetalhesDoJogador } from "./detalhes-jogador";
+import { AtributosDasRolagens } from "@/components/atributos-das-rolagens";
+import {
+  BotaoDoAtributo,
+  DesenhoDoDadoNoCelular,
+  DetalhesDoJogador,
+  useFichaDoJogador,
+} from "./detalhes-jogador";
+import { nomesDoDadoDoAtributo } from "@/lib/mestre/expressao-de-rolagem";
+import { atributosDaConta } from "@/lib/mestre/rolagens-no-texto";
 import { textoDoValor } from "@/lib/mestre/valor-do-atributo";
 import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
 import { attachmentKind, type AttachmentKind } from "@/lib/attachments/kind";
@@ -194,6 +202,15 @@ function CharacterCard({
 
   // O desenho dos atributos que a campanha escolheu, que chega pelo declarativo.
   const estiloDosAtributos = useEstiloDosAtributos();
+  // Os detalhes, lidos uma vez para o cartão: a ficha embaixo os mostra, e o
+  // dado dos atributos os menciona ("d20-@NEX").
+  const ficha = useFichaDoJogador(codigo, personagem.id);
+  // O que o dado com menção lê, para o valor aparecer resolvido: "d4+15", e
+  // não "d4+20-@NEX". Ver `textoDoDado`.
+  const nomesDoDado = useMemo(
+    () => nomesDoDadoDoAtributo(atributosDaConta(personagem.atributos, ficha?.detalhes)),
+    [personagem.atributos, ficha],
+  );
 
   // O retrato e a miniatura ampliados. Estado à parte do `abrindo`: aqueles são
   // ANEXOS, atrás do token e baixados para uma blob que depois se revoga; estes
@@ -381,10 +398,10 @@ function CharacterCard({
             <span
               className={cn(
                 "leading-tight font-medium tabular-nums",
-                textoDoValor(atributo).length > 4 ? "text-sm" : "text-xl",
+                textoDoValor(atributo, nomesDoDado).length > 4 ? "text-sm" : "text-xl",
               )}
             >
-              {textoDoValor(atributo)}
+              {textoDoValor(atributo, nomesDoDado)}
             </span>
           </li>
         ))}
@@ -421,10 +438,10 @@ function CharacterCard({
                 <DesenhoDoDadoNoCelular rolagem={atributo.rolagem} lado="0.55em" />
                 <span
                   style={{
-                    fontSize: `${0.75 * (textoDoValor(atributo).length > 3 ? 3 / textoDoValor(atributo).length : 1)}em`,
+                    fontSize: `${0.75 * (textoDoValor(atributo, nomesDoDado).length > 3 ? 3 / textoDoValor(atributo, nomesDoDado).length : 1)}em`,
                   }}
                 >
-                  {textoDoValor(atributo)}
+                  {textoDoValor(atributo, nomesDoDado)}
                 </span>
               </BotaoDoAtributo>
             ) : (
@@ -451,7 +468,11 @@ function CharacterCard({
           {t.personagens.atributos}
         </p>
 
-        {atributosDesenhados}
+        {/* O dado com menção ("d20-@NEX") lê os números deste personagem: os
+            outros atributos e os detalhes. Ver `AtributosDasRolagens`. */}
+        <AtributosDasRolagens atributos={personagem.atributos} detalhes={ficha?.detalhes}>
+          {atributosDesenhados}
+        </AtributosDasRolagens>
       </section>
     ) : null;
 
@@ -821,6 +842,7 @@ function CharacterCard({
               codigo={codigo}
               personagemId={personagem.id}
               atributos={personagem.atributos}
+              ficha={ficha}
               busca={termo}
             />
             <InventarioJogador codigo={codigo} personagemId={personagem.id} busca={termo} />
@@ -862,6 +884,7 @@ function CharacterCard({
             codigo={codigo}
             personagemId={personagem.id}
             atributos={personagem.atributos}
+            ficha={ficha}
             abas
             topoDasAbas={comBusca ? 53 : 0}
           />

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::Vault;
+use super::{detalhes, Vault};
 use crate::error::AppResult;
 
 /// O fio da campanha: as mensagens da mesa e as rolagens, uma por linha.
@@ -48,6 +48,10 @@ pub const MODIFICADOR_MAX: i64 = 10_000;
 
 /// Teto do nome de plugin que assina uma linha. O id e conferido a parte.
 const MAX_NOME: usize = 60;
+
+/// Quantas siglas uma rolagem guarda. Uma conta de sessenta letras nao le
+/// muito mais que isto, e a linha do fio mostra menos ainda.
+pub const MAX_SIGLAS: usize = 8;
 
 /// Quem disse.
 ///
@@ -105,6 +109,23 @@ pub struct Rolagem {
     pub modificador: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotulo: Option<String>,
+    /// As siglas que a conta leu, e quanto valiam. Vazio = nenhuma. Ver
+    /// `Sigla`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub siglas: Vec<Sigla>,
+}
+
+/// Uma sigla que a conta da rolagem leu, e quanto valia NA HORA:
+/// `{1d20+@AGI}` rolou com a AGI 1. E o que deixa o historico dizer de onde
+/// veio o `+1`, e continuar certo depois de a AGI subir. A sigla de um
+/// atributo, ou o rotulo de um detalhe (`@Luta`). Espelha `SiglaDoLance` do TS.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Sigla {
+    pub sigla: String,
+    pub valor: i64,
+    /// O atributo que E um dado: `1d8`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rolagem: Option<String>,
 }
 
 fn zero(valor: &i64) -> bool {
@@ -320,7 +341,34 @@ pub fn rolagem_valida(rolagem: Rolagem) -> Result<Rolagem, &'static str> {
         .map(|rotulo| corta(&rotulo.split_whitespace().collect::<Vec<_>>().join(" "), MAX_ROTULO))
         .filter(|rotulo| !rotulo.is_empty());
 
-    Ok(Rolagem { rotulo, ..rolagem })
+    // A sigla tambem e uma linha, e do tamanho do rotulo de um detalhe -- e o
+    // que ela pode ser.
+    let siglas = rolagem
+        .siglas
+        .iter()
+        .filter_map(|sigla| {
+            let nome = corta(
+                &sigla.sigla.split_whitespace().collect::<Vec<_>>().join(" "),
+                detalhes::MAX_ROTULO,
+            );
+            (!nome.is_empty()).then(|| Sigla {
+                sigla: nome,
+                valor: sigla.valor.clamp(-detalhes::MAX_NUMERO, detalhes::MAX_NUMERO),
+                rolagem: sigla
+                    .rolagem
+                    .as_deref()
+                    .map(|rolagem| corta(rolagem.trim(), detalhes::MAX_ROLAGEM))
+                    .filter(|rolagem| !rolagem.is_empty()),
+            })
+        })
+        .take(MAX_SIGLAS)
+        .collect();
+
+    Ok(Rolagem {
+        rotulo,
+        siglas,
+        ..rolagem
+    })
 }
 
 #[cfg(test)]
@@ -445,6 +493,7 @@ mod tests {
                 dados: vec![Dado { faces: 20, valor: 17, descartado: false }],
                 modificador: 0,
                 rotulo: None,
+                siglas: Vec::new(),
             }),
         };
 
@@ -472,15 +521,35 @@ mod tests {
             dados: vec![Dado { faces: 20, valor: 3, descartado: false }],
             modificador: 3,
             rotulo: Some("  Ataque\ncom   espada ".into()),
+            siglas: vec![
+                Sigla { sigla: " Pontos\nde  Vida ".into(), valor: 3, rolagem: None },
+                Sigla { sigla: "  ".into(), valor: 1, rolagem: None },
+                Sigla { sigla: "AGI".into(), valor: 0, rolagem: Some(" 1d8 ".into()) },
+            ],
         })
         .expect("valida");
         assert_eq!(rolagem.rotulo.as_deref(), Some("Ataque com espada"));
+        // A sigla vazia sai; as outras ficam numa linha, aparadas.
+        assert_eq!(
+            rolagem.siglas,
+            [
+                Sigla { sigla: "Pontos de Vida".into(), valor: 3, rolagem: None },
+                Sigla { sigla: "AGI".into(), valor: 0, rolagem: Some("1d8".into()) },
+            ]
+        );
 
-        assert!(rolagem_valida(Rolagem { dados: vec![], modificador: 0, rotulo: None }).is_err());
+        assert!(rolagem_valida(Rolagem {
+            dados: vec![],
+            modificador: 0,
+            rotulo: None,
+            siglas: Vec::new()
+        })
+        .is_err());
         assert!(rolagem_valida(Rolagem {
             dados: vec![Dado { faces: 20, valor: 1, descartado: false }],
             modificador: MODIFICADOR_MAX + 1,
             rotulo: None,
+            siglas: Vec::new(),
         })
         .is_err());
     }

@@ -9,9 +9,10 @@ import {
   type MouseEvent,
   type RefObject,
 } from "react";
-import { Dices, Info, Pencil, Plus, Trash2 } from "lucide-react";
+import { Info, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useAtributosDasRolagens } from "@/components/atributos-das-rolagens";
 import { confirmarApagar } from "@/components/mestre/confirmar-apagar";
 import { DadoEmImagem } from "@/components/mestre/saquinho-dados";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
@@ -44,7 +45,12 @@ import {
 import { repartirAtributos } from "@/lib/atributos-em-imagem";
 import { t } from "@/lib/i18n/personagens";
 import { rolarExpressao } from "@/lib/mestre/dados-actions";
-import { lerExpressaoDeRolagem, textoDaExpressao } from "@/lib/mestre/expressao-de-rolagem";
+import {
+  lerExpressaoDeRolagem,
+  nomesDoDadoDoAtributo,
+  textoDaExpressao,
+  type AtributoDaConta,
+} from "@/lib/mestre/expressao-de-rolagem";
 import {
   facesParaDesenhar,
   lerValorDoAtributo,
@@ -249,10 +255,10 @@ export function AtributosPersonagem({
  * imagem já escreve o nome do atributo, e um ícone em cada círculo do ritual
  * disputaria o olho com o número. O hover diz o que é, e como mexer.
  *
- * O atributo que é um DADO mostra o dado ("d8"), e o clique rola: no círculo
- * não cabem um campo e um botão, e na mesa o gesto do dado é rolar. Mudar o
- * dado vai para o botão direito, com o resto. Escrever um dado no número --
- * "d8" -- é o caminho de ida.
+ * O atributo que é um DADO mostra o desenho dele em cima do texto, como o
+ * cartão da grade: o desenho rola, e o texto ("d8") é o campo, editado no
+ * lugar como o número -- escrever "2" ali tira o dado. Escrever um dado no
+ * número -- "d8" -- é o caminho de ida. Ver `DadoNoLugar`.
  *
  * A edição da sigla e da descrição abre ancorada no círculo, DEPOIS de o menu
  * fechar: aberta no clique do item, o menu devolveria o foco ao círculo ao
@@ -280,8 +286,10 @@ function AtributoNoLugar({
   onApagar: () => void;
 }) {
   const { sigla, valor, rolagem, descricao } = atributo;
+  const nomes = useNomesDoDado();
+  const formula = rolagem ? textoDoDado(rolagem) : undefined;
 
-  type Campo = "sigla" | "descricao" | "valor";
+  type Campo = "sigla" | "descricao";
   const [editando, setEditando] = useState<Campo | null>(null);
   const pedido = useRef<Campo | null>(null);
   const [caixa, setCaixa] = useState<HTMLSpanElement | null>(null);
@@ -302,7 +310,14 @@ function AtributoNoLugar({
           <Tooltip>
             <TooltipTrigger render={<span className="flex size-full items-center justify-center" />}>
               {rolagem ? (
-                <DadoNoLugar rolagem={rolagem} rotulo={rotulo} />
+                <DadoNoLugar
+                  sigla={sigla}
+                  valor={valor}
+                  rolagem={rolagem}
+                  rotulo={rotulo}
+                  onValor={onValor}
+                  onDado={onDado}
+                />
               ) : (
                 <CampoDoValor
                   sigla={sigla}
@@ -315,6 +330,11 @@ function AtributoNoLugar({
             </TooltipTrigger>
             <TooltipContent>
               <p className="font-medium">{sigla}</p>
+              {/* O dado com menção mostra o resultado no círculo; a fórmula
+                  fica aqui, para quem quer saber de onde ele veio. */}
+              {rolagem && formula !== textoDoDado(rolagem, nomes) ? (
+                <p className="tabular-nums">{t.atributos.formula(formula!)}</p>
+              ) : null}
               {descricao ? <p className="max-w-56 whitespace-pre-line">{descricao}</p> : null}
               <p className="text-muted-foreground max-w-56">
                 {rolagem ? t.atributos.dicaDoDadoNoLugar : t.atributos.dicaNoLugar}
@@ -324,12 +344,6 @@ function AtributoNoLugar({
         </ContextMenuTrigger>
 
         <ContextMenuContent>
-          {rolagem ? (
-            <ContextMenuItem onClick={() => (pedido.current = "valor")}>
-              <Dices />
-              {t.atributos.mudarValor(sigla)}
-            </ContextMenuItem>
-          ) : null}
           <ContextMenuItem onClick={() => (pedido.current = "sigla")}>
             <Pencil />
             {t.atributos.renomear(sigla)}
@@ -373,26 +387,6 @@ function AtributoNoLugar({
                   if (!lido || lido === sigla) return;
 
                   onSigla(lido);
-                }}
-              />
-            </>
-          ) : editando === "valor" ? (
-            <>
-              <p className="text-xs font-medium">{t.atributos.mudarValor(sigla)}</p>
-              <Input
-                autoFocus
-                defaultValue={rolagem ? textoDoDado(rolagem) : String(valor)}
-                placeholder={t.atributos.exemploDeValor}
-                aria-label={t.atributos.valor(sigla)}
-                className="h-8 text-sm"
-                onFocus={(evento) => evento.currentTarget.select()}
-                onKeyDown={(evento) => {
-                  if (evento.key === "Enter") evento.currentTarget.blur();
-                }}
-                onBlur={(evento) => {
-                  setEditando(null);
-                  const patch = patchDoValor(evento.target.value, { valor, rolagem });
-                  if (patch) onDado(patch);
                 }}
               />
             </>
@@ -475,6 +469,8 @@ export function CartaoDeAtributo({
   onDescricao: (descricao: string) => void;
   onApagar: () => void;
 }) {
+  const nomes = useNomesDoDado();
+
   return (
     <li className="group/atributo bg-muted/40 focus-within:border-ring relative flex flex-col items-center rounded-md border px-1 pt-1.5 pb-1">
       <CampoDaSigla
@@ -490,7 +486,7 @@ export function CartaoDeAtributo({
         valor={valor}
         onGravar={onValor}
         dado={dado}
-        className={tamanhoDoValor(dado?.rolagem ? textoDoDado(dado.rolagem) : String(valor))}
+        className={tamanhoDoValor(dado?.rolagem ? textoDoDado(dado.rolagem, nomes) : String(valor))}
       />
 
       <DescricaoDoAtributo
@@ -683,6 +679,16 @@ function CampoDaSigla({
   );
 }
 
+/**
+ * O que o dado de um atributo lê da ficha em volta: os números, para
+ * "d20-@NEX". Fora de uma ficha -- os atributos da campanha --, nada. Ver
+ * `nomesDoDadoDoAtributo`.
+ */
+function useNomesDoDado(): ReadonlyArray<AtributoDaConta> {
+  const nomes = useAtributosDasRolagens();
+  return useMemo(() => nomesDoDadoDoAtributo(nomes), [nomes]);
+}
+
 /** O que muda quando o valor vira dado, ou volta a número. Ver `patchDoValor`. */
 type PatchDoDado = Pick<PatchAtributo, "valor" | "rolagem">;
 
@@ -694,8 +700,9 @@ type PatchDoDado = Pick<PatchAtributo, "valor" | "rolagem">;
 function patchDoValor(
   texto: string,
   atual: { valor: number; rolagem?: string },
+  nomes?: ReadonlyArray<AtributoDaConta>,
 ): PatchDoDado | null {
-  const lido = lerValorDoAtributo(texto);
+  const lido = lerValorDoAtributo(texto, nomes);
   if (!lido) return null;
 
   if (lido.tipo === "numero") {
@@ -723,9 +730,11 @@ function tamanhoDoValor(texto: string): string {
  * acompanhar o corpo do lugar. Ver `facesParaDesenhar`.
  */
 function DesenhoDoDado({ rolagem, lado }: { rolagem: string; lado: string }) {
+  const nomes = useNomesDoDado();
+
   return (
     <span className="flex shrink-0 items-center justify-center gap-[0.1em]" style={{ height: lado }}>
-      {facesParaDesenhar(rolagem).map((faces) => (
+      {facesParaDesenhar(rolagem, nomes).map((faces) => (
         <span key={faces} className="block [&>img]:size-full" style={{ width: lado, height: lado }}>
           <DadoEmImagem tipo={tipoDado(faces)} tamanho={LADO_DO_DESENHO} />
         </span>
@@ -747,10 +756,11 @@ const LADO_DO_DESENHO = 32;
  * detalhe rolável, em cima do valor. Ver `RolagemDoDetalhe`.
  */
 function BotaoDoDado({ rolagem, rotulo }: { rolagem: string; rotulo: string }) {
-  const leitura = useMemo(() => lerExpressaoDeRolagem(rolagem), [rolagem]);
+  const nomes = useNomesDoDado();
+  const leitura = useMemo(() => lerExpressaoDeRolagem(rolagem, nomes), [rolagem, nomes]);
   if (!leitura.ok) return null;
 
-  const { expressao } = leitura;
+  const { expressao, siglas } = leitura;
   const rolar = t.detalhes.rolar(rotulo, textoDaExpressao(expressao));
 
   return (
@@ -758,7 +768,7 @@ function BotaoDoDado({ rolagem, rotulo }: { rolagem: string; rotulo: string }) {
       type="button"
       aria-label={rolar}
       title={rolar}
-      onClick={() => rolarExpressao(expressao, rotulo)}
+      onClick={() => rolarExpressao(expressao, rotulo, siglas)}
       className="hover:bg-accent focus-visible:ring-ring mt-0.5 rounded px-1 py-0.5 outline-none focus-visible:ring-2"
     >
       <DesenhoDoDado rolagem={rolagem} lado="1.25rem" />
@@ -768,29 +778,56 @@ function BotaoDoDado({ rolagem, rotulo }: { rolagem: string; rotulo: string }) {
 
 /**
  * O dado no lugar dele da imagem: o desenho em cima do texto, os dois no corpo
- * do lugar, e o clique rola. Juntos eles ocupam a altura da caixa do número
- * (1,3 do corpo, ver `estiloDoLugar`), e o texto mais comprido que três letras
- * encolhe para caber no círculo, onde "-10" cabe e "d12+1" não.
+ * do lugar. O desenho rola; o texto é o campo do valor, como no cartão da
+ * grade -- "d6" troca o dado, "2" o tira, e as setas sobem e descem a escada.
+ * Juntos eles ocupam a altura da caixa do número (1,3 do corpo, ver
+ * `estiloDoLugar`), e o texto mais comprido que três letras encolhe para caber
+ * no círculo, onde "-10" cabe e "d12+1" não.
  */
-function DadoNoLugar({ rolagem, rotulo }: { rolagem: string; rotulo: string }) {
-  const leitura = useMemo(() => lerExpressaoDeRolagem(rolagem), [rolagem]);
-  const texto = textoDoDado(rolagem);
-  if (!leitura.ok) return <span>{texto}</span>;
-
-  const { expressao } = leitura;
-  const rolar = t.detalhes.rolar(rotulo, textoDaExpressao(expressao));
+function DadoNoLugar({
+  sigla,
+  valor,
+  rolagem,
+  rotulo,
+  onValor,
+  onDado,
+}: {
+  sigla: string;
+  valor: number;
+  rolagem: string;
+  rotulo: string;
+  onValor: (valor: number) => void;
+  onDado: (patch: PatchDoDado) => void;
+}) {
+  const nomes = useNomesDoDado();
+  const leitura = useMemo(() => lerExpressaoDeRolagem(rolagem, nomes), [rolagem, nomes]);
+  const texto = textoDoDado(rolagem, nomes);
   const corpo = 0.75 * (texto.length > 3 ? 3 / texto.length : 1);
 
   return (
-    <button
-      type="button"
-      aria-label={rolar}
-      onClick={() => rolarExpressao(expressao, rotulo)}
-      className="focus-visible:ring-ring flex size-full cursor-pointer flex-col items-center justify-center rounded leading-none outline-none hover:brightness-125 focus-visible:ring-2"
-    >
-      <DesenhoDoDado rolagem={rolagem} lado="0.55em" />
-      <span style={{ fontSize: `${corpo}em` }}>{texto}</span>
-    </button>
+    <span className="flex size-full flex-col items-center justify-center leading-none">
+      {leitura.ok ? (
+        <button
+          type="button"
+          aria-label={t.detalhes.rolar(rotulo, textoDaExpressao(leitura.expressao))}
+          onClick={() => rolarExpressao(leitura.expressao, rotulo, leitura.siglas)}
+          className="focus-visible:ring-ring cursor-pointer rounded outline-none hover:brightness-125 focus-visible:ring-2"
+        >
+          <DesenhoDoDado rolagem={rolagem} lado="0.55em" />
+        </button>
+      ) : null}
+      {/* O corpo no embrulho, e o campo o herda: o `input` tem `font:
+          inherit` no reset. */}
+      <span className="w-full" style={{ fontSize: `${corpo}em` }}>
+        <CampoDoValor
+          sigla={sigla}
+          valor={valor}
+          onGravar={onValor}
+          dado={{ rolagem, onGravar: onDado }}
+          className="leading-none"
+        />
+      </span>
+    </span>
   );
 }
 
@@ -818,11 +855,17 @@ function CampoDoValor({
   className?: string;
 }) {
   const [rascunho, setRascunho] = useState<string | null>(null);
+  const [focado, setFocado] = useState(false);
   const desistiu = useRef(false);
   const marcar = useMarcarAoFocar();
+  const nomes = nomesDoDadoDoAtributo(useAtributosDasRolagens(), sigla);
 
   const rolagem = dado?.rolagem;
-  const mostrado = rascunho ?? (rolagem ? textoDoDado(rolagem) : String(valor));
+  // O dado com menção, como a planilha: parado, o resultado ("d4+15"); no
+  // foco, a fórmula como foi escrita ("d4+20-@NEX"), que é o que se edita.
+  const escrito = rolagem ? textoDoDado(rolagem) : String(valor);
+  const resolvido = rolagem ? textoDoDado(rolagem, nomes) : escrito;
+  const mostrado = rascunho ?? (focado ? escrito : resolvido);
 
   function passo(delta: 1 | -1) {
     const proximoDado = dado ? passoDoDado(mostrado, delta) : null;
@@ -851,6 +894,16 @@ function CampoDoValor({
       inputMode={dado ? "text" : "numeric"}
       value={mostrado}
       {...marcar}
+      onFocus={(evento) => {
+        marcar.onFocus(evento);
+        setFocado(true);
+        // A fórmula entra no lugar do resultado DEPOIS do `select` de cima, e
+        // trocar o valor desfaz a seleção: marca de novo no quadro seguinte.
+        if (escrito !== resolvido) {
+          const campo = evento.currentTarget;
+          requestAnimationFrame(() => campo.select());
+        }
+      }}
       onChange={(evento) => setRascunho(evento.target.value)}
       onKeyDown={(evento) => {
         // As setas preparam o número e só o `blur` grava: segurar a seta de
@@ -866,6 +919,7 @@ function CampoDoValor({
       onBlur={() => {
         const lido = rascunho;
         setRascunho(null);
+        setFocado(false);
 
         if (desistiu.current) {
           desistiu.current = false;
@@ -874,7 +928,13 @@ function CampoDoValor({
         if (lido === null) return;
 
         if (dado) {
-          const patch = patchDoValor(lido, { valor, rolagem });
+          // O que não se lê volta ao que era, mas DIZ: o "d20-@Nada" que some
+          // calado parece um campo quebrado.
+          if (lido.trim() !== "" && !lerValorDoAtributo(lido, nomes)) {
+            toast.error(t.atributos.valorNaoLido(lido.trim()));
+            return;
+          }
+          const patch = patchDoValor(lido, { valor, rolagem }, nomes);
           if (!patch) return;
           // Só o número, sem dado a tirar: o caminho de sempre.
           if (patch.rolagem === undefined && patch.valor !== undefined) onGravar(patch.valor);

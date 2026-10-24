@@ -1158,6 +1158,14 @@ num arquivo ao lado dele:
   como o dado: com AGI d8, `{AGI+1}` rola 1d8+1. Só entre chaves: na
   `rolagem` a sigla ainda não vale, porque quem rola o detalhe pelo celular
   é o daemon.
+- **A menção com `@` entre chaves:** `@` na frente lê a sigla de um atributo
+  (`{1d20+@FOR}`, o mesmo que `{1d20+FOR}`) ou o rótulo de um detalhe da
+  mesma ficha que guarde número: `{1d20+@Luta}` soma a Luta, `{@Ataquesd6}`
+  rola tantos d6 quanto os Ataques. Detalhe só com `@`, e só o de número (ou
+  o texto com um número inteiro escrito, como "3"): `{1d20+@Classe}` com a
+  Classe "Combatente" deixa as chaves como texto. O rótulo vale com espaço
+  (`@Bônus de Ataque`), sem diferenciar maiúscula; com a sigla e o rótulo
+  iguais, vale o atributo.
 - **`retrato` e `miniatura`** são um arquivo da pasta do plugin ou uma URL
   `https` com o nome de um site. O arquivo vai ao acervo da campanha ao
   trazer; a URL é baixada nessa hora, pela máquina do mestre, e a ficha entra

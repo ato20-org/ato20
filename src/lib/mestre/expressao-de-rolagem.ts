@@ -43,13 +43,19 @@ export type ErroDaExpressao =
   | "modificador-grande";
 
 /**
- * Um atributo que a conta pode ler pela sigla: `{1d20+FOR}`, `{AGId20>+5}`.
- * Só a ficha onde o texto mora passa os dela -- ver `AtributosDasRolagens`.
+ * Um atributo que a conta pode ler pela sigla: `{1d20+FOR}`, `{AGId20>+5}`, e
+ * com a menção, `{1d20+@FOR}`. Só a ficha onde o texto mora passa os dela --
+ * ver `AtributosDasRolagens`.
  *
  * Com `rolagem`, o atributo É um dado (a AGI d8), e a sigla na conta rola ele:
  * `{AGI+2}` é 1d8+2. Ver `Atributo.rolagem`.
+ *
+ * Com `soComArroba`, é um DETALHE da ficha que guarda número, pelo rótulo na
+ * `sigla`: `{1d20+@Furtividade}`. Só com o `@`, porque rótulo é palavra de
+ * frase -- "Luta", "Vida" --, e a conta escrita antes de a ficha ganhar o
+ * detalhe não pode mudar de leitura. Ver `atributosDaConta`.
  */
-export type AtributoDaConta = { sigla: string; valor: number; rolagem?: string };
+export type AtributoDaConta = { sigla: string; valor: number; rolagem?: string; soComArroba?: boolean };
 
 export type LeituraDaExpressao =
   | {
@@ -92,10 +98,11 @@ class ErroDeLeitura extends Error {
  * número a quem faz a conta de cabeça na mesa. `×` e `÷` valem como `*` e `/`.
  *
  * Com `atributos`, a sigla de cada um vale o número dele: como parcela
- * (`1d20+FOR`) e como quantidade de dados (`AGId20>+5`). Sem eles -- o campo de
- * rolagem do detalhe, a paleta --, sigla é letra solta e a leitura recusa,
- * como sempre recusou: o leitor do daemon não sabe de sigla, e os dois têm de
- * aceitar as mesmas coisas. Ver `serve/expressao.rs`.
+ * (`1d20+FOR`) e como quantidade de dados (`AGId20>+5`). Com `@` na frente, a
+ * menção, vale também o detalhe da ficha pelo rótulo (`1d20+@Furtividade`).
+ * Sem eles -- o campo de rolagem do detalhe, a paleta --, sigla é letra solta
+ * e a leitura recusa, como sempre recusou: o leitor do daemon não sabe de
+ * sigla, e os dois têm de aceitar as mesmas coisas. Ver `serve/expressao.rs`.
  */
 export function lerExpressaoDeRolagem(
   texto: string,
@@ -208,8 +215,24 @@ function avaliar(no: No): number {
 }
 
 /**
+ * O que o dado de um atributo lê -- `d20-@NEX`: só o que é NÚMERO, os atributos
+ * de número e os detalhes, e nunca ele mesmo (`sigla`). O dado de um atributo
+ * não lê outro dado, e é isso que garante que nenhum chama o outro: `{AGI+2}`
+ * abre a AGI uma vez, e para.
+ */
+export function nomesDoDadoDoAtributo<T extends AtributoDaConta>(nomes: ReadonlyArray<T>, sigla?: string): T[] {
+  const propria = sigla?.trim().toLocaleUpperCase("pt-BR");
+
+  return nomes.filter(
+    (nome) =>
+      !nome.rolagem && (nome.soComArroba || nome.sigla.trim().toLocaleUpperCase("pt-BR") !== propria),
+  );
+}
+
+/**
  * As siglas que a conta procura, da mais comprida para a mais curta: com AG e
- * AGI na ficha, "AGI" é a AGI, e não a AG seguida de um I.
+ * AGI na ficha, "AGI" é a AGI, e não a AG seguida de um I. Entre as do mesmo
+ * tamanho, a ordem de quem passou -- os atributos antes dos detalhes.
  */
 function siglasDaConta(atributos: ReadonlyArray<AtributoDaConta> | undefined): AtributoDaConta[] {
   return (atributos ?? [])
@@ -220,11 +243,18 @@ function siglasDaConta(atributos: ReadonlyArray<AtributoDaConta> | undefined): A
 
 /**
  * A sigla que começa em `i`, sem diferenciar maiúscula: o livro escreve FOR, e
- * quem digita depressa escreve for.
+ * quem digita depressa escreve for. Os detalhes só depois do `@` (`mencao`).
  */
-function siglaEm(entrada: string, i: number, siglas: ReadonlyArray<AtributoDaConta>): AtributoDaConta | undefined {
+function siglaEm(
+  entrada: string,
+  i: number,
+  siglas: ReadonlyArray<AtributoDaConta>,
+  mencao: boolean,
+): AtributoDaConta | undefined {
   return siglas.find(
-    ({ sigla }) => entrada.slice(i, i + sigla.length).toLocaleUpperCase("pt-BR") === sigla.toLocaleUpperCase("pt-BR"),
+    ({ sigla, soComArroba }) =>
+      (mencao || !soComArroba) &&
+      entrada.slice(i, i + sigla.length).toLocaleUpperCase("pt-BR") === sigla.toLocaleUpperCase("pt-BR"),
   );
 }
 
@@ -255,17 +285,21 @@ function simbolosDe(
       continue;
     }
 
+    // A menção: `@AGI`, `@Furtividade`. Colada no `@`, sem espaço, e o que
+    // vem depois é nome e nada mais -- nem o dado disputa com ele.
+    const mencao = letra === "@";
+
     // Número, ou dado: `20`, `d20`, `2d6`, `2 d 6`, e o dado com o que fica
     // dele: `6d20>`, `2d20 <`.
-    const casou = /^(\d*)\s*([dD])\s*(\d+)(?:\s*([<>]))?|^(\d+)/.exec(entrada.slice(i));
+    const casou = mencao ? null : /^(\d*)\s*([dD])\s*(\d+)(?:\s*([<>]))?|^(\d+)/.exec(entrada.slice(i));
 
     // A sigla de um atributo, DEPOIS do dado: onde as duas leituras servem --
     // uma sigla "D" diante de `d20` --, o dado vence, e a conta escrita antes
     // de a ficha ter a sigla continua lendo o mesmo.
-    const sigla = casou ? undefined : siglaEm(entrada, i, siglas);
+    const sigla = casou ? undefined : siglaEm(entrada, mencao ? i + 1 : i, siglas, mencao);
     if (sigla) {
       usadas.set(sigla.sigla, sigla);
-      i += sigla.sigla.length;
+      i += (mencao ? 1 : 0) + sigla.sigla.length;
 
       // Colada no dado, ela é a QUANTIDADE: `AGId20>` são tantos d20 quanto a
       // AGI. Zero ou menos não rola -- `jogadaDe` recusa --, e o que cada
@@ -275,11 +309,15 @@ function simbolosDe(
       // O atributo que É um dado entra como a expressão dele entre
       // parênteses: `{AGI+2}` com AGI d8 é `(1d8)+2`, e a soma o espalha como
       // qualquer termo. Dado não conta dados -- `AGId20` com AGI d8 não
-      // diz nada --, e a expressão gravada não lê sigla, para uma não chamar
-      // a outra.
+      // diz nada --, e a expressão gravada só lê o que é número, para uma
+      // não chamar a outra. Ver `nomesDoDadoDoAtributo`.
       if (sigla.rolagem) {
         if (dado) throw new ErroDeLeitura("sintaxe");
-        simbolos.push({ tipo: "abre" }, ...simbolosDe(sigla.rolagem, [], new Map()), { tipo: "fecha" });
+        simbolos.push(
+          { tipo: "abre" },
+          ...simbolosDe(sigla.rolagem, nomesDoDadoDoAtributo(siglas), usadas),
+          { tipo: "fecha" },
+        );
         continue;
       }
 
