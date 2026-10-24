@@ -118,6 +118,21 @@ describe("o card arrastado até uma pasta do Compêndio", () => {
     expect(aceita(ficha, pasta("compendio"))).toBe(false);
   });
 
+  it("o item do plugin só cai no mapa com a imagem, e não entra em pasta", () => {
+    const pistola: FonteDoArrasto = {
+      tipo: "item-plugin",
+      extensaoId: "ordem-paranormal",
+      colecaoId: "armas",
+      itemId: "pistola",
+    };
+
+    // A peça é a imagem: sem ela, o item entra em jogo pelo botão.
+    expect(aceita(pistola, { tipo: "palco" })).toBe(false);
+    expect(aceita({ ...pistola, url: "blob:pistola" }, { tipo: "palco" })).toBe(true);
+    expect(assetIdDoArrasto({ ...pistola, url: "blob:pistola" })).toBeUndefined();
+    expect(aceita({ ...pistola, url: "blob:pistola" }, pasta("compendio-itens"))).toBe(false);
+  });
+
   it("o disparo não cai no mapa: ele sai pela mira", () => {
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, { tipo: "palco" })).toBe(false);
     expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-disparos"))).toBe(true);

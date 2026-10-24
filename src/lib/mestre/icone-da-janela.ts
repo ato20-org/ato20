@@ -90,6 +90,9 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     // Ficha, como a do personagem: é a mesma coisa, só que ainda do plugin.
     case "ficha-do-plugin":
       return ScrollText;
+    // O do item de sempre: é a mesma coisa, só que ainda do plugin.
+    case "item-do-plugin":
+      return Package;
     // Os mesmos das abas do Compêndio, que é de onde as duas mais abrem.
     case "efeito":
       return Sparkles;

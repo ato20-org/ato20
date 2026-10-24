@@ -16,12 +16,13 @@ import {
   useTokenDragStore,
   vaiNaPeca,
 } from "@/lib/store/use-token-drag-store";
-import { avisarDoTrazido } from "@/lib/mestre/bestiario";
+import { avisarDoItemTrazido, avisarDoTrazido } from "@/lib/mestre/bestiario";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { itensMudaram } from "@/lib/store/use-itens-store";
 import { itemEmJogo, porEmJogo } from "@/lib/vault/compendio";
 import { porEmJogoDoBestiario } from "@/lib/vault/bestiario";
+import { itemDoPluginEmJogo } from "@/lib/vault/itens-do-plugin";
 import { cn } from "@/lib/utils";
 import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
@@ -76,7 +77,8 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
   const url =
     arrasto?.fonte.tipo === "item" ||
     arrasto?.fonte.tipo === "molde-item" ||
-    arrasto?.fonte.tipo === "molde-plugin"
+    arrasto?.fonte.tipo === "molde-plugin" ||
+    arrasto?.fonte.tipo === "item-plugin"
       ? arrasto.fonte.url
       : doAcervo;
 
@@ -253,6 +255,26 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
               itensMudaram();
             }),
           )
+          .catch((cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+          );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "item-plugin") {
+        // O item do plugin entra no catálogo pelo molde que ele deixa na
+        // campanha, como o molde de item do mestre, e a cópia vira peça.
+        const { extensaoId, colecaoId, itemId } = solto.fonte;
+
+        void itemDoPluginEmJogo({ extensaoId, colecaoId, itemId })
+          .then(({ trazido, item }) => {
+            avisarDoItemTrazido(trazido);
+            return promoverImagemDoItem(item.id).then((asset) => {
+              por(asset.id, { itemId: item.id });
+              itensMudaram();
+            });
+          })
           .catch((cause: unknown) =>
             toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
           );

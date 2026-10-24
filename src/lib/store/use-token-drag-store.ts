@@ -103,6 +103,14 @@ export type FonteDoArrasto =
    */
   | { tipo: "molde-item"; itemId: string; url?: string }
   /**
+   * Um item de um PLUGIN. Solto no mapa, entra no catálogo como o molde de
+   * item: sai do molde que ele deixou na campanha, trazido na hora se ainda
+   * não estava, e a cópia ganha a peça. A URL é a da imagem do card, para a
+   * sombra; sem ela não vai ao mapa -- a peça é a imagem. Ver
+   * `itemDoPluginEmJogo`.
+   */
+  | { tipo: "item-plugin"; extensaoId: string; colecaoId: string; itemId: string; url?: string }
+  /**
    * Uma condição da biblioteca do Compêndio. Solta num token, o personagem
    * dele -- ou o objeto -- ganha uma cópia, e a biblioteca continua com a
    * dela. Leva a condição inteira, e não só o id: a etiqueta no ar mostra o
@@ -224,6 +232,7 @@ export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
   return fonte.tipo === "item" ||
     fonte.tipo === "molde-item" ||
     fonte.tipo === "molde-plugin" ||
+    fonte.tipo === "item-plugin" ||
     fonte.tipo === "nota" ||
     fonte.tipo === "cena" ||
     fonte.tipo === "area" ||
@@ -345,6 +354,7 @@ export function aceita(
         !(fonte.tipo === "personagem" && !fonte.assetId) &&
         !(fonte.tipo === "molde" && !fonte.assetId) &&
         !(fonte.tipo === "molde-item" && !fonte.url) &&
+        !(fonte.tipo === "item-plugin" && !fonte.url) &&
         !(fonte.tipo === "item" && !fonte.url)
       );
     case "peca":

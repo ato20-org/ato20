@@ -898,22 +898,27 @@ function CartaoDaPasta({
  * move e não se desfaz, porque não é do mestre: é do plugin, e some com ele.
  *
  * Embaixo do nome, quantas fichas e de que plugin: é pela pasta que o mestre
- * sabe de onde a ameaça veio, e a quem dar o crédito.
+ * sabe de onde a ameaça veio, e a quem dar o crédito. A mesma pasta serve às
+ * coleções de itens, na aba deles: quadrada como os cards ao lado, e contando
+ * itens.
  */
 export function CartaoDaColecao({
   nome,
   plugin,
   total,
   aura,
+  itens = false,
   onAbrir,
 }: {
   nome: string;
   plugin: string;
   total: number;
   aura: AuraDoPlugin | null;
+  /** Uma coleção de itens, e não de fichas. */
+  itens?: boolean;
   onAbrir: () => void;
 }) {
-  const formato = FORMATO_DA_PASTA.compendio;
+  const formato = FORMATO_DA_PASTA[itens ? "compendio-itens" : "compendio"];
 
   return (
     <li
@@ -946,7 +951,7 @@ export function CartaoDaColecao({
           {nome}
         </span>
         <span className="text-muted-foreground truncate text-[10px] tabular-nums">
-          {texto.naPastaDoPlugin(total, plugin)}
+          {itens ? texto.itensNaPastaDoPlugin(total, plugin) : texto.naPastaDoPlugin(total, plugin)}
         </span>
       </span>
     </li>
