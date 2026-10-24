@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  atributosDaConta,
   lerReguaDoTexto,
   MAX_METROS_DA_REGUA,
   numeroDaRegua,
@@ -102,6 +103,63 @@ describe("a sigla do atributo que é um dado, no texto", () => {
       texto: "AGI+1",
       expressao: { dados: [{ quantidade: 1, faces: 8 }], modificador: 1 },
     });
+  });
+});
+
+describe("a menção da ficha com @ dentro das chaves", () => {
+  const ficha = atributosDaConta(
+    [
+      { sigla: "AGI", valor: 3 },
+      { sigla: "VIG", valor: 0, rolagem: "1d8" },
+    ],
+    [
+      { rotulo: "Furtividade", valor: 5 },
+      { rotulo: "Classe", valor: "Combatente" },
+      { rotulo: "Nível", valor: " 2 " },
+      { rotulo: "NEX", valor: "35%" },
+      { rotulo: "Vida", valor: undefined },
+      { rotulo: "AGI", valor: 9 },
+    ],
+  );
+
+  it("o detalhe entra só com número, depois dos atributos", () => {
+    expect(ficha).toEqual([
+      { sigla: "AGI", valor: 3 },
+      { sigla: "VIG", valor: 0, rolagem: "1d8" },
+      { sigla: "Furtividade", valor: 5, soComArroba: true },
+      { sigla: "Nível", valor: 2, soComArroba: true },
+      { sigla: "AGI", valor: 9, soComArroba: true },
+    ]);
+  });
+
+  it("@ lê o atributo e o detalhe, e a dica diz quanto valeram", () => {
+    const [, ataque] = pedacosComRolagens("Ataque: {@AGId20>+@Furtividade}", ficha);
+
+    expect(ataque).toEqual({
+      tipo: "rolagem",
+      texto: "@AGId20>+@Furtividade",
+      expressao: { dados: [{ quantidade: 3, faces: 20, manter: "maior" }], modificador: 5 },
+      siglas: [
+        { sigla: "AGI", valor: 3 },
+        { sigla: "Furtividade", valor: 5, soComArroba: true },
+      ],
+    });
+  });
+
+  it("o atributo que é um dado rola o dado dele com @ também", () => {
+    expect(pedacosComRolagens("{@VIG+@nível}", ficha)[0]).toMatchObject({
+      expressao: { dados: [{ quantidade: 1, faces: 8 }], modificador: 2 },
+    });
+  });
+
+  it("o detalhe sem @, o de texto e o que não há deixam as chaves como texto", () => {
+    for (const texto of ["{1d20+Furtividade}", "{1d20+@Classe}", "{1d20+@NEX}", "{1d20+@Vida}", "{1d20+@}"]) {
+      expect(temRolagemNoTexto(texto, ficha)).toBe(false);
+    }
+  });
+
+  it("no celular, a conta com @ perde as chaves como as outras", () => {
+    expect(textoSemChaves("Furtivo: {1d20+@Furtividade}", ficha)).toBe("Furtivo: 1d20+@Furtividade");
   });
 });
 

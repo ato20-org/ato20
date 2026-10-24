@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { duracaoDaQueda } from "@/lib/geometry/dado";
 import { textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
+import { textoDasSiglas } from "@/lib/mestre/valor-do-atributo";
 import { cn } from "@/lib/utils";
 import {
   entraNaSoma,
@@ -139,6 +140,10 @@ const BOLINHAS_DO_LANCE = 4;
  * Um lance no histórico: as cores dos dados, o nome ("Dante · Luta", ou a
  * notação quando não tem), o modificador e o total. A conta inteira fica no
  * `title`, para quem quer conferir dado por dado.
+ *
+ * Com siglas (`{1d20+@AGI}`), elas vêm embaixo do nome, com o valor da hora:
+ * "AGI 1" diz de onde veio o `+1`. Embaixo, e não ao lado: o saquinho é
+ * estreito, e ao lado elas cortariam o nome de quem rolou.
  */
 function LinhaDeLance({
   linha,
@@ -170,9 +175,11 @@ function LinhaDeLance({
       .map((lados) => `${porFaces.get(lados)}d${lados}${regraDosDescartados(naOrdem, lados as FacesDado)}`)
       .join("+") + textoDoModificador(lance.modificador);
   const conta = `${valores.join(" + ")} ${textoDoModificador(lance.modificador)} = ${total}`.replace("  ", " ");
+  const siglas = lance.siglas?.length ? textoDasSiglas(lance.siglas) : null;
+  const dica = [caindo ? notacao : `${notacao}: ${conta}`, siglas].filter(Boolean).join("\n");
 
   return (
-    <li className="flex items-center gap-2 text-xs" title={caindo ? notacao : `${notacao}: ${conta}`}>
+    <li className="flex items-center gap-2 text-xs" title={dica}>
       <span aria-hidden className="flex shrink-0 -space-x-1">
         {naOrdem.slice(0, BOLINHAS_DO_LANCE).map((rolagem) => (
           <span
@@ -182,7 +189,12 @@ function LinhaDeLance({
           />
         ))}
       </span>
-      <span className="text-muted-foreground min-w-0 flex-1 truncate">{lance.rotulo ?? notacao}</span>
+      <span className="min-w-0 flex-1">
+        <span className="text-muted-foreground block truncate">{lance.rotulo ?? notacao}</span>
+        {siglas ? (
+          <span className="text-muted-foreground/70 block truncate text-[10px] leading-tight">{siglas}</span>
+        ) : null}
+      </span>
       {lance.modificador !== 0 ? (
         <span className="text-muted-foreground/70 tabular-nums">{textoDoModificador(lance.modificador)}</span>
       ) : null}

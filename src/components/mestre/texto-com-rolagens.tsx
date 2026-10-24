@@ -10,7 +10,7 @@ import { rolarExpressao } from "@/lib/mestre/dados-actions";
 import { textoDaExpressao, textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
 import { colocarReguaDaFicha } from "@/lib/mestre/regua-actions";
 import { numeroDaRegua, pedacosComRolagens, type PedacoDoTexto } from "@/lib/mestre/rolagens-no-texto";
-import { textoDoValor } from "@/lib/mestre/valor-do-atributo";
+import { textoDasSiglas } from "@/lib/mestre/valor-do-atributo";
 
 const CHIP =
   "hover:bg-accent focus-visible:ring-ring text-foreground inline-flex items-center gap-1 rounded px-1 py-0.5 align-middle outline-none focus-visible:ring-2";
@@ -56,7 +56,8 @@ export function TextoComRolagens({ texto, rotulo }: { texto: string; rotulo: str
  *
  * Com sigla, a dica diz a conta resolvida -- a que vai à mesa e ao fio -- e,
  * embaixo, como ela foi escrita e quanto cada sigla valeu: "AGId20>+5, com AGI
- * 3". É o que deixa o mestre conferir que a AGI que rolou é a de agora.
+ * 3". É o que deixa o mestre conferir que a AGI que rolou é a de agora. E
+ * elas vão no lance, para o histórico dizer o mesmo depois.
  */
 function RolagemNoTexto({
   rolagem,
@@ -70,12 +71,7 @@ function RolagemNoTexto({
   const ficam = expressao.dados.some((termo) => termo.manter);
   const dica = [
     rolar,
-    siglas
-      ? t.detalhes.comAtributos(
-          rolagem.texto,
-          siglas.map((atributo) => `${atributo.sigla} ${textoDoValor(atributo)}`).join(", "),
-        )
-      : null,
+    siglas ? t.detalhes.comAtributos(rolagem.texto, textoDasSiglas(siglas)) : null,
     ficam ? t.detalhes.ficaOMaior : null,
   ]
     .filter(Boolean)
@@ -89,7 +85,7 @@ function RolagemNoTexto({
       onPointerDown={(evento: ReactPointerEvent) => evento.stopPropagation()}
       onClick={(evento) => {
         evento.stopPropagation();
-        rolarExpressao(expressao, rotulo);
+        rolarExpressao(expressao, rotulo, siglas);
       }}
       className={CHIP}
     >

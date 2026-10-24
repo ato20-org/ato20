@@ -45,7 +45,8 @@
     { "texto": "6d20>>", "erro": "sintaxe" },
     { "texto": "5>+1d20", "erro": "sintaxe" },
     { "texto": "-2d20>", "erro": "dado-fora-da-soma" },
-    { "texto": "21d20>", "erro": "muitos-dados" }
+    { "texto": "21d20>", "erro": "muitos-dados" },
+    { "texto": "1d20+@FOR", "erro": "sintaxe" }
   ],
   "comAtributos": {
     "ficha": [
@@ -55,7 +56,14 @@
       { "sigla": "DES", "valor": -2 },
       { "sigla": "VIG", "valor": 0 },
       { "sigla": "ESP", "valor": 0, "rolagem": "1d8" },
-      { "sigla": "D", "valor": 2 }
+      { "sigla": "D", "valor": 2 },
+      { "sigla": "Furtividade", "valor": 5, "soComArroba": true },
+      { "sigla": "Fortitude", "valor": 7, "soComArroba": true },
+      { "sigla": "Pontos de Esforço", "valor": 2, "soComArroba": true },
+      { "sigla": "Ataques", "valor": 2, "soComArroba": true },
+      { "sigla": "FOR", "valor": 99, "soComArroba": true },
+      { "sigla": "PER", "valor": 0, "rolagem": "d20+@Furtividade" },
+      { "sigla": "SAB", "valor": 0, "rolagem": "d6+@ESP" }
     ],
     "aceitas": [
       { "texto": "1d20+FOR", "dados": [[1, 20]], "modificador": 4 },
@@ -71,14 +79,32 @@
       { "texto": "Dd6", "dados": [[2, 6]], "modificador": 0 },
       { "texto": "ESP", "dados": [[1, 8]], "modificador": 0 },
       { "texto": "1d20+ESP+FOR", "dados": [[1, 20], [1, 8]], "modificador": 4 },
-      { "texto": "6d20>+45", "dados": [[6, 20, ">"]], "modificador": 45 }
+      { "texto": "6d20>+45", "dados": [[6, 20, ">"]], "modificador": 45 },
+      { "texto": "1d20+@FOR", "dados": [[1, 20]], "modificador": 4 },
+      { "texto": "@AGId20>+5", "dados": [[3, 20, ">"]], "modificador": 5 },
+      { "texto": "@ESP+2", "dados": [[1, 8]], "modificador": 2 },
+      { "texto": "@Dd6", "dados": [[2, 6]], "modificador": 0 },
+      { "texto": "1d20+@Furtividade", "dados": [[1, 20]], "modificador": 5 },
+      { "texto": "1d20+@furtividade", "dados": [[1, 20]], "modificador": 5 },
+      { "texto": "1d20+@Fortitude", "dados": [[1, 20]], "modificador": 7 },
+      { "texto": "1d20 + @Pontos de Esforço*2", "dados": [[1, 20]], "modificador": 4 },
+      { "texto": "@Ataquesd20>", "dados": [[2, 20, ">"]], "modificador": 0 },
+      { "texto": "PER+1", "dados": [[1, 20]], "modificador": 6 },
+      { "texto": "@PER", "dados": [[1, 20]], "modificador": 5 }
     ],
     "recusadas": [
       { "texto": "VIGd20>", "erro": "sintaxe" },
       { "texto": "DESd20", "erro": "sintaxe" },
       { "texto": "1d20+INT", "erro": "sintaxe" },
       { "texto": "ESPd20", "erro": "sintaxe" },
-      { "texto": "ESP*2", "erro": "dado-fora-da-soma" }
+      { "texto": "ESP*2", "erro": "dado-fora-da-soma" },
+      { "texto": "1d20+Furtividade", "erro": "sintaxe" },
+      { "texto": "1d20+@", "erro": "sintaxe" },
+      { "texto": "1d20+@ FOR", "erro": "sintaxe" },
+      { "texto": "1d20+@@FOR", "erro": "sintaxe" },
+      { "texto": "1d20+@Classe", "erro": "sintaxe" },
+      { "texto": "@ESPd20", "erro": "sintaxe" },
+      { "texto": "SAB", "erro": "sintaxe" }
     ]
   }
 }

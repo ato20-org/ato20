@@ -4,9 +4,11 @@ import {
   facesParaDesenhar,
   lerValorDoAtributo,
   passoDoDado,
+  textoDasSiglas,
   textoDoDado,
   textoDoValor,
 } from "@/lib/mestre/valor-do-atributo";
+import { nomesDoDadoDoAtributo } from "@/lib/mestre/expressao-de-rolagem";
 import { MAX_VALOR_ATRIBUTO } from "@/types/character";
 
 describe("o que se digita no valor do atributo", () => {
@@ -33,6 +35,28 @@ describe("o que se digita no valor do atributo", () => {
     expect(lerValorDoAtributo("d7")).toBeNull();
     expect(lerValorDoAtributo("{1d4")).toBeNull();
   });
+
+  it("o dado pode mencionar o que é número, e fica como foi escrito", () => {
+    const ficha = [
+      { sigla: "AGI", valor: 2 },
+      { sigla: "VIG", valor: 0, rolagem: "1d6" },
+      { sigla: "NEX", valor: 5, soComArroba: true },
+    ];
+    const nomes = nomesDoDadoDoAtributo(ficha, "AGI");
+
+    // Nem o atributo-dado, nem ele mesmo: um dado não chama outro.
+    expect(nomes).toEqual([{ sigla: "NEX", valor: 5, soComArroba: true }]);
+    expect(lerValorDoAtributo("d20-@NEX", nomes)).toEqual({ tipo: "dado", rolagem: "d20-@NEX" });
+    expect(lerValorDoAtributo("{ d20-@NEX }", nomes)).toEqual({ tipo: "dado", rolagem: "d20-@NEX" });
+    // Sem menção, a forma curta de sempre.
+    expect(lerValorDoAtributo("d8", nomes)).toEqual({ tipo: "dado", rolagem: "1d8" });
+    for (const texto of ["d20+@VIG", "d20+@AGI", "d20+@Classe", "d20-@NEX"]) {
+      expect(lerValorDoAtributo(texto, texto === "d20-@NEX" ? [] : nomes), texto).toBeNull();
+    }
+    // Menção sem dado não é valor: o atributo de número não guarda conta.
+    expect(lerValorDoAtributo("@NEX", nomes)).toBeNull();
+    expect(lerValorDoAtributo("2+@NEX", nomes)).toBeNull();
+  });
 });
 
 describe("o dado como a ficha o mostra", () => {
@@ -45,6 +69,27 @@ describe("o dado como a ficha o mostra", () => {
   it("o valor é o número, ou o dado quando há", () => {
     expect(textoDoValor({ valor: 3 })).toBe("3");
     expect(textoDoValor({ valor: 3, rolagem: "1d8" })).toBe("d8");
+  });
+
+  it("o dado com menção: resolvido com a ficha, e como foi escrito sem ela", () => {
+    const nomes = [{ sigla: "NEX", valor: 5, soComArroba: true }];
+
+    expect(textoDoDado("d4+20-@NEX", nomes)).toBe("d4+15");
+    expect(textoDoValor({ valor: 1, rolagem: "d4+20-@NEX" }, nomes)).toBe("d4+15");
+    expect(textoDoDado("d4+20-@NEX")).toBe("d4+20-@NEX");
+    // A menção que a ficha não tem mostra a fórmula, e não um número inventado.
+    expect(textoDoDado("d4+20-@Classe", nomes)).toBe("d4+20-@Classe");
+  });
+
+  it("as siglas da conta, cada uma com o valor", () => {
+    expect(textoDasSiglas([{ sigla: "AGI", valor: 1 }])).toBe("AGI 1");
+    expect(
+      textoDasSiglas([
+        { sigla: "AGI", valor: 3 },
+        { sigla: "Luta", valor: -2 },
+        { sigla: "VIG", valor: 0, rolagem: "1d8" },
+      ]),
+    ).toBe("AGI 3 · Luta -2 · VIG d8");
   });
 });
 

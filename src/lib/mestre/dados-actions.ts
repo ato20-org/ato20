@@ -1,12 +1,12 @@
 "use client";
 
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
-import type { ExpressaoDeRolagem, TermoDeDados } from "@/lib/mestre/expressao-de-rolagem";
+import type { AtributoDaConta, ExpressaoDeRolagem, TermoDeDados } from "@/lib/mestre/expressao-de-rolagem";
 import { anunciarDadosNoFio } from "@/lib/mestre/fio-actions";
 import type { Jogada } from "@/lib/mestre/notacao-de-dados";
 import { RAIO_DADO, useDadosStore } from "@/lib/store/use-dados-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
-import { descartadosDe, sortearValor, type Dado, type Lance } from "@/types/dado";
+import { descartadosDe, sortearValor, type Dado, type Lance, type SiglaDoLance } from "@/types/dado";
 
 /** Velocidade do arremesso sem gesto, em unidades de cena por segundo. */
 const IMPULSO = 400;
@@ -96,16 +96,33 @@ export function rolarNaMesa(jogada: Jogada): number {
  * Cada termo é um lançamento (`2d6+1d4` são dois), e a linha do fio é uma só,
  * do gesto inteiro. Devolve quantos dados caíram: a mesa cheia pode cortar
  * no meio, e quem chamou decide se avisa.
+ *
+ * `atributos` são as siglas que a conta leu -- `{1d20+@AGI}` --, e vão no
+ * lance e no fio com o valor de agora, para o histórico dizer de onde veio o
+ * `+1`. Ver `SiglaDoLance`.
  */
-export function rolarExpressao(expressao: ExpressaoDeRolagem, rotulo?: string): number {
+export function rolarExpressao(
+  expressao: ExpressaoDeRolagem,
+  rotulo?: string,
+  atributos?: ReadonlyArray<AtributoDaConta>,
+): number {
+  const siglas =
+    atributos && atributos.length > 0
+      ? atributos.map(({ sigla, valor, rolagem }): SiglaDoLance => ({ sigla, valor, ...(rolagem && { rolagem }) }))
+      : undefined;
   // Os dados do gesto inteiro levam o mesmo lance: é por ele que o saquinho
   // soma o modificador e junta os dois d20 numa linha só.
   const lance: Lance | undefined =
-    rotulo || expressao.modificador !== 0
-      ? { id: crypto.randomUUID(), modificador: expressao.modificador, ...(rotulo && { rotulo }) }
+    rotulo || expressao.modificador !== 0 || siglas
+      ? {
+          id: crypto.randomUUID(),
+          modificador: expressao.modificador,
+          ...(rotulo && { rotulo }),
+          ...(siglas && { siglas }),
+        }
       : undefined;
   const dados = expressao.dados.flatMap((jogada) => lancarNaMesa(jogada, lance));
-  anunciarDadosNoFio(dados, { rotulo, modificador: expressao.modificador });
+  anunciarDadosNoFio(dados, { rotulo, modificador: expressao.modificador, siglas });
 
   return dados.length;
 }

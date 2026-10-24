@@ -11,7 +11,8 @@
 //! zero nos dois, em vez de estourar so de um lado. Os casos de teste sao um
 //! JSON so, lido pelos dois (`expressao-de-rolagem.casos.json`).
 //!
-//! As siglas dos atributos (`{1d20+FOR}`, `{AGId20>+5}`) so valem em
+//! As siglas dos atributos (`{1d20+FOR}`, `{AGId20>+5}`), e a mencao com `@`
+//! que le tambem os detalhes (`{1d20+@Furtividade}`), so valem em
 //! `ler_com`: e a conta escrita entre chaves no texto da ficha, que o celular
 //! rola por `serve::roll_in_text`. A `rolagem` do detalhe e do atributo le sem
 //! elas, como o campo do Mestre a le.
@@ -61,8 +62,8 @@ pub fn descartados(faces: u32, gravados: &[u32], manter: Option<Manter>) -> Vec<
     (0..gravados.len()).map(|i| fica.is_some_and(|fica| i != fica)).collect()
 }
 
-/// Um atributo que a conta le pela sigla: `{1d20+FOR}`, `{AGId20>+5}`.
-/// Espelha `AtributoDaConta` do TS.
+/// Um atributo que a conta le pela sigla: `{1d20+FOR}`, `{AGId20>+5}`, e com
+/// a mencao, `{1d20+@FOR}`. Espelha `AtributoDaConta` do TS.
 #[derive(Debug, Clone, Copy)]
 pub struct AtributoDaConta<'a> {
     pub sigla: &'a str,
@@ -70,6 +71,30 @@ pub struct AtributoDaConta<'a> {
     /// O atributo que E um dado (a AGI d8): a sigla na conta rola ele, e
     /// `{AGI+2}` e 1d8+2.
     pub rolagem: Option<&'a str>,
+    /// Um DETALHE da ficha que guarda numero, pelo rotulo na `sigla`: so se le
+    /// com o `@` na frente -- `{1d20+@Furtividade}`. Ver `numero_do_detalhe`.
+    pub so_com_arroba: bool,
+}
+
+/// O numero que um detalhe guarda, para a mencao: o do tipo numero, ou o
+/// escrito num texto -- "5", "-2", "+3", com ate nove algarismos. "35%" e
+/// "Combatente" nao sao. Espelha `NUMERO_ESCRITO`, em `rolagens-no-texto.ts`.
+pub fn numero_do_detalhe(valor: &serde_json::Value) -> Option<i64> {
+    match valor {
+        serde_json::Value::Number(numero) => numero.as_i64(),
+        serde_json::Value::String(texto) => {
+            let texto = texto.trim();
+            let algarismos = texto.strip_prefix(['+', '-']).unwrap_or(texto);
+            if algarismos.is_empty()
+                || algarismos.len() > 9
+                || !algarismos.bytes().all(|b| b.is_ascii_digit())
+            {
+                return None;
+            }
+            texto.parse().ok()
+        }
+        _ => None,
+    }
 }
 
 /// Os dados que caem, e o que se soma a eles.
@@ -156,11 +181,22 @@ pub fn ler(texto: &str) -> Result<Expressao, Erro> {
 /// dado entra como a expressao dele. Espelha `lerExpressaoDeRolagem` com
 /// `atributos`.
 pub fn ler_com(texto: &str, atributos: &[AtributoDaConta]) -> Result<Expressao, Erro> {
+    ler_lembrando(texto, atributos).map(|(expressao, _)| expressao)
+}
+
+/// `ler_com`, e as siglas que a conta leu: na ordem em que apareceram, uma
+/// vez cada. E o que a rolagem guarda para o historico dizer de onde veio o
+/// `+1`. Espelha `siglas` em `LeituraDaExpressao`.
+pub fn ler_lembrando<'a>(
+    texto: &str,
+    atributos: &[AtributoDaConta<'a>],
+) -> Result<(Expressao, Vec<AtributoDaConta<'a>>), Erro> {
     if texto.trim().is_empty() {
         return Err(Erro::Vazia);
     }
 
-    let simbolos = simbolos_de(texto, &siglas_da_conta(atributos))?;
+    let mut usadas = Vec::new();
+    let simbolos = simbolos_de(texto, &siglas_da_conta(atributos), &mut usadas)?;
     let mut leitor = Leitor {
         simbolos: &simbolos,
         posicao: 0,
@@ -186,10 +222,13 @@ pub fn ler_com(texto: &str, atributos: &[AtributoDaConta]) -> Result<Expressao, 
         return Err(Erro::ModificadorGrande);
     }
 
-    Ok(Expressao {
-        dados,
-        modificador: modificador as i64,
-    })
+    Ok((
+        Expressao {
+            dados,
+            modificador: modificador as i64,
+        },
+        usadas,
+    ))
 }
 
 /// Espalha a arvore numa soma de termos com sinal. Dado so entra com sinal
@@ -264,10 +303,14 @@ fn avaliar(no: &No) -> Result<f64, Erro> {
 }
 
 /// Uma sigla que a conta procura, ja em maiuscula, e o que ela vale.
+#[derive(Clone)]
 struct Sigla<'a> {
+    /// Como a ficha a escreve, aparada: o que a rolagem guarda.
+    escrita: &'a str,
     letras: Vec<char>,
     valor: i64,
     rolagem: Option<&'a str>,
+    so_com_arroba: bool,
 }
 
 /// As siglas que a conta procura, da mais comprida para a mais curta: com AG e
@@ -278,23 +321,32 @@ fn siglas_da_conta<'a>(atributos: &[AtributoDaConta<'a>]) -> Vec<Sigla<'a>> {
         .iter()
         .filter(|atributo| !atributo.sigla.trim().is_empty())
         .map(|atributo| Sigla {
+            escrita: atributo.sigla.trim(),
             letras: atributo.sigla.trim().to_uppercase().chars().collect(),
             valor: atributo.valor,
             // A `rolagem` vazia e numero, como no TS, onde `""` e falso.
             rolagem: atributo.rolagem.filter(|rolagem| !rolagem.is_empty()),
+            so_com_arroba: atributo.so_com_arroba,
         })
         .collect();
-    // Estavel, como o `sort` do JS: entre as do mesmo tamanho, a ordem da ficha.
+    // Estavel, como o `sort` do JS: entre as do mesmo tamanho, a ordem da
+    // ficha -- os atributos antes dos detalhes.
     siglas.sort_by(|a, b| b.letras.len().cmp(&a.letras.len()));
     siglas
 }
 
 /// A sigla que comeca em `i`, sem diferenciar maiuscula: o livro escreve FOR,
-/// e quem digita depressa escreve for.
-fn sigla_em<'s, 'a>(entrada: &[char], i: usize, siglas: &'s [Sigla<'a>]) -> Option<&'s Sigla<'a>> {
+/// e quem digita depressa escreve for. Os detalhes so depois do `@` (`mencao`).
+fn sigla_em<'s, 'a>(
+    entrada: &[char],
+    i: usize,
+    siglas: &'s [Sigla<'a>],
+    mencao: bool,
+) -> Option<&'s Sigla<'a>> {
     siglas.iter().find(|sigla| {
         let fim = i + sigla.letras.len();
-        fim <= entrada.len()
+        (mencao || !sigla.so_com_arroba)
+            && fim <= entrada.len()
             && entrada[i..fim]
                 .iter()
                 .collect::<String>()
@@ -304,7 +356,11 @@ fn sigla_em<'s, 'a>(entrada: &[char], i: usize, siglas: &'s [Sigla<'a>]) -> Opti
     })
 }
 
-fn simbolos_de(texto: &str, siglas: &[Sigla]) -> Result<Vec<Simbolo>, Erro> {
+fn simbolos_de<'a>(
+    texto: &str,
+    siglas: &[Sigla<'a>],
+    usadas: &mut Vec<AtributoDaConta<'a>>,
+) -> Result<Vec<Simbolo>, Erro> {
     let entrada: Vec<char> = texto
         .chars()
         .map(|letra| match letra {
@@ -346,10 +402,18 @@ fn simbolos_de(texto: &str, siglas: &[Sigla]) -> Result<Vec<Simbolo>, Erro> {
             continue;
         }
 
+        // A mencao: `@AGI`, `@Furtividade`. Colada no `@`, sem espaco, e o que
+        // vem depois e nome e nada mais -- nem o dado disputa com ele.
+        let mencao = letra == '@';
+
         // Numero, ou dado: `20`, `d20`, `2d6`, `2 d 6`. O mesmo que a regex do
         // TS, `^(\d*)\s*([dD])\s*(\d+)|^(\d+)`, tentando o dado primeiro.
-        let lido = dado_em(&entrada, i)
-            .or_else(|| numero_em(&entrada, i).map(|(valor, fim)| (Simbolo::Numero(valor), fim)));
+        let lido = if mencao {
+            None
+        } else {
+            dado_em(&entrada, i)
+                .or_else(|| numero_em(&entrada, i).map(|(valor, fim)| (Simbolo::Numero(valor), fim)))
+        };
         if let Some((simbolo, fim)) = lido {
             simbolos.push(simbolo);
             i = fim;
@@ -358,22 +422,39 @@ fn simbolos_de(texto: &str, siglas: &[Sigla]) -> Result<Vec<Simbolo>, Erro> {
 
         // A sigla de um atributo, DEPOIS do dado: onde as duas leituras
         // servem -- uma sigla "D" diante de `d20` --, o dado vence.
-        let sigla = sigla_em(&entrada, i, siglas).ok_or(Erro::Sintaxe)?;
+        if mencao {
+            i += 1;
+        }
+        let sigla = sigla_em(&entrada, i, siglas, mencao).ok_or(Erro::Sintaxe)?;
         i += sigla.letras.len();
+        if !usadas.iter().any(|usada| usada.sigla == sigla.escrita) {
+            usadas.push(AtributoDaConta {
+                sigla: sigla.escrita,
+                valor: sigla.valor,
+                rolagem: sigla.rolagem,
+                so_com_arroba: sigla.so_com_arroba,
+            });
+        }
 
         // Colada no dado, ela e a QUANTIDADE: `AGId20>` sao tantos d20 quanto
         // a AGI. Zero ou menos nao rola -- `jogada_de` recusa.
         let dado = faces_em(&entrada, i);
 
         // O atributo que E um dado entra como a expressao dele entre
-        // parenteses, e a expressao gravada nao le sigla. Dado nao conta
-        // dados: `AGId20` com a AGI d8 nao diz nada.
+        // parenteses, e a expressao gravada so le o que e numero ("d20-@NEX"),
+        // para uma nao chamar a outra. Dado nao conta dados: `AGId20` com a
+        // AGI d8 nao diz nada. Espelha `nomesDoDadoDoAtributo`.
         if let Some(rolagem) = sigla.rolagem {
             if dado.is_some() {
                 return Err(Erro::Sintaxe);
             }
+            let numeros: Vec<Sigla> = siglas
+                .iter()
+                .filter(|outra| outra.rolagem.is_none())
+                .cloned()
+                .collect();
             simbolos.push(Simbolo::Abre);
-            simbolos.extend(simbolos_de(rolagem, &[])?);
+            simbolos.extend(simbolos_de(rolagem, &numeros, usadas)?);
             simbolos.push(Simbolo::Fecha);
             continue;
         }
@@ -623,6 +704,10 @@ mod tests {
                 sigla: atributo["sigla"].as_str().unwrap(),
                 valor: atributo["valor"].as_i64().unwrap(),
                 rolagem: atributo.get("rolagem").and_then(Value::as_str),
+                so_com_arroba: atributo
+                    .get("soComArroba")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
             })
             .collect();
 
@@ -637,6 +722,54 @@ mod tests {
         }
         // Sem a ficha, a sigla e letra solta, como sempre foi.
         assert_eq!(ler("1d20+FOR"), Err(Erro::Sintaxe));
+    }
+
+    #[test]
+    fn lembra_as_siglas_que_leu_uma_vez_cada() {
+        let ficha = [
+            AtributoDaConta {
+                sigla: " AGI ",
+                valor: 1,
+                rolagem: None,
+                so_com_arroba: false,
+            },
+            AtributoDaConta {
+                sigla: "Luta",
+                valor: 4,
+                rolagem: None,
+                so_com_arroba: true,
+            },
+            AtributoDaConta {
+                sigla: "FOR",
+                valor: 2,
+                rolagem: None,
+                so_com_arroba: false,
+            },
+        ];
+
+        let (expressao, usadas) = ler_lembrando("@AGId20>+@luta+AGI", &ficha).expect("le");
+        assert_eq!(expressao.modificador, 5);
+        let usadas: Vec<_> = usadas.iter().map(|u| (u.sigla, u.valor)).collect();
+        assert_eq!(usadas, [("AGI", 1), ("Luta", 4)]);
+
+        let (_, nenhuma) = ler_lembrando("1d20+5", &ficha).expect("le");
+        assert!(nenhuma.is_empty());
+    }
+
+    #[test]
+    fn o_detalhe_vale_o_numero_que_guarda() {
+        use serde_json::json;
+
+        assert_eq!(numero_do_detalhe(&json!(5)), Some(5));
+        assert_eq!(numero_do_detalhe(&json!(-3)), Some(-3));
+        assert_eq!(numero_do_detalhe(&json!(" 2 ")), Some(2));
+        assert_eq!(numero_do_detalhe(&json!("+3")), Some(3));
+        assert_eq!(numero_do_detalhe(&json!("-12")), Some(-12));
+        assert_eq!(numero_do_detalhe(&json!("999999999")), Some(999_999_999));
+        for texto in ["Combatente", "35%", "2,5", "2.5", "", "+", "- 2", "1234567890", "١٢"] {
+            assert_eq!(numero_do_detalhe(&json!(texto)), None, "{texto:?}");
+        }
+        assert_eq!(numero_do_detalhe(&json!(null)), None);
     }
 
     #[test]

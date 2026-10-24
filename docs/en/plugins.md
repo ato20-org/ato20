@@ -1247,6 +1247,14 @@ collection; the sheets live in a file next to it:
   is up to the plugin. An attribute that is a die goes in as the die: with
   AGI d8, `{AGI+1}` rolls 1d8+1. Braces only: `rolagem` doesn't take
   abbreviations yet, because the daemon is what rolls a detail from the phone.
+- **The `@` mention between braces:** an `@` in front reads an attribute's
+  abbreviation (`{1d20+@FOR}`, the same as `{1d20+FOR}`) or the label of a
+  detail on the same sheet that holds a number: `{1d20+@Luta}` adds Luta, and
+  `{@Ataquesd6}` rolls as many d6 as Ataques. Details only with `@`, and only
+  numeric ones (or text holding a whole number, like "3"): `{1d20+@Classe}`
+  with Classe "Combatente" leaves the braces as text. Labels may have spaces
+  (`@Bônus de Ataque`), case doesn't matter, and when an abbreviation and a
+  label are the same, the attribute wins.
 - **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
   URL with a site name. The file goes into the campaign's library when brought;
   the URL is downloaded then, by the GM's machine, and the sheet comes in

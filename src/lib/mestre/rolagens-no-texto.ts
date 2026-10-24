@@ -3,7 +3,8 @@ import {
   type AtributoDaConta,
   type ExpressaoDeRolagem,
 } from "@/lib/mestre/expressao-de-rolagem";
-import { MAX_ROLAGEM } from "@/types/detalhe";
+import type { Atributo } from "@/types/character";
+import { MAX_ROLAGEM, type Detalhe } from "@/types/detalhe";
 import type { FormaDaRegua } from "@/types/scene";
 
 /** As formas de régua que a ficha escreve entre chaves. Ver `lerReguaDoTexto`. */
@@ -43,6 +44,49 @@ export type PedacoDoTexto =
  */
 const ENTRE_CHAVES = new RegExp(`\\{([^{}\\n]{1,${MAX_ROLAGEM}})\\}`, "g");
 
+/**
+ * O número escrito num texto: "5", "-2", "+3". Inteiro e de até nove
+ * algarismos -- passar disso nenhuma conta aceita, e o teto é o que deixa o
+ * Rust ler igual (`numero_do_detalhe`). "35%", "2,5" e "Combatente" não são.
+ */
+const NUMERO_ESCRITO = /^[+-]?\d{1,9}$/;
+
+/** O que a menção lê de um detalhe: o rótulo, e o valor. O do plugin vem com `null`. */
+export type DetalheDaConta = Pick<Detalhe, "rotulo"> & { valor?: Detalhe["valor"] | null };
+
+/**
+ * O que a conta lê da ficha: os atributos pela sigla, e os detalhes que guardam
+ * número pelo rótulo, só com `@` -- "{1d20+@Furtividade}", "{@NEXd6}". Ver
+ * `AtributoDaConta.soComArroba`.
+ *
+ * Detalhe de número, ou texto e escolha com um número escrito ("3"); a Classe
+ * "Combatente" não entra, e o `@Classe` deixa as chaves como texto, como a
+ * sigla que a ficha não tem. Os atributos vêm antes: com a sigla e o rótulo
+ * iguais, a menção é o atributo. Espelho de `siglas_da_ficha`, em `serve.rs`.
+ */
+export function atributosDaConta(
+  atributos: ReadonlyArray<Pick<Atributo, "sigla" | "valor" | "rolagem">> | undefined,
+  detalhes: ReadonlyArray<DetalheDaConta> | null | undefined,
+): AtributoDaConta[] {
+  const daFicha: AtributoDaConta[] = (atributos ?? []).map(({ sigla, valor, rolagem }) => ({
+    sigla,
+    valor,
+    ...(rolagem && { rolagem }),
+  }));
+
+  for (const { rotulo, valor } of detalhes ?? []) {
+    const numero =
+      typeof valor === "number"
+        ? valor
+        : typeof valor === "string" && NUMERO_ESCRITO.test(valor.trim())
+          ? Number(valor.trim())
+          : null;
+    if (numero !== null && Number.isInteger(numero)) daFicha.push({ sigla: rotulo, valor: numero, soComArroba: true });
+  }
+
+  return daFicha;
+}
+
 /** Até quanto a régua da ficha mede, em metros. Ver `lerReguaDoTexto`. */
 export const MAX_METROS_DA_REGUA = 300;
 
@@ -81,7 +125,8 @@ export function lerReguaDoTexto(texto: string): ReguaDoTexto | null {
  * escreveu.
  *
  * `atributos` são os da ficha onde o texto mora: com eles, `{1d20+FOR}` lê a
- * FOR dela. A sigla que a ficha não tem deixa as chaves como texto.
+ * FOR dela, e `{1d20+@Luta}` o detalhe Luta. A sigla que a ficha não tem deixa
+ * as chaves como texto. Ver `atributosDaConta`.
  */
 export function pedacosComRolagens(
   texto: string,

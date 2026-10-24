@@ -43,6 +43,7 @@ import { normaliza } from "@/lib/search";
 import { idioma } from "@/lib/i18n/idioma";
 import { t as textos } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
+import { textoDasSiglas } from "@/lib/mestre/valor-do-atributo";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
 
 /**
@@ -375,6 +376,9 @@ function RolagemView({
       >
         {rotulo ? <span className="text-foreground">{rotulo} · </span> : null}
         {notacao}
+        {/* As siglas que a conta leu, com o valor da hora: "1d20+1 · AGI 1"
+            diz de onde veio o +1. Ver `SiglaDoLance`. */}
+        {rolagem.siglas?.length ? <span className="opacity-70"> · {textoDasSiglas(rolagem.siglas)}</span> : null}
       </span>
 
       <span className="grid shrink-0 place-items-end">
