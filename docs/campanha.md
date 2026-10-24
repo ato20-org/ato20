@@ -37,6 +37,7 @@ minha-campanha/
   trilha.json
   configuracoes.json   o que vale só nesta campanha; vence o da máquina
   chat.jsonl           o fio da mesa: mensagens e rolagens, uma por linha
+  historico.jsonl      o que aconteceu na mesa, um acontecimento por linha
   jogadores/
     a8b9.../
       historico-ana.txt   o que cada jogador anexou
@@ -101,6 +102,22 @@ decodifica (com aviso no log) em vez de perder o resto da conversa. Apagar tamb�
 acréscimo: uma linha `{"tipo":"apagada","alvo":…}`, e a original fica no arquivo — nenhuma
 tela a mostra de novo, e quem quiser mesmo sumir com uma frase tem o texto na mão. Quem
 escreve é sempre o daemon; ver [daemon.md](daemon.md).
+
+**O `historico.jsonl` segue a mesma regra, e é o irmão do fio.** Cada linha é um acontecimento
+da mesa com a hora: a cena que entrou no ar, o combate que começou, cada rodada e o fim, o
+valor de um medidor (`antes` → `depois`), a condição que entrou ou saiu, o item dado, tirado,
+passado ou posto no mapa, o efeito disparado (quem disparou e em quem caiu), e o que a mesa viu —
+a evidência, o retrato na fila, a névoa revelada, a porta aberta. Os nomes vão congelados na
+linha, como no fio. Névoa, porta, item no mapa e disparo só contam na cena que está no ar: arrumar a cena de amanhã é preparo, e não história. A conversa
+e as rolagens NÃO são copiadas para cá: a janela Histórico as lê do `chat.jsonl` e as intercala
+pela hora. O marco que o mestre escreve na linha do tempo também mora aqui, e editar ou apagar
+é acréscimo (`{"tipo":"editado","alvo":…}`, `{"tipo":"apagado","alvo":…}`), como no fio.
+
+Quem escreve é o Mestre, que compara o antes e o depois dos stores (o mesmo caminho dos eventos
+de plugin), e o Rust, nos gestos de mochila — o único lugar por onde passam o Mestre, o celular e
+o MCP. O Rust só confere a casca de cada linha (`tipo`, `id`, `quando`); o formato de cada
+acontecimento está em `src/types/historico.ts`. Viaja no zip da campanha como o fio; o pacote de
+partes não o leva.
 
 **Gravação por diferença.** Cada `board_save` reescreve `ordem.json` e só as cenas cujo JSON
 mudou. Sem isso, mover um token dez pixels reescreveria as trinta cenas da campanha: disco

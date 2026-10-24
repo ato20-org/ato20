@@ -34,7 +34,7 @@ endereço mais adivinhável da rede não é lugar para descobrir isso. O daemon 
 
 ## Janelas soltas
 
-As janelas do Mestre -- a ficha, o Compêndio, o chat, as Rolagens, a Mesa -- podem sair do
+As janelas do Mestre -- a ficha, o Compêndio, o chat, o Histórico, as Rolagens, a Mesa -- podem sair do
 aplicativo e virar **janelas do sistema**, para o segundo monitor: arrastar o cabeçalho de
 uma janela flutuante (ou a aba de uma atracada) para fora da janela do ATO20 e soltar lá, ou
 o ↗ no cabeçalho. Enquanto a mão está fora, o Mestre avisa embaixo o que soltar ali faz. O ↙
