@@ -270,6 +270,9 @@ export function CenaDeEsguelha({
             ? efeitosPorPersonagem.get(item.personagemId)
             : efeitosDoObjeto(item.condicoes),
           ...(animarSo && !animarSo.has(item.id) ? { parado: true } : {}),
+          // O item da campanha, e não o token: quando alguém escrevesse os
+          // dois, é o token que vence. Ver `CanvasItem.itemId`.
+          ...(item.itemId && !item.personagemId ? { item: true } : {}),
         })),
     [efeitosPorPersonagem, scene.grupos, scene.items, animarSo],
   );

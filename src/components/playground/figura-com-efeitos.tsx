@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import { useDeclarativo } from "@/components/playground/declarativo";
 import { ParticulasDaFigura } from "@/components/playground/particulas-da-figura";
 import { QuadrosAnimados } from "@/components/playground/quadros-animados";
 import { useSceneScaleSeHouver } from "@/components/playground/scene-stage";
 import { faseDaFigura, type EfeitoPedido } from "@/lib/condicao";
+import { sementeDaLuz } from "@/lib/geometry/luz";
 import {
   assarAura,
   assarPele,
@@ -39,6 +46,12 @@ const PERIODO: Record<"aura" | "translucido" | "tremendo", number> = {
   translucido: 3.2,
   tremendo: 0.45,
 };
+
+/** De quanto em quanto tempo o item lampeja, em segundos. Ver `LampejoDoItem`. */
+const PERIODO_DO_LAMPEJO = 4.2;
+
+/** A cor do lampejo do item: luz, e não a cor de nenhuma condição. */
+const LUZ_DO_LAMPEJO = "#ffffff";
 
 /** O retângulo da figura dentro da caixa, quando ela não a ocupa inteira. */
 export type LugarDaFigura = {
@@ -212,6 +225,125 @@ export function FiguraComEfeitos({
         <ParticulasDaFigura particulas={particulas} semente={semente} alcance={alcance} />
       ) : null}
     </>
+  );
+}
+
+/**
+ * O brilho do lampejo, degrau a degrau: sobe rápido e se desfaz devagar, como
+ * luz batendo em metal. Um degrau a cada `PASSO_DO_LAMPEJO` milissegundos; no
+ * último, zero, a silhueta volta a se esconder.
+ */
+const CURVA_DO_LAMPEJO = [
+  0.3, 0.6, 0.75, 0.66, 0.56, 0.46, 0.37, 0.29, 0.22, 0.16, 0.11, 0.07, 0.04, 0,
+];
+const PASSO_DO_LAMPEJO = 50;
+
+/**
+ * O lampejo do item da campanha largado na mesa de esguelha: de tempos em
+ * tempos, um brilho -- o do que está ali para ser apanhado, como o item caído
+ * dos Dark Souls. O balanço no ar é do invólucro em volta: ver `PecaEmPe`.
+ *
+ * Só o item, e não o token: é ele que a mesa precisa achar no meio da mobília.
+ * A espada e o baú são imagens como o barril ao lado, e sem o brilho o grupo
+ * passa por eles.
+ *
+ * ## É a aura, na frente
+ *
+ * A silhueta branca e borrada que o forno da aura já sabe assar, posta POR
+ * CIMA da figura e acesa por um instante. Assada uma vez e guardada, como a
+ * aura -- ver `assarAura`, e lá por que não um `filter` animado.
+ *
+ * ## Sem animação CSS, e escondida fora do brilho
+ *
+ * De esguelha a caixa da peça muda de tamanho a cada quadro da câmera (ver
+ * `escrever` no `ChaoInclinado`), e toda CAMADA composta dentro dela é
+ * realocada a cada quadro do voo. Uma animação de opacidade faz da silhueta
+ * uma camada assim -- medido no caminho da TV com o tripé voando, a webview
+ * perdia quadro e a memória disparava. Então o brilho é escrito à mão, degrau a
+ * degrau, numa imagem comum, pintada na camada que a peça já tem; e fora do
+ * brilho ela fica `hidden`, sem custo nenhum. Direto no elemento, e não em
+ * estado: um render por degrau, por item, seria o React trabalhando para
+ * mudar um número.
+ *
+ * Não acende parada -- o Mestre só anima o selecionado (ver `animarSo`) --,
+ * nem para quem pediu menos movimento: um clarão é justamente o que essa
+ * preferência pede para não ter.
+ */
+export function LampejoDoItem({
+  url,
+  semente,
+  parado,
+}: {
+  /** A figura de onde a silhueta sai. */
+  url: string | null;
+  /** O id que dá a fase, para dois itens lado a lado não acenderem juntos. */
+  semente: string;
+  parado?: boolean;
+}) {
+  const lampejo = useAura(url, LUZ_DO_LAMPEJO);
+  const ligado = Boolean(lampejo) && !parado;
+  const silhueta = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const imagem = silhueta.current;
+    if (
+      !ligado ||
+      !imagem ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+
+    const periodo = PERIODO_DO_LAMPEJO * 1000;
+    let relogio: number | undefined;
+    let degraus: number | undefined;
+
+    const acender = () => {
+      let i = 0;
+      window.clearInterval(degraus);
+      imagem.style.opacity = String(CURVA_DO_LAMPEJO[0]);
+      imagem.hidden = false;
+      degraus = window.setInterval(() => {
+        i += 1;
+        const brilho = CURVA_DO_LAMPEJO[i] ?? 0;
+        imagem.style.opacity = String(brilho);
+        if (brilho > 0) return;
+        imagem.hidden = true;
+        window.clearInterval(degraus);
+      }, PASSO_DO_LAMPEJO);
+    };
+
+    // A fase da peça, pela conta do `faseDaFigura`.
+    const primeiro = window.setTimeout(
+      () => {
+        acender();
+        relogio = window.setInterval(acender, periodo);
+      },
+      (sementeDaLuz(semente) / 4_294_967_296) * periodo,
+    );
+
+    return () => {
+      window.clearTimeout(primeiro);
+      window.clearInterval(relogio);
+      window.clearInterval(degraus);
+      imagem.hidden = true;
+    };
+  }, [ligado, semente]);
+
+  if (!lampejo) return null;
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={silhueta}
+      src={lampejo.desenho}
+      alt=""
+      aria-hidden
+      draggable={false}
+      hidden
+      // `max-w-none` pela razão da aura: a silhueta borrada passa da caixa.
+      className="pointer-events-none absolute max-w-none select-none"
+      style={expandida({}, null, lampejo)}
+    />
   );
 }
 

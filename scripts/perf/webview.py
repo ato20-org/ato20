@@ -183,6 +183,10 @@ def argumentos():
     # Listas, viram celulas. Ver `medidoresDaMedida` na pagina.
     p.add_argument("--medidores", default="0")
     p.add_argument("--estilo", default="fabrica")
+    # Os K primeiros tokens viram ITENS da campanha, que de esguelha flutuam e
+    # lampejam. Lista, para os dois lados na mesma tabela: `--itens 0,20`. Ver
+    # `itensDaMedida` na pagina.
+    p.add_argument("--itens", default="")
     p.add_argument("--url", default=None, help="servidor já de pé")
     p.add_argument("--pular-build", action="store_true")
     # A janela do `tauri.conf.json`. Medir noutro tamanho mede outra área de
@@ -544,6 +548,13 @@ def main():
             )
             for rotulo, url in urls
             for amb in args.ambiente.split(",")
+        ]
+
+    if args.itens:
+        urls = [
+            (rotulo + f" itens={k}", url + f"&itens={k}")
+            for rotulo, url in urls
+            for k in args.itens.split(",")
         ]
 
     try:

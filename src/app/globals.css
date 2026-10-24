@@ -276,6 +276,21 @@
     animation: efeito-piscar 2s ease-in-out infinite;
   }
 
+  /* O item largado na mesa de esguelha balança no ar. O período espelha
+     `PERIODO_DO_FLUTUAR`, em `chao-inclinado.tsx`. O lampejo não mora aqui:
+     ver `LampejoDoItem`.
+
+     Em DEGRAUS, quatro por trecho dos quadros abaixo: ~10 posições por
+     segundo, e não 60. O `top` anima fora do compositor (ver o invólucro em
+     `PecaEmPe`), e cada posição é estilo, layout e pintura. Medido no caminho
+     da TV com a câmera parada (no `next dev`), vinte itens em movimento
+     contínuo custavam mais que o dobro de CPU que em degraus; e o vão é de
+     poucos pixels, então o degrau fica abaixo do pixel que a pintura
+     arredonda. */
+  .item-flutuando {
+    animation: item-flutuar 3.2s steps(4) infinite;
+  }
+
   /* A chama de pé do 2.5D: uma faixa de quadros andando pela posição do
      fundo, em degraus. Repinta um elemento pequeno a cada degrau, em vez de
      compor duas camadas por chama a cada quadro da câmera. Ver `faixaDaFolha`. */
@@ -477,9 +492,49 @@
     .efeito-flutuar,
     .efeito-piscar,
     .efeito-grade,
-    .efeito-faixa
+    .efeito-faixa,
+    .item-flutuando
   ) {
   animation-play-state: paused;
+}
+
+/* O item no ar, PARADO, fora do `@media`: quem pediu menos movimento continua
+   vendo o vão entre ele e a sombra, só sem o balanço. O balanço anda entre
+   duas alturas acima desta base, e nunca pousa.
+
+   Pelo `top`, e não por `transform`: ver o invólucro em `PecaEmPe`. Em
+   porcentagem da caixa da peça, que de esguelha muda de tamanho com a
+   câmera. */
+.item-flutuando {
+  top: -6%;
+}
+
+/* Um cosseno em oito pontos, entre -3% e -9%: devagar nas pontas, depressa no
+   meio, como o que flutua. */
+@keyframes item-flutuar {
+  0%,
+  100% {
+    top: -3%;
+  }
+
+  12.5%,
+  87.5% {
+    top: -3.88%;
+  }
+
+  25%,
+  75% {
+    top: -6%;
+  }
+
+  37.5%,
+  62.5% {
+    top: -8.12%;
+  }
+
+  50% {
+    top: -9%;
+  }
 }
 
 @keyframes efeito-faixa {
