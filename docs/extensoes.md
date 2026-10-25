@@ -89,7 +89,10 @@ app a rodar todas para saber o que existe.
 mais do que ele tem.** A 13 é a atual: ela acrescentou os `itens`, as armas,
 proteções e o resto que o plugin traz pronto para o Compêndio (ver
 [Itens do plugin](#itens-do-plugin-armas-e-equipamento-prontos-no-compêndio)),
-que um ATO20 anterior ignoraria calado. A 12 acrescentou o `bestiario`, as
+as `abas`, uma aba nova no Compêndio com verbetes que se dão a um personagem
+(ver [Abas do plugin](#abas-do-plugin-rituais-e-outros-verbetes-no-compêndio)),
+e as `aparencias` da ficha do bestiário, que um ATO20 anterior ignoraria
+calado. A 12 acrescentou o `bestiario`, as
 fichas prontas que o plugin traz para o Compêndio (ver
 [Bestiário do plugin](#bestiário-do-plugin-fichas-prontas-no-compêndio)), e as
 `auras`, a cor, o emblema e a luz com que o plugin marca pastas, cards,
@@ -1177,6 +1180,14 @@ num arquivo ao lado dele:
   outra -- sem miniatura o card não arrastaria. Até 2 MB, nos formatos do
   estilo de medidor; a baixada passa pelo mesmo teto, com o tipo conferido
   pelos bytes.
+- **`aparencias`** são as outras caras da mesma ficha, depois da Padrão:
+  `"aparencias": [{ "nome": "SB", "miniatura": "bestiario/carnical-sb.webp" }]`.
+  Cada uma tem um `nome` e um `retrato` ou uma `miniatura`, na forma de cima, e
+  vira uma aparência do personagem, que o mestre troca no menu dele, sem outra
+  ficha. O que a aparência não diz vem da ficha: a que só traz a miniatura muda
+  a peça no mapa e continua com o mesmo rosto. Até 8 por ficha, com nomes que
+  não se repetem nem repetem a Padrão. Pede a **API 13**: numa versão mais
+  velha o campo é ignorado, e a ficha entra só com a Padrão.
 - **`fonte`** aparece no card: o livro, o suplemento, a coleção de quem fez a
   ficha. É onde o crédito fica à vista.
 - **`sistema`** é só etiqueta: o id de um sistema do mesmo plugin. Trazer
@@ -1257,6 +1268,72 @@ mesmos campos da do bestiário; os itens moram num arquivo ao lado dele:
   medidores, 16 tags, mais 500 itens e 4 MB por arquivo e 120 letras na
   fonte. A coleção que quebra depois de instalada aparece com o motivo, e as
   outras seguem; plugin desligado, coleção fora.
+
+## Abas do plugin: rituais e outros verbetes no Compêndio
+
+O plugin acrescenta uma aba própria ao Compêndio da campanha -- os rituais de um
+sistema, os talentos, as magias --, depois das quatro de sempre. Cada coleção da
+aba é uma pasta, com a aura dela, e na busca as pastas dão lugar aos verbetes
+que bateram; as tags da fileira são as dos verbetes da aba. Pede a **API 13**.
+O manifesto declara a aba, o grupo da ficha que recebe o verbete e as coleções,
+com os mesmos campos das do bestiário; os verbetes moram num arquivo por
+coleção:
+
+```json
+"contribui": {
+  "abas": [{
+    "id": "rituais",
+    "titulo": { "pt-BR": "Rituais", "en": "Rituals" },
+    "grupo": { "nome": "Rituais", "exibicao": "lista" },
+    "colecoes": [
+      { "id": "sangue", "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+        "arquivo": "rituais/sangue.json", "aura": "sangue" }
+    ]
+  }]
+}
+```
+
+```json
+{
+  "verbetes": [{
+    "id": "descarnar",
+    "nome": "Descarnar",
+    "tags": ["Sangue", "Desconjuração"],
+    "fonte": "Ordem Paranormal Wiki",
+    "imagem": "bestiario/elementos/sangue.webp",
+    "resumo": "Sangue",
+    "campos": [
+      { "rotulo": "Conjuração", "valor": "Derramar sangue humano sob o símbolo" }
+    ],
+    "descricao": "A pele do alvo é dilacerada: {1d10} de dano de Sangue."
+  }]
+}
+```
+
+- **Ler e dar.** O verbete não vira molde nem item: é texto de consulta. O
+  clique no card abre o verbete inteiro, com os `campos` em linhas e a
+  `descricao` embaixo; as rolagens e as réguas entre chaves funcionam como na
+  ficha. "Dar a…", no menu do card e na janela, lista os personagens em jogo,
+  e o verbete entra na ficha do escolhido como **detalhe** do `grupo` da aba:
+  o `nome` é o rótulo, o `resumo` é o valor, e a descrição é a `descricao`
+  com os campos embaixo, um por linha. Dar de novo não duplica.
+- **O grupo entra no molde da campanha** na primeira vez, com a `exibicao` da
+  aba -- `lista` desenha como os Ataques. A campanha que já tem um grupo com
+  esse nome fica com o dela. Sem lugar no molde (são 16 grupos), o detalhe
+  entra mesmo assim, no fim da ficha, com o aviso.
+- **Sem vínculo.** O detalhe é da campanha: o plugin atualizado depois não
+  mexe nele, e o mestre o edita como qualquer detalhe.
+- **`imagem`** é um arquivo da pasta do plugin, como o retrato do bestiário;
+  o card não vai à rede. Sem imagem, o card mostra um livro.
+- **Conferido na instalação, inteiro.** A aba precisa de grupo (até 24 letras)
+  e de 1 a 32 coleções; o arquivo, de 1 a 500 verbetes. O `nome` vai até 40
+  letras e o `resumo` até 80, os tetos do rótulo e do valor do detalhe; a
+  `descricao` até 2.000; até 12 `campos`, com rótulo de até 40 letras e valor
+  de até 300; e as 16 tags. A coleção que quebra depois de instalada aparece
+  na pasta com o motivo, e as outras seguem.
+- **Plugin desligado, aba fora.** Ligar e desligar mostra e esconde a aba na
+  hora. Ela só existe no Compêndio da campanha: o do ATO20 guarda o que a
+  campanha guardou, e o verbete não se guarda -- se dá.
 
 ## Auras: a cor, o emblema e a luz do plugin
 

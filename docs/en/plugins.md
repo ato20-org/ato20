@@ -100,7 +100,10 @@ that asks for more than it has.** Version 13 is the current one: it added
 `itens`, the weapons, protection and other gear a plugin brings ready-made to
 the Compendium (see
 [Plugin items](#plugin-items-ready-made-weapons-and-gear-in-the-compendium)),
-which an earlier ATO20 would silently ignore. Version 12 added
+`abas`, a new Compendium tab with entries you give to a character (see
+[Plugin tabs](#plugin-tabs-rituals-and-other-entries-in-the-compendium)), and
+the bestiary sheet's `aparencias`, which an earlier ATO20 would silently
+ignore. Version 12 added
 `bestiario`, the ready-made sheets a plugin brings to the Compendium (see
 [Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)), and
 `auras`, the color, emblem and light a plugin marks folders, cards,
@@ -1267,6 +1270,15 @@ collection; the sheets live in a file next to it:
   image stands in for the missing other -- without a token the card couldn't be
   dragged. Up to 2 MB, in the meter style's formats; a downloaded one goes
   through the same limit, with its type checked from the bytes.
+- **`aparencias`** are the other looks of the same sheet, after the Default
+  one: `"aparencias": [{ "nome": "SB", "miniatura": "bestiary/ghoul-sb.webp" }]`.
+  Each has a `nome` and a `retrato` or a `miniatura`, in the form above, and
+  becomes one of the character's appearances, which the GM switches from its
+  menu, with no second sheet. Whatever the appearance doesn't say comes from
+  the sheet: one that only brings a token changes the piece on the map and
+  keeps the same face. Up to 8 per sheet, with names that don't repeat each
+  other or the Default one. Needs **API 13**: an older version ignores the
+  field, and the sheet comes in with only the Default one.
 - **`fonte`** shows on the card: the book, the supplement, the collection of
   whoever made the sheet. It's where the credit stays in sight.
 - **`sistema`** is only a label: the id of a system from the same plugin.
@@ -1348,6 +1360,74 @@ next to it:
   goes in `descricao`), 6 meters, 16 tags, plus 500 items and 4 MB per file
   and 120 characters in the source. A collection that breaks after install
   shows with the reason, and the others carry on; plugin off, collection out.
+
+## Plugin tabs: rituals and other entries in the Compendium
+
+A plugin adds its own tab to the campaign's Compendium -- a system's rituals,
+talents, spells --, after the usual four. Each collection in the tab is a
+folder, with its aura, and while searching the folders give way to the entries
+that matched; the tag row shows the tab's entries' tags. Needs **API 13**. The
+manifest declares the tab, the sheet group that receives the entry and the
+collections, with the same fields as the bestiary's; the entries live in one
+file per collection:
+
+```json
+"contribui": {
+  "abas": [{
+    "id": "rituais",
+    "titulo": { "pt-BR": "Rituais", "en": "Rituals" },
+    "grupo": { "nome": "Rituais", "exibicao": "lista" },
+    "colecoes": [
+      { "id": "sangue", "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+        "arquivo": "rituais/sangue.json", "aura": "sangue" }
+    ]
+  }]
+}
+```
+
+```json
+{
+  "verbetes": [{
+    "id": "descarnar",
+    "nome": "Descarnar",
+    "tags": ["Sangue", "Desconjuração"],
+    "fonte": "Ordem Paranormal Wiki",
+    "imagem": "bestiario/elementos/sangue.webp",
+    "resumo": "Sangue",
+    "campos": [
+      { "rotulo": "Conjuração", "valor": "Derramar sangue humano sob o símbolo" }
+    ],
+    "descricao": "A pele do alvo é dilacerada: {1d10} de dano de Sangue."
+  }]
+}
+```
+
+- **Read and give.** An entry becomes neither a template nor an item: it's
+  reference text. Clicking the card opens the whole entry, with the `campos` as
+  lines and the `descricao` below; rolls and rulers between braces work as on
+  the sheet. "Give to…", in the card's menu and in the window, lists the
+  characters in play, and the entry goes onto the chosen one's sheet as a
+  **detail** in the tab's `grupo`: the `nome` is the label, the `resumo` the
+  value, and the description is the `descricao` with the fields below, one per
+  line. Giving it again doesn't duplicate it.
+- **The group joins the campaign template** the first time, with the tab's
+  `exibicao` -- `lista` draws like Attacks. A campaign that already has a group
+  with that name keeps its own. With no room in the template (16 groups), the
+  detail goes in anyway, at the end of the sheet, with a warning.
+- **No link.** The detail belongs to the campaign: a later plugin update
+  doesn't touch it, and the GM edits it like any detail.
+- **`imagem`** is a file in the plugin folder, like the bestiary's portrait;
+  the card doesn't go to the network. Without an image, the card shows a book.
+- **Checked on install, in full.** The tab needs a group (up to 24 characters)
+  and 1 to 32 collections; the file, 1 to 500 entries. `nome` holds up to 40
+  characters and `resumo` up to 80, the detail's label and value limits;
+  `descricao` up to 2,000; up to 12 `campos`, with a label of up to 40
+  characters and a value of up to 300; and the 16 tags. A collection that
+  breaks after install shows in its folder with the reason, and the others
+  carry on.
+- **Plugin off, tab out.** Turning it on and off shows and hides the tab right
+  away. It only exists in the campaign's Compendium: ATO20's keeps what the
+  campaign kept, and an entry isn't kept -- it's given.
 
 ## Auras: the plugin's color, emblem and light
 
