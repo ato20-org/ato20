@@ -250,6 +250,15 @@ pub struct Item {
     /// molde no catalogo -- ver `compendio::duplicar_item`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compendio: bool,
+    /// De que item de plugin este molde foi trazido: `{plugin}/{colecao}/{item}`.
+    ///
+    /// So no MOLDE, como em `characters::Personagem::do_plugin`: e o que deixa
+    /// a segunda pistola trazida do plugin sair do molde que a primeira deixou,
+    /// sem trazer o item -- e a imagem dele -- de novo. A copia no catalogo nao
+    /// a leva (`compendio::duplicar_item`). Ver
+    /// `compendio::trazer_item_do_plugin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub do_plugin: Option<String>,
     #[serde(rename = "criadoEm")]
     pub criado_em: i64,
 }
@@ -423,6 +432,7 @@ pub(crate) fn montar(
         tags: Vec::new(),
         aura: None,
         compendio: false,
+        do_plugin: None,
         criado_em: now_ms(),
     };
 
@@ -1432,6 +1442,7 @@ mod tests {
                 tags: Vec::new(),
                 aura: None,
                 compendio: false,
+                do_plugin: None,
                 criado_em: n as i64,
             })
             .collect();

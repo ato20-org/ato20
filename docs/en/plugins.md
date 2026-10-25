@@ -96,7 +96,11 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 12 is the current one: it added
+that asks for more than it has.** Version 13 is the current one: it added
+`itens`, the weapons, protection and other gear a plugin brings ready-made to
+the Compendium (see
+[Plugin items](#plugin-items-ready-made-weapons-and-gear-in-the-compendium)),
+which an earlier ATO20 would silently ignore. Version 12 added
 `bestiario`, the ready-made sheets a plugin brings to the Compendium (see
 [Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)), and
 `auras`, the color, emblem and light a plugin marks folders, cards,
@@ -1280,6 +1284,70 @@ collection; the sheets live in a file next to it:
   the section with the reason, and the other collections carry on.
 - **Plugin off, collection out.** Turning it on and off shows and hides the
   section right away.
+
+## Plugin items: ready-made weapons and gear in the Compendium
+
+A plugin brings ready-made items -- a system's weapons, protection, ammo,
+healing -- and they show in the Items tab of the campaign's Compendium, after
+the GM's item templates, the same way as the bestiary: each collection is a
+folder, in a section named after the plugin, and a search swaps the folders for
+the items that matched. It needs **API 13**. The manifest declares the
+collection, with the same fields as a bestiary one; the items live in a file
+next to it:
+
+```json
+"apiVersao": 13,
+"contribui": {
+  "itens": [{
+    "id": "weapons",
+    "titulo": { "pt-BR": "Armas", "en": "Weapons" },
+    "arquivo": "items/weapons.json",
+    "sistema": "ordem",
+    "aura": "arsenal"
+  }]
+}
+```
+
+```json
+{
+  "itens": [{
+    "id": "pistol",
+    "nome": "Pistol",
+    "tags": ["Firearm", "Simple weapon"],
+    "fonte": "Core Rulebook",
+    "atributos": [
+      { "nome": "Damage", "valor": "1d12 ballistic" },
+      { "nome": "Critical", "valor": "18" },
+      { "nome": "Range", "valor": "Short" }
+    ],
+    "medidores": [{ "nome": "Ammo", "maximo": 2 }]
+  }]
+}
+```
+
+- **The item is the campaign's.** `atributos` are the name and value pairs of
+  the item window, in its order, and the card shows the first two: put there
+  what decides between two weapons without opening the window. `medidores`
+  are the item's, with a name and a maximum -- the value belongs to each
+  backpack, and starts full. `descricao` is free text, and `imagem` works like
+  a bestiary sheet's portrait: a file in the folder or an `https` URL.
+- **Read only, and always copied.** Clicking the card opens the whole item,
+  read only. "Put in play" -- with the button, or by dragging a card with an
+  image to the map, which also places the token -- puts the item in the
+  campaign's Items catalog; "Bring to the campaign" leaves it as a template in
+  the Compendium, where it can be edited. Both come from the brought template,
+  which keeps where it came from (`doPlugin`): the second pistol does not bring
+  the item again, and updating the plugin does not touch what the campaign
+  already brought. The copy in the catalog does not keep the mark.
+- **`aura`**, on the collection or the item, paints the folder and frames the
+  card, and the brought item takes it into the campaign. See
+  [Auras](#auras-the-plugins-color-emblem-and-light).
+- **Checked on install, in full**, like the bestiary. The limits are the
+  campaign item's: 120 characters in the name, 4,000 in the description, 24
+  attributes (the name up to 40 characters and the value up to 120; the rest
+  goes in `descricao`), 6 meters, 16 tags, plus 500 items and 4 MB per file
+  and 120 characters in the source. A collection that breaks after install
+  shows with the reason, and the others carry on; plugin off, collection out.
 
 ## Auras: the plugin's color, emblem and light
 

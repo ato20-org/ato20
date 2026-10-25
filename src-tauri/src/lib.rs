@@ -10,6 +10,7 @@ mod estante;
 mod extensoes;
 mod galeria;
 mod importar;
+mod itens_do_plugin;
 mod janelas;
 mod mcp;
 mod presenca;
@@ -305,6 +306,10 @@ pub fn run() {
             commands::bestiario_ficha,
             commands::bestiario_trazer,
             commands::bestiario_por_em_jogo,
+            commands::itens_do_plugin_listar,
+            commands::itens_do_plugin_item,
+            commands::itens_do_plugin_trazer,
+            commands::itens_do_plugin_em_jogo,
             commands::character_rename,
             commands::character_remove,
             commands::character_set_campo,

@@ -105,6 +105,12 @@ export type Item = {
    * e das mochilas. Pôr em jogo copia no catálogo. Espelho de `Item::compendio`.
    */
   compendio?: boolean;
+  /**
+   * De que item de plugin este molde foi trazido, `{plugin}/{coleção}/{item}`.
+   * Só no molde: é de onde a próxima pistola do plugin sai, sem trazer o item
+   * de novo. Espelho de `Item::do_plugin`.
+   */
+  doPlugin?: string;
   criadoEm: number;
 };
 

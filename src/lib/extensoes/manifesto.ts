@@ -38,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 12;
+export const API_VERSAO = 13;
 
 /**
  * O que uma extensão diz de si.
@@ -113,6 +113,8 @@ export type Contribuicoes = {
   bestiario?: ColecaoDoBestiarioDeclarada[];
   /** Ausente em lista lida por um Rust anterior à API 12. */
   auras?: AuraDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 13. */
+  itens?: ColecaoDeItensDeclarada[];
 };
 
 /**
@@ -129,6 +131,13 @@ export type ColecaoDoBestiarioDeclarada = {
   /** A aura do mesmo plugin que pinta a pasta da coleção. Ver `AuraDeclarada`. */
   aura?: string | null;
 };
+
+/**
+ * Uma coleção de itens prontos para o Compêndio: as armas, as proteções. A
+ * mesma declaração do bestiário; o `arquivo` traz itens, e não fichas, e quem
+ * o lê é o Rust (`itens_do_plugin.rs`). Espelho de `extensoes::ColecaoDeItens`.
+ */
+export type ColecaoDeItensDeclarada = ColecaoDoBestiarioDeclarada;
 
 /** Os efeitos de luz que o núcleo sabe desenhar. Espelho de `extensoes::EFEITOS_DE_LUZ`. */
 export type EfeitoDeLuz = "fixa" | "pulso" | "fluxo" | "cintilar";
@@ -579,6 +588,7 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       sistemas: c.sistemas?.map(titulo),
       bestiario: c.bestiario?.map(titulo),
       auras: c.auras?.map(titulo),
+      itens: c.itens?.map(titulo),
     },
   };
 }

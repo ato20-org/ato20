@@ -40,6 +40,9 @@ export type ConteudoJanela =
   // para a aba ter título antes de a ficha chegar, como o do livro. Ver
   // `FichaDoPluginBody`.
   | { tipo: "ficha-do-plugin"; extensaoId: string; colecaoId: string; moldeId: string; nome: string }
+  // Um item de um plugin, para LER sem trazer, pelo mesmo arranjo da ficha.
+  // Ver `ItemDoPluginBody`.
+  | { tipo: "item-do-plugin"; extensaoId: string; colecaoId: string; itemId: string; nome: string }
   // Um efeito da campanha no editor dele: o de área ou o de personagem, em jogo
   // ou guardado no Compêndio -- a mesma lista, `useEfeitosDaCampanhaStore`.
   // Pelo id, como o item: o título é rótulo, e renomear o fogo não pode abrir
@@ -140,6 +143,8 @@ export function chaveDe(conteudo: ConteudoJanela): string {
     // Sem o nome: ele é rótulo, não identidade, como o título do livro.
     case "ficha-do-plugin":
       return `ficha-do-plugin:${conteudo.extensaoId}/${conteudo.colecaoId}/${conteudo.moldeId}`;
+    case "item-do-plugin":
+      return `item-do-plugin:${conteudo.extensaoId}/${conteudo.colecaoId}/${conteudo.itemId}`;
     case "efeito":
       return `efeito:${conteudo.efeitoId}`;
     case "condicao":

@@ -325,27 +325,7 @@ fn validar_molde(molde: &MoldeDoBestiario, grupos: &[String]) -> Result<(), Text
     }
 
     for imagem in molde.imagens() {
-        match imagem {
-            Imagem::Arquivo(rel) => {
-                let extensao = rel.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
-                let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
-                if !extensoes::caminho_relativo_seguro(rel) || !e_imagem {
-                    return Err(crate::texto!(
-                        "aponta para a imagem {rel:?}; tem de ser um arquivo da pasta ({})",
-                        "points to the image {rel:?}; it must be a file inside the folder ({})",
-                        IMAGENS_DE_MEDIDOR.join(", ")
-                    ));
-                }
-            }
-            Imagem::Url(url) => {
-                if !url_valida(url) {
-                    return Err(crate::texto!(
-                        "aponta para a imagem {url:?}; a URL tem de ser https, com o nome de um site",
-                        "points to the image {url:?}; the URL must be https, with a site name"
-                    ));
-                }
-            }
-        }
+        validar_imagem(imagem)?;
     }
 
     if molde.atributos.len() > characters::MAX_ATRIBUTOS {
@@ -402,40 +382,7 @@ fn validar_molde(molde: &MoldeDoBestiario, grupos: &[String]) -> Result<(), Text
             characters::MAX_MEDIDORES
         ));
     }
-    let mut medidores: Vec<String> = Vec::new();
-    for medidor in &molde.medidores {
-        let nome = &medidor.nome;
-        if tamanho(nome) == 0 || tamanho(nome) > characters::MAX_NOME_MEDIDOR {
-            return Err(crate::texto!(
-                "tem o medidor {nome:?}; o nome precisa ter de 1 a {} letras",
-                "has the meter {nome:?}; the name must have 1 to {} characters",
-                characters::MAX_NOME_MEDIDOR
-            ));
-        }
-        if medidores.contains(&chave_do_nome(nome)) {
-            return Err(crate::texto!(
-                "tem o medidor {nome:?} duas vezes",
-                "has the meter {nome:?} twice"
-            ));
-        }
-        medidores.push(chave_do_nome(nome));
-        if !(1..=modelos::MAX_VALOR).contains(&medidor.maximo) {
-            return Err(crate::texto!(
-                "tem o medidor {nome:?} com maximo {}; vai de 1 a {}",
-                "has the meter {nome:?} with a maximum of {}; it goes from 1 to {}",
-                medidor.maximo,
-                modelos::MAX_VALOR
-            ));
-        }
-        if let Some(cor) = &medidor.cor {
-            if !extensoes::cor_hex_valida(cor) {
-                return Err(crate::texto!(
-                    "tem o medidor {nome:?} com a cor {cor:?}, que nao e hex, como \"#ef4444\"",
-                    "has the meter {nome:?} with the color {cor:?}, which is not hex, like \"#ef4444\""
-                ));
-            }
-        }
-    }
+    validar_medidores(&molde.medidores)?;
 
     if molde.detalhes.len() > detalhes::MAX_DETALHES {
         return Err(crate::texto!(
@@ -459,6 +406,81 @@ fn validar_molde(molde: &MoldeDoBestiario, grupos: &[String]) -> Result<(), Text
             ));
         }
         pares.push(par);
+    }
+
+    Ok(())
+}
+
+/// A imagem que a ficha -- ou o item (`itens_do_plugin`) -- aponta tem a
+/// forma certa? Um arquivo de imagem dentro da pasta, ou uma URL que
+/// `url_valida` aceita. Se o arquivo EXISTE e conferido na importacao, ver
+/// `imagem_fora_da_pasta`. O motivo volta sem o sujeito.
+pub(crate) fn validar_imagem(imagem: Imagem) -> Result<(), Texto> {
+    match imagem {
+        Imagem::Arquivo(rel) => {
+            let extensao = rel.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+            let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+            if !extensoes::caminho_relativo_seguro(rel) || !e_imagem {
+                return Err(crate::texto!(
+                    "aponta para a imagem {rel:?}; tem de ser um arquivo da pasta ({})",
+                    "points to the image {rel:?}; it must be a file inside the folder ({})",
+                    IMAGENS_DE_MEDIDOR.join(", ")
+                ));
+            }
+        }
+        Imagem::Url(url) => {
+            if !url_valida(url) {
+                return Err(crate::texto!(
+                    "aponta para a imagem {url:?}; a URL tem de ser https, com o nome de um site",
+                    "points to the image {url:?}; the URL must be https, with a site name"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Os medidores de uma ficha, ou de um item, contra as regras do modelo da
+/// campanha: o nome que cabe e nao se repete, o maximo, a cor. Quantos cabem
+/// e de quem chama -- o teto do personagem nao e o do item. O motivo volta
+/// sem o sujeito.
+pub(crate) fn validar_medidores(medidores: &[MedidorDoMolde]) -> Result<(), Texto> {
+    let tamanho = |texto: &str| texto.trim().chars().count();
+
+    let mut vistos: Vec<String> = Vec::new();
+    for medidor in medidores {
+        let nome = &medidor.nome;
+        if tamanho(nome) == 0 || tamanho(nome) > characters::MAX_NOME_MEDIDOR {
+            return Err(crate::texto!(
+                "tem o medidor {nome:?}; o nome precisa ter de 1 a {} letras",
+                "has the meter {nome:?}; the name must have 1 to {} characters",
+                characters::MAX_NOME_MEDIDOR
+            ));
+        }
+        if vistos.contains(&chave_do_nome(nome)) {
+            return Err(crate::texto!(
+                "tem o medidor {nome:?} duas vezes",
+                "has the meter {nome:?} twice"
+            ));
+        }
+        vistos.push(chave_do_nome(nome));
+        if !(1..=modelos::MAX_VALOR).contains(&medidor.maximo) {
+            return Err(crate::texto!(
+                "tem o medidor {nome:?} com maximo {}; vai de 1 a {}",
+                "has the meter {nome:?} with a maximum of {}; it goes from 1 to {}",
+                medidor.maximo,
+                modelos::MAX_VALOR
+            ));
+        }
+        if let Some(cor) = &medidor.cor {
+            if !extensoes::cor_hex_valida(cor) {
+                return Err(crate::texto!(
+                    "tem o medidor {nome:?} com a cor {cor:?}, que nao e hex, como \"#ef4444\"",
+                    "has the meter {nome:?} with the color {cor:?}, which is not hex, like \"#ef4444\""
+                ));
+            }
+        }
     }
 
     Ok(())
@@ -553,15 +575,19 @@ fn validar_detalhe(detalhe: &DetalheDoMolde, grupos: &[String]) -> Result<(), Te
     Ok(())
 }
 
-/// Le e confere o arquivo de uma colecao.
+/// Le o arquivo de uma colecao de plugin -- o bestiario, os itens --, sem
+/// conferir o que ele traz: isso e de quem chama.
 ///
-/// `symlink_metadata`, como nas imagens declaradas: a copia da importacao pula
-/// link simbolico, e um arquivo que fosse link passaria aqui e faltaria na
-/// pasta instalada.
-fn ler_arquivo(caminho: &Path, colecao: &ColecaoDoBestiario) -> AppResult<Bestiario> {
-    let id = &colecao.id;
-    let arquivo = &colecao.arquivo;
-
+/// `grupo` e a chave do manifesto que declara a colecao, para o erro dizer
+/// onde procurar. `symlink_metadata`, como nas imagens declaradas: a copia da
+/// importacao pula link simbolico, e um arquivo que fosse link passaria aqui e
+/// faltaria na pasta instalada.
+pub(crate) fn ler_colecao<T: serde::de::DeserializeOwned>(
+    caminho: &Path,
+    grupo: &str,
+    id: &str,
+    arquivo: &str,
+) -> AppResult<T> {
     let tamanho = std::fs::symlink_metadata(caminho)
         .ok()
         .filter(|meta| meta.is_file())
@@ -570,14 +596,14 @@ fn ler_arquivo(caminho: &Path, colecao: &ColecaoDoBestiario) -> AppResult<Bestia
     match tamanho {
         None => {
             return Err(AppError::ExtensaoInvalida(crate::texto!(
-                "o bestiario {id:?} aponta para {arquivo:?}, que nao esta na pasta",
-                "the bestiary {id:?} points to {arquivo:?}, which is not in the folder"
+                "a colecao {id:?} de `{grupo}` aponta para {arquivo:?}, que nao esta na pasta",
+                "the collection {id:?} in `{grupo}` points to {arquivo:?}, which is not in the folder"
             )));
         }
         Some(bytes) if bytes > ARQUIVO_MAX => {
             return Err(AppError::ExtensaoInvalida(crate::texto!(
-                "o arquivo {arquivo:?} do bestiario {id:?} tem {} KB; o teto e {} KB",
-                "the file {arquivo:?} of the bestiary {id:?} is {} KB; the limit is {} KB",
+                "o arquivo {arquivo:?} da colecao {id:?} de `{grupo}` tem {} KB; o teto e {} KB",
+                "the file {arquivo:?} of the collection {id:?} in `{grupo}` is {} KB; the limit is {} KB",
                 bytes / 1024,
                 ARQUIVO_MAX / 1024
             )));
@@ -586,14 +612,41 @@ fn ler_arquivo(caminho: &Path, colecao: &ColecaoDoBestiario) -> AppResult<Bestia
     }
 
     let cru = std::fs::read_to_string(caminho)?;
-    let bestiario: Bestiario = serde_json::from_str(&cru).map_err(|cause| AppError::Malformed {
-        file: arquivo.clone(),
+    serde_json::from_str(&cru).map_err(|cause| AppError::Malformed {
+        file: arquivo.to_string(),
         cause: cause.to_string(),
-    })?;
+    })
+}
 
-    validar(&bestiario, id).map_err(AppError::ExtensaoInvalida)?;
+/// Le e confere o arquivo de uma colecao do bestiario.
+fn ler_arquivo(caminho: &Path, colecao: &ColecaoDoBestiario) -> AppResult<Bestiario> {
+    let bestiario: Bestiario = ler_colecao(caminho, "bestiario", &colecao.id, &colecao.arquivo)?;
+    validar(&bestiario, &colecao.id).map_err(AppError::ExtensaoInvalida)?;
 
     Ok(bestiario)
+}
+
+/// A imagem que a ficha, ou o item, aponta na pasta falta ou passa do teto? O
+/// motivo volta sem o sujeito, como em `validar_imagem`.
+pub(crate) fn imagem_fora_da_pasta(pasta: &Path, rel: &str) -> Option<Texto> {
+    let tamanho = std::fs::symlink_metadata(pasta.join(rel))
+        .ok()
+        .filter(|meta| meta.is_file())
+        .map(|meta| meta.len());
+
+    match tamanho {
+        None => Some(crate::texto!(
+            "aponta para {rel:?}, que nao esta na pasta",
+            "points to {rel:?}, which is not in the folder"
+        )),
+        Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => Some(crate::texto!(
+            "tem a imagem {rel:?} com {} KB; o teto e {} KB",
+            "has the image {rel:?} at {} KB; the limit is {} KB",
+            bytes / 1024,
+            IMAGEM_DE_MEDIDOR_MAX / 1024
+        )),
+        Some(_) => None,
+    }
 }
 
 /// Os arquivos das colecoes de uma pasta de plugin, e as imagens que eles
@@ -620,30 +673,11 @@ pub fn validar_pasta(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
                     continue;
                 };
 
-                let tamanho = std::fs::symlink_metadata(pasta.join(rel))
-                    .ok()
-                    .filter(|meta| meta.is_file())
-                    .map(|meta| meta.len());
-
-                let motivo = match tamanho {
-                    None => Some(crate::texto!(
-                        "a ficha {:?} do bestiario {:?} aponta para {rel:?}, que nao esta na pasta",
-                        "the sheet {:?} in the bestiary {:?} points to {rel:?}, which is not in the folder",
-                        molde.id,
-                        colecao.id
-                    )),
-                    Some(bytes) if bytes > IMAGEM_DE_MEDIDOR_MAX => Some(crate::texto!(
-                        "a imagem {rel:?} da ficha {:?} tem {} KB; o teto e {} KB",
-                        "the image {rel:?} of the sheet {:?} is {} KB; the limit is {} KB",
-                        molde.id,
-                        bytes / 1024,
-                        IMAGEM_DE_MEDIDOR_MAX / 1024
-                    )),
-                    Some(_) => None,
-                };
-
-                if let Some(motivo) = motivo {
-                    return Err(AppError::ExtensaoInvalida(motivo));
+                if let Some(motivo) = imagem_fora_da_pasta(pasta, rel) {
+                    return Err(AppError::ExtensaoInvalida(Texto {
+                        pt: format!("a ficha {:?} do bestiario {:?} {}", molde.id, colecao.id, motivo.pt),
+                        en: format!("the sheet {:?} in the bestiary {:?} {}", molde.id, colecao.id, motivo.en),
+                    }));
                 }
             }
         }

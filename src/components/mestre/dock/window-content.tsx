@@ -6,6 +6,7 @@ import { CharacterBody } from "@/components/mestre/character-window";
 import { CharactersBody } from "@/components/mestre/characters-window";
 import { CompendioBody, CompendioDoAto20Body } from "@/components/mestre/compendio-window";
 import { FichaDoPluginBody } from "@/components/mestre/ficha-do-plugin";
+import { ItemDoPluginBody } from "@/components/mestre/item-do-plugin";
 import {
   CondicaoBody,
   FundoDaCondicao,
@@ -194,6 +195,8 @@ export function useRotuloJanela(conteudo: ConteudoJanela): Rotulo {
       return { titulo: t.janelas.compendioAto20, subtitulo: t.janelas.compendioAto20Sub };
     case "ficha-do-plugin":
       return { titulo: conteudo.nome, subtitulo: t.janelas.fichaDoPluginSub };
+    case "item-do-plugin":
+      return { titulo: conteudo.nome, subtitulo: t.janelas.itemDoPluginSub };
     case "efeito":
       return rotuloDoEfeito;
     case "condicao":
@@ -413,6 +416,9 @@ export function larguraPadrao(conteudo: ConteudoJanela): number {
     // as ações em texto corrido embaixo.
     case "ficha-do-plugin":
       return 440;
+    // A do item de sempre: a imagem ao lado do nome e os atributos embaixo.
+    case "item-do-plugin":
+      return 400;
     // Larga o bastante para o editor abrir em duas colunas: a prévia parada à
     // esquerda, as camadas rolando à direita. Abaixo de 32rem ele empilha, e a
     // prévia sai da vista assim que o mestre desce até a luz.
@@ -468,6 +474,7 @@ export function larguraMinima(conteudo: ConteudoJanela): number {
     case "anexo":
     case "asset":
     case "ficha-do-plugin":
+    case "item-do-plugin":
     case "efeito":
     case "condicao":
       return 320;
@@ -545,6 +552,14 @@ function CorpoDeFabrica({ conteudo }: { conteudo: ConteudoJanela }) {
           extensaoId={conteudo.extensaoId}
           colecaoId={conteudo.colecaoId}
           moldeId={conteudo.moldeId}
+        />
+      );
+    case "item-do-plugin":
+      return (
+        <ItemDoPluginBody
+          extensaoId={conteudo.extensaoId}
+          colecaoId={conteudo.colecaoId}
+          itemId={conteudo.itemId}
         />
       );
     case "item":
