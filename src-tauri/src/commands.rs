@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::abas_do_plugin;
 use crate::bestiario;
 use crate::itens_do_plugin;
 use crate::compendio;
@@ -1606,6 +1607,72 @@ pub async fn itens_do_plugin_item(
 
     let dir = state.extensoes.clone();
     em_segundo_plano(move || itens_do_plugin::item(&dir, &extensao_id, &colecao_id, &item_id)).await
+}
+
+// --- abas de plugin ------------------------------------------------------------
+//
+// As abas que um plugin acrescenta ao Compendio -- os rituais --, pelo caminho
+// dos itens: lidas do DISCO, pelo id. O verbete nao vem para a campanha como
+// molde: e dado a um personagem, como detalhe. Ver `abas_do_plugin`.
+
+/// As abas dos plugins ligados. Nao depende de campanha aberta.
+#[tauri::command]
+pub async fn abas_listar(state: State<'_, AppState>) -> AppResult<Vec<abas_do_plugin::AbaListada>> {
+    let estado: HashMap<String, bool> = state.db.extensoes_estado()?.into_iter().collect();
+    let dir = state.extensoes.clone();
+
+    em_segundo_plano(move || {
+        abas_do_plugin::listar(&dir, |id| estado.get(id).copied().unwrap_or(true))
+    })
+    .await
+}
+
+/// Um verbete inteiro de um plugin ligado, para ler. Nao depende de campanha
+/// aberta.
+#[tauri::command]
+pub async fn abas_verbete(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    aba_id: String,
+    colecao_id: String,
+    verbete_id: String,
+) -> AppResult<abas_do_plugin::VerbeteCompleto> {
+    if !extensao_ligada(&state, &extensao_id)? {
+        return Err(plugin_desligado(&extensao_id));
+    }
+
+    let dir = state.extensoes.clone();
+    em_segundo_plano(move || abas_do_plugin::verbete(&dir, &extensao_id, &aba_id, &colecao_id, &verbete_id))
+        .await
+}
+
+/// Da o verbete a um personagem da campanha aberta: ele entra na ficha como
+/// detalhe, no grupo da aba. Lido do disco, como o trazer, e gravado com o
+/// vault na mao so no fim.
+#[tauri::command]
+pub async fn abas_dar(
+    state: State<'_, AppState>,
+    extensao_id: String,
+    aba_id: String,
+    colecao_id: String,
+    verbete_id: String,
+    personagem_id: String,
+) -> AppResult<abas_do_plugin::Dado> {
+    if !extensao_ligada(&state, &extensao_id)? {
+        return Err(plugin_desligado(&extensao_id));
+    }
+
+    let dir = state.extensoes.clone();
+    let (aba, verbete, _) = em_segundo_plano(move || {
+        abas_do_plugin::achar(&dir, &extensao_id, &aba_id, &colecao_id, &verbete_id)
+    })
+    .await?;
+
+    let shared = state.vault.clone();
+    em_segundo_plano(move || {
+        com_vault(&shared, |vault| abas_do_plugin::dar(vault, &aba, &verbete, &personagem_id))
+    })
+    .await
 }
 
 fn plugin_desligado(extensao_id: &str) -> AppError {

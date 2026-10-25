@@ -115,6 +115,8 @@ export type Contribuicoes = {
   auras?: AuraDeclarada[];
   /** Ausente em lista lida por um Rust anterior à API 13. */
   itens?: ColecaoDeItensDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 13. */
+  abas?: AbaDoCompendioDeclarada[];
 };
 
 /**
@@ -138,6 +140,24 @@ export type ColecaoDoBestiarioDeclarada = {
  * o lê é o Rust (`itens_do_plugin.rs`). Espelho de `extensoes::ColecaoDeItens`.
  */
 export type ColecaoDeItensDeclarada = ColecaoDoBestiarioDeclarada;
+
+/**
+ * Uma aba nova no Compêndio: os rituais de um sistema, os talentos, as magias.
+ * O manifesto declara a aba, o grupo da ficha que recebe o verbete dado a um
+ * personagem e as coleções; os verbetes moram no `arquivo` de cada coleção, e
+ * quem os lê é o Rust (`abas_do_plugin.rs`). Espelho de
+ * `extensoes::AbaDoCompendio`.
+ */
+export type AbaDoCompendioDeclarada = {
+  id: string;
+  titulo: string;
+  /** Onde o verbete entra na ficha: "Rituais", em lista. */
+  grupo: { nome: string; exibicao?: "linhas" | "lista" };
+  colecoes: ColecaoDeVerbetesDeclarada[];
+};
+
+/** Uma coleção de verbetes: a mesma declaração do bestiário e dos itens. */
+export type ColecaoDeVerbetesDeclarada = ColecaoDoBestiarioDeclarada;
 
 /** Os efeitos de luz que o núcleo sabe desenhar. Espelho de `extensoes::EFEITOS_DE_LUZ`. */
 export type EfeitoDeLuz = "fixa" | "pulso" | "fluxo" | "cintilar";
@@ -589,6 +609,7 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       bestiario: c.bestiario?.map(titulo),
       auras: c.auras?.map(titulo),
       itens: c.itens?.map(titulo),
+      abas: c.abas?.map((aba) => ({ ...titulo(aba), colecoes: aba.colecoes.map(titulo) })),
     },
   };
 }

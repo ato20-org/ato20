@@ -90,7 +90,9 @@ use crate::error::{AppError, AppResult};
 /// traz pronto para o Compendio, num arquivo ao lado do manifesto, como o
 /// bestiario. Um ATO20 de API 12 ignoraria a chave calado, e o plugin
 /// instalado so para isso nao mostraria nada; pedindo 13, ele ouve "atualize o
-/// ATO20".
+/// ATO20". Na mesma versao, antes de sair, entraram as `abas` -- uma aba nova
+/// no Compendio, com verbetes de consulta que se dao a um personagem -- e as
+/// `aparencias` da ficha do bestiario.
 pub const API_VERSAO: u32 = 13;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
@@ -365,6 +367,12 @@ impl Manifesto {
         for x in &c.itens {
             textos.push((caminho("itens", &x.id, "titulo"), &x.titulo));
         }
+        for x in &c.abas {
+            textos.push((caminho("abas", &x.id, "titulo"), &x.titulo));
+            for colecao in &x.colecoes {
+                textos.push((caminho("abas", &format!("{}/{}", x.id, colecao.id), "titulo"), &colecao.titulo));
+            }
+        }
         for x in &c.auras {
             textos.push((caminho("auras", &x.id, "titulo"), &x.titulo));
         }
@@ -473,6 +481,9 @@ pub struct Contribuicoes {
     /// Itens prontos para o Compendio. Ver `ColecaoDeItens`.
     #[serde(default)]
     pub itens: Vec<ColecaoDeItens>,
+    /// Abas novas no Compendio, com verbetes de consulta. Ver `AbaDoCompendio`.
+    #[serde(default)]
+    pub abas: Vec<AbaDoCompendio>,
     /// A cor, o emblema e a luz com que o plugin marca uma coisa. Ver `Aura`.
     #[serde(default)]
     pub auras: Vec<Aura>,
@@ -512,6 +523,26 @@ pub struct ColecaoDoBestiario {
 /// aura --, e pela mesma razao de o arquivo ser a parte. O que muda e o que o
 /// arquivo traz: itens, e nao fichas. Ver `itens_do_plugin`.
 pub type ColecaoDeItens = ColecaoDoBestiario;
+
+/// Uma aba nova no Compendio: os rituais de um sistema, os talentos, as magias.
+///
+/// O manifesto declara a aba, o grupo da ficha que recebe o verbete dado a um
+/// personagem e as colecoes; os verbetes moram no `arquivo` de cada colecao,
+/// pela razao do bestiario. O verbete nao vira molde: e texto de consulta, e
+/// o que se faz com ele e dar a um personagem. Ver `abas_do_plugin`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AbaDoCompendio {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// O grupo da ficha onde o verbete dado entra -- "Rituais", em lista. Ele
+    /// entra no molde da campanha na primeira vez. Ver `abas_do_plugin::dar`.
+    pub grupo: GrupoDoSistema,
+    pub colecoes: Vec<ColecaoDeVerbetes>,
+}
+
+/// Uma colecao de verbetes: a mesma declaracao do bestiario e dos itens.
+pub type ColecaoDeVerbetes = ColecaoDoBestiario;
 
 /// Os efeitos de luz de uma aura. Lista fechada, como os alvos de menu, e por
 /// uma razao a mais: cada um e uma animacao do NUCLEO, escrita para mexer so em
@@ -2079,6 +2110,10 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             c.itens.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
         (
+            "abas",
+            c.abas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
             "auras",
             c.auras.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
@@ -2147,6 +2182,9 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     }
     for colecao in &c.itens {
         validar_colecao("itens", colecao, &c.sistemas, &c.auras)?;
+    }
+    for aba in &c.abas {
+        validar_aba(aba, &c.sistemas, &c.auras)?;
     }
 
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
@@ -2683,6 +2721,60 @@ fn validar_colecao(
                 "the collection {id:?} in `{grupo}` points to the aura {aura:?}, which the plugin does not declare in `auras`"
             )));
         }
+    }
+
+    Ok(())
+}
+
+/// A aba faz sentido? O grupo da ficha com um nome que caiba no molde, e as
+/// colecoes pela regra das do bestiario. Os verbetes sao conferidos na
+/// importacao, pela pasta. Ver `abas_do_plugin::validar_pasta`.
+fn validar_aba(aba: &AbaDoCompendio, sistemas: &[Sistema], auras: &[Aura]) -> AppResult<()> {
+    let id = &aba.id;
+    let letras = aba.grupo.nome.trim().chars().count();
+
+    // Sem grupo, o verbete dado nao teria onde morar na ficha.
+    if letras == 0 || letras > crate::vault::detalhes::MAX_NOME_DO_GRUPO {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a aba {id:?} poe os verbetes no grupo {:?}; o nome precisa ter de 1 a {} letras",
+            "the tab {id:?} puts its entries in the group {:?}; the name must have 1 to {} characters",
+            aba.grupo.nome,
+            crate::vault::detalhes::MAX_NOME_DO_GRUPO
+        )));
+    }
+
+    // Aba sem colecao seria uma aba vazia na barra do Compendio.
+    if aba.colecoes.is_empty() || aba.colecoes.len() > MAX_CONTRIBUICOES {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a aba {id:?} traz {} colecoes; vai de 1 a {MAX_CONTRIBUICOES}",
+            "the tab {id:?} brings {} collections; it goes from 1 to {MAX_CONTRIBUICOES}",
+            aba.colecoes.len()
+        )));
+    }
+
+    let mut vistas: Vec<&str> = Vec::new();
+    for colecao in &aba.colecoes {
+        let colecao_id = &colecao.id;
+        if !id_valido(colecao_id) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a aba {id:?} tem a colecao {colecao_id:?}; o id e so minusculas, digitos e hifen",
+                "the tab {id:?} has the collection {colecao_id:?}; the id is only lowercase letters, digits and hyphens"
+            )));
+        }
+        if colecao.titulo.vazio() {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a colecao {colecao_id:?} da aba {id:?} esta sem titulo",
+                "the collection {colecao_id:?} in the tab {id:?} has no `titulo`"
+            )));
+        }
+        if vistas.contains(&colecao_id.as_str()) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a aba {id:?} tem a colecao {colecao_id:?} duas vezes",
+                "the tab {id:?} has the collection {colecao_id:?} twice"
+            )));
+        }
+        vistas.push(colecao_id);
+        validar_colecao("abas", colecao, sistemas, auras)?;
     }
 
     Ok(())
@@ -3831,6 +3923,7 @@ pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     validar_imagens_declaradas(origem, &manifesto)?;
     crate::bestiario::validar_pasta(origem, &manifesto)?;
     crate::itens_do_plugin::validar_pasta(origem, &manifesto)?;
+    crate::abas_do_plugin::validar_pasta(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
