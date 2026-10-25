@@ -12,10 +12,12 @@ import {
 import { toast } from "sonner";
 import {
   BookCopy,
+  BookOpen,
   CloudRain,
   Crosshair,
   Download,
   FolderPlus,
+  Gift,
   Maximize2,
   Package,
   PackagePlus,
@@ -71,6 +73,13 @@ import {
   type EspecieDoCompendio,
 } from "@/components/mestre/compendio-efeitos";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
+import { OpcoesDeDarVerbete } from "@/components/mestre/verbete-do-plugin";
+import {
+  listarAbasDosPlugins,
+  type AbaDoPlugin,
+  type ColecaoDeVerbetesDoPlugin,
+  type VerbeteDoPlugin,
+} from "@/lib/vault/abas-do-plugin";
 import { EditorDeTags } from "@/components/mestre/editor-de-tags";
 import { ItensDeAura } from "@/components/mestre/itens-de-aura";
 import { ImagemDoItem, imagemDesenhada } from "@/components/mestre/imagem-do-item";
@@ -173,6 +182,9 @@ const texto = t.compendio;
  * card da condição anima o efeito dela no hover.
  */
 type Tipo = "bestiario" | "itens" | "condicoes" | "efeitos";
+
+/** O valor de uma aba de plugin na barra: `plugin:{plugin}/{aba}`. */
+const PREFIXO_DA_ABA = "plugin:";
 
 /** De que lista do Rust é a coisa, para as tags e para trazer e levar. */
 function tipoDeMolde(lista: Tipo): TipoDeMolde {
@@ -306,6 +318,13 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   // uma por aba: a coleção de fichas e a de itens podem ter o mesmo id.
   const [colecaoAberta, setColecaoAberta] = useState<string | null>(null);
   const [colecaoDeItensAberta, setColecaoDeItensAberta] = useState<string | null>(null);
+  // As abas que os plugins acrescentam -- os rituais --, e a aberta, pela chave
+  // `{plugin}/{aba}`. À parte do `tipo`, que é das quatro de sempre: com uma
+  // aba de plugin aberta, o `tipo` guarda a de sempre para onde voltar. E a
+  // pasta aberta em cada aba de plugin, pela mesma chave.
+  const abasDosPlugins = useAbasDosPlugins();
+  const [abaDoPlugin, setAbaDoPlugin] = useState<string | null>(null);
+  const [colecoesDeVerbetesAbertas, setColecoesDeVerbetesAbertas] = useState<Record<string, string | null>>({});
   const abrir = useAbrirJanela();
   const { recarregar } = useCharacters();
   const moldes = useCharactersStore((state) => state.moldes);
@@ -345,12 +364,34 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     0,
   );
 
+  // A aba de plugin aberta: só na campanha, e a que sumiu -- plugin desligado
+  // -- devolve à aba de sempre.
+  const abaAtual =
+    onde === "campanha" && abaDoPlugin
+      ? (abasDosPlugins.find((aba) => chaveContribuicao(aba.extensao, aba.id) === abaDoPlugin) ?? null)
+      : null;
+  const achadosDosVerbetes = useMemo(
+    () =>
+      (abaAtual?.colecoes ?? []).map((colecao) => ({
+        colecao,
+        achados: filtrarNoCompendio(colecao.verbetes, filtro, (verbete) => verbete.nome, (verbete) => verbete.tags),
+      })),
+    [abaAtual, filtro],
+  );
+
   // As tags da lista ABERTA, e não de todas: ligar "morto-vivo" na aba de
   // Itens não acharia nada, e o botão estaria ali só para confundir.
   const tagsDisponiveis = useMemo(() => {
     const daCampanha = onde === "campanha";
     const dados = maquina.dados;
     let coisas: Array<{ tags?: string[] }> | null | undefined;
+
+    // Na aba de plugin, as tags dos verbetes dela: o elemento, a campanha.
+    if (abaAtual)
+      return tagsDaLista(
+        abaAtual.colecoes.flatMap((colecao) => colecao.verbetes),
+        (verbete) => verbete.tags,
+      );
 
     switch (lista) {
       case "bestiario":
@@ -387,6 +428,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     maquina.dados,
     doPlugin,
     itensDoPlugin,
+    abaAtual,
   ]);
 
   // Trocar de espécie solta o filtro, pela razão da troca de lista.
@@ -398,7 +440,16 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
   // Trocar de lista solta o filtro: as tags de uma não são as da outra.
   function trocarTipo(proximo: Tipo) {
     setTipo(proximo);
+    setAbaDoPlugin(null);
     setTagsLigadas([]);
+  }
+
+  // As abas de plugin chegam à barra como `plugin:{plugin}/{aba}`.
+  function trocarAba(valor: string) {
+    if (valor.startsWith(PREFIXO_DA_ABA)) {
+      setAbaDoPlugin(valor.slice(PREFIXO_DA_ABA.length));
+      setTagsLigadas([]);
+    } else trocarTipo(valor as Tipo);
   }
 
   function alternarTag(tag: string) {
@@ -675,8 +726,22 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           (colecao) => chaveContribuicao(colecao.extensao, colecao.id) === colecaoDeItensAberta,
         ) ?? null)
       : null;
-  // A pasta de plugin aberta na aba, das duas, para a trilha.
-  const colecaoNaTrilha = pastaDoPlugin
+  const chaveDaAba = abaAtual ? chaveContribuicao(abaAtual.extensao, abaAtual.id) : null;
+  const pastaDeVerbetes =
+    abaAtual && chaveDaAba && !filtrando(filtro)
+      ? (abaAtual.colecoes.find((colecao) => colecao.id === colecoesDeVerbetesAbertas[chaveDaAba]) ?? null)
+      : null;
+  const abrirColecaoDeVerbetes = useCallback(
+    (colecaoId: string | null) => {
+      if (chaveDaAba) setColecoesDeVerbetesAbertas((atuais) => ({ ...atuais, [chaveDaAba]: colecaoId }));
+    },
+    [chaveDaAba],
+  );
+
+  // A pasta de plugin aberta na aba, das três, para a trilha.
+  const colecaoNaTrilha = pastaDeVerbetes
+    ? { nome: resolverTexto(pastaDeVerbetes.titulo), onFechar: () => abrirColecaoDeVerbetes(null) }
+    : pastaDoPlugin
     ? { nome: resolverTexto(pastaDoPlugin.titulo), onFechar: () => setColecaoAberta(null) }
     : pastaDeItensDoPlugin
       ? { nome: resolverTexto(pastaDeItensDoPlugin.titulo), onFechar: () => setColecaoDeItensAberta(null) }
@@ -718,7 +783,11 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* As abas de sempre, as da ficha: sublinhadas, à esquerda, com a borda
           de ponta a ponta. Eram pílulas, e eram a única janela com elas. */}
-      <Tabs value={tipo} onValueChange={(valor) => trocarTipo(valor as Tipo)} className="shrink-0 gap-0">
+      <Tabs
+        value={chaveDaAba ? `${PREFIXO_DA_ABA}${chaveDaAba}` : tipo}
+        onValueChange={(valor) => trocarAba(String(valor))}
+        className="shrink-0 gap-0"
+      >
         <TabsList
           variant="line"
           aria-label={texto.titulo}
@@ -736,13 +805,27 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           <TabsTrigger value="efeitos" className="flex-none">
             {texto.efeitos}
           </TabsTrigger>
+          {/* As dos plugins ligados, depois das de sempre, e só na campanha:
+              o Compêndio do ATO20 guarda o que a campanha guardou, e o
+              verbete do plugin não se guarda -- se dá a um personagem. */}
+          {daCampanha
+            ? abasDosPlugins.map((aba) => (
+                <TabsTrigger
+                  key={chaveContribuicao(aba.extensao, aba.id)}
+                  value={`${PREFIXO_DA_ABA}${chaveContribuicao(aba.extensao, aba.id)}`}
+                  className="flex-none"
+                >
+                  {resolverTexto(aba.titulo)}
+                </TabsTrigger>
+              ))
+            : null}
         </TabsList>
       </Tabs>
 
       {/* Dentro de Efeitos, as três espécies que se guardam aqui: o chão, o
           tiro e o clima. A fileira de baixo, sublinhada e menor, como Mapas e
           Fundos dentro de Cenas. O de personagem mora na condição. */}
-      {tipo === "efeitos" ? (
+      {tipo === "efeitos" && !abaAtual ? (
         <Tabs
           value={especie}
           onValueChange={(valor) => trocarEspecie(valor as EspecieDoCompendio)}
@@ -773,13 +856,15 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
 
         {/* Criar só existe na campanha: o ATO20 recebe o que a campanha
             guarda, e criar lá direto seria um molde que nenhuma ficha edita. */}
-        {daCampanha ? (
+        {/* Nem na aba de plugin: o verbete é do plugin, e não se cria nem
+            se guarda em pasta -- se dá a um personagem. */}
+        {daCampanha && !abaAtual ? (
           <BotaoDoTopo rotulo={rotuloDeCriar} onClick={criar}>
             <Plus />
           </BotaoDoTopo>
         ) : null}
 
-        {daCampanha ? (
+        {daCampanha && !abaAtual ? (
           <BotaoDoTopo rotulo={texto.novaPasta} onClick={criarPasta}>
             <FolderPlus />
           </BotaoDoTopo>
@@ -810,9 +895,13 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
           acha em todas as pastas, e o card diz de qual. */}
       {colecaoNaTrilha ? (
         <NavegacaoDoCompendioProvider value={navegacao}>
-          <TrilhaDoCompendio raiz={raizDaTrilha} pastas={[]} colecao={colecaoNaTrilha} />
+          <TrilhaDoCompendio
+            raiz={abaAtual ? resolverTexto(abaAtual.titulo) : raizDaTrilha}
+            pastas={[]}
+            colecao={colecaoNaTrilha}
+          />
         </NavegacaoDoCompendioProvider>
-      ) : daCampanha && !filtrando(filtro) && daAba[1].length > 0 ? (
+      ) : daCampanha && !abaAtual && !filtrando(filtro) && daAba[1].length > 0 ? (
         <NavegacaoDoCompendioProvider value={navegacao}>
           <TrilhaDoCompendio raiz={raizDaTrilha} pastas={daAba[1]} />
         </NavegacaoDoCompendioProvider>
@@ -828,6 +917,15 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
             dados={maquina.dados}
             onApagar={(id, nome) => setAApagar({ onde: "ato20", tipo: tipoDeMolde(lista), id, nome })}
             onEditarTags={setEditandoTags}
+          />
+        ) : abaAtual ? (
+          <AbaDoPluginNoCompendio
+            aba={abaAtual}
+            achados={achadosDosVerbetes}
+            pasta={pastaDeVerbetes}
+            filtro={filtro}
+            auras={auras}
+            onAbrir={abrirColecaoDeVerbetes}
           />
         ) : tipo === "bestiario" && pastaDoPlugin ? (
           pastaDoPlugin.erro ? (
@@ -1195,6 +1293,195 @@ function useItensDosPlugins(): ColecaoDeItensDoPlugin[] {
   return colecoes;
 }
 
+/**
+ * As abas que os plugins ligados acrescentam ao Compêndio, pelo arranjo de
+ * `useBestiarioDosPlugins`: relidas quando a lista de plugins muda, e vazias
+ * enquanto leem e na falha -- a aba some, e as de sempre continuam.
+ */
+function useAbasDosPlugins(): AbaDoPlugin[] {
+  const [abas, setAbas] = useState<AbaDoPlugin[]>([]);
+  const extensoes = useExtensoesStore((estado) => estado.extensoes);
+
+  useEffect(() => {
+    let ativo = true;
+
+    void listarAbasDosPlugins().then(
+      (lidas) => {
+        if (ativo) setAbas(lidas);
+      },
+      () => {
+        if (ativo) setAbas([]);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [extensoes]);
+
+  return abas;
+}
+
+/**
+ * Uma aba de plugin: as coleções como pastas, e os verbetes de cada uma.
+ *
+ * O arranjo das fichas do plugin no Bestiário, sem a parte da campanha: o
+ * verbete não vira molde, e o que se faz com ele é LER e DAR a um personagem,
+ * que o recebe como detalhe na ficha. Na busca, as pastas somem e o que bateu
+ * aparece, uma seção por coleção. Ver `ColecoesDosPlugins`.
+ */
+function AbaDoPluginNoCompendio({
+  aba,
+  achados,
+  pasta,
+  filtro,
+  auras,
+  onAbrir,
+}: {
+  aba: AbaDoPlugin;
+  achados: Array<{ colecao: ColecaoDeVerbetesDoPlugin; achados: VerbeteDoPlugin[] }>;
+  /** A coleção aberta, fora da busca. */
+  pasta: ColecaoDeVerbetesDoPlugin | null;
+  filtro: FiltroDoCompendio;
+  auras: Record<string, AuraDoPlugin>;
+  /** Entra na pasta da coleção, pelo id dela. */
+  onAbrir: (colecaoId: string) => void;
+}) {
+  if (pasta)
+    return pasta.erro ? (
+      <p className="text-destructive px-3 py-2 text-xs">{texto.colecaoQuebrada(noIdioma(pasta.erro))}</p>
+    ) : (
+      <VerbetesDoPlugin aba={aba} colecao={pasta} verbetes={pasta.verbetes} auras={auras} />
+    );
+
+  const buscando = filtrando(filtro);
+  if (buscando && achados.every(({ achados: daColecao }) => daColecao.length === 0))
+    return <NadaCom filtro={filtro} />;
+
+  return (
+    <ColecoesDosPlugins
+      achados={achados}
+      buscando={buscando}
+      auras={auras}
+      verbetes
+      total={(colecao) => colecao.verbetes.length}
+      conteudo={(colecao, verbetes) => (
+        <VerbetesDoPlugin aba={aba} colecao={colecao} verbetes={verbetes} auras={auras} />
+      )}
+      // A chave é `{plugin}/{coleção}`, e o plugin é o da aba.
+      onAbrir={(chave) => onAbrir(chave.slice(chave.indexOf("/") + 1))}
+    />
+  );
+}
+
+/** Os cards de uma coleção de verbetes, aos poucos: um plugin pode trazer quinhentos. */
+function VerbetesDoPlugin({
+  aba,
+  colecao,
+  verbetes,
+  auras,
+}: {
+  aba: AbaDoPlugin;
+  colecao: ColecaoDeVerbetesDoPlugin;
+  verbetes: VerbeteDoPlugin[];
+  auras: Record<string, AuraDoPlugin>;
+}) {
+  const { limite, fim } = useAosPoucos(verbetes, verbetes.length);
+
+  return (
+    <>
+      <GradeDeCartoes>
+        {verbetes.slice(0, limite).map((verbete) => (
+          <CartaoDoVerbeteDoPlugin
+            key={verbete.id}
+            extensaoId={colecao.extensao}
+            abaId={aba.id}
+            colecaoId={colecao.id}
+            verbete={verbete}
+            aura={verbete.aura ? (auras[chaveContribuicao(colecao.extensao, verbete.aura)] ?? null) : null}
+          />
+        ))}
+      </GradeDeCartoes>
+      {fim}
+    </>
+  );
+}
+
+/**
+ * Um verbete, como card: deitado como o da condição, com a imagem do plugin --
+ * o símbolo do elemento -- no meio. Clicar abre o verbete para ler, e o menu
+ * dá a um personagem em jogo. Ver `VerbeteDoPluginBody`.
+ */
+const CartaoDoVerbeteDoPlugin = memo(function CartaoDoVerbeteDoPlugin({
+  extensaoId,
+  abaId,
+  colecaoId,
+  verbete,
+  aura,
+}: {
+  extensaoId: string;
+  abaId: string;
+  colecaoId: string;
+  verbete: VerbeteDoPlugin;
+  aura: AuraDoPlugin | null;
+}) {
+  const abrir = useAbrirJanela();
+  const qual = { extensaoId, abaId, colecaoId, verbeteId: verbete.id };
+
+  function abrirVerbete() {
+    abrir({ tipo: "verbete-do-plugin", ...qual, nome: verbete.nome });
+  }
+
+  const itens = ({ Item: Opcao, Sub, SubTrigger, SubContent }: Kit) => (
+    <>
+      <Opcao onClick={abrirVerbete}>
+        <Maximize2 />
+        {texto.abrir}
+      </Opcao>
+      <Sub>
+        <SubTrigger>
+          <Gift />
+          {texto.darA}
+        </SubTrigger>
+        <SubContent className="max-h-72 w-48">
+          <OpcoesDeDarVerbete qual={qual} nome={verbete.nome} Item={Opcao} />
+        </SubContent>
+      </Sub>
+    </>
+  );
+
+  return (
+    <Cartao
+      nome={verbete.nome}
+      detalhe={verbete.fonte ?? undefined}
+      tags={verbete.tags}
+      faixa
+      titulo={texto.dicaDoVerbete(verbete.nome)}
+      aura={aura}
+      onAbrir={abrirVerbete}
+      imagem={
+        // O símbolo num quadrado no meio da faixa: esticado de ponta a ponta,
+        // um emblema de 128 px viraria borrão.
+        <span className="flex size-full items-center justify-center p-2">
+          {verbete.imagem ? (
+            <span className="aspect-square h-full">
+              <ImagemDoPlugin extensaoId={extensaoId} caminho={verbete.imagem} />
+            </span>
+          ) : (
+            <BookOpen className="text-muted-foreground size-8" aria-hidden />
+          )}
+        </span>
+      }
+      acao={
+        <AcaoDaLinha rotulo={texto.abrir} onClick={abrirVerbete}>
+          <Maximize2 />
+        </AcaoDaLinha>
+      }
+      itens={itens}
+    />
+  );
+});
+
 /** O que as coleções dos plugins têm em comum, das fichas e dos itens. */
 type ColecaoNaTela = {
   extensao: string;
@@ -1226,6 +1513,7 @@ function ColecoesDosPlugins<C extends ColecaoNaTela, T>({
   buscando,
   auras,
   itens = false,
+  verbetes = false,
   total,
   conteudo,
   onAbrir,
@@ -1236,6 +1524,8 @@ function ColecoesDosPlugins<C extends ColecaoNaTela, T>({
   auras: Record<string, AuraDoPlugin>;
   /** Coleções de itens: a pasta quadrada, contando itens. */
   itens?: boolean;
+  /** Coleções de uma aba de plugin: a pasta deitada, só com o número. */
+  verbetes?: boolean;
   /** Quanto a coleção traz, para a pasta. */
   total: (colecao: C) => number;
   /** Os cards do que bateu numa coleção, na busca. */
@@ -1287,6 +1577,7 @@ function ColecoesDosPlugins<C extends ColecaoNaTela, T>({
                 total={total(colecao)}
                 aura={colecao.aura ? (auras[chaveContribuicao(extensao, colecao.aura)] ?? null) : null}
                 itens={itens}
+                verbetes={verbetes}
                 onAbrir={() => onAbrir(chaveContribuicao(extensao, colecao.id))}
               />
             ))}

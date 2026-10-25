@@ -96,6 +96,9 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
     // O do item de sempre: é a mesma coisa, só que ainda do plugin.
     case "item-do-plugin":
       return Package;
+    // Um verbete é texto de consulta: o ritual, o talento.
+    case "verbete-do-plugin":
+      return BookOpen;
     // Os mesmos das abas do Compêndio, que é de onde as duas mais abrem.
     case "efeito":
       return Sparkles;

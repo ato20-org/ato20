@@ -1,6 +1,7 @@
 "use client";
 
 import type { TextoDePlugin } from "@/lib/extensoes/texto";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { call } from "@/lib/vault/bridge";
 import type { Personagem } from "@/types/character";
 
@@ -83,6 +84,8 @@ export type FichaCompletaDoPlugin = {
     fonte?: string | null;
     retrato?: string | null;
     miniatura?: string | null;
+    /** As outras caras, depois da Padrão. Espelho de `bestiario::AparenciaDoMolde`. */
+    aparencias?: Array<{ nome: string; retrato?: string | null; miniatura?: string | null }>;
     atributos: Array<{ sigla: string; valor: number; descricao?: string | null }>;
     medidores: Array<{ nome: string; maximo: number; cor?: string | null }>;
     detalhes: DetalheDaFichaDoPlugin[];
@@ -111,17 +114,37 @@ export type TrazidoDoPlugin = {
 /** Qual ficha, de qual coleção, de qual plugin. */
 export type QualFicha = { extensaoId: string; colecaoId: string; moldeId: string };
 
-/** A ficha entra no Compêndio da campanha, como molde. */
-export function trazerDoBestiario(ficha: QualFicha): Promise<TrazidoDoPlugin> {
-  return call<TrazidoDoPlugin>("bestiario_trazer", ficha);
+/**
+ * A ficha entra no Compêndio da campanha, como molde.
+ *
+ * O retrato e a miniatura entram no ACERVO da campanha agora, e quem os quer
+ * não é esta tela: o botão de pôr o token no mapa, na lista de Personagens,
+ * precisa da dimensão natural da miniatura, e sem reler o acervo ficava
+ * desabilitado em "Lendo o acervo" até o aplicativo ser reaberto. Ver
+ * `useAssetsStore`.
+ */
+export async function trazerDoBestiario(ficha: QualFicha): Promise<TrazidoDoPlugin> {
+  const trazido = await call<TrazidoDoPlugin>("bestiario_trazer", ficha);
+
+  invalidarAcervo("image");
+
+  return trazido;
 }
 
 /**
  * A ficha entra em jogo: sai do molde que ela deixou na campanha, trazido
- * agora se ainda não estava. Volta o molde e o personagem novo.
+ * agora se ainda não estava. Volta o molde e o personagem novo. Relê o acervo
+ * pelo motivo de `trazerDoBestiario`.
  */
-export function porEmJogoDoBestiario(
+export async function porEmJogoDoBestiario(
   ficha: QualFicha,
 ): Promise<{ trazido: TrazidoDoPlugin; personagem: Personagem }> {
-  return call<{ trazido: TrazidoDoPlugin; personagem: Personagem }>("bestiario_por_em_jogo", ficha);
+  const posto = await call<{ trazido: TrazidoDoPlugin; personagem: Personagem }>(
+    "bestiario_por_em_jogo",
+    ficha,
+  );
+
+  invalidarAcervo("image");
+
+  return posto;
 }

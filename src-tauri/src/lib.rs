@@ -11,6 +11,7 @@ mod extensoes;
 mod galeria;
 mod importar;
 mod itens_do_plugin;
+mod abas_do_plugin;
 mod janelas;
 mod mcp;
 mod presenca;
@@ -310,6 +311,9 @@ pub fn run() {
             commands::itens_do_plugin_item,
             commands::itens_do_plugin_trazer,
             commands::itens_do_plugin_em_jogo,
+            commands::abas_listar,
+            commands::abas_verbete,
+            commands::abas_dar,
             commands::character_rename,
             commands::character_remove,
             commands::character_set_campo,

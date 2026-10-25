@@ -1,6 +1,7 @@
 "use client";
 
 import type { TextoDePlugin } from "@/lib/extensoes/texto";
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import type { MotivoDoRust } from "@/lib/vault/bestiario";
 import { call } from "@/lib/vault/bridge";
 import type { AtributoDoItem, Item } from "@/types/inventory";
@@ -82,15 +83,31 @@ export type TrazidoItemDoPlugin = {
   imagensDeFora: MotivoDoRust[];
 };
 
-/** O item entra no Compêndio da campanha, como molde. */
-export function trazerItemDoPlugin(qual: QualItem): Promise<TrazidoItemDoPlugin> {
-  return call<TrazidoItemDoPlugin>("itens_do_plugin_trazer", qual);
+/**
+ * O item entra no Compêndio da campanha, como molde. A imagem entra no acervo,
+ * e as telas abertas releem, como no bestiário. Ver `trazerDoBestiario`.
+ */
+export async function trazerItemDoPlugin(qual: QualItem): Promise<TrazidoItemDoPlugin> {
+  const trazido = await call<TrazidoItemDoPlugin>("itens_do_plugin_trazer", qual);
+
+  invalidarAcervo("image");
+
+  return trazido;
 }
 
 /**
  * O item entra no catálogo da campanha: sai do molde que ele deixou no
  * Compêndio, trazido agora se ainda não estava. Volta o molde e o item novo.
  */
-export function itemDoPluginEmJogo(qual: QualItem): Promise<{ trazido: TrazidoItemDoPlugin; item: Item }> {
-  return call<{ trazido: TrazidoItemDoPlugin; item: Item }>("itens_do_plugin_em_jogo", qual);
+export async function itemDoPluginEmJogo(
+  qual: QualItem,
+): Promise<{ trazido: TrazidoItemDoPlugin; item: Item }> {
+  const posto = await call<{ trazido: TrazidoItemDoPlugin; item: Item }>(
+    "itens_do_plugin_em_jogo",
+    qual,
+  );
+
+  invalidarAcervo("image");
+
+  return posto;
 }

@@ -85,6 +85,19 @@ const pt = {
     apagarArquivo: "Apagar o arquivo",
     apagarArquivoTitulo: (nome: string) => `Deseja apagar ${nome}?`,
     apagarArquivoItem: "O arquivo, do acervo da campanha",
+    apagarPastaTitulo: (nome: string) => `Deseja apagar a pasta ${nome}?`,
+    apagarPastaQuadros: (n: number) =>
+      n === 1 ? "1 quadro, com o que há nele" : `${n} quadros, com o que há neles`,
+    apagarPastaNotas: (n: number) => (n === 1 ? "1 nota" : `${n} notas`),
+    apagarPastaArquivos: (n: number) =>
+      n === 1 ? "1 arquivo do acervo da campanha" : `${n} arquivos do acervo da campanha`,
+    apagarPastaSubpastas: (n: number) => (n === 1 ? "1 subpasta" : `${n} subpastas`),
+    apagarPastaVazia: "Só a pasta: ela está vazia",
+    apagarPastaEmUso: (n: number, destino: string) =>
+      n === 1
+        ? `1 arquivo em uso num mapa fica, e vai para ${destino}`
+        : `${n} arquivos em uso num mapa ficam, e vão para ${destino}`,
+    aRaiz: "a raiz",
   },
 
   /** Trazer de fora para a campanha: pasta, arquivos ou vault. Ver `lib/obsidian/importar`. */
@@ -135,6 +148,7 @@ const pt = {
     moverPara: "Mover para",
     raiz: "Raiz",
     desfazerPasta: "Desfazer pasta",
+    apagarPasta: "Apagar pasta",
     solteParaTirar: "Solte aqui para tirar da pasta",
   },
 
@@ -585,6 +599,17 @@ const en: typeof pt = {
     apagarArquivo: "Delete the file",
     apagarArquivoTitulo: (nome) => `Delete ${nome}?`,
     apagarArquivoItem: "The file, from the campaign library",
+    apagarPastaTitulo: (nome) => `Delete the folder ${nome}?`,
+    apagarPastaQuadros: (n) => (n === 1 ? "1 board, with what is on it" : `${n} boards, with what is on them`),
+    apagarPastaNotas: (n) => (n === 1 ? "1 note" : `${n} notes`),
+    apagarPastaArquivos: (n) => (n === 1 ? "1 file from the campaign library" : `${n} files from the campaign library`),
+    apagarPastaSubpastas: (n) => (n === 1 ? "1 subfolder" : `${n} subfolders`),
+    apagarPastaVazia: "Just the folder: it is empty",
+    apagarPastaEmUso: (n, destino) =>
+      n === 1
+        ? `1 file in use on a map stays, and goes to ${destino}`
+        : `${n} files in use on a map stay, and go to ${destino}`,
+    aRaiz: "the root",
   },
 
   importarDeFora: {
@@ -634,6 +659,7 @@ const en: typeof pt = {
     moverPara: "Move to",
     raiz: "Root",
     desfazerPasta: "Dissolve folder",
+    apagarPasta: "Delete folder",
     solteParaTirar: "Drop here to take it out of the folder",
   },
 
