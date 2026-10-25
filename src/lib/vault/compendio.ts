@@ -1,5 +1,6 @@
 "use client";
 
+import { invalidarAcervo } from "@/lib/store/use-assets-store";
 import { call } from "@/lib/vault/bridge";
 import type { Condicao, MoldeDeCondicao, PatchCondicao, Personagem } from "@/types/character";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
@@ -86,9 +87,17 @@ export async function imagemDoCompendio(assetId: string): Promise<string> {
 /** Quantos entraram do outro lado, e os ids novos dos personagens. */
 export type Copiados = { personagens: string[]; itens: number; condicoes: number; efeitos: number };
 
-/** Do ATO20 para a campanha: tudo como molde, no Compêndio dela. */
-export function trazerDoCompendio(selecao: SelecaoDoCompendio): Promise<Copiados> {
-  return call<Copiados>("compendio_trazer", { selecao });
+/**
+ * Do ATO20 para a campanha: tudo como molde, no Compêndio dela. As imagens das
+ * fichas e dos itens entram no acervo da campanha, e as telas abertas releem.
+ * Ver `trazerDoBestiario`.
+ */
+export async function trazerDoCompendio(selecao: SelecaoDoCompendio): Promise<Copiados> {
+  const copiados = await call<Copiados>("compendio_trazer", { selecao });
+
+  invalidarAcervo("image");
+
+  return copiados;
 }
 
 /** Da campanha para o ATO20. A campanha continua com o que tinha. */
