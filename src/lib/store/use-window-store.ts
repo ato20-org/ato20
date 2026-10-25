@@ -43,6 +43,16 @@ export type ConteudoJanela =
   // Um item de um plugin, para LER sem trazer, pelo mesmo arranjo da ficha.
   // Ver `ItemDoPluginBody`.
   | { tipo: "item-do-plugin"; extensaoId: string; colecaoId: string; itemId: string; nome: string }
+  // Um verbete de uma aba de plugin -- um ritual --, para LER e dar a um
+  // personagem. Pelos quatro ids, como o dar. Ver `VerbeteDoPluginBody`.
+  | {
+      tipo: "verbete-do-plugin";
+      extensaoId: string;
+      abaId: string;
+      colecaoId: string;
+      verbeteId: string;
+      nome: string;
+    }
   // Um efeito da campanha no editor dele: o de área ou o de personagem, em jogo
   // ou guardado no Compêndio -- a mesma lista, `useEfeitosDaCampanhaStore`.
   // Pelo id, como o item: o título é rótulo, e renomear o fogo não pode abrir
@@ -145,6 +155,8 @@ export function chaveDe(conteudo: ConteudoJanela): string {
       return `ficha-do-plugin:${conteudo.extensaoId}/${conteudo.colecaoId}/${conteudo.moldeId}`;
     case "item-do-plugin":
       return `item-do-plugin:${conteudo.extensaoId}/${conteudo.colecaoId}/${conteudo.itemId}`;
+    case "verbete-do-plugin":
+      return `verbete-do-plugin:${conteudo.extensaoId}/${conteudo.abaId}/${conteudo.colecaoId}/${conteudo.verbeteId}`;
     case "efeito":
       return `efeito:${conteudo.efeitoId}`;
     case "condicao":
