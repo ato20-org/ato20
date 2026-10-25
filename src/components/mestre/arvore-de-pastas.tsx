@@ -8,6 +8,7 @@ import {
   FolderPlus,
   MoreVertical,
   TextCursorInput,
+  Trash2,
   Ungroup,
 } from "lucide-react";
 
@@ -179,6 +180,7 @@ export function PastaRow({
   alvo,
   aberta = false,
   aoDesfazer,
+  aoApagar,
 }: {
   pasta: Pasta;
   pastas: Pasta[];
@@ -208,6 +210,12 @@ export function PastaRow({
    * `removerPasta` do store não a alcança. Chamado ANTES de a pasta sair.
    */
   aoDesfazer?: (pasta: Pasta) => void;
+  /**
+   * Apaga a pasta COM o que há dentro. Só quem sabe apagar o conteúdo passa:
+   * no Arquivos, os quadros, as notas e os arquivos do acervo. Quem chama
+   * pergunta antes -- o item só pede. Ausente, o menu fica só com o Desfazer.
+   */
+  aoApagar?: (pasta: Pasta) => void;
 }) {
   const [renomeando, setRenomeando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
@@ -256,6 +264,12 @@ export function PastaRow({
           <Ungroup />
           {t.arvoreDePastas.desfazerPasta}
         </Item>
+        {aoApagar ? (
+          <Item variant="destructive" onClick={() => aoApagar(pasta)}>
+            <Trash2 />
+            {t.arvoreDePastas.apagarPasta}
+          </Item>
+        ) : null}
       </>
     );
   };

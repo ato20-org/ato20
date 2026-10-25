@@ -76,7 +76,7 @@ import {
 } from "@/hooks/use-renomear-pelo-menu";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import { documentoDe } from "@/lib/dom";
-import { achatarArvore, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
+import { achatarArvore, descendentes, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { usePaineisStore } from "@/lib/store/use-paineis-store";
@@ -321,6 +321,10 @@ export const ArquivosList = memo(function ArquivosList({ ready }: { ready: boole
    * `buscarArquivos` para o que cada tipo acha e por quê.
    */
   const [busca, setBusca] = useState("");
+  // A pasta do "Apagar pasta", enquanto o diálogo pergunta. Aqui, e não na
+  // linha: o menu fecha antes de o diálogo abrir, e a linha da pasta some
+  // quando ela é apagada.
+  const [pastaAApagar, setPastaAApagar] = useState<Pasta | null>(null);
   const importar = useImportarDeFora();
   // O que vem do sistema e cai no painel: pasta, vault ou arquivos, pelo mesmo
   // import do botão. Sempre na raiz, como no acervo: o arrasto do sistema não
@@ -548,6 +552,7 @@ export const ArquivosList = memo(function ArquivosList({ ready }: { ready: boole
                     itensDeCriar={itensDeCriarNa(linha.pasta.id)}
                     alvo={ALVO_DE_NOTA}
                     aoDesfazer={desfazerNoAcervo}
+                    aoApagar={setPastaAApagar}
                   />
                 ) : linha.tipo === "nota" ? (
                   <NotaRow
@@ -590,10 +595,155 @@ export const ArquivosList = memo(function ArquivosList({ ready }: { ready: boole
         </div>
       </ScrollArea>
 
+      <ConfirmarApagarPasta
+        pasta={pastaAApagar}
+        pastas={pastas}
+        quadros={quadros}
+        notas={notas ?? []}
+        acervo={acervo}
+        onFechar={() => setPastaAApagar(null)}
+      />
+
       {importar.dialogo}
     </div>
   );
 });
+
+/** O que uma pasta do Arquivos leva junto: as subpastas e o que há em todas. */
+type ConteudoDaPasta = {
+  /** A pasta e as subpastas, por id. */
+  ids: Set<string>;
+  quadros: Scene[];
+  notas: Nota[];
+  /** Os arquivos do acervo que nenhum mapa que FICA usa: estes se apagam. */
+  livres: AssetMeta[];
+  /** Os que um mapa de fora usa: não se apagam, sobem para a mãe da pasta. */
+  emUso: AssetMeta[];
+};
+
+function conteudoDaPasta(
+  pasta: Pasta,
+  pastas: Pasta[],
+  quadros: Scene[],
+  notas: Nota[],
+  acervo: AssetMeta[],
+): ConteudoDaPasta {
+  const ids = new Set(descendentes(pastas, pasta.id));
+  const dentro = (pastaId: string | undefined) => pastaId !== undefined && ids.has(pastaId);
+  const quadrosDentro = quadros.filter((quadro) => dentro(quadro.pastaId));
+  const arquivos = acervo.filter((asset) => dentro(asset.folderId));
+
+  // O uso é contado nos mapas que FICAM: o quadro apagado junto não segura a
+  // imagem que só ele usava.
+  const saem = new Set(quadrosDentro.map((quadro) => quadro.id));
+  const ficam = (useSceneStore.getState().board?.scenes ?? []).filter((scene) => !saem.has(scene.id));
+  const emUso = arquivos.filter((asset) => countAssetUsage(ficam, asset.id) > 0);
+
+  return {
+    ids,
+    quadros: quadrosDentro,
+    notas: notas.filter((nota) => dentro(nota.pastaId)),
+    livres: arquivos.filter((asset) => !emUso.includes(asset)),
+    emUso,
+  };
+}
+
+/**
+ * Apaga a pasta com o que há dentro: os quadros, as notas e os arquivos do
+ * acervo, dela e das subpastas.
+ *
+ * O arquivo em uso num mapa de fora não se apaga -- a cena ficaria apontando
+ * para o que não existe, a mesma regra do "Apagar" do arquivo --: sobe para a
+ * mãe da pasta. As pastas saem por último, das mais fundas para cima, já
+ * vazias, e o `removerPasta` não tem o que soltar.
+ */
+async function apagarPasta(pasta: Pasta, pastas: Pasta[], conteudo: ConteudoDaPasta) {
+  for (const quadro of conteudo.quadros) useSceneStore.getState().removeScene(quadro.id);
+
+  for (const nota of conteudo.notas) {
+    fecharNotaEmTodaParte(nota.id);
+    useSceneStore.getState().removerNota(nota.id);
+    void apagarDocumento(nota.arquivo).catch((cause: unknown) => {
+      console.error("falha ao apagar a nota", cause);
+    });
+  }
+
+  // Em série, como o `moverAcervo`: cada chamada reescreve o índice do acervo.
+  try {
+    for (const asset of conteudo.livres) {
+      if (useSpotlightStore.getState().spotlight?.assetId === asset.id) useSpotlightStore.getState().clear();
+      await deleteAsset(asset.id);
+    }
+    for (const asset of conteudo.emUso) await setAssetFolder(asset.id, pasta.parentId);
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : String(cause));
+  }
+  useAssetsStore.getState().recarregar();
+
+  const profundidade = (id: string) => {
+    let nivel = 0;
+    for (let atual = pastas.find((p) => p.id === id); atual?.parentId; nivel++) {
+      const mae = atual.parentId;
+      atual = pastas.find((p) => p.id === mae);
+    }
+    return nivel;
+  };
+  for (const id of [...conteudo.ids].sort((a, b) => profundidade(b) - profundidade(a))) {
+    useSceneStore.getState().removerPasta(id);
+  }
+}
+
+/**
+ * A pergunta do "Apagar pasta", com o preço contado de relance: quantos
+ * quadros, notas, arquivos e subpastas vão junto, e o que fica.
+ */
+function ConfirmarApagarPasta({
+  pasta,
+  pastas,
+  quadros,
+  notas,
+  acervo,
+  onFechar,
+}: {
+  pasta: Pasta | null;
+  pastas: Pasta[];
+  quadros: Scene[];
+  notas: Nota[];
+  acervo: AssetMeta[];
+  onFechar: () => void;
+}) {
+  const conteudo = pasta ? conteudoDaPasta(pasta, pastas, quadros, notas, acervo) : null;
+  const texto = t.arquivosList;
+
+  const itens = conteudo
+    ? [
+        conteudo.quadros.length > 0 ? texto.apagarPastaQuadros(conteudo.quadros.length) : null,
+        conteudo.notas.length > 0 ? texto.apagarPastaNotas(conteudo.notas.length) : null,
+        conteudo.livres.length > 0 ? texto.apagarPastaArquivos(conteudo.livres.length) : null,
+        conteudo.ids.size > 1 ? texto.apagarPastaSubpastas(conteudo.ids.size - 1) : null,
+      ].filter((item): item is string => item !== null)
+    : [];
+  const mae = pasta?.parentId ? pastas.find((p) => p.id === pasta.parentId) : undefined;
+
+  return (
+    <ConfirmarRemocao
+      aberto={pasta !== null}
+      onAberto={(aberto) => {
+        if (!aberto) onFechar();
+      }}
+      titulo={texto.apagarPastaTitulo(pasta?.nome ?? "")}
+      itens={itens.length > 0 ? itens : [texto.apagarPastaVazia]}
+      ressalva={
+        conteudo && conteudo.emUso.length > 0
+          ? texto.apagarPastaEmUso(conteudo.emUso.length, mae?.nome ?? texto.aRaiz)
+          : undefined
+      }
+      onConfirmar={() => {
+        if (pasta && conteudo) void apagarPasta(pasta, pastas, conteudo);
+      }}
+    />
+  );
+}
 
 function BotaoDeCriar({
   rotulo,
