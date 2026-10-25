@@ -1003,10 +1003,10 @@ pub fn molde_do_plugin(vault: &Vault, chave: &str) -> AppResult<Option<Personage
 /// grupos, sem os detalhes de fabrica deles --, para os Ataques desenharem como
 /// lista; e o detalhe guarda o nome do grupo como a CAMPANHA o escreve.
 ///
-/// `imagens` sao o retrato e a miniatura ja prontos, pelo valor que a ficha
-/// declara: o arquivo resolvido, os bytes baixados, ou o motivo de nao terem
-/// vindo. A ficha entra sem a imagem que faltou -- a imagem e o enfeite, e a
-/// ficha e o que a mesa usa.
+/// `imagens` sao o retrato e a miniatura ja prontos, os da ficha e os das
+/// aparencias, pelo valor que a ficha declara: o arquivo resolvido, os bytes
+/// baixados, ou o motivo de nao terem vindo. A ficha entra sem a imagem que
+/// faltou -- a imagem e o enfeite, e a ficha e o que a mesa usa.
 pub fn trazer_do_plugin(
     vault: &Vault,
     chave: &str,
@@ -1066,6 +1066,26 @@ pub fn trazer_do_plugin(
     let do_acervo = |valor: &Option<String>| valor.as_ref().and_then(|v| no_acervo.get(v).cloned());
     let retrato = do_acervo(&molde.retrato).or_else(|| do_acervo(&molde.miniatura));
     let miniatura = do_acervo(&molde.miniatura).or_else(|| retrato.clone());
+
+    // As outras caras, depois da Padrao. O que a aparencia nao diz -- ou a
+    // imagem dela que nao veio -- e o da ficha, como em
+    // `characters::criar_aparencia`: o Carnical com o simbolo na testa muda a
+    // peca no mapa e continua com o mesmo rosto.
+    let aparencias: Vec<Aparencia> = std::iter::once(Aparencia {
+        id: APARENCIA_PADRAO.to_string(),
+        nome: "Padrão".to_string(),
+        retrato: retrato.clone(),
+        retrato_url: None,
+        miniatura: miniatura.clone(),
+    })
+    .chain(molde.aparencias.iter().map(|aparencia| Aparencia {
+        id: uuid::Uuid::new_v4().to_string(),
+        nome: aparencia.nome.trim().to_string(),
+        retrato: do_acervo(&aparencia.retrato).or_else(|| retrato.clone()),
+        retrato_url: None,
+        miniatura: do_acervo(&aparencia.miniatura).or_else(|| miniatura.clone()),
+    }))
+    .collect();
 
     let modelos_de_atributo = atributos::load(vault)?;
     let atributos: Vec<Atributo> = molde
@@ -1131,16 +1151,10 @@ pub fn trazer_do_plugin(
         id: uuid::Uuid::new_v4().to_string(),
         nome: nome_da_copia(molde.nome.trim(), &usados),
         ficha: None,
-        retrato: retrato.clone(),
+        retrato,
         retrato_url: None,
-        miniatura: miniatura.clone(),
-        aparencias: vec![Aparencia {
-            id: APARENCIA_PADRAO.to_string(),
-            nome: "Padrão".to_string(),
-            retrato,
-            retrato_url: None,
-            miniatura,
-        }],
+        miniatura,
+        aparencias,
         aparencia_ativa: Some(APARENCIA_PADRAO.to_string()),
         medidores,
         condicoes: Vec::new(),
@@ -1941,6 +1955,74 @@ mod tests {
         assert!(em_jogo.do_plugin.is_none());
         assert_eq!(em_jogo.aura.as_deref(), Some("ordem/sangue"));
         assert_eq!(molde_do_plugin(&vault, &chave).unwrap().unwrap().id, zumbi.id);
+    }
+
+    #[test]
+    fn a_aparencia_da_ficha_do_plugin_entra_com_o_rosto_da_ficha() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vault = campanha(&tmp.path().join("campanha"));
+
+        let (mut molde, grupos) = zumbi();
+        molde.miniatura = Some("bestiario/zumbi-token.png".into());
+        molde.aparencias = vec![
+            crate::bestiario::AparenciaDoMolde {
+                nome: " SB ".into(),
+                retrato: None,
+                miniatura: Some("bestiario/zumbi-sb.png".into()),
+            },
+            // A imagem desta nao vem: a aparencia fica, com a cara da ficha.
+            crate::bestiario::AparenciaDoMolde {
+                nome: "Ferido".into(),
+                retrato: None,
+                miniatura: Some("https://exemplo.com/ferido.png".into()),
+            },
+        ];
+        let arquivo = |nome: &str| {
+            let caminho = tmp.path().join(nome);
+            std::fs::write(&caminho, png()).unwrap();
+            Ok(ImagemDoPlugin::Arquivo(caminho))
+        };
+        let imagens = vec![
+            ("bestiario/zumbi.png".to_string(), arquivo("retrato.png")),
+            ("bestiario/zumbi-token.png".to_string(), arquivo("token.png")),
+            ("bestiario/zumbi-sb.png".to_string(), arquivo("sb.png")),
+            (
+                "https://exemplo.com/ferido.png".to_string(),
+                Err(crate::error::Texto { pt: "fora do ar".into(), en: "offline".into() }),
+            ),
+        ];
+
+        let trazido = trazer_do_plugin(
+            &vault,
+            &chave_do_plugin("ordem", "ameacas", "zumbi"),
+            &molde,
+            None,
+            &grupos,
+            imagens,
+        )
+        .unwrap();
+        let zumbi = &trazido.molde;
+        assert_eq!(trazido.imagens_de_fora.len(), 1);
+        assert_eq!(assets::index(&vault).unwrap().len(), 3);
+
+        let nomes: Vec<_> = zumbi.aparencias.iter().map(|a| a.nome.as_str()).collect();
+        assert_eq!(nomes, ["Padrão", "SB", "Ferido"]);
+        assert_eq!(zumbi.aparencia_ativa.as_deref(), Some(characters::APARENCIA_PADRAO));
+
+        // A SB troca a peca no mapa e fica com o rosto da ficha.
+        let (padrao, sb, ferido) = (&zumbi.aparencias[0], &zumbi.aparencias[1], &zumbi.aparencias[2]);
+        assert_eq!(padrao.miniatura, zumbi.miniatura);
+        assert_ne!(sb.miniatura, zumbi.miniatura);
+        assert!(sb.miniatura.is_some());
+        assert_eq!(sb.retrato, zumbi.retrato);
+        assert_eq!((&ferido.retrato, &ferido.miniatura), (&zumbi.retrato, &zumbi.miniatura));
+
+        // Em jogo, a copia leva as caras, e a SB entra no ar pelo menu.
+        let em_jogo = duplicar(&vault, &zumbi.id, false).unwrap();
+        assert_eq!(em_jogo.aparencias.len(), 3);
+        let trocado = characters::ativar_aparencia(&vault, &em_jogo.id, &em_jogo.aparencias[1].id).unwrap();
+        assert_eq!(trocado.miniatura, sb.miniatura);
+        assert_eq!(trocado.retrato, zumbi.retrato);
     }
 
     #[test]

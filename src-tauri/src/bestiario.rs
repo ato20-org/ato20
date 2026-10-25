@@ -61,6 +61,11 @@ pub const MAX_FONTE: usize = 120;
 /// endereco de imagem de verdade pede.
 pub const MAX_URL: usize = 2048;
 
+/// Quantas aparencias uma ficha traz alem da Padrao. Cada uma pode ser um
+/// download na hora de trazer, e uma ameaca com mais de oito caras ja e uma
+/// galeria, nao uma ficha.
+pub const MAX_APARENCIAS: usize = 8;
+
 /// O arquivo de uma colecao.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +99,9 @@ pub struct MoldeDoBestiario {
     /// A peca no mapa. Mesma forma do retrato.
     #[serde(default)]
     pub miniatura: Option<String>,
+    /// As outras caras da ameaca, depois da Padrao. Ver `AparenciaDoMolde`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aparencias: Vec<AparenciaDoMolde>,
     /// Uma aura do plugin, por cima da da colecao: o chefe dourado no meio
     /// dos goblins. Ver `extensoes::Aura`.
     #[serde(default)]
@@ -104,6 +112,23 @@ pub struct MoldeDoBestiario {
     pub medidores: Vec<MedidorDoMolde>,
     #[serde(default)]
     pub detalhes: Vec<DetalheDoMolde>,
+}
+
+/// Uma aparencia a mais da ficha: a mesma ameaca com outra cara -- o Carnical
+/// com o simbolo na testa. Vira uma linha de `characters::Aparencia` depois da
+/// Padrao, e o mestre a troca no menu do personagem, sem outra ficha.
+///
+/// O que ela nao diz vem da ficha, como em `characters::criar_aparencia`: a
+/// variacao que so troca a peca no mapa continua com o mesmo rosto.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AparenciaDoMolde {
+    pub nome: String,
+    /// Mesma forma do retrato da ficha.
+    #[serde(default)]
+    pub retrato: Option<String>,
+    #[serde(default)]
+    pub miniatura: Option<String>,
 }
 
 /// Um medidor da ficha: o nome e o teto. Ele nasce cheio.
@@ -175,12 +200,19 @@ impl MoldeDoBestiario {
         self.aura.as_deref().or(colecao.aura.as_deref())
     }
 
-    /// O retrato e a miniatura, nessa ordem, os que existem.
-    pub fn imagens(&self) -> impl Iterator<Item = Imagem<'_>> {
+    /// O retrato e a miniatura, nessa ordem, e os de cada aparencia: os
+    /// valores que existem, como a ficha os escreve.
+    pub fn valores_de_imagem(&self) -> impl Iterator<Item = &String> {
         [&self.retrato, &self.miniatura]
             .into_iter()
+            .chain(self.aparencias.iter().flat_map(|a| [&a.retrato, &a.miniatura]))
             .flatten()
-            .map(|valor| Imagem::de(valor))
+    }
+
+    /// As imagens de `valores_de_imagem`. E o que a validacao e a importacao
+    /// conferem: a aparencia passa pela mesma regra da ficha.
+    pub fn imagens(&self) -> impl Iterator<Item = Imagem<'_>> {
+        self.valores_de_imagem().map(|valor| Imagem::de(valor))
     }
 }
 
@@ -326,6 +358,40 @@ fn validar_molde(molde: &MoldeDoBestiario, grupos: &[String]) -> Result<(), Text
 
     for imagem in molde.imagens() {
         validar_imagem(imagem)?;
+    }
+
+    if molde.aparencias.len() > MAX_APARENCIAS {
+        return Err(crate::texto!(
+            "tem {} aparencias; o teto e {MAX_APARENCIAS}",
+            "has {} appearances; the limit is {MAX_APARENCIAS}",
+            molde.aparencias.len()
+        ));
+    }
+    // A Padrao e a primeira linha de todo personagem, e uma segunda com o
+    // mesmo nome seria impossivel de escolher no menu.
+    let mut nomes = vec![chave_do_nome("Padrão")];
+    for aparencia in &molde.aparencias {
+        let nome = &aparencia.nome;
+        if tamanho(nome) == 0 || tamanho(nome) > MAX_NOME {
+            return Err(crate::texto!(
+                "tem a aparencia {nome:?}; o nome precisa ter de 1 a {MAX_NOME} letras",
+                "has the appearance {nome:?}; the name must have 1 to {MAX_NOME} characters"
+            ));
+        }
+        if nomes.contains(&chave_do_nome(nome)) {
+            return Err(crate::texto!(
+                "tem a aparencia {nome:?} duas vezes, contando a Padrao",
+                "has the appearance {nome:?} twice, counting the default one"
+            ));
+        }
+        nomes.push(chave_do_nome(nome));
+        // Aparencia e cara: sem imagem nenhuma ela seria a Padrao com outro nome.
+        if aparencia.retrato.is_none() && aparencia.miniatura.is_none() {
+            return Err(crate::texto!(
+                "tem a aparencia {nome:?} sem retrato e sem miniatura",
+                "has the appearance {nome:?} with no portrait and no token"
+            ));
+        }
     }
 
     if molde.atributos.len() > characters::MAX_ATRIBUTOS {
@@ -1083,6 +1149,12 @@ mod tests {
             r##"detalhes=[{"grupo":"Combate","rotulo":"X","tipo":"escolha","opcoes":["a"],"valor":"b"}]"##,
             r##"detalhes=[{"grupo":"Combate","rotulo":"Luta","rolagem":"dois d20"}]"##,
             r##"detalhes=[{"grupo":"Combate","rotulo":"X"},{"grupo":"combate","rotulo":"x"}]"##,
+            r##"aparencias=[{"nome":"","miniatura":"bestiario/zumbi-sb.webp"}]"##,
+            r##"aparencias=[{"nome":"padrão","miniatura":"bestiario/zumbi-sb.webp"}]"##,
+            r##"aparencias=[{"nome":"SB","miniatura":"bestiario/a.webp"},{"nome":"sb","miniatura":"bestiario/b.webp"}]"##,
+            r##"aparencias=[{"nome":"SB"}]"##,
+            r##"aparencias=[{"nome":"SB","miniatura":"../fora.webp"}]"##,
+            r##"aparencias=[{"nome":"SB","retrato":"http://exemplo.com/zumbi.webp"}]"##,
         ] {
             assert!(validado(&com_molde(troca)).is_err(), "{troca} devia ser recusado");
         }
@@ -1095,6 +1167,24 @@ mod tests {
         );
         let erro = validado(&com_molde(&longo)).unwrap_err();
         assert!(erro.pt.contains("descricao"), "{}", erro.pt);
+    }
+
+    #[test]
+    fn a_aparencia_passa_e_as_imagens_dela_entram_na_conta() {
+        let json = com_molde(r##"aparencias=[{"nome":"SB","miniatura":"bestiario/zumbi-sb.webp"}]"##);
+        validado(&json).unwrap();
+
+        let bestiario: Bestiario = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            bestiario.moldes[0].imagens().collect::<Vec<_>>(),
+            [Imagem::Arquivo("bestiario/zumbi.webp"), Imagem::Arquivo("bestiario/zumbi-sb.webp")]
+        );
+
+        let muitas: Vec<String> = (0..=MAX_APARENCIAS)
+            .map(|i| format!(r##"{{"nome":"Cara {i}","miniatura":"bestiario/zumbi.webp"}}"##))
+            .collect();
+        let erro = validado(&com_molde(&format!("aparencias=[{}]", muitas.join(",")))).unwrap_err();
+        assert!(erro.pt.contains("aparencias"), "{}", erro.pt);
     }
 
     #[test]
@@ -1137,6 +1227,17 @@ mod tests {
         assert!(erro.to_string().contains("bestiario/zumbi.webp"), "{erro}");
 
         escrever(&pasta, "bestiario/zumbi.webp", "webp");
+        extensoes::importar(&dir, &pasta).unwrap();
+
+        // A imagem da aparencia e cobrada como a da ficha.
+        escrever(
+            &pasta,
+            "bestiario/ameacas.json",
+            &com_molde(r##"aparencias=[{"nome":"SB","miniatura":"bestiario/zumbi-sb.webp"}]"##),
+        );
+        let erro = extensoes::importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("bestiario/zumbi-sb.webp"), "{erro}");
+        escrever(&pasta, "bestiario/zumbi-sb.webp", "webp");
         extensoes::importar(&dir, &pasta).unwrap();
 
         let (colecao, bestiario) = ler(&dir, "ordem", "ameacas").unwrap();

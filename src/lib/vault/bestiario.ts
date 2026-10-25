@@ -84,6 +84,8 @@ export type FichaCompletaDoPlugin = {
     fonte?: string | null;
     retrato?: string | null;
     miniatura?: string | null;
+    /** As outras caras, depois da Padrão. Espelho de `bestiario::AparenciaDoMolde`. */
+    aparencias?: Array<{ nome: string; retrato?: string | null; miniatura?: string | null }>;
     atributos: Array<{ sigla: string; valor: number; descricao?: string | null }>;
     medidores: Array<{ nome: string; maximo: number; cor?: string | null }>;
     detalhes: DetalheDaFichaDoPlugin[];

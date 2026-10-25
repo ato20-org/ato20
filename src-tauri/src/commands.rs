@@ -1497,8 +1497,8 @@ async fn trazer_ficha_do_plugin(
 
     let mut imagens = Vec::new();
     let mut vistas = HashSet::new();
-    for valor in [&molde.retrato, &molde.miniatura].into_iter().flatten() {
-        // A mesma imagem nos dois campos entra uma vez so no acervo.
+    for valor in molde.valores_de_imagem() {
+        // A mesma imagem em dois campos entra uma vez so no acervo.
         if !vistas.insert(valor.clone()) {
             continue;
         }
