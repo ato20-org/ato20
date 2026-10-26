@@ -71,6 +71,158 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.11.0",
+    data: "2026-10-26",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A janela Histórico: tudo o que aconteceu na campanha, sessão por sessão",
+          en: "The History window: everything that happened in the campaign, session by session",
+        },
+        detalhe: {
+          pt: "Ela guarda, com a hora, a cena que foi ao ar, os combates e as rodadas, a vida e as condições que mudaram, os itens dados, tirados ou postos no mapa, os efeitos disparados e o que a mesa viu, com o chat e as rolagens no meio. As sessões antigas ficam fechadas mostrando só os marcos, que você escreve no pé da janela e edita no próprio lugar. Tem busca e filtro por tipo e por personagem, e só você vê. Névoa, porta, item no mapa e efeito só contam na cena que está no ar.",
+          en: "With the time, it keeps the scene that went On air, fights and rounds, health and conditions that changed, items given, taken or placed on the map, fired effects and what the table saw, with the chat and rolls in between. Older sessions stay closed showing only the milestones, which you write at the bottom of the window and edit in place. It has search and filters by type and by character, and only you see it. Fog, doors, items on the map and effects only count in the scene that is On air.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Plugins trazem monstros, itens e rituais prontos para o Compêndio",
+          en: "Plugins bring ready-made monsters, items and rituals to the Compendium",
+        },
+        detalhe: {
+          pt: "Um plugin de sistema, como o de Ordem Paranormal, pode trazer fichas prontas para o Bestiário, itens prontos (armas, munição, proteção, o que cura) e abas próprias, como a de Rituais. Cada coleção aparece como uma pasta com a cor e o emblema do plugin. A ficha e o item do plugin abrem só para ler: Trazer para a campanha copia para o Compêndio, e soltar o card no mapa põe em jogo. O verbete de uma aba, como um ritual, vai para a ficha de um personagem pelo Dar a. A ficha do bestiário pode vir com mais de uma aparência, trocada no submenu Aparências.",
+          en: "A game system plugin, like the Ordem Paranormal one, can bring ready-made sheets to the Bestiary, ready-made items (weapons, ammo, protection, healing) and tabs of its own, like Rituals. Each collection shows up as a folder with the plugin's color and emblem. Plugin sheets and items open read-only: Bring to the campaign copies them into the Compendium, and dropping the card on the map puts it in play. An entry from a plugin tab, like a ritual, goes into a character's sheet with Give to. A bestiary sheet can come with more than one appearance, switched in the Appearances submenu.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As contas entre chaves leem a ficha: {1d20+FOR}, {AGId20>+5}, {1d20+@Luta}",
+          en: "Rolls in braces read the sheet: {1d20+STR}, {AGId20>+5}, {1d20+@Fight}",
+        },
+        detalhe: {
+          pt: "A sigla de um atributo da ficha vale o número dele na hora de rolar, somada ou como quantidade de dados, e com @ a conta lê também um detalhe de número, como Luta. O saquinho e o chat dizem quanto cada um valia naquela rolagem. Um atributo também pode ser um dado, como a AGI d8: o desenho rola, e o texto se edita no próprio círculo, inclusive com conta, como d4+20-@NEX.",
+          en: "An attribute's abbreviation from the sheet counts as its number when rolling, added in or as the number of dice, and with @ the roll also reads a number detail, like Fight. The Dice bag and the chat show what each one was worth on that roll. An attribute can also be a die, like an AGI d8: the drawing rolls, and the text is edited right in the circle, formulas included, like d4+20-@NEX.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "No celular, a conta no texto de um detalhe vira o botão de rolar",
+          en: "On the phone, a roll written in a detail's text becomes a roll button",
+        },
+        detalhe: {
+          pt: "\"Soco {1d4}\" mostra o d4 no lugar das chaves, e o toque rola. Na busca do celular, o que rola ganha o botão rolar, e tocar no resto leva até o detalhe na ficha.",
+          en: "\"Punch {1d4}\" shows the d4 in place of the braces, and a tap rolls it. In the phone's search, results that roll get a roll button, and tapping the rest takes you to the detail on the sheet.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "{9m} e {3°} no texto da ficha põem a régua no mapa",
+          en: "{9m} and {3°} in a sheet's text place the ruler on the map",
+        },
+        detalhe: {
+          pt: "Como o {1d20} rola, {9m} cria uma régua reta de 9 metros e {3°} um círculo de 3 metros de raio, saindo do token do dono da ficha. A régua selecionada ganha os botões de forma, de trava e de apagar: travada, a ponta gira sem mudar o tamanho. A forma e a cor ficam no painel do canto de baixo.",
+          en: "Just as {1d20} rolls, {9m} creates a 9-meter straight ruler and {3°} a circle with a 3-meter radius, starting from the token of the sheet's owner. A selected ruler gets shape, lock and delete buttons: locked, the tip turns without changing the size. Shape and color are in the panel at the bottom corner.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O olho no token mostra o que ele vê",
+          en: "The eye on a token shows what it sees",
+        },
+        detalhe: {
+          pt: "Um olho no gizmo do token cobre o que as paredes e as portas escondem dele, com o escuro do mapa como a mesa vê. Só você vê, e vale enquanto o token está selecionado.",
+          en: "An eye on the token's gizmo covers whatever walls and doors hide from it, with the map's darkness as the table sees it. Only you see this, and it lasts while the token is selected.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Cada som das macros pode ganhar uma tecla",
+          en: "Each sound in Macros can get a key",
+        },
+        detalhe: {
+          pt: "No painel de som, em Pads, Macros, clique no selo da linha e aperte a combinação: letras, números e F1 a F12, com Ctrl, Alt e Shift. A tecla que já é de um atalho é recusada com o nome do dono, e a nova aparece em Configurações, Teclado.",
+          en: "In the sound panel, under Pads, Macros, click the line's badge and press the combination: letters, numbers and F1 to F12, with Ctrl, Alt and Shift. A key already taken by a shortcut is refused with the owner's name, and the new one shows up in Settings, Keyboard.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "No 2.5D, o item largado na mesa flutua e brilha",
+          en: "In 2.5D, an item dropped on the table floats and glints",
+        },
+        detalhe: {
+          pt: "O item da campanha posto em pé no mapa balança no ar e lampeja de tempos em tempos, para o grupo achar o que dá para apanhar. Na sua tela só o selecionado anima, e quem pediu menos movimento no sistema vê o item parado no ar.",
+          en: "A campaign item standing on the map bobs in the air and glints every few seconds, so the party finds what can be picked up. On your screen only the selected one animates, and anyone who asked the system for reduced motion sees the item still in the air.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Arquivos: apagar uma pasta com tudo o que há dentro",
+          en: "Files: delete a folder with everything in it",
+        },
+        detalhe: {
+          pt: "Apagar pasta, ao lado de Desfazer pasta, apaga os quadros, as notas e os arquivos dela e das subpastas, depois de dizer o que vai junto. O arquivo usado num mapa que fica não se apaga: sobe para a pasta de cima.",
+          en: "Delete folder, next to Dissolve folder, deletes its boards, notes and files, subfolders included, after telling you what goes with it. A file used by a map that stays isn't deleted: it moves up to the parent folder.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas de Rolagens e Chat não abrem mais sozinhas",
+          en: "The Rolls and Chat windows no longer open on their own",
+        },
+        detalhe: {
+          pt: "Antes, a rolagem ou a mensagem de um jogador abria a janela por cima do mapa. O contador da bandeja de Rolagens e o ponto de não lidas do Chat continuam avisando.",
+          en: "Before, a player's roll or message opened the window over the map. The Rolls tray counter and the Chat unread dot still let you know.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A tela da mesa e o celular não congelam mais quando a conexão cai",
+          en: "The spectator window and phones no longer freeze when the connection drops",
+        },
+        detalhe: {
+          pt: "Eles percebem a queda e reconectam sozinhos, com um aviso por cima da última cena enquanto isso. Se você reabre o ATO20 sem campanha, o aviso diz que a mesa fechou, e a tela volta sozinha quando a campanha abre.",
+          en: "They notice the drop and reconnect on their own, with a notice over the last scene meanwhile. If you reopen ATO20 without a campaign, the notice says the table is closed, and the screen comes back on its own when the campaign opens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Na tela da mesa, o token não dá mais a volta inteira ao girar, e a sombra anda junto com ele",
+          en: "In the spectator window, a turning token no longer spins all the way around, and its shadow moves with it",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Nos dados 3D, nenhuma face fica mais transparente, e o número não escapa do dado",
+          en: "On the 3D dice, no face turns transparent anymore, and the number stays inside the die",
+        },
+        detalhe: {
+          pt: "Os dados também ganharam mais luz, e o número do d4 e da moeda não some mais na face mais clara.",
+          en: "The dice also got brighter, and the number on the d4 and the coin no longer fades on the brightest face.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A ficha trazida de um plugin vai para o mapa sem precisar reabrir o ATO20",
+          en: "A sheet brought from a plugin goes onto the map without reopening ATO20",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.10.0",
     data: "2026-10-19",
     mudancas: [

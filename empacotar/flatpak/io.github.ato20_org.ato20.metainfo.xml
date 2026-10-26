@@ -100,6 +100,115 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.11.0" date="2026-10-26">
+      <description>
+        <p>
+          ATO20 1.11 adds the History window with the campaign timeline,
+          ready-made monsters, items and rituals from plugins, rolls that read
+          the sheet, the ruler from a sheet's text and the eye that shows what a
+          token sees.
+        </p>
+        <ul>
+          <li>
+            The History window: everything that happened in the campaign,
+            session by session. With the time, it keeps the scene that went On
+            air, fights and rounds, health and conditions that changed, items
+            given, taken or placed on the map, fired effects and what the table
+            saw, with the chat and rolls in between. Older sessions stay closed
+            showing only the milestones, which you write at the bottom of the
+            window and edit in place. It has search and filters by type and by
+            character, and only you see it. Fog, doors, items on the map and
+            effects only count in the scene that is On air.
+          </li>
+          <li>
+            Plugins bring ready-made monsters, items and rituals to the
+            Compendium. A game system plugin, like the Ordem Paranormal one, can
+            bring ready-made sheets to the Bestiary, ready-made items (weapons,
+            ammo, protection, healing) and tabs of its own, like Rituals. Each
+            collection shows up as a folder with the plugin's color and emblem.
+            Plugin sheets and items open read-only: Bring to the campaign copies
+            them into the Compendium, and dropping the card on the map puts it
+            in play. An entry from a plugin tab, like a ritual, goes into a
+            character's sheet with Give to. A bestiary sheet can come with more
+            than one appearance, switched in the Appearances submenu.
+          </li>
+          <li>
+            Rolls in braces read the sheet: {1d20+STR}, {AGId20&gt;+5},
+            {1d20+@Fight}. An attribute's abbreviation from the sheet counts as
+            its number when rolling, added in or as the number of dice, and with
+            @ the roll also reads a number detail, like Fight. The Dice bag and
+            the chat show what each one was worth on that roll. An attribute can
+            also be a die, like an AGI d8: the drawing rolls, and the text is
+            edited right in the circle, formulas included, like d4+20-@NEX.
+          </li>
+          <li>
+            On the phone, a roll written in a detail's text becomes a roll
+            button. "Punch {1d4}" shows the d4 in place of the braces, and a tap
+            rolls it. In the phone's search, results that roll get a roll
+            button, and tapping the rest takes you to the detail on the sheet.
+          </li>
+          <li>
+            {9m} and {3°} in a sheet's text place the ruler on the map. Just as
+            {1d20} rolls, {9m} creates a 9-meter straight ruler and {3°} a
+            circle with a 3-meter radius, starting from the token of the sheet's
+            owner. A selected ruler gets shape, lock and delete buttons: locked,
+            the tip turns without changing the size. Shape and color are in the
+            panel at the bottom corner.
+          </li>
+          <li>
+            The eye on a token shows what it sees. An eye on the token's gizmo
+            covers whatever walls and doors hide from it, with the map's
+            darkness as the table sees it. Only you see this, and it lasts while
+            the token is selected.
+          </li>
+          <li>
+            Each sound in Macros can get a key. In the sound panel, under Pads,
+            Macros, click the line's badge and press the combination: letters,
+            numbers and F1 to F12, with Ctrl, Alt and Shift. A key already taken
+            by a shortcut is refused with the owner's name, and the new one
+            shows up in Settings, Keyboard.
+          </li>
+          <li>
+            In 2.5D, an item dropped on the table floats and glints. A campaign
+            item standing on the map bobs in the air and glints every few
+            seconds, so the party finds what can be picked up. On your screen
+            only the selected one animates, and anyone who asked the system for
+            reduced motion sees the item still in the air.
+          </li>
+          <li>
+            Files: delete a folder with everything in it. Delete folder, next to
+            Dissolve folder, deletes its boards, notes and files, subfolders
+            included, after telling you what goes with it. A file used by a map
+            that stays isn't deleted: it moves up to the parent folder.
+          </li>
+          <li>
+            The Rolls and Chat windows no longer open on their own. Before, a
+            player's roll or message opened the window over the map. The Rolls
+            tray counter and the Chat unread dot still let you know.
+          </li>
+          <li>
+            Fixed: the spectator window and phones no longer freeze when the
+            connection drops. They notice the drop and reconnect on their own,
+            with a notice over the last scene meanwhile. If you reopen ATO20
+            without a campaign, the notice says the table is closed, and the
+            screen comes back on its own when the campaign opens.
+          </li>
+          <li>
+            Fixed: in the spectator window, a turning token no longer spins all
+            the way around, and its shadow moves with it.
+          </li>
+          <li>
+            Fixed: on the 3D dice, no face turns transparent anymore, and the
+            number stays inside the die. The dice also got brighter, and the
+            number on the d4 and the coin no longer fades on the brightest face.
+          </li>
+          <li>
+            Fixed: a sheet brought from a plugin goes onto the map without
+            reopening ATO20.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.10.0" date="2026-10-19">
       <description>
         <p>
