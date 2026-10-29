@@ -1,16 +1,23 @@
 pub mod animacao;
 pub mod assets;
 pub mod atomic;
+pub mod atributos;
 pub mod board;
 pub mod characters;
 pub mod condicoes;
 pub mod efeitos;
 pub mod dados_de_extensao;
+pub mod detalhes;
 pub mod documentos;
 pub mod fio;
+pub mod historico;
 pub mod inventory;
+pub mod itens;
+pub mod migrar;
 pub mod mime;
 pub mod modelos;
+pub mod pacote;
+pub mod sistema;
 pub mod variantes;
 pub mod players;
 pub mod session;
@@ -30,7 +37,14 @@ use atomic::{read_json, write_json};
 /// antiga em vez de abri-la errada em silencio. Uma campanha com versao MAIOR
 /// que esta e recusada: abrir com codigo velho um formato novo grava por cima
 /// do que nao entende.
-pub const VAULT_VERSION: u32 = 1;
+///
+/// 2: o acervo entrou na arvore de Arquivos, e as pastas dele com ele. Ver
+/// `migrar::acervo_na_arvore`.
+///
+/// 3: o item passou a ser da campanha, num `itens.json` na raiz, e o
+/// inventario de cada personagem a guardar so referencias a ele. Ver
+/// `migrar::itens_da_campanha`.
+pub const VAULT_VERSION: u32 = 3;
 
 /// Identidade da campanha, no `config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +187,25 @@ impl Vault {
         }
 
         Ok(Self { root, config })
+    }
+
+    /// Leva a campanha aberta ao formato atual, se ela for de antes.
+    ///
+    /// Separado do `open` de proposito: quem abre so para ler -- a capa na
+    /// lista de recentes -- nao pode reescrever a campanha de ninguem. Quem
+    /// chama e o `campaign_open`, quando o mestre de fato entra nela.
+    ///
+    /// A versao nova so vai para o `config.json` depois de todos os passos:
+    /// cair no meio e repetir na proxima abertura. Ver `migrar`.
+    pub fn migrar(&mut self) -> AppResult<()> {
+        if self.config.versao >= VAULT_VERSION {
+            return Ok(());
+        }
+
+        migrar::migrar(self, self.config.versao)?;
+
+        self.config.versao = VAULT_VERSION;
+        write_json(&Self::config_path(&self.root), &self.config)
     }
 
     /// Cria a campanha em `root`.

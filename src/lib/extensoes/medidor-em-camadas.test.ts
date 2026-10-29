@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  fileiraDePontos,
   quadroDaSequencia,
   recorteDaBarra,
   reservaDoEstilo,
@@ -59,6 +60,40 @@ describe("o quadro da sequência", () => {
     expect(quadroDaSequencia(0, 2)).toBe(0);
     expect(quadroDaSequencia(0.01, 2)).toBe(1);
     expect(quadroDaSequencia(1, 2)).toBe(1);
+  });
+});
+
+describe("a fileira de pontos", () => {
+  it("sem proporcao, o quadrado de antes", () => {
+    // 100 de largura, 20 de altura, cinco pontos: 4 vãos de 3 e 17,6 cada.
+    expect(fileiraDePontos(5, 100, 20)).toEqual({ resumo: false, largura: 17.6, altura: 17.6, vao: 3 });
+    // Poucos pontos param na altura do encaixe.
+    expect(fileiraDePontos(2, 100, 20)).toMatchObject({ largura: 20, altura: 20 });
+  });
+
+  it("o ponto estreito cabe mais antes de encolher", () => {
+    // A mesma fileira de cinco em 0,4 cabe inteira na altura.
+    expect(fileiraDePontos(5, 100, 20, { proporcao: 0.4 })).toMatchObject({ largura: 8, altura: 20 });
+    // Doze em 0,4 já encolhem: (100 - 11 × 3) / (12 × 0,4).
+    const doze = fileiraDePontos(12, 100, 20, { proporcao: 0.4 });
+    expect(doze.altura).toBeCloseTo(13.96, 2);
+    expect(doze.largura).toBeCloseTo(doze.altura * 0.4, 6);
+  });
+
+  it("vira o resumo pelo máximo, e não pelo valor", () => {
+    expect(fileiraDePontos(12, 100, 20, { ate: 12 }).resumo).toBe(false);
+    expect(fileiraDePontos(13, 100, 20, { ate: 12 })).toMatchObject({ resumo: true, largura: 20, altura: 20 });
+    expect(fileiraDePontos(1, 100, 20, { ate: 0 }).resumo).toBe(true);
+    expect(fileiraDePontos(30, 100, 20).resumo).toBe(false);
+  });
+
+  it("no resumo o ponto deixa metade do encaixe para o número", () => {
+    // Largo demais para metade de 30: encolhe até caber em 15.
+    expect(fileiraDePontos(40, 30, 20, { ate: 10, proporcao: 2 })).toMatchObject({ largura: 15, altura: 7.5 });
+  });
+
+  it("encaixe sem lugar dá ponto de tamanho zero, e não negativo", () => {
+    expect(fileiraDePontos(50, 10, 20)).toMatchObject({ largura: 0, altura: 0 });
   });
 });
 

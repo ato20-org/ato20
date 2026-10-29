@@ -49,8 +49,8 @@ function read(): Stored | null {
  *
  * Só isso: qual aba está aberta e onde cada janela mora saíram para o
  * `useLayoutStore` quando os painéis viraram dock. Recolher continua aqui
- * porque é gesto do momento — tem caminho de volta no canto do palco — e não
- * arrumação de bancada.
+ * porque é gesto do momento — os dois botões do cabeçalho do Mestre vão e
+ * voltam, ver `AlternarColuna` — e não arrumação de bancada.
  *
  * Lido do `localStorage` só depois da montagem, por `restore()`. Ler na criação
  * do store daria divergência de hidratação: a tela do Mestre é a raiz e é

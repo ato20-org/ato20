@@ -1,18 +1,31 @@
 mod appimage;
+mod bestiario;
+mod catalogo;
 mod commands;
+mod compendio;
 mod configuracoes;
 mod db;
 mod error;
 mod estante;
 mod extensoes;
+mod galeria;
+mod importar;
+mod itens_do_plugin;
+mod abas_do_plugin;
+mod janelas;
+mod mcp;
+mod presenca;
 mod serve;
+mod tailscale;
+mod uvtt;
 mod vault;
+mod webkit;
 
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use commands::AppState;
 use db::AppDb;
@@ -23,6 +36,9 @@ pub fn run() {
     // no `LD_PRELOAD`, e daqui nao se volta. Nada pode existir ainda -- nem
     // thread, nem janela, nem banco.
     appimage::corrigir_wayland();
+
+    // O WebKitGTK 2.54 pisca o que anima ao entrar e ao sair. Ver o modulo.
+    webkit::compor_como_o_252();
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -120,6 +136,15 @@ pub fn run() {
             let config_dir = app.path().app_config_dir()?;
             let db = AppDb::open(&config_dir.join("ato20.db"))?;
 
+            // O cano do MCP, ligado se o mestre o deixou ligado. Os pedidos
+            // saem para a janela por evento, e nao por um fluxo do daemon --
+            // ver `serve::mcp::Ponte`. A janela pode nem existir ainda: o
+            // daemon espera ela dizer que ouve (`mcp_ouvir`).
+            let ponte_do_mcp = Arc::new(mcp::ponte(&db));
+            let janela = app.handle().clone();
+            ponte_do_mcp
+                .ligar_janela(move |pedido| janela.emit_to("main", "mcp-pedido", pedido).is_ok());
+
             // A estante fica no diretorio de DADOS, e nao junto do banco: um
             // manual de trezentas paginas nao e preferencia de maquina. Ver
             // `estante::dir`. O diretorio nasce na primeira importacao -- nao
@@ -130,6 +155,10 @@ pub fn run() {
             // DADO da maquina, e podem trazer imagem e fonte junto. O
             // diretorio nasce na primeira importacao -- nao aqui.
             let extensoes = extensoes::dir(&app.path().app_data_dir()?);
+
+            // O Compendio do ATO20 tambem e dado da maquina, ao lado da estante.
+            // A pasta nasce no primeiro uso. Ver `compendio`.
+            let compendio = compendio::dir(&app.path().app_data_dir()?);
 
             // O atalho do menu, para quem roda o AppImage. Aqui e nao no
             // instalador porque o AppImage NAO TEM instalador: ver `appimage`.
@@ -151,14 +180,27 @@ pub fn run() {
                 log::warn!("bundle das telas nao encontrado; Espectador e Jogador nao serao servidos");
             }
 
-            let started =
-                serve::spawn(Arc::clone(&vault), web_root, estante.clone(), extensoes.clone())?;
+            let started = serve::spawn(
+                Arc::clone(&vault),
+                web_root,
+                estante.clone(),
+                extensoes.clone(),
+                Arc::clone(&ponte_do_mcp),
+            )?;
             log::info!(
                 "daemon em {} (rede: {:?})",
                 started.addr.url,
                 started.addr.lan_url
             );
 
+            // Um Funnel que sobrou de um travamento: o `--bg` sobrevive ao
+            // processo, e a mesa nao deveria estar na internet sem o mestre
+            // ter aberto o convite nesta sessao. Numa thread, porque a CLI do
+            // Tailscale nao tem nada que atrasar a primeira janela.
+            let porta = started.addr.porta;
+            std::thread::spawn(move || tailscale::fechar_se_nosso(porta));
+
+            app.manage(ponte_do_mcp);
             app.manage(AppState {
                 vault,
                 db,
@@ -167,14 +209,28 @@ pub fn run() {
                 estante,
                 extensoes,
                 config_dir,
+                compendio,
             });
 
+            // Fora do `AppState`: nao e campanha, nem disco, nem daemon. Ver
+            // `presenca`.
+            app.manage(presenca::Presenca::iniciar());
+
             relogio_da_mesa(app.handle().clone());
+
+            // A janela principal nasce aqui, e nao do `tauri.conf.json`: e
+            // ela que atende o `window.open` das janelas soltas. Ver `janelas`.
+            app.manage(janelas::Pedidos::default());
+            janelas::criar_principal(app.handle())?;
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::daemon_addr,
+            commands::enderecos_da_mesa,
+            commands::tailscale_estado,
+            commands::funil_abrir,
+            commands::funil_fechar,
             commands::updater_embutido,
             commands::abrir_no_navegador,
             commands::campaign_recents,
@@ -191,9 +247,17 @@ pub fn run() {
             commands::documento_write,
             commands::documento_delete,
             commands::asset_list,
+            commands::galeria_anexos,
+            commands::galeria_anexo_mini,
+            commands::galeria_caminho,
+            commands::galeria_mostrar_na_pasta,
+            commands::galeria_programas,
+            commands::galeria_abrir_com,
+            commands::galeria_escolher_programa,
             commands::asset_import,
             commands::asset_import_bytes,
             commands::asset_import_cancelar,
+            commands::uvtt_ler,
             commands::asset_set_escopo,
             commands::asset_delete,
             commands::asset_rename,
@@ -202,11 +266,6 @@ pub fn run() {
             commands::asset_set_trecho_youtube,
             commands::asset_set_folder,
             commands::asset_set_peaks,
-            commands::folder_list,
-            commands::folder_create,
-            commands::folder_move,
-            commands::folder_rename,
-            commands::folder_delete,
             commands::portraits_load,
             commands::portraits_save,
             commands::track_load,
@@ -221,6 +280,42 @@ pub fn run() {
             commands::player_attachments_dir,
             commands::characters_list,
             commands::character_create,
+            commands::compendio_criar,
+            commands::compendio_por_em_jogo,
+            commands::compendio_guardar,
+            commands::compendio_criar_item,
+            commands::compendio_item_em_jogo,
+            commands::compendio_guardar_item,
+            commands::compendio_maquina,
+            commands::compendio_maquina_imagem,
+            commands::compendio_trazer,
+            commands::compendio_levar,
+            commands::compendio_maquina_remover,
+            commands::compendio_maquina_semear,
+            commands::compendio_condicoes,
+            commands::compendio_condicao_criar,
+            commands::compendio_condicao_editar,
+            commands::compendio_condicao_apagar,
+            commands::compendio_condicao_no_menu,
+            commands::compendio_condicao_guardar,
+            commands::compendio_efeito_criar,
+            commands::compendio_efeito_em_jogo,
+            commands::compendio_efeito_guardar,
+            commands::compendio_tags,
+            commands::compendio_aura,
+            commands::compendio_maquina_tags,
+            commands::bestiario_listar,
+            commands::bestiario_imagem,
+            commands::bestiario_ficha,
+            commands::bestiario_trazer,
+            commands::bestiario_por_em_jogo,
+            commands::itens_do_plugin_listar,
+            commands::itens_do_plugin_item,
+            commands::itens_do_plugin_trazer,
+            commands::itens_do_plugin_em_jogo,
+            commands::abas_listar,
+            commands::abas_verbete,
+            commands::abas_dar,
             commands::character_rename,
             commands::character_remove,
             commands::character_set_campo,
@@ -228,6 +323,30 @@ pub fn run() {
             commands::character_aparencia_renomear,
             commands::character_aparencia_remover,
             commands::character_aparencia_ativar,
+            commands::detalhes_list,
+            commands::detalhe_criar,
+            commands::detalhe_editar,
+            commands::detalhe_remover,
+            commands::detalhes_reordenar,
+            commands::detalhes_da_campanha,
+            commands::detalhes_rolagens,
+            commands::grupo_de_detalhes_criar,
+            commands::grupo_de_detalhes_editar,
+            commands::grupo_de_detalhes_remover,
+            commands::grupos_de_detalhes_reordenar,
+            commands::detalhe_da_campanha_criar,
+            commands::detalhes_da_campanha_aplicar_em_todos,
+            commands::detalhe_da_campanha_editar,
+            commands::detalhe_da_campanha_remover,
+            commands::detalhes_da_campanha_reordenar,
+            commands::character_atributo_criar,
+            commands::character_atributo_editar,
+            commands::character_atributo_remover,
+            commands::atributos_da_campanha_list,
+            commands::atributo_da_campanha_criar,
+            commands::atributo_da_campanha_editar,
+            commands::atributo_da_campanha_remover,
+            commands::atributos_da_campanha_aplicar_em_todos,
             commands::character_medidor_criar,
             commands::character_medidor_editar,
             commands::character_medidor_remover,
@@ -267,20 +386,35 @@ pub fn run() {
             commands::player_characters,
             commands::character_players,
             commands::character_links,
-            commands::character_note,
-            commands::character_set_note,
+            commands::itens_list,
+            commands::item_create,
+            commands::item_update,
+            commands::item_remove,
+            commands::item_set_imagem,
+            commands::item_promote_imagem,
+            commands::itens_portadores,
             commands::inventory_list,
             commands::inventory_add,
+            commands::inventory_give,
             commands::inventory_update,
             commands::inventory_remove,
             commands::inventory_move,
-            commands::inventory_set_imagem,
-            commands::inventory_promote_imagem,
+            commands::historico_acrescentar,
+            commands::historico_ler,
             commands::campaign_export_name,
             commands::campaign_export,
             commands::campaign_import,
+            commands::pacote_exportar,
+            commands::pacote_abrir,
+            commands::pacote_importar,
+            commands::pacote_fechar,
             commands::estante_list,
             commands::estante_import,
+            commands::importar_ler_pasta,
+            commands::importar_ler_arquivos,
+            commands::importar_identificar,
+            commands::ficha_pdf_ler,
+            commands::sistema_aplicar,
             commands::estante_pagina,
             commands::estante_remover,
             commands::estante_abrir,
@@ -290,14 +424,37 @@ pub fn run() {
             commands::marcador_remover,
             commands::extensoes_listar,
             commands::extensao_importar,
+            commands::extensao_instalar_do_catalogo,
             commands::extensao_remover,
             commands::extensao_habilitar,
             commands::configuracoes_ler,
             commands::configuracoes_gravar,
             commands::configuracoes_abrir_arquivo,
+            presenca::definir_presenca,
+            mcp::mcp_estado,
+            mcp::mcp_ligar,
+            mcp::mcp_trocar_token,
+            mcp::mcp_ouvir,
+            mcp::mcp_responder,
+            janelas::janela_solta_pedir,
+            janelas::janela_solta_focar,
+            janelas::janela_solta_fechar,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, evento| match evento {
+            // Fecha o Funnel na saida: a mesa aberta para a internet e
+            // escolha de uma sessao, e nao um estado que fica para tras.
+            tauri::RunEvent::Exit => {
+                if let Some(estado) = app.try_state::<AppState>() {
+                    tailscale::fechar_se_nosso(estado.daemon.porta);
+                }
+            }
+            tauri::RunEvent::WindowEvent { label, event, .. } => {
+                janelas::ao_evento(app, &label, &event)
+            }
+            _ => {}
+        });
 }
 
 /// A resposta do protocolo para tudo que nao se serve.

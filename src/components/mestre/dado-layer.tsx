@@ -187,6 +187,14 @@ export type Jogada = {
   semente: number;
   /** O dado da mesa que saiu para virar esta jogada, se veio de um. */
   daMesa?: string;
+  /**
+   * Onde o dedo soltou, em pixel de tela, quando a jogada veio de um arrasto.
+   *
+   * `x` e `y` já vêm presos na mesa, e perto da borda a trava os empurra para
+   * dentro: quem precisa saber se a soltura caiu num lugar da TELA -- a faixa
+   * de tirar o dado, no celular -- pergunta por aqui. Ver `LixeiraDoDado`.
+   */
+  solto?: { clientX: number; clientY: number };
 };
 
 /** As bordas em que o dado para: a mesa declarada, ou o espaço inteiro. */
@@ -314,6 +322,7 @@ export function DadosNoEspaco({
       impulso: { x: arremesso.vx / scale, y: arremesso.vy / scale },
       semente: arremesso.semente,
       daMesa: arremesso.daMesa,
+      solto: { clientX: arremesso.clientX, clientY: arremesso.clientY },
     };
 
     // Consome ANTES de executar: quem executa pode ser assíncrono -- no celular
@@ -666,6 +675,9 @@ const DadoNaMesa = memo(function DadoNaMesa({
   const x = sugado ? sugado.x : quadro.x;
   const y = sugado ? sugado.y : quadro.y;
   const nitidez = sugado ? sugado.nitidez : quadro.nitidez;
+  // O descartado apaga ao POUSAR, e não antes: no ar ninguém sabe quem fica, e
+  // apagar logo contaria o resultado. Ver `Dado.descartado`.
+  const apagado = dado.descartado && (agora - dado.lancadoEm) / 1000 >= duracaoDaQueda(dado);
   const sombra = sugado ? sugado.sombra : quadro.sombra;
 
   const desenho = desenharDado({
@@ -711,7 +723,7 @@ const DadoNaMesa = memo(function DadoNaMesa({
               `scale(${quadro.escala * quadro.esmagaX} ${quadro.escala * quadro.esmagaY}) ` +
               `translate(${-x} ${-y})`
         }
-        opacity={sugado ? sugado.opacidade : undefined}
+        opacity={sugado ? sugado.opacidade : apagado ? 0.4 : undefined}
       >
         <DadoFacetas
           tipo={tipo}

@@ -61,7 +61,7 @@ export async function rolarParaPlugin(notacoes: readonly string[]): Promise<Resu
   return {
     dados,
     total: dados
-      .filter((dado) => entraNaSoma(dado.faces))
+      .filter((dado) => entraNaSoma(dado))
       .reduce((soma, dado) => soma + dado.valor, 0),
   };
 }

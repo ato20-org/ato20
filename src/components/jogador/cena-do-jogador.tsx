@@ -36,6 +36,7 @@ import {
   peDe,
   pivoDe,
   raioDoAnel,
+  sobeDe,
 } from "@/lib/geometry/peca-de-esguelha";
 import {
   angleTo,
@@ -58,12 +59,16 @@ import {
 } from "@/lib/sync/movimento";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import { podeMoverNaVez, type VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping, TipoDePing } from "@/types/ping";
 import {
   ehQuadro,
   type CanvasItem,
   type FichaNaCena,
+  type Parede,
   type Portrait,
   type Scene,
   type Tripe,
@@ -181,7 +186,11 @@ export function CenaDoJogador({
   fichas,
   efeitos,
   rolagens,
+  iniciativa,
   pings,
+  disparados,
+  laser,
+  segurados,
   tripe,
   corte,
 }: {
@@ -193,8 +202,16 @@ export function CenaDoJogador({
   /** O que as condições fazem com cada figura. Ver `LiveState.efeitos`. */
   efeitos: EfeitosDoPersonagem[];
   rolagens: RolagemDaMesa[];
+  /** De quem é a vez, com a iniciativa rodando. Ver `podeMoverNaVez`. */
+  iniciativa: VezNaMesa | null;
   /** Os pings da mesa. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** Os efeitos disparados. Ver `LiveState.disparados`. */
+  disparados: EfeitoDisparado[];
+  /** O laser do mestre. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
+  /** Os itens na mão do mestre. Ver `LiveState.seguradosPeloMestre`. */
+  segurados: string[];
   /**
    * O tripé no ar, quando a mesa vê de esguelha. Aí o celular também vê, e o
    * dedo pega o token pelo chão do tripé. Ver `AlcasDeEsguelha`.
@@ -222,6 +239,24 @@ export function CenaDoJogador({
   );
 
   const { meus, reler } = useMeusPersonagens(codigo, chave);
+
+  // Os meus que podem andar AGORA: em combate, só o da vez. Filtrar o conjunto,
+  // e não cada gesto, faz o token fora da vez simplesmente não ser pegável --
+  // sem alça, sem arrasto -- pelo mesmo `podePegar` de sempre. Pelos dois
+  // valores simples, e não pelo objeto: o quadro chega dez vezes por segundo,
+  // cada vez com uma `iniciativa` nova.
+  const emCombate = iniciativa !== null;
+  const vezDe = iniciativa?.vezDe ?? null;
+  const meusNaVez = useMemo(() => {
+    if (!emCombate) return meus;
+
+    const vez = { vezDe, rodada: 0 };
+    return new Set([...meus].filter((id) => podeMoverNaVez(vez, id)));
+  }, [meus, emCombate, vezDe]);
+
+  // Na mão do mestre o token não é pegável, como o travado: some a alça, e o
+  // que já estava no dedo é largado logo abaixo. Ver `seguradosPeloMestre`.
+  const naMaoDoMestre = useMemo(() => new Set(segurados), [segurados]);
 
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
@@ -262,7 +297,8 @@ export function CenaDoJogador({
    *
    * Três saídas: o eco trouxe o token ao lugar E ao ângulo em que o dedo
    * soltou; o token saiu da cena; ou deixou de ser deste jogador no meio do
-   * gesto -- o mestre o travou, ou tirou o personagem dele. Nas duas últimas a
+   * gesto -- o mestre o travou, tirou o personagem dele, ou o pegou na mão
+   * (`segurados`). Nas duas últimas a
    * alça desmonta sob o dedo e o `pointerup` nunca chega, então é aqui que o
    * token é largado.
    *
@@ -278,7 +314,8 @@ export function CenaDoJogador({
   if (
     naMao &&
     (!noAr ||
-      !podePegar(noAr, meus) ||
+      !podePegar(noAr, meusNaVez) ||
+      naMaoDoMestre.has(noAr.id) ||
       (naMao.solto &&
         Math.abs(noAr.x - naMao.x) < MESMO_LUGAR &&
         Math.abs(noAr.y - naMao.y) < MESMO_LUGAR &&
@@ -303,8 +340,13 @@ export function CenaDoJogador({
   }, [cena, naMao]);
 
   const pegaveis = useMemo(
-    () => (quadro ? [] : exibida.items.filter((item) => podePegar(item, meus))),
-    [quadro, exibida.items, meus],
+    () =>
+      quadro
+        ? []
+        : exibida.items.filter(
+            (item) => podePegar(item, meusNaVez) && !naMaoDoMestre.has(item.id),
+          ),
+    [quadro, exibida.items, meusNaVez, naMaoDoMestre],
   );
 
   /**
@@ -485,6 +527,8 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
+        laser={laser}
         // Pela mesma razão do mapa de prumo, logo abaixo.
         variante="tela"
         smooth
@@ -495,6 +539,7 @@ export function CenaDoJogador({
           <AlcasDeEsguelha
             camera={camera}
             itens={pegaveis}
+            paredes={exibida.paredes}
             gesto={gesto}
             onMover={mover}
             onGirar={girar}
@@ -518,6 +563,8 @@ export function CenaDoJogador({
         efeitos={efeitos}
         rolagens={rolagens}
         pings={pings}
+        disparados={disparados}
+        laser={laser}
         smooth
         naMao={naMao?.itemId}
         variante="tela"
@@ -684,11 +731,13 @@ function desenhoDaAlca(
   item: CanvasItem,
   tripe: Tripe,
   tela: Tela,
+  /** O pé no teto em que ele pisa, ou zero. Ver `sobeDe`. */
+  sobe = 0,
 ): DesenhoDaAlca | null {
   // O que está perto demais do olho não se projeta: ver `vistoPeloTripe`.
   const naTela = (ponto: Vec) =>
-    profundidadeNoTripe(tripe, ponto) > PERTO_DO_OLHO
-      ? projetarNoTripe(tripe, tela, ponto)
+    profundidadeNoTripe(tripe, ponto, sobe) > PERTO_DO_OLHO
+      ? projetarNoTripe(tripe, tela, ponto, sobe)
       : null;
 
   const contorno: Vec[] = [];
@@ -703,7 +752,7 @@ function desenhoDaAlca(
   } else {
     // A figura em pé é paralela à tela: o contorno é o retângulo dela ali,
     // pelo pé, na escala daquela profundidade e tombado com a rolagem.
-    const figura = figuraNoTripe(tripe, tela, peDe(item));
+    const figura = figuraNoTripe(tripe, tela, peDe(item), sobe);
     if (!figura) return null;
     const largura = item.width * figura.escala;
     const altura = item.height * figura.escala;
@@ -776,6 +825,7 @@ function emTexto(pontos: Vec[]): string {
 function AlcasDeEsguelha({
   camera,
   itens,
+  paredes,
   gesto,
   onMover,
   onGirar,
@@ -784,6 +834,8 @@ function AlcasDeEsguelha({
   camera: CameraAssinavel;
   /** Os tokens deste jogador. Ver `podePegar`. */
   itens: CanvasItem[];
+  /** Para a alça subir com o token que pisa num teto. Ver `sobeDe`. */
+  paredes: Parede[] | undefined;
   /** O token na mão agora, e o que o dedo faz com ele. */
   gesto: { itemId: string; gesto: Gesto } | null;
   onMover: (event: ReactPointerEvent, item: CanvasItem, levar: Levar) => void;
@@ -830,13 +882,17 @@ function AlcasDeEsguelha({
           : null;
       };
     } else {
-      const figura = figuraNoTripe(vista.tripe, vista.tela, pivo);
+      // Pego no teto, o pé anda no plano dele: o dedo segura a figura onde ela
+      // está desenhada. Ver `sobeDe`.
+      const sobe = sobeDe(item, paredes);
+      const figura = figuraNoTripe(vista.tripe, vista.tela, pivo, sobe);
       if (!figura) return;
       const pega = {
         x: (dedo.x - figura.x) / figura.escala,
         y: (dedo.y - figura.y) / figura.escala,
       };
-      pivoSob = (tripe, tela, aqui) => peSobODedo(tripe, tela, aqui, pega);
+      pivoSob = (tripe, tela, aqui) =>
+        peSobODedo(tripe, tela, aqui, pega, sobe);
     }
 
     // Pelo olho de AGORA a cada passo: a câmera pode andar no meio do gesto.
@@ -859,7 +915,7 @@ function AlcasDeEsguelha({
         const grupo = grupos.current.get(item.id);
         if (!grupo) continue;
         const desenho = vista
-          ? desenhoDaAlca(item, vista.tripe, vista.tela)
+          ? desenhoDaAlca(item, vista.tripe, vista.tela, sobeDe(item, paredes))
           : null;
         if (!desenho) {
           grupo.setAttribute("display", "none");

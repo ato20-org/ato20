@@ -1,6 +1,10 @@
 import type { Idioma } from "@/lib/i18n/idioma";
+import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import type {
   Ambiente,
@@ -143,6 +147,43 @@ export type LiveState = {
    */
   pings?: Ping[];
   /**
+   * Os efeitos DISPARADOS no ar: a bola de fogo voando, o sopro abrindo. Ver
+   * `EfeitoDisparado`. Não confundir com `disparos`, que são os sons.
+   *
+   * Nasce na janela do mestre e sai do quadro quando o tiro acaba, como o
+   * ping: o daemon reentrega o último quadro a quem conecta, e um tiro
+   * esquecido aqui voaria de novo na TV. Quem recebe desenha só os da cena
+   * que tem, e cada um uma vez -- a chave é o id.
+   *
+   * Opcional, como `pings`: ausente é o mapa sem tiro nenhum, e é o que um
+   * quadro de uma versão anterior diz.
+   */
+  disparados?: EfeitoDisparado[];
+  /**
+   * O laser do mestre, enquanto o rastro está aceso. Ver `LaserNaMesa`.
+   *
+   * Some do quadro quando o rastro apaga, e não fica até o próximo: o daemon
+   * reentrega o último quadro a quem conecta, e o batimento o repete. Um
+   * rastro esquecido aqui acenderia de novo na TV vinte segundos depois.
+   *
+   * Opcional: ausente é a mesa sem laser, e é o que um quadro de uma versão
+   * anterior diz.
+   */
+  laser?: LaserNaMesa;
+  /**
+   * Os itens que o mestre está arrastando agora, por id.
+   *
+   * O celular não deixa o jogador pegar o próprio token enquanto ele está na
+   * mão do mestre, e larga o que já estava pegando: dois arrastos no mesmo
+   * token o puxariam de um lado para o outro. Quem garante de verdade é o
+   * Mestre, que recusa o movimento -- ver `useMovimentosDaMesa`; isto é o que
+   * deixa o celular saber antes de tentar.
+   *
+   * Some do quadro quando o mestre solta, como o laser. Opcional: ausente é
+   * ninguém segurando, e é o que um quadro de versão anterior diz.
+   */
+  seguradosPeloMestre?: string[];
+  /**
    * O idioma do Mestre. A janela do espectador recarrega nele quando muda, e o
    * celular também, enquanto o jogador não escolheu outro. Ver
    * `seguirIdiomaDaMesa`.
@@ -151,6 +192,21 @@ export type LiveState = {
    * tela fica no idioma em que abriu.
    */
   idioma?: Idioma;
+  /**
+   * O ajuste de imagem da CAMPANHA na janela do espectador. O da cena vai
+   * dentro dela, em `Scene.imagem`, e os dois se multiplicam -- ver `compor`.
+   *
+   * Só a janela do espectador e a Janela Mesa aplicam; o jogador recebe e
+   * ignora. Ausente = neutro, e é o que um quadro de uma versão anterior diz.
+   */
+  imagem?: AjusteDeImagem;
+  /**
+   * De quem é a vez, com a iniciativa rodando. `null` fora de combate.
+   *
+   * Opcional, como `idioma`: o quadro de uma versão anterior não o traz, e
+   * ausente é "ninguém está em combate". Ver `VezNaMesa`.
+   */
+  iniciativa?: VezNaMesa | null;
 };
 
 /**
@@ -179,7 +235,33 @@ export const SCENE_BROADCAST_INTERVAL_MS = 100;
 export interface SceneChannel {
   /** Só o Mestre chama. Num canal de espectador é inerte. */
   publish(state: LiveState): void;
-  /** Devolve a função de cancelamento. */
-  subscribe(handler: (state: LiveState) => void): () => void;
+  /**
+   * Devolve a função de cancelamento. `aoMudarConexao` ouve cada troca do
+   * `EstadoDaConexao` -- só o canal de espectador fala nele.
+   */
+  subscribe(
+    handler: (state: LiveState) => void,
+    aoMudarConexao?: (estado: EstadoDaConexao) => void,
+  ): () => void;
   close(): void;
 }
+
+/**
+ * Como está o fio entre quem assiste e o daemon. Ver o vigia em
+ * `createSubscriberChannel`.
+ */
+export type EstadoDaConexao =
+  /** O fluxo está aberto e dando sinal de vida. */
+  | "no-ar"
+  /** Caiu, ou emudeceu sem fechar, e está tentando de novo. */
+  | "reconectando"
+  /**
+   * O daemon responde, mas sem campanha aberta: o Mestre fechou o app e voltou,
+   * ou está trocando de campanha. Continua tentando.
+   */
+  | "mesa-fechada"
+  /**
+   * A campanha aberta é outra, e o código desta tela não vale nela. Desistiu:
+   * insistir só gastaria as tentativas que o daemon conta contra quem erra.
+   */
+  | "recusado";

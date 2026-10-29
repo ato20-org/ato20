@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, UserRound } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,13 @@ import { usePlayerStore } from "@/lib/store/use-player-store";
  * sem virar jogador tem a porta do lado — `/espectador`, a TV, que nunca cria
  * linha na campanha do mestre.
  */
-export function PlayerEntrada({ codigo }: { codigo: string }) {
+export function PlayerEntrada({
+  codigo,
+  nomeDaMesa,
+}: {
+  codigo: string;
+  nomeDaMesa: string;
+}) {
   const status = usePlayerStore((state) => state.status);
   const erro = usePlayerStore((state) => state.erro);
   const boot = usePlayerStore((state) => state.boot);
@@ -54,17 +60,6 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
     // rola mantém o campo visível em vez de empurrá-lo para fora.
     <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto p-6">
       <div className="mx-auto w-full max-w-sm space-y-6">
-        <div className="space-y-2 text-center">
-          <UserRound
-            className="text-muted-foreground mx-auto size-8"
-            aria-hidden
-          />
-          <h1 className="text-xl font-medium">{t.entrada.quemJoga}</h1>
-          <p className="text-muted-foreground text-sm text-balance">
-            {t.entrada.explicacao}
-          </p>
-        </div>
-
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -72,6 +67,26 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
             void entrar(codigo, nome);
           }}
         >
+          {/* O nome da mesa no título, e não um ícone de pessoa: quem chega
+              pelo link ou pelo QR quer saber, antes de tudo, se é a mesa
+              certa. A pergunta vira o rótulo do campo -- antes ele só tinha o
+              texto de dentro, que some ao digitar e o leitor de tela não lê
+              como nome do campo. */}
+          <div className="space-y-1.5 pb-3 text-center">
+            <h1 className="text-2xl font-semibold break-words text-balance">
+              {nomeDaMesa}
+            </h1>
+            <label htmlFor="player-name" className="block font-medium">
+              {t.entrada.quemJoga}
+            </label>
+            {/* O que mais confunde quem chega: escrever o nome do personagem,
+                que é o mestre quem entrega. "Credencial" saiu: o que o jogador
+                precisa saber é que não há senha e o aparelho se lembra dele. */}
+            <p className="text-muted-foreground text-sm text-balance">
+              {t.entrada.explicacao}
+            </p>
+          </div>
+
           <Input
             id="player-name"
             value={nome}
@@ -79,7 +94,7 @@ export function PlayerEntrada({ codigo }: { codigo: string }) {
             autoComplete="name"
             autoFocus
             spellCheck={false}
-            placeholder={t.entrada.teuNome}
+            placeholder={t.entrada.seuNome}
             maxLength={60}
             // Alvo de dedo, não de cursor: `h-11` e texto de 16px, que é o
             // tamanho abaixo do qual o iOS dá zoom sozinho ao focar o campo.

@@ -24,6 +24,7 @@ const pt = {
   retrato: {
     paginaViva: "Página viva",
     apareceNaMesa: "aparece na mesa",
+    vez: "Vez",
   },
 
   previaDaMencao: {
@@ -222,6 +223,22 @@ const pt = {
     aguardando: "Aguardando o Mestre…",
   },
 
+  /** A tarja de quem assiste quando o fio cai no meio da sessão. Ver `AvisoDeConexao`. */
+  conexao: {
+    reconectando: "Sem conexão com a mesa. Reconectando…",
+    mesaFechada: "O mestre fechou a mesa. Esperando ela abrir de novo…",
+    recusado: "Esta tela não é mais da mesa aberta. Peça o link novo ao mestre.",
+  },
+
+  /** O zoom de quem assiste, no canto do mapa. Ver `ControlesDeZoom`. */
+  zoom: {
+    rotulo: "Zoom do mapa",
+    aproximar: "Aproximar",
+    afastar: "Afastar",
+    porcento: (porcento: number) => `${porcento}%`,
+    voltar: (porcento: number) => `${porcento}%. Voltar ao enquadramento do mestre`,
+  },
+
   barreira: {
     falhou: (nome: string) => `${nome} falhou ao desenhar.`,
   },
@@ -240,6 +257,12 @@ const pt = {
   transformHandles: {
     espelhar: "Espelhar na horizontal",
     abrirFicha: "Abrir a ficha do personagem",
+    verPeloToken: "Ver o que o token vê",
+    voltarAVerTudo: "Voltar a ver tudo",
+    verPeloTokenDica:
+      "Ver pelo token: o que as paredes e as portas escondem dele fica coberto, e o escuro do mapa fica como a mesa vê. Só você vê.",
+    vendoPeloTokenDica:
+      "Vendo o que este token vê. Clique aqui, ou fora dele, para voltar a ver tudo.",
     negrito: "Negrito",
     italico: "Itálico",
     sublinhado: "Sublinhado",
@@ -254,9 +277,19 @@ const pt = {
     tirarDaMesa: "Tirar da mesa",
     mostrarParaAMesa: "Mostrar para a mesa",
     mesaVendoDica: "A mesa está vendo. Clique para esconder.",
-    soVoceVeDica: "Só você vê. Clique para mostrar na TV e nos celulares.",
+    soVoceVeDica: "Só você vê. Clique para mostrar na janela do espectador e nos celulares.",
     fecharPorta: "Fechar a porta",
     abrirPorta: "Abrir a porta",
+    ligarNevoaDinamica: "Ligar a névoa dinâmica",
+    desligarNevoaDinamica: "Desligar a névoa dinâmica",
+    nevoaDinamicaDica:
+      "Névoa dinâmica: a lanterna de cada token abre esta área enquanto alcança, e as paredes param. Clique para desligar.",
+    nevoaParadaDica:
+      "Ligar a névoa dinâmica: a lanterna de cada token passa a abrir esta área por onde ilumina.",
+    borracha: "Borracha",
+    sairDaBorracha: "Sair da borracha",
+    borrachaAtivaDica: "Arraste sobre a área para furar. [ e ] mudam o pincel, Esc sai.",
+    borrachaDica: "Borracha: fura esta área por onde passar. Ctrl+Z desfaz a passada.",
     /** Pela chave `doQue` que o chamador passa, e que não é texto. */
     alturaDa: {
       parede: "Altura da parede",
@@ -275,6 +308,10 @@ const pt = {
     travadoDica:
       "Travado: não move, não muda de tamanho e não apaga. Clique para destravar.",
     travarDica: "Travar no lugar, para não mexer sem querer.",
+    travarMedida: "Travar a medida",
+    destravarMedida: "Destravar a medida",
+    medidaTravadaDica: "Medida travada: a ponta gira, mas o tamanho não muda. Clique para destravar.",
+    travarMedidaDica: "Travar a medida: a ponta passa a girar, sem mudar o tamanho.",
     excluir: "Excluir",
     excluirDoMapa: "Excluir do mapa",
     girarPeloCanto: (canto: string) => `Rotacionar pelo canto ${canto}`,
@@ -308,6 +345,7 @@ const en: typeof pt = {
   retrato: {
     paginaViva: "Live page",
     apareceNaMesa: "shows at the table",
+    vez: "Turn",
   },
 
   previaDaMencao: {
@@ -500,6 +538,20 @@ const en: typeof pt = {
     aguardando: "Waiting for the GM…",
   },
 
+  conexao: {
+    reconectando: "Lost connection to the table. Reconnecting…",
+    mesaFechada: "The GM closed the table. Waiting for it to reopen…",
+    recusado: "This screen no longer belongs to the open table. Ask the GM for the new link.",
+  },
+
+  zoom: {
+    rotulo: "Map zoom",
+    aproximar: "Zoom in",
+    afastar: "Zoom out",
+    porcento: (porcento) => `${porcento}%`,
+    voltar: (porcento) => `${porcento}%. Back to the GM's framing`,
+  },
+
   barreira: {
     falhou: (nome) => `${nome} failed to draw.`,
   },
@@ -517,6 +569,12 @@ const en: typeof pt = {
   transformHandles: {
     espelhar: "Flip horizontally",
     abrirFicha: "Open the character sheet",
+    verPeloToken: "See what this token sees",
+    voltarAVerTudo: "See everything again",
+    verPeloTokenDica:
+      "See through this token: whatever walls and doors hide from it is covered, and the map's darkness looks as the table sees it. Only you see this.",
+    vendoPeloTokenDica:
+      "Seeing what this token sees. Click here, or away from it, to see everything again.",
     negrito: "Bold",
     italico: "Italic",
     sublinhado: "Underline",
@@ -535,6 +593,16 @@ const en: typeof pt = {
       "Only you can see it. Click to show it on the spectator window and the phones.",
     fecharPorta: "Close the door",
     abrirPorta: "Open the door",
+    ligarNevoaDinamica: "Turn on dynamic fog",
+    desligarNevoaDinamica: "Turn off dynamic fog",
+    nevoaDinamicaDica:
+      "Dynamic fog: each token's lantern opens this area while it reaches, and walls stop it. Click to turn off.",
+    nevoaParadaDica:
+      "Turn on dynamic fog: each token's lantern opens this area wherever it shines.",
+    borracha: "Eraser",
+    sairDaBorracha: "Leave the eraser",
+    borrachaAtivaDica: "Drag over the area to cut holes. [ and ] change the brush, Esc leaves.",
+    borrachaDica: "Eraser: cuts holes in this area wherever it passes. Ctrl+Z undoes the stroke.",
     alturaDa: {
       parede: "Wall height",
       porta: "Door height",
@@ -551,6 +619,10 @@ const en: typeof pt = {
     travar: "Lock",
     travadoDica: "Locked: it doesn't move, resize or get deleted. Click to unlock.",
     travarDica: "Lock it in place, so it doesn't get moved by accident.",
+    travarMedida: "Lock the measure",
+    destravarMedida: "Unlock the measure",
+    medidaTravadaDica: "Measure locked: the tip turns, but the size stays. Click to unlock.",
+    travarMedidaDica: "Lock the measure: the tip turns without changing the size.",
     excluir: "Delete",
     excluirDoMapa: "Delete from the map",
     girarPeloCanto: (canto) => `Rotate from corner ${canto}`,

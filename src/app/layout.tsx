@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
+import { ImagemAusente } from "@/components/imagem-ausente";
+
 import "./globals.css";
 
 /*
@@ -63,6 +65,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
         {children}
+        <ImagemAusente />
       </body>
     </html>
   );

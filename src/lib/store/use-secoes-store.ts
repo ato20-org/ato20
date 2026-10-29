@@ -25,6 +25,7 @@ const CHAVE_DISCO = "ato20:secoes-ficha";
  */
 export type SecaoFicha =
   | "campos"
+  | "atributos"
   | "aparencias"
   | "medidores"
   | "condicoes"
@@ -33,7 +34,9 @@ export type SecaoFicha =
   | "nota"
   // A de um plugin: `ext:{extensaoId}/{secaoId}`. O store grava texto, então
   // ela entra sem migração. Ver `SecoesDeExtensao`.
-  | `ext:${string}`;
+  | `ext:${string}`
+  // Um grupo de detalhes: `det:{nome sem caixa}`. Ver `GruposDeDetalhes`.
+  | `det:${string}`;
 
 /**
  * O que é gravado são as FECHADAS, e não as abertas.

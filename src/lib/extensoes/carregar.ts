@@ -20,6 +20,7 @@ import {
   useConfiguracoesStore,
   valorDe,
 } from "@/lib/configuracoes/registro";
+import { enderecoDaMesa } from "@/lib/configuracoes/rede";
 import { COMPONENTES, EXPERIMENTAL } from "@/lib/extensoes/componentes";
 import { assinarFioParaPlugin, postarParaPlugin } from "@/lib/extensoes/chat";
 import { rolarParaPlugin } from "@/lib/extensoes/dados";
@@ -320,6 +321,10 @@ function conteudoDe(extensaoId: string, janela: JanelaDeExtensao): ConteudoJanel
     return { tipo: "personagem", personagemId: janela.personagemId };
   }
 
+  // A Biblioteca virou parte de Arquivos: o plugin que pede a tela dela abre a
+  // árvore onde as imagens estão agora.
+  if (janela.tela === "imagens") return { tipo: "quadros" };
+
   return { tipo: janela.tela };
 }
 
@@ -522,24 +527,29 @@ function construirApi(extensao: Extensao, registrados: Desfazer[]): Ato20Api {
       // publica no canal de outro.
       publicar: (canal, valor) => publicarNoCanal(extensao.id, canal, valor),
 
+      // `rede` é o endereço do convite, e não só o IP do Wi-Fi: com o mestre
+      // na Tailscale, o QR de um plugin tem de chamar o celular pelo mesmo
+      // caminho que o do Jogador.
       async enderecos() {
-        const { url, lanUrl } = await daemonAddr();
+        const [{ url }, mesa] = await Promise.all([daemonAddr(), enderecoDaMesa()]);
 
         return {
           local: url,
-          rede: lanUrl,
+          rede: mesa?.url ?? null,
           codigo: useCampaignStore.getState().campaign?.codigo ?? null,
         };
       },
 
       async linkDaPagina(paginaId, opcoes) {
-        const { url, lanUrl } = await daemonAddr();
+        const base = opcoes?.rede
+          ? ((await enderecoDaMesa())?.url ?? null)
+          : (await daemonAddr()).url;
 
         return montarLinkDaPagina({
           extensao,
           paginaId,
           codigo: useCampaignStore.getState().campaign?.codigo ?? null,
-          base: opcoes?.rede ? lanUrl : url,
+          base,
           busca: opcoes?.busca,
         });
       },

@@ -32,6 +32,23 @@ const PREFIXO: &str = "campanha/";
 /// e uma grade, e passando disso ela vira uma lista que ninguem le.
 pub const MAX_EFEITOS: usize = 32;
 
+/// Quantos MOLDES de efeito o Compendio guarda. Folgado: e biblioteca, e nao o
+/// seletor -- o teto de 32 e dos que estao em jogo. Ver `compendio`.
+pub const MAX_MOLDES: usize = 500;
+
+/// O efeito e um MOLDE do Compendio, e nao um efeito em jogo: guardado para
+/// usar depois, fora do seletor da area e do cardapio, e fora do que vai a
+/// mesa. A marca mora no proprio efeito (`"compendio": true`), no mesmo
+/// arquivo, e por isso o editor de sempre o edita. Ver `compendio`.
+pub fn eh_molde(efeito: &Value) -> bool {
+    efeito.get("compendio").and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Quantos estao em jogo: os que contam para o teto de `MAX_EFEITOS`.
+pub(crate) fn em_jogo(efeitos: &[Value]) -> usize {
+    efeitos.iter().filter(|efeito| !eh_molde(efeito)).count()
+}
+
 /// O teto de um efeito gravado, em bytes. Folgado para todas as camadas com
 /// texto de sobra; o que passa disso nao e efeito, e o arquivo viaja no quadro
 /// declarativo para cada aparelho da mesa.
@@ -66,7 +83,7 @@ pub fn load(vault: &Vault) -> AppResult<Vec<Value>> {
         .collect())
 }
 
-fn save(vault: &Vault, efeitos: &[Value]) -> AppResult<()> {
+pub(crate) fn save(vault: &Vault, efeitos: &[Value]) -> AppResult<()> {
     write_json(&path(vault), &efeitos)
 }
 
@@ -82,7 +99,7 @@ fn erro(causa: String) -> AppError {
 pub fn criar(vault: &Vault) -> AppResult<Value> {
     let mut efeitos = load(vault)?;
 
-    if efeitos.len() >= MAX_EFEITOS {
+    if em_jogo(&efeitos) >= MAX_EFEITOS {
         return Err(erro(format!("a campanha ja tem {MAX_EFEITOS} efeitos")));
     }
 
@@ -106,6 +123,166 @@ pub fn criar(vault: &Vault) -> AppResult<Value> {
     save(vault, &efeitos)?;
 
     Ok(novo)
+}
+
+/// Um id `campanha/…` que nao esta nem na campanha nem entre os que estao
+/// para entrar.
+pub fn id_novo(existentes: &[Value], novos: &[Value]) -> String {
+    loop {
+        let sorteio = uuid::Uuid::new_v4().simple().to_string();
+        let candidato = format!("{PREFIXO}{}", &sorteio[..8]);
+        let usado = existentes
+            .iter()
+            .chain(novos)
+            .any(|efeito| efeito.get("id").and_then(Value::as_str) == Some(&candidato));
+        if !usado {
+            return candidato;
+        }
+    }
+}
+
+/// Acrescenta efeitos prontos, vindos de um pacote, com os ids que quem
+/// importou ja sorteou (`id_novo`). Os que nao cabem no teto, nao tem id da
+/// campanha ou passam do tamanho ficam de fora: quem chamou ja contou as vagas.
+pub fn adotar(vault: &Vault, novos: Vec<Value>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut efeitos = load(vault)?;
+
+    for efeito in novos {
+        let Value::Object(mut campos) = efeito else {
+            continue;
+        };
+        campos.remove("origem");
+        let id_ok = campos
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(id_da_campanha);
+        let efeito = Value::Object(campos);
+        let bytes = serde_json::to_vec(&efeito)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+
+        // Cada um no teto do seu lugar: o molde que chega num pacote nao
+        // ocupa vaga dos em jogo, nem e recusado por ela.
+        let cabe = if eh_molde(&efeito) {
+            efeitos.len() - em_jogo(&efeitos) < MAX_MOLDES
+        } else {
+            em_jogo(&efeitos) < MAX_EFEITOS
+        };
+        if id_ok && bytes <= MAX_BYTES && cabe {
+            efeitos.push(efeito);
+        }
+    }
+
+    save(vault, &efeitos)
+}
+
+/// Um molde de efeito em branco, no Compendio. Fora do teto dos em jogo.
+pub fn criar_molde(vault: &Vault) -> AppResult<Value> {
+    let mut efeitos = load(vault)?;
+
+    if efeitos.len() - em_jogo(&efeitos) >= MAX_MOLDES {
+        return Err(erro(format!("o Compendio ja tem {MAX_MOLDES} efeitos")));
+    }
+
+    let mut novo = Map::new();
+    novo.insert("id".into(), Value::String(id_novo(&efeitos, &[])));
+    novo.insert("titulo".into(), Value::String("Efeito novo".into()));
+    novo.insert("compendio".into(), Value::Bool(true));
+    let novo = Value::Object(novo);
+
+    efeitos.push(novo.clone());
+    save(vault, &efeitos)?;
+
+    Ok(novo)
+}
+
+/// Poe o efeito em jogo (`false`) ou o guarda no Compendio (`true`). Entrar em
+/// jogo respeita o teto: o seletor e uma grade, e trinta e dois e o que cabe.
+pub fn marcar(vault: &Vault, id: &str, compendio: bool) -> AppResult<Value> {
+    let mut efeitos = load(vault)?;
+    let lugar = efeitos
+        .iter()
+        .position(|efeito| efeito.get("id").and_then(Value::as_str) == Some(id))
+        .ok_or_else(|| erro(format!("a campanha nao tem o efeito {id}")))?;
+
+    if eh_molde(&efeitos[lugar]) == compendio {
+        return Ok(efeitos[lugar].clone());
+    }
+    if !compendio && em_jogo(&efeitos) >= MAX_EFEITOS {
+        return Err(AppError::Recusado(crate::texto!(
+            "A campanha já tem {} efeitos em jogo. Guarde um no Compêndio antes.",
+            "The campaign already has {} effects in play. Put one in the Compendium first.",
+            MAX_EFEITOS
+        )));
+    }
+
+    if let Value::Object(campos) = &mut efeitos[lugar] {
+        if compendio {
+            campos.insert("compendio".into(), Value::Bool(true));
+        } else {
+            campos.remove("compendio");
+        }
+    }
+    let marcado = efeitos[lugar].clone();
+    save(vault, &efeitos)?;
+
+    Ok(marcado)
+}
+
+/// Acrescenta moldes prontos -- vindos de outra campanha, do ATO20 ou das
+/// sugestoes --, com o id que quem chamou ja sorteou (`id_novo`). Sempre como
+/// molde. O que nao tem id da campanha, passa do tamanho ou do teto fica de
+/// fora, como em `adotar`.
+pub fn acrescentar_moldes(vault: &Vault, novos: Vec<Value>) -> AppResult<()> {
+    if novos.is_empty() {
+        return Ok(());
+    }
+
+    let mut efeitos = load(vault)?;
+
+    for efeito in novos {
+        let Value::Object(mut campos) = efeito else {
+            continue;
+        };
+        campos.remove("origem");
+        campos.insert("compendio".into(), Value::Bool(true));
+        let id_ok = campos
+            .get("id")
+            .and_then(Value::as_str)
+            .is_some_and(id_da_campanha);
+        let efeito = Value::Object(campos);
+        let bytes = serde_json::to_vec(&efeito).map(|v| v.len()).unwrap_or(usize::MAX);
+
+        if id_ok && bytes <= MAX_BYTES && efeitos.len() - em_jogo(&efeitos) < MAX_MOLDES {
+            efeitos.push(efeito);
+        }
+    }
+
+    save(vault, &efeitos)
+}
+
+/// Troca as tags do efeito. Quem normaliza e quem chama -- ver
+/// `compendio::definir_tags`.
+pub fn set_tags(vault: &Vault, id: &str, tags: Vec<String>) -> AppResult<()> {
+    let mut efeitos = load(vault)?;
+    let efeito = efeitos
+        .iter_mut()
+        .find(|efeito| efeito.get("id").and_then(Value::as_str) == Some(id))
+        .ok_or_else(|| erro(format!("a campanha nao tem o efeito {id}")))?;
+
+    if let Value::Object(campos) = efeito {
+        if tags.is_empty() {
+            campos.remove("tags");
+        } else {
+            campos.insert("tags".into(), serde_json::json!(tags));
+        }
+    }
+
+    save(vault, &efeitos)
 }
 
 /// Grava o efeito inteiro, como o editor o tem, no lugar do que tinha o mesmo
@@ -144,6 +321,29 @@ pub fn salvar(vault: &Vault, efeito: Value) -> AppResult<Value> {
     // tem sempre a do acervo. Gravada, ela poderia apontar para outro lugar.
     campos.remove("origem");
 
+    let mut efeitos = load(vault)?;
+    let lugar = efeitos
+        .iter()
+        .position(|atual| atual.get("id").and_then(Value::as_str) == Some(id.as_str()))
+        .ok_or_else(|| erro(format!("a campanha nao tem o efeito {id}")))?;
+
+    // A marca do Compendio e SEMPRE a do disco: quem a muda e `marcar`, que
+    // confere o teto. O editor grava um instante depois do ultimo toque, e a
+    // gravacao atrasada de um molde que acabou de entrar em jogo o devolveria
+    // ao Compendio -- ou, ao contrario, poria em jogo o trigesimo terceiro.
+    campos.remove("compendio");
+    if let Some(marca) = efeitos[lugar].get("compendio") {
+        campos.insert("compendio".into(), marca.clone());
+    }
+
+    // As tags ficam como estavam quando o editor manda o efeito sem elas:
+    // "partir de um efeito pronto" troca o efeito INTEIRO pela copia do pronto.
+    if !campos.contains_key("tags") {
+        if let Some(tags) = efeitos[lugar].get("tags") {
+            campos.insert("tags".into(), tags.clone());
+        }
+    }
+
     let efeito = Value::Object(campos);
     let bytes = serde_json::to_vec(&efeito).map(|v| v.len()).unwrap_or(usize::MAX);
     if bytes > MAX_BYTES {
@@ -153,12 +353,6 @@ pub fn salvar(vault: &Vault, efeito: Value) -> AppResult<Value> {
             MAX_BYTES / 1024
         )));
     }
-
-    let mut efeitos = load(vault)?;
-    let lugar = efeitos
-        .iter()
-        .position(|atual| atual.get("id").and_then(Value::as_str) == Some(id.as_str()))
-        .ok_or_else(|| erro(format!("a campanha nao tem o efeito {id}")))?;
 
     efeitos[lugar] = efeito.clone();
     save(vault, &efeitos)?;

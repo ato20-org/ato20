@@ -95,11 +95,13 @@ export type SessionAudio = {
   /** Os nove slots do numpad. Sempre nove posições. Ver `Pad`. */
   pads: Pad[];
   /**
-   * Os sons soltos, sem tecla. Ver `Macro`.
+   * Os sons soltos, cada um na tecla que o mestre escolher, ou em nenhuma. Ver
+   * `Macro`.
    *
    * Lista e não nove posições fixas: ela não desenha buraco nenhum, e o teto de
    * nove existia por causa das teclas do numpad — que é justamente o que esta
-   * lista não usa.
+   * lista não usa. A tecla de cada uma viaja dentro dela, e por isso a leitura
+   * não precisa de nada novo: campanha anterior às teclas só não traz o campo.
    */
   macros: Macro[];
 };

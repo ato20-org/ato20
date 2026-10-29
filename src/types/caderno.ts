@@ -16,4 +16,12 @@ export type Nota = {
   tags: string[];
   criadoEm: number;
   atualizadoEm: number;
+  /**
+   * O personagem de cujo caderno a nota é. Cada personagem tem o seu: quem
+   * joga com dois não mistura o que o Corvo sabe com o que a Mira sabe.
+   *
+   * Ausente só na nota antiga de quem ainda não recebeu personagem; o primeiro
+   * que ele receber a leva. Ver `vault::players::character_notes`.
+   */
+  personagemId?: string;
 };

@@ -14,8 +14,17 @@ import {
   assetIdDoArrasto,
   tamanhoDoArrasto,
   useTokenDragStore,
+  vaiNaPeca,
 } from "@/lib/store/use-token-drag-store";
-import { promoverImagemDoItem } from "@/lib/vault/inventory";
+import { avisarDoItemTrazido, avisarDoTrazido } from "@/lib/mestre/bestiario";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
+import { itensMudaram } from "@/lib/store/use-itens-store";
+import { itemEmJogo, porEmJogo } from "@/lib/vault/compendio";
+import { porEmJogoDoBestiario } from "@/lib/vault/bestiario";
+import { itemDoPluginEmJogo } from "@/lib/vault/itens-do-plugin";
+import { cn } from "@/lib/utils";
+import { promoverImagemDoItem } from "@/lib/vault/itens";
 import type { SceneGrid } from "@/types/scene";
 
 /**
@@ -66,7 +75,12 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
     arrasto ? assetIdDoArrasto(arrasto.fonte) : undefined,
   );
   const url =
-    arrasto?.fonte.tipo === "item" ? arrasto.fonte.url : doAcervo;
+    arrasto?.fonte.tipo === "item" ||
+    arrasto?.fonte.tipo === "molde-item" ||
+    arrasto?.fonte.tipo === "molde-plugin" ||
+    arrasto?.fonte.tipo === "item-plugin"
+      ? arrasto.fonte.url
+      : doAcervo;
 
   const addItem = useSceneStore((state) => state.addItem);
   const select = useSelectionStore((state) => state.select);
@@ -91,20 +105,54 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       const { largura, altura } = tamanhoDoArrasto(solto);
       const centro = toScene(solto.x, solto.y);
 
-      const por = (assetId: string, personagemId?: string) => {
+      const por = (
+        assetId: string,
+        dono?: { personagemId?: string; itemId?: string },
+      ) => {
         // Já selecionado, como no `+` do acervo: o gesto seguinte é quase
         // sempre ajustar o que acabou de entrar.
         select([
           addItem(sceneId, {
             assetId,
-            personagemId,
+            personagemId: dono?.personagemId,
+            ...(dono?.itemId ? { itemId: dono.itemId } : {}),
             ...boxAround(centro, largura, altura),
           }),
         ]);
       };
 
-      // Mapa não entra no palco; só vira menção na nota. `aceita` já barra.
-      if (solto.fonte.tipo === "cena") return;
+      // Mapa não entra no palco; só vira menção na nota. A condição vai numa
+      // peça, e não no chão; o disparo e o ambiente só vão a uma pasta.
+      // `aceita` já barra os quatro.
+      if (
+        solto.fonte.tipo === "cena" ||
+        solto.fonte.tipo === "disparo" ||
+        solto.fonte.tipo === "ambiente" ||
+        vaiNaPeca(solto.fonte)
+      )
+        return;
+
+      // O efeito de área do Compêndio vira uma área REDONDA de efeito, como a
+      // que a ferramenta desenha: só o mestre vê até ele a pôr na mesa. O efeito
+      // vai ao jogo antes -- a cópia do molde, ou o trazido do ATO20 --, e com
+      // os trinta e dois cheios a área não nasce: o store já disse por quê.
+      if (solto.fonte.tipo === "area") {
+        const { efeitoId, doAto20 } = solto.fonte;
+        const caixa = boxAround(centro, largura, altura);
+
+        void useEfeitosDaCampanhaStore
+          .getState()
+          .paraOJogo(efeitoId, doAto20)
+          .then((efeito) => {
+            if (!efeito) return;
+            const id = useSceneStore
+              .getState()
+              .addAreaDeEfeito(sceneId, { ...caixa, formato: "elipse", efeito });
+            useSelectionStore.getState().selectAreaDeEfeito(id);
+          });
+
+        return;
+      }
 
       // Nota: vira cartão de documento, centrado onde soltou. O tamanho é o
       // que a sombra mostrou, como o token.
@@ -123,18 +171,27 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       }
 
       if (solto.fonte.tipo === "item") {
-        // A imagem do item pode ser um anexo, que não tem id de acervo. O
-        // objeto de cena é GRAVADO e tem de resolver depois de reabrir o
-        // aplicativo, então ele precisa de um asset de verdade — e é aqui,
+        // A imagem do item pode ser a foto do jogador, que não tem id de
+        // acervo. A peça é GRAVADA e tem de resolver depois de reabrir o
+        // aplicativo, então ela precisa de um asset de verdade — e é aqui,
         // depois do gesto, que dá para esperar o disco.
         //
         // O tamanho NÃO vem do asset promovido, e sim do que a sombra mostrou:
         // o mestre acabou de escolhê-lo na roda, e trocá-lo agora pela medida
         // natural do arquivo desmentiria a prévia que ele estava olhando.
-        const { personagemId, itemId } = solto.fonte;
+        //
+        // A peça leva o `itemId`: é ele que faz dela uma peça de ITEM, com o
+        // gizmo e os botões dele, e não uma imagem solta. O item continua onde
+        // estava -- na mochila, no ponto --: pôr no mapa não tira de lá.
+        const { itemId } = solto.fonte;
 
-        void promoverImagemDoItem(personagemId, itemId).then(
-          (asset) => por(asset.id),
+        void promoverImagemDoItem(itemId).then(
+          (asset) => {
+            por(asset.id, { itemId });
+            // A promoção pode ter trocado a foto do jogador pelo asset, e o
+            // catálogo aberto precisa saber.
+            itensMudaram();
+          },
           (cause: unknown) =>
             toast.error(
               cause instanceof Error
@@ -146,21 +203,104 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
         return;
       }
 
+      if (solto.fonte.tipo === "molde") {
+        // O molde do Compêndio entra em jogo ANTES de virar peça: a peça
+        // aponta para o personagem, e o personagem é a cópia, não o molde. A
+        // imagem é a mesma -- a cópia divide a miniatura com o molde --, então
+        // a peça nasce com o que a sombra mostrou.
+        const { personagemId, assetId } = solto.fonte;
+
+        void porEmJogo(personagemId).then(
+          (novo) => {
+            por(assetId, { personagemId: novo.id });
+            useCharactersStore.getState().recarregar();
+          },
+          (cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+        );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "molde-plugin") {
+        // A ficha do plugin entra em jogo pelo molde que ela deixa na
+        // campanha, como o molde do mestre. A peça é a miniatura que a CÓPIA
+        // ganhou -- o arquivo da pasta do plugin ou a imagem baixada --, e sem
+        // ela o personagem entra em jogo sem peça, e o aviso diz por quê.
+        const { extensaoId, colecaoId, moldeId } = solto.fonte;
+
+        void porEmJogoDoBestiario({ extensaoId, colecaoId, moldeId }).then(
+          ({ trazido, personagem }) => {
+            if (personagem.miniatura) por(personagem.miniatura, { personagemId: personagem.id });
+            useCharactersStore.getState().recarregar();
+            avisarDoTrazido(trazido);
+          },
+          (cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+        );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "molde-item") {
+        // O molde entra no catálogo, e a cópia é que vira peça: a peça leva o
+        // `itemId`, e o molde não é item do jogo. Depois, a promoção da imagem,
+        // como no item comum -- a peça precisa de um asset de verdade.
+        const { itemId } = solto.fonte;
+
+        void itemEmJogo(itemId)
+          .then((novo) =>
+            promoverImagemDoItem(novo.id).then((asset) => {
+              por(asset.id, { itemId: novo.id });
+              itensMudaram();
+            }),
+          )
+          .catch((cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+          );
+
+        return;
+      }
+
+      if (solto.fonte.tipo === "item-plugin") {
+        // O item do plugin entra no catálogo pelo molde que ele deixa na
+        // campanha, como o molde de item do mestre, e a cópia vira peça.
+        const { extensaoId, colecaoId, itemId } = solto.fonte;
+
+        void itemDoPluginEmJogo({ extensaoId, colecaoId, itemId })
+          .then(({ trazido, item }) => {
+            avisarDoItemTrazido(trazido);
+            return promoverImagemDoItem(item.id).then((asset) => {
+              por(asset.id, { itemId: item.id });
+              itensMudaram();
+            });
+          })
+          .catch((cause: unknown) =>
+            toast.error(cause instanceof Error ? cause.message : t.fantasma.naoDeuMolde),
+          );
+
+        return;
+      }
+
       // Do acervo, do handout ou do ponto, o mesmo caminho: os dois últimos
       // guardam ids de acervo, e a imagem entra na mesa como qualquer outra.
       // Ela continua no handout, só esmaecida -- ver `HandoutMestre` --, e
       // continua anexada ao ponto.
       por(
         solto.fonte.assetId,
-        solto.fonte.tipo === "personagem" ? solto.fonte.personagemId : undefined,
+        solto.fonte.tipo === "personagem"
+          ? { personagemId: solto.fonte.personagemId }
+          : undefined,
       );
     });
   }, []);
 
-  if (!arrasto || arrasto.destino?.tipo !== "palco" || scale === 0) return null;
+  if (!arrasto || arrasto.destino?.tipo !== "palco" || arrasto.emOutraJanela || scale === 0)
+    return null;
 
   const { largura, altura } = tamanhoDoArrasto(arrasto);
   const caixa = boxAround(toScene(arrasto.x, arrasto.y), largura, altura);
+  const area = arrasto.fonte.tipo === "area" ? arrasto.fonte : null;
 
   return (
     <div
@@ -174,11 +314,21 @@ export function TokenFantasma({ sceneId, grid }: TokenFantasmaProps) {
       }}
     >
       <div
-        className="border-primary/80 absolute inset-0 border-dashed"
+        className={cn("border-primary/80 absolute inset-0 border-dashed", area && "rounded-full")}
         // Dividido pela escala como toda linha de interface desenhada dentro do
         // plano: em espessura fixa, o tracejado engrossaria junto com o zoom até
         // virar uma moldura que esconde o token.
-        style={{ borderWidth: 2 / scale }}
+        //
+        // A área é o círculo que vai nascer, na cor do efeito, e não uma caixa.
+        style={{
+          borderWidth: 2 / scale,
+          ...(area
+            ? {
+                borderColor: area.cor,
+                backgroundColor: `color-mix(in srgb, ${area.cor} 22%, transparent)`,
+              }
+            : {}),
+        }}
       />
 
       {arrasto.fonte.tipo === "nota" ? (

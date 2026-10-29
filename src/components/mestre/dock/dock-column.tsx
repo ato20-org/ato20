@@ -110,7 +110,7 @@ export function DockColumn({
             className="flex min-h-0 min-w-0 flex-col overflow-hidden"
             style={{ flex: `0 1 ${coluna.fracoes[indice] * 100}%` }}
           >
-            <DockGroup lado={lado} grupo={grupo} comRecolher={indice === 0} />
+            <DockGroup lado={lado} grupo={grupo} />
           </div>
 
           {/* Entre este e o próximo, nunca depois do último. */}

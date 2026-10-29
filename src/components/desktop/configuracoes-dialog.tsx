@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   Blocks,
+  Bot,
   Box,
   Keyboard,
   Minus,
   History,
+  Info,
   Moon,
   Palette,
   Plus,
@@ -17,6 +19,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { CatalogoDePlugins, DetalhesDoInstalado } from "@/components/desktop/catalogo-de-plugins";
+import { IconeDePlugin } from "@/components/desktop/icone-de-plugin";
 import { ListaDeConfiguracoes } from "@/components/desktop/lista-de-configuracoes";
 import { ChromeButton } from "@/components/desktop/window-chrome";
 import { Button } from "@/components/ui/button";
@@ -31,6 +35,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HistoricoDeVersoes } from "@/components/desktop/versoes-lista";
 import { useUpdaterEmbutido } from "@/hooks/use-updater-embutido";
 import { versaoAtual } from "@/lib/versoes";
@@ -38,8 +43,13 @@ import { atalhosPorGrupo, rotuloDoGrupo } from "@/lib/mestre/atalhos";
 import { t } from "@/lib/i18n/desktop";
 import { rico } from "@/lib/i18n/rico";
 import { SecaoIdioma } from "@/components/desktop/secao-idioma";
+import { SecaoMcp } from "@/components/desktop/secao-mcp";
+import { Sobre } from "@/components/desktop/sobre";
 import { type Extensao, tipoDaExtensao } from "@/lib/extensoes/manifesto";
+import { urlDaImagemDoEstilo } from "@/lib/extensoes/medidor-em-camadas";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
 import { useExtensoesStore } from "@/lib/store/use-extensoes-store";
+import { useTrackStore } from "@/lib/store/use-track-store";
 import {
   DEGRAUS_ZOOM,
   usePreferenciasStore,
@@ -48,8 +58,10 @@ import {
 /**
  * As seções, na ordem da barra lateral.
  *
- * Plugins por último de propósito: é a única que ainda não faz nada, e primeira
- * na lista ela seria a primeira impressão da tela.
+ * Plugins perto do fim de propósito: é a única que ainda não faz nada, e primeira
+ * na lista ela seria a primeira impressão da tela. Sobre no fim, que é onde todo
+ * aplicativo a guarda: ninguém abre as Configurações por ela, e quem a procura
+ * olha lá embaixo.
  */
 const SECOES = [
   { chave: "geral", titulo: t.configuracoes.secoes.geral, icone: SlidersHorizontal },
@@ -57,6 +69,8 @@ const SECOES = [
   { chave: "versao", titulo: t.configuracoes.secoes.versao, icone: History },
   { chave: "teclado", titulo: t.configuracoes.secoes.teclado, icone: Keyboard },
   { chave: "plugins", titulo: t.configuracoes.secoes.plugins, icone: Puzzle },
+  { chave: "mcp", titulo: t.configuracoes.secoes.mcp, icone: Bot },
+  { chave: "sobre", titulo: t.configuracoes.secoes.sobre, icone: Info },
 ] as const;
 
 type Chave = (typeof SECOES)[number]["chave"];
@@ -152,6 +166,8 @@ export function ConfiguracoesDialog() {
               {secao === "versao" ? <PainelVersao /> : null}
               {secao === "teclado" ? <PainelTeclado /> : null}
               {secao === "plugins" ? <PainelPlugins /> : null}
+              {secao === "mcp" ? <PainelMcp /> : null}
+              {secao === "sobre" ? <PainelSobre /> : null}
             </div>
           </ScrollArea>
         </div>
@@ -369,11 +385,33 @@ function PainelVersao() {
   );
 }
 
+function PainelMcp() {
+  return (
+    <>
+      <TituloSecao ajuda={t.configuracoes.mcp.ajuda}>{t.configuracoes.secoes.mcp}</TituloSecao>
+      <SecaoMcp />
+    </>
+  );
+}
+
+function PainelSobre() {
+  return (
+    <>
+      <TituloSecao>{t.configuracoes.secoes.sobre}</TituloSecao>
+      <Sobre />
+    </>
+  );
+}
+
 function PainelTeclado() {
   // A lista passou a depender dos plugins habilitados, e `atalhosPorGrupo` lê o
   // store por fora do React. Sem esta assinatura, ligar uma extensão com a tela
   // aberta não acrescentaria os atalhos dela aqui.
   useExtensoesStore((state) => state.extensoes);
+  // Pelo mesmo motivo, as teclas das macros e o nome de cada som: a linha
+  // "Acionar Trovão" é desenhada a partir dos dois.
+  useTrackStore((state) => state.macros);
+  useAssetsStore((state) => state.audio.assets);
 
   const grupos = atalhosPorGrupo();
 
@@ -420,14 +458,13 @@ function PainelTeclado() {
  * A lista é lida ao ABRIR a seção, e não uma vez na montagem do diálogo:
  * instalar uma extensão é copiar uma pasta, e quem faz isso por fora do
  * aplicativo espera achá-la aqui sem reabrir a janela.
+ *
+ * Instalados primeiro, e o Catálogo na aba ao lado: quem abre a seção quase
+ * sempre vem ligar ou desligar o que já tem, e o catálogo é o único pedaço da
+ * tela que fala com a rede. Ver `CatalogoDePlugins`.
  */
 function PainelPlugins() {
-  const extensoes = useExtensoesStore((state) => state.extensoes);
-  const carregada = useExtensoesStore((state) => state.carregada);
-  const ocupada = useExtensoesStore((state) => state.ocupada);
-  const erro = useExtensoesStore((state) => state.erro);
   const carregar = useExtensoesStore((state) => state.carregar);
-  const importar = useExtensoesStore((state) => state.importar);
 
   useEffect(() => {
     void carregar();
@@ -439,6 +476,38 @@ function PainelPlugins() {
         {t.configuracoes.secoes.plugins}
       </TituloSecao>
 
+      <Tabs defaultValue="instalados" className="gap-3">
+        <TabsList variant="line" className="h-7 justify-start gap-2">
+          <TabsTrigger value="instalados" className="flex-none text-xs">
+            {t.configuracoes.plugins.abaInstalados}
+          </TabsTrigger>
+          <TabsTrigger value="catalogo" className="flex-none text-xs">
+            {t.configuracoes.plugins.abaCatalogo}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="instalados" className="flex flex-col gap-4">
+          <Instalados />
+        </TabsContent>
+
+        <TabsContent value="catalogo">
+          <CatalogoDePlugins />
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}
+
+/** O que está nesta máquina: importar, e a lista separada por natureza. */
+function Instalados() {
+  const extensoes = useExtensoesStore((state) => state.extensoes);
+  const carregada = useExtensoesStore((state) => state.carregada);
+  const ocupada = useExtensoesStore((state) => state.ocupada);
+  const erro = useExtensoesStore((state) => state.erro);
+  const importar = useExtensoesStore((state) => state.importar);
+
+  return (
+    <>
       <Button
         variant="outline"
         size="sm"
@@ -576,6 +645,14 @@ function Grupo({
 function LinhaExtensao({ extensao }: { extensao: Extensao }) {
   const habilitar = useExtensoesStore((state) => state.habilitar);
   const remover = useExtensoesStore((state) => state.remover);
+  const [aberto, setAberto] = useState(false);
+
+  // Da pasta do plugin, e não do catálogo: esta aba não fala com a rede, e o
+  // plugin importado à mão também tem o dele. O endereço é o das imagens de
+  // estilo, que já sabe ir pelo daemon no desenvolvimento.
+  const icone = extensao.icone
+    ? urlDaImagemDoEstilo(extensao.id, extensao.icone, extensao.versao)
+    : null;
 
   // A etiqueta só para a HÍBRIDA: uma extensão de código que também traz CSS.
   // Nos outros casos o cabeçalho do grupo já disse o que ela é, e repetir na
@@ -591,26 +668,43 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
         aria-label={t.configuracoes.plugins.habilitar(extensao.nome)}
       />
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm">{extensao.nome}</p>
-        <p className="text-muted-foreground truncate text-xs">
-          {/* A versão sempre, o autor quando há. O `manifest.json` pode vir
+      {/* O ícone e o nome abrem a página do plugin, como o card do Catálogo.
+          O interruptor e a lixeira ficam de fora: são os gestos da linha, e um
+          clique neles não pode abrir janela. */}
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        title={t.configuracoes.plugins.abrirPagina(extensao.nome)}
+        onClick={() => setAberto(true)}
+        className="hover:bg-muted/50 focus-visible:ring-ring/50 -my-1 flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1 text-left transition-colors outline-none focus-visible:ring-3"
+      >
+        <IconeDePlugin
+          id={extensao.id}
+          nome={extensao.nome}
+          url={icone}
+          tamanho="pequeno"
+        />
+
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm">{extensao.nome}</p>
+          <p className="text-muted-foreground truncate text-xs">
+            {/* A versão sempre, o autor quando há. O `manifest.json` pode vir
               sem autor, e "por undefined" seria pior que só a versão. */}
-          {extensao.versao}
-          {extensao.autor ? ` · ${extensao.autor}` : ""}
-        </p>
+            {extensao.versao}
+            {extensao.autor ? ` · ${extensao.autor}` : ""}
+          </p>
+        </div>
 
-      </div>
-
-      {tambemTema ? (
-        <span
-          className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
-          title={t.configuracoes.plugins.tambemTema}
-        >
-          <Palette className="size-3" aria-hidden />
-          {t.configuracoes.plugins.tema}
-        </span>
-      ) : null}
+        {tambemTema ? (
+          <span
+            className="text-muted-foreground flex shrink-0 items-center gap-1 text-[10px] uppercase"
+            title={t.configuracoes.plugins.tambemTema}
+          >
+            <Palette className="size-3" aria-hidden />
+            {t.configuracoes.plugins.tema}
+          </span>
+        ) : null}
+      </button>
 
       <Button
         variant="ghost"
@@ -621,6 +715,20 @@ function LinhaExtensao({ extensao }: { extensao: Extensao }) {
       >
         <Trash2 className="size-3.5" />
       </Button>
+
+      <DetalhesDoInstalado
+        extensao={extensao}
+        icone={
+          <IconeDePlugin
+            id={extensao.id}
+            nome={extensao.nome}
+            url={icone}
+            tamanho="grande"
+          />
+        }
+        aberto={aberto}
+        aoMudar={setAberto}
+      />
     </li>
   );
 }

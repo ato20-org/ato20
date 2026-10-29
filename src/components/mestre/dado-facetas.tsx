@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 import { corDaFace, corDaTinta, type FaceDesenhada } from "@/lib/geometry/dado";
 import type { TipoDado } from "@/types/dado";
 
@@ -31,8 +33,32 @@ export function DadoFacetas({
   raio: number;
   nitidez?: number;
 }) {
+  // Vários dados dividem a mesma página; o id do recorte tem de ser único por
+  // dado para um não recortar o outro. Sem os `:` que o `useId` põe: valem em
+  // `url(#...)`, mas não são XML-ID legais, e o WebKitGTK é exigente.
+  const recorte = `recorte-${useId().replace(/:/g, "")}`;
+  const temNumeros = desenho.some((face) => face.numeros.length > 0);
+
   return (
     <>
+      {/* A silhueta do dado é a UNIÃO das faces visíveis — que num convexo, com
+          o culling certo, ladrilham o contorno sem sobra. Recortar os números
+          por ela resolve o algarismo (e o sublinhado do 6/9) que escapava para
+          FORA do dado, para o vazio ao lado — era o pior no d10, cuja pipa tem o
+          centro do número longe do centro do círculo inscrito.
+
+          Pela silhueta e não por cada face: o número ainda PODE sangrar para a
+          face vizinha quando encosta na aresta — que continua sendo o dado, e é
+          o que o deixa gravado em vez de cortado na borda —, só não escapa para
+          fora da silhueta. Uma clipPath por dado, não uma por face. */}
+      {temNumeros && (
+        <clipPath id={recorte}>
+          {desenho.map((face) => (
+            <polygon key={face.chave} points={face.pontos} />
+          ))}
+        </clipPath>
+      )}
+
       {desenho.map((face) => (
         <polygon
           key={face.chave}
@@ -54,8 +80,14 @@ export function DadoFacetas({
           A opacidade num grupo só, e não em cada `<text>`: são até dez por
           dado, e são eles o gasto dominante da animação — um atributo por
           quadro em vez de dez. Omitida quando é um, para não pôr atributo onde
-          ele não muda nada. */}
-      <g opacity={nitidez < 1 ? nitidez : undefined}>
+          ele não muda nada.
+
+          O recorte no MESMO grupo, pelo mesmo motivo: um atributo em vez de um
+          por número. */}
+      <g
+        opacity={nitidez < 1 ? nitidez : undefined}
+        clipPath={temNumeros ? `url(#${recorte})` : undefined}
+      >
         {desenho.map((face) =>
           face.numeros.map((numero, i) => (
             <text
@@ -82,4 +114,43 @@ export function DadoFacetas({
       </g>
     </>
   );
+}
+
+/**
+ * O mesmo dado do `DadoFacetas`, PARADO, em texto de SVG -- para uma `<img>`.
+ *
+ * Existe para a ficha, que desenha um dado por perícia rolável, até cinco por
+ * termo: em SVG vivo cada d20 é uma vintena de nós, e cem perícias com três
+ * dados passavam de oito mil nós na janela. Na `<img>` é um nó, e o motor
+ * rasteriza a imagem uma vez para todas as cópias. Ver `DadoEmImagem`.
+ *
+ * Os atributos são os do componente acima, um a um: mudar um lá é mudar aqui.
+ * A fonte é a genérica porque a imagem não enxerga as da página; no tamanho
+ * da ficha o número é um risco de dois pixels, e nenhuma fonte se lê ali.
+ */
+export function svgDasFacetas(tipo: TipoDado, desenho: FaceDesenhada[], raio: number, lado: number): string {
+  const faces = desenho
+    .map(
+      (face) =>
+        `<polygon points="${face.pontos}" fill="${corDaFace(tipo.hex, face.luz)}" stroke="${corDaFace(tipo.hex, face.luz * 0.35)}" stroke-width="${raio * 0.018}" stroke-linejoin="round"/>`,
+    )
+    .join("");
+
+  const numeros = desenho
+    .flatMap((face) =>
+      face.numeros.map(
+        (numero) =>
+          `<text transform="matrix(${numero.matriz.join(" ")})" font-size="1" fill="${corDaTinta(tipo.tinta, face.luz)}" text-anchor="middle" dominant-baseline="central" font-weight="700"${numero.sublinhado ? ' text-decoration="underline"' : ""}>${numero.texto}</text>`,
+      ),
+    )
+    .join("");
+
+  // O mesmo recorte pela silhueta do `DadoFacetas`. Id fixo porque cada `<img>`
+  // é um documento isolado: dois dados na mesma ficha não colidem.
+  const temNumeros = desenho.some((face) => face.numeros.length > 0);
+  const recorte = temNumeros
+    ? `<clipPath id="recorte">${desenho.map((face) => `<polygon points="${face.pontos}"/>`).join("")}</clipPath>`
+    : "";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${lado}" height="${lado}" viewBox="0 0 ${lado} ${lado}" font-family="sans-serif">${recorte}${faces}<g${temNumeros ? ' clip-path="url(#recorte)"' : ""}>${numeros}</g></svg>`;
 }

@@ -43,6 +43,7 @@ export function countAssetUsage(
   const inScenes = scenes.filter(
     (scene) =>
       scene.backgroundAssetId === assetId ||
+      scene.ceuAssetId === assetId ||
       scene.items.some((item) => item.assetId === assetId),
   ).length;
 
@@ -80,6 +81,7 @@ export function collectUsedAssetIds(
 
   for (const scene of scenes) {
     if (scene.backgroundAssetId) used.add(scene.backgroundAssetId);
+    if (scene.ceuAssetId) used.add(scene.ceuAssetId);
     for (const item of scene.items) used.add(item.assetId);
   }
 

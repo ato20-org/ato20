@@ -154,10 +154,11 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
       // Com a cor, o fundo e a ênfase: ver `semIdDoTexto`.
       textos: textos.map(semIdDoTexto),
       postits: postits.map(semIdDoPostit),
-      tracos: tracos.map(({ pontos, cor, espessura }) => ({
+      tracos: tracos.map(({ pontos, cor, espessura, opacidade }) => ({
         pontos,
         cor,
         espessura,
+        ...(opacidade !== undefined ? { opacidade } : {}),
       })),
       drafts: itens.map(
         ({
@@ -170,10 +171,14 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           locked,
           flipX,
           flipY,
+          espelharPeloOlhar,
           opacity,
           semSombra,
           sombra,
+          itemId,
         }) => ({
+          // O item da campanha vem junto, pela razão de `offsetDraft`.
+          ...(itemId ? { itemId } : {}),
           assetId,
           x,
           y,
@@ -183,6 +188,7 @@ export const useClipboardStore = create<ClipboardStore>((set) => ({
           locked,
           flipX,
           flipY,
+          espelharPeloOlhar,
           opacity,
           semSombra,
           sombra,

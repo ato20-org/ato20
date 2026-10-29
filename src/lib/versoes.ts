@@ -71,6 +71,897 @@ export type Versao = {
  */
 export const VERSOES: Versao[] = [
   {
+    versao: "1.11.0",
+    data: "2026-10-26",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A janela Histórico: tudo o que aconteceu na campanha, sessão por sessão",
+          en: "The History window: everything that happened in the campaign, session by session",
+        },
+        detalhe: {
+          pt: "Ela guarda, com a hora, a cena que foi ao ar, os combates e as rodadas, a vida e as condições que mudaram, os itens dados, tirados ou postos no mapa, os efeitos disparados e o que a mesa viu, com o chat e as rolagens no meio. As sessões antigas ficam fechadas mostrando só os marcos, que você escreve no pé da janela e edita no próprio lugar. Tem busca e filtro por tipo e por personagem, e só você vê. Névoa, porta, item no mapa e efeito só contam na cena que está no ar.",
+          en: "With the time, it keeps the scene that went On air, fights and rounds, health and conditions that changed, items given, taken or placed on the map, fired effects and what the table saw, with the chat and rolls in between. Older sessions stay closed showing only the milestones, which you write at the bottom of the window and edit in place. It has search and filters by type and by character, and only you see it. Fog, doors, items on the map and effects only count in the scene that is On air.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Plugins trazem monstros, itens e rituais prontos para o Compêndio",
+          en: "Plugins bring ready-made monsters, items and rituals to the Compendium",
+        },
+        detalhe: {
+          pt: "Um plugin de sistema, como o de Ordem Paranormal, pode trazer fichas prontas para o Bestiário, itens prontos (armas, munição, proteção, o que cura) e abas próprias, como a de Rituais. Cada coleção aparece como uma pasta com a cor e o emblema do plugin. A ficha e o item do plugin abrem só para ler: Trazer para a campanha copia para o Compêndio, e soltar o card no mapa põe em jogo. O verbete de uma aba, como um ritual, vai para a ficha de um personagem pelo Dar a. A ficha do bestiário pode vir com mais de uma aparência, trocada no submenu Aparências.",
+          en: "A game system plugin, like the Ordem Paranormal one, can bring ready-made sheets to the Bestiary, ready-made items (weapons, ammo, protection, healing) and tabs of its own, like Rituals. Each collection shows up as a folder with the plugin's color and emblem. Plugin sheets and items open read-only: Bring to the campaign copies them into the Compendium, and dropping the card on the map puts it in play. An entry from a plugin tab, like a ritual, goes into a character's sheet with Give to. A bestiary sheet can come with more than one appearance, switched in the Appearances submenu.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As contas entre chaves leem a ficha: {1d20+FOR}, {AGId20>+5}, {1d20+@Luta}",
+          en: "Rolls in braces read the sheet: {1d20+STR}, {AGId20>+5}, {1d20+@Fight}",
+        },
+        detalhe: {
+          pt: "A sigla de um atributo da ficha vale o número dele na hora de rolar, somada ou como quantidade de dados, e com @ a conta lê também um detalhe de número, como Luta. O saquinho e o chat dizem quanto cada um valia naquela rolagem. Um atributo também pode ser um dado, como a AGI d8: o desenho rola, e o texto se edita no próprio círculo, inclusive com conta, como d4+20-@NEX.",
+          en: "An attribute's abbreviation from the sheet counts as its number when rolling, added in or as the number of dice, and with @ the roll also reads a number detail, like Fight. The Dice bag and the chat show what each one was worth on that roll. An attribute can also be a die, like an AGI d8: the drawing rolls, and the text is edited right in the circle, formulas included, like d4+20-@NEX.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "No celular, a conta no texto de um detalhe vira o botão de rolar",
+          en: "On the phone, a roll written in a detail's text becomes a roll button",
+        },
+        detalhe: {
+          pt: "\"Soco {1d4}\" mostra o d4 no lugar das chaves, e o toque rola. Na busca do celular, o que rola ganha o botão rolar, e tocar no resto leva até o detalhe na ficha.",
+          en: "\"Punch {1d4}\" shows the d4 in place of the braces, and a tap rolls it. In the phone's search, results that roll get a roll button, and tapping the rest takes you to the detail on the sheet.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "{9m} e {3°} no texto da ficha põem a régua no mapa",
+          en: "{9m} and {3°} in a sheet's text place the ruler on the map",
+        },
+        detalhe: {
+          pt: "Como o {1d20} rola, {9m} cria uma régua reta de 9 metros e {3°} um círculo de 3 metros de raio, saindo do token do dono da ficha. A régua selecionada ganha os botões de forma, de trava e de apagar: travada, a ponta gira sem mudar o tamanho. A forma e a cor ficam no painel do canto de baixo.",
+          en: "Just as {1d20} rolls, {9m} creates a 9-meter straight ruler and {3°} a circle with a 3-meter radius, starting from the token of the sheet's owner. A selected ruler gets shape, lock and delete buttons: locked, the tip turns without changing the size. Shape and color are in the panel at the bottom corner.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O olho no token mostra o que ele vê",
+          en: "The eye on a token shows what it sees",
+        },
+        detalhe: {
+          pt: "Um olho no gizmo do token cobre o que as paredes e as portas escondem dele, com o escuro do mapa como a mesa vê. Só você vê, e vale enquanto o token está selecionado.",
+          en: "An eye on the token's gizmo covers whatever walls and doors hide from it, with the map's darkness as the table sees it. Only you see this, and it lasts while the token is selected.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Cada som das macros pode ganhar uma tecla",
+          en: "Each sound in Macros can get a key",
+        },
+        detalhe: {
+          pt: "No painel de som, em Pads, Macros, clique no selo da linha e aperte a combinação: letras, números e F1 a F12, com Ctrl, Alt e Shift. A tecla que já é de um atalho é recusada com o nome do dono, e a nova aparece em Configurações, Teclado.",
+          en: "In the sound panel, under Pads, Macros, click the line's badge and press the combination: letters, numbers and F1 to F12, with Ctrl, Alt and Shift. A key already taken by a shortcut is refused with the owner's name, and the new one shows up in Settings, Keyboard.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "No 2.5D, o item largado na mesa flutua e brilha",
+          en: "In 2.5D, an item dropped on the table floats and glints",
+        },
+        detalhe: {
+          pt: "O item da campanha posto em pé no mapa balança no ar e lampeja de tempos em tempos, para o grupo achar o que dá para apanhar. Na sua tela só o selecionado anima, e quem pediu menos movimento no sistema vê o item parado no ar.",
+          en: "A campaign item standing on the map bobs in the air and glints every few seconds, so the party finds what can be picked up. On your screen only the selected one animates, and anyone who asked the system for reduced motion sees the item still in the air.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Arquivos: apagar uma pasta com tudo o que há dentro",
+          en: "Files: delete a folder with everything in it",
+        },
+        detalhe: {
+          pt: "Apagar pasta, ao lado de Desfazer pasta, apaga os quadros, as notas e os arquivos dela e das subpastas, depois de dizer o que vai junto. O arquivo usado num mapa que fica não se apaga: sobe para a pasta de cima.",
+          en: "Delete folder, next to Dissolve folder, deletes its boards, notes and files, subfolders included, after telling you what goes with it. A file used by a map that stays isn't deleted: it moves up to the parent folder.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas de Rolagens e Chat não abrem mais sozinhas",
+          en: "The Rolls and Chat windows no longer open on their own",
+        },
+        detalhe: {
+          pt: "Antes, a rolagem ou a mensagem de um jogador abria a janela por cima do mapa. O contador da bandeja de Rolagens e o ponto de não lidas do Chat continuam avisando.",
+          en: "Before, a player's roll or message opened the window over the map. The Rolls tray counter and the Chat unread dot still let you know.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A tela da mesa e o celular não congelam mais quando a conexão cai",
+          en: "The spectator window and phones no longer freeze when the connection drops",
+        },
+        detalhe: {
+          pt: "Eles percebem a queda e reconectam sozinhos, com um aviso por cima da última cena enquanto isso. Se você reabre o ATO20 sem campanha, o aviso diz que a mesa fechou, e a tela volta sozinha quando a campanha abre.",
+          en: "They notice the drop and reconnect on their own, with a notice over the last scene meanwhile. If you reopen ATO20 without a campaign, the notice says the table is closed, and the screen comes back on its own when the campaign opens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Na tela da mesa, o token não dá mais a volta inteira ao girar, e a sombra anda junto com ele",
+          en: "In the spectator window, a turning token no longer spins all the way around, and its shadow moves with it",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Nos dados 3D, nenhuma face fica mais transparente, e o número não escapa do dado",
+          en: "On the 3D dice, no face turns transparent anymore, and the number stays inside the die",
+        },
+        detalhe: {
+          pt: "Os dados também ganharam mais luz, e o número do d4 e da moeda não some mais na face mais clara.",
+          en: "The dice also got brighter, and the number on the d4 and the coin no longer fades on the brightest face.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A ficha trazida de um plugin vai para o mapa sem precisar reabrir o ATO20",
+          en: "A sheet brought from a plugin goes onto the map without reopening ATO20",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.10.0",
+    data: "2026-10-19",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O clima na mesa: chuva, tempestade, neve, neblina, cinzas e brasas",
+          en: "Weather on the table: rain, storm, snow, fog, ash and embers",
+        },
+        detalhe: {
+          pt: "O ambiente cobre a cena inteira, por cima da tela da mesa, e não anda nem amplia com a câmera. Nas Configurações do mapa se escolhe o ambiente, a intensidade e o vento. No Compêndio, a aba Ambiente, dentro de Efeitos, traz os seis prontos e cria outros, com as camadas que caem, o véu e o relâmpago, e o card tem Pôr nesta cena. Mexer num ambiente do Compêndio muda a chuva da tela da mesa na hora. Você vê o clima na metade e sem relâmpago, e ele some enquanto você arrasta alguma coisa.",
+          en: "Weather covers the whole scene, over the spectator window, and doesn't move or zoom with the camera. Map settings pick the weather, its intensity and the wind. In the Compendium, the Weather tab under Effects brings the six ready-made ones and creates new ones, with falling layers, a veil and lightning, and each card has Put in this scene. Changing a weather in the Compendium changes the rain in the spectator window right away. You see it at half strength and without lightning, and it hides while you drag something.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas do Mestre saem do ATO20, para o segundo monitor",
+          en: "GM windows can leave ATO20 for a second monitor",
+        },
+        detalhe: {
+          pt: "A ficha, o Compêndio, o chat, as Rolagens, a Mesa: arraste o cabeçalho de uma janela, ou a aba de uma atracada, para fora do ATO20 e solte, ou use o ↗ do cabeçalho. Ela vira uma janela do sistema e funciona como dentro, e o que se abre a partir dela abre solto também. O ↙ traz de volta, e a próxima abre no mesmo lugar e no mesmo tamanho. Os atalhos, como desfazer, ainda só valem na janela principal.",
+          en: "The sheet, the Compendium, the chat, Rolls, the Table: drag a window's header, or a docked tab, outside ATO20 and drop it, or use the ↗ in the header. It becomes a system window that works just like inside, and whatever opens from it opens detached too. The ↙ brings it back, and the next one opens in the same place and size. Shortcuts, like undo, still only work in the main window.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Uma IA deste computador pode mexer na campanha aberta",
+          en: "An AI on this computer can work on the open campaign",
+        },
+        detalhe: {
+          pt: "Em Configurações, IA, a opção Deixar uma IA mexer nas campanhas liga o MCP: um programa como o Claude Code ou o Cursor passa a criar notas, cenas, personagens e itens, pôr tokens no mapa, dar itens e ler e escrever no fio da mesa, e o que ele faz aparece na hora. Ele não apaga nada, não põe cena no ar e não rola dado. Vem desligado, só entra quem tem o token, e só deste computador. A tela mostra o comando do Claude Code pronto para copiar.",
+          en: "In Settings, AI, Let an AI work on your campaigns turns MCP on: a program like Claude Code or Cursor can create notes, scenes, characters and items, place tokens on the map, give items, and read and write in the table chat, and what it does shows up right away. It deletes nothing, puts no scene On air and rolls no dice. It starts off, only programs with the token get in, and only from this computer. The screen shows the Claude Code command ready to copy.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.9.0",
+    data: "2026-10-16",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A iniciativa: a ordem da rodada, de quem é a vez e o que aconteceu em cada rodada",
+          en: "Initiative: the turn order, whose turn it is and what happened in each round",
+        },
+        detalhe: {
+          pt: "A janela Iniciativa mostra quem tem token no mapa da mesa. Iniciar iniciativa põe todos na ordem, jogadores primeiro, e a ordem se arruma arrastando: não há número de iniciativa, a ordem é a que você arrumar. Pelo botão direito no mapa, os tokens selecionados começam a iniciativa, entram nela ou saem. Na vez de alguém, só o token dele anda pelo celular, o retrato ganha a moldura amarela e o selo VEZ, e o celular de quem joga mostra Sua vez. A aba Rodadas guarda o que aconteceu em cada uma: as rolagens, os medidores e as condições. Por enquanto a ordem não fica gravada, e fechar o ATO20 encerra o combate.",
+          en: "The Initiative window shows everyone with a token on the table's map. Start initiative puts them all in order, players first, and you rearrange the order by dragging: there are no initiative numbers, the order is the one you set. Right-clicking the map lets the selected tokens start initiative, join it or leave it. On someone's turn, only their token moves from the phone, their portrait gets a yellow frame and the TURN badge, and the player's phone shows Your turn. The Rounds tab keeps what happened in each round: the rolls, the meters and the conditions. For now the order isn't saved, and closing ATO20 ends the combat.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O Compêndio: monstros, NPCs, itens, condições e efeitos prontos para usar",
+          en: "The Compendium: monsters, NPCs, items, conditions and effects ready to use",
+        },
+        detalhe: {
+          pt: "A janela Compêndio guarda o que a campanha tem preparado e ainda não entrou no jogo, em cards com imagem e tags: o Bestiário, os Itens, as Condições e os Efeitos. Soltar um card no mapa, ou Pôr em jogo, cria a ficha ou o item, e Guardar no Compêndio, no menu de Personagens e de Itens, faz o caminho de volta. Cada aba tem pastas, que se abrem como num gerenciador de arquivos, e o card muda de pasta arrastado até ela. O Compêndio do ATO20 é outra janela, com o que vale para todas as campanhas do computador.",
+          en: "The Compendium window keeps what the campaign has prepared and hasn't brought into play yet, as cards with images and tags: the Bestiary, Items, Conditions and Effects. Dropping a card on the map, or Put in play, creates the sheet or the item, and Save to the Compendium, in the Characters and Items menus, goes the other way. Every tab has folders that open like in a file manager, and you move a card by dragging it onto a folder. The ATO20 Compendium is a separate window, with what applies to every campaign on this computer.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Disparar efeitos: a bola de fogo, o raio, o sopro do dragão",
+          en: "Fire effects: the fireball, the ray, the dragon's breath",
+        },
+        detalhe: {
+          pt: "O botão Disparo, logo abaixo da Luz, atira um efeito de um ponto a outro: dois cliques no mapa, ou segurar e arrastar. Clicar num personagem faz o tiro sair dele, e Shift trava o ângulo. Pelo botão direito no token, Disparar atira para onde ele olha. O tiro vai reto, estoura no alvo ou abre em cone, e aparece na tela da mesa e no celular dos jogadores. Os disparos se criam e se editam no Compêndio, em Efeitos, Disparo, e cinco vêm prontos: Bola de fogo, Raio de gelo, Jato d'água, Sopro de fogo e Nuvem venenosa.",
+          en: "The Shot button, right below Light, fires an effect from one point to another: two clicks on the map, or press and drag. Clicking a character fires from it, and Shift locks the angle. Right-click a token and choose Fire to shoot where it's facing. A shot goes straight, bursts on the target or spreads in a cone, and it shows in the spectator window and on the players' phones. Shots are created and edited in the Compendium, under Effects, Shot, and five come ready: Fireball, Ray of frost, Water jet, Fire breath and Poison cloud.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Mapas do Dungeondraft e do Dungeon Alchemist, com paredes, portas e luzes",
+          en: "Maps from Dungeondraft and Dungeon Alchemist, with walls, doors and lights",
+        },
+        detalhe: {
+          pt: "O Novo mapa ganha a opção Universal VTT, que abre arquivos .dd2vtt e .uvtt. O mapa entra com a imagem, a grade no tamanho certo, as paredes, as portas fechadas e as luzes, e com a escuridão quando a luz não está desenhada na própria imagem.",
+          en: "New map gets a Universal VTT option that opens .dd2vtt and .uvtt files. The map comes in with its image, the grid at the right size, the walls, the closed doors and the lights, plus darkness when the lighting isn't already painted into the image.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A Galeria, com toda imagem da campanha",
+          en: "The Gallery, with every image in the campaign",
+        },
+        detalhe: {
+          pt: "A janela Galeria junta as imagens do acervo e as que pertencem a alguma coisa, como o fundo de uma cena, um retrato ou a foto que o jogador mandou, da mais nova para a mais antiga. A busca é pelo nome do arquivo. Clicar abre, arrastar põe no mapa, e o botão direito tem Mostrar na mesa, Abrir com outro programa, Mostrar na pasta e as Propriedades, com onde a imagem é usada.",
+          en: "The Gallery window gathers the images in the library and the ones that belong to something, like a scene's backdrop, a portrait or a photo a player sent, newest first. Search goes by file name. Clicking opens, dragging puts it on the map, and right-click has Show to the table, Open with another program, Show in folder and Properties, including where the image is used.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O painel de Elementos muda o que está selecionado no mapa",
+          en: "The Elements panel changes what's selected on the map",
+        },
+        detalhe: {
+          pt: "Com uma parede, área escondida, forma ou efeito em área selecionado, o painel do canto passa a falar dele: troca o formato entre quadrado, círculo e traço livre, troca o tipo no mesmo lugar, como a forma que vira efeito em área, e muda os ajustes de cada um, como o efeito da área e a altura da parede.",
+          en: "With a wall, fog area, shape or area effect selected, the corner panel works on it: switch its shape between rectangle, circle and freeform, change its type in place, like a shape that becomes an area effect, and adjust each one's settings, like the area's effect and the wall's height.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.8.0",
+    data: "2026-10-15",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A aba Sobre, nas Configurações",
+          en: "An About tab in Settings",
+        },
+        detalhe: {
+          pt: "Em Configurações → Sobre ficam a versão, o site, o código e onde falar com o projeto: e-mail, X e Instagram. O e-mail tem um botão de copiar ao lado.",
+          en: "Settings → About has the version, the website, the code and where to reach the project: email, X and Instagram. The email has a copy button next to it.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O ATO20 diz que é gratuito, e onde apoiar",
+          en: "ATO20 says it's free, and where to support it",
+        },
+        detalhe: {
+          pt: "No pé da tela de campanhas, o ATO20 avisa que é gratuito e mostra o site, para quem pagou por ele achar o original. Embaixo vem o Ko-fi, para quem quiser apoiar o projeto. O Ko-fi também está no O que mudou, ao lado das releases no GitHub, e na aba Sobre.",
+          en: "At the bottom of the campaign screen, ATO20 says it's free and shows the website, so anyone who paid for it can find the original. Below that is Ko-fi, for anyone who'd like to support the project. Ko-fi is also in What's new, next to the GitHub releases, and in the About tab.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Uma licença nova: a PolyForm Perimeter",
+          en: "A new license: PolyForm Perimeter",
+        },
+        detalhe: {
+          pt: "O ATO20 continua gratuito, e o código continua aberto para ler, estudar e modificar. O que a licença nova proíbe é oferecer outro produto que concorra com o ATO20. Mestrar mesa paga e escrever ou vender plugin continuam liberados, a documentação de plugins segue MIT, e as versões até a 1.7.0 continuam MIT.",
+          en: "ATO20 is still free, and the code is still open to read, study and modify. What the new license forbids is offering another product that competes with ATO20. Running paid games and writing or selling plugins are still allowed, the plugin documentation stays MIT, and versions up to 1.7.0 remain MIT.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.7.0",
+    data: "2026-10-14",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A mesa pela internet, sem o jogador instalar nada",
+          en: "The table over the internet, with nothing for players to install",
+        },
+        detalhe: {
+          pt: "Com o Tailscale no computador do mestre, o convite ganha a opção Internet. Um botão abre a mesa num endereço https, e o jogador entra pelo navegador do celular, de qualquer lugar. A mesa fecha quando você clica em Fechar ou sai do ATO20, e o botão Entrar na mesa mostra um globo enquanto ela está aberta. Quem chega pela internet não lê os sussurros nem mexe como mestre, e quem erra o código dez vezes espera dez minutos.",
+          en: "With Tailscale on the GM's computer, the invite gets an Internet option. A button opens the table at an https address, and players join from their phone's browser, from anywhere. The table closes when you click Close or leave ATO20, and the Join the table button shows a globe while it's open. Whoever comes in over the internet can't read whispers or act as the GM, and anyone who gets the code wrong ten times waits ten minutes.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O convite pela VPN de jogo",
+          en: "The invite over a gaming VPN",
+        },
+        detalhe: {
+          pt: "Com o Tailscale, o ZeroTier, o Hamachi ou o Radmin ligado, o convite mostra a rede dele ao lado da rede local, e o QR leva o endereço dela. A VPN ligada com o ATO20 aberto aparece sem reiniciar, e a escolha fica gravada no computador. Um endereço seu, como um nome do MagicDNS ou um túnel, entra em Outro endereço.",
+          en: "With Tailscale, ZeroTier, Hamachi or Radmin on, the invite shows its network next to the local one, and the QR code carries its address. A VPN turned on with ATO20 open shows up without restarting, and the choice is saved on the computer. An address of your own, like a MagicDNS name or a tunnel, goes in Other address.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O convite da mesa em inglês",
+          en: "The table invite in English",
+        },
+        detalhe: {
+          pt: "Com o aplicativo em inglês, o convite e a escolha de rede nos Ajustes apareciam em português.",
+          en: "With the app in English, the invite and the network choice in Options showed up in Portuguese.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O convite numa rede sem gateway",
+          en: "The invite on a network without a gateway",
+        },
+        detalhe: {
+          pt: "Numa rede local sem saída nenhuma, como a de uma LAN party com IP fixo, o convite dizia Sem rede. Agora ele acha o endereço pela placa de rede do computador.",
+          en: "On a local network with no way out, like a LAN party with fixed IPs, the invite said No network. Now it finds the address from the computer's network card.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.6.0",
+    data: "2026-10-14",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Os itens são da campanha, cada um com o seu card",
+          en: "Items belong to the campaign, each with its own card",
+        },
+        detalhe: {
+          pt: "A janela Itens guarda o catálogo em pastas, com busca. O card do item se edita no lugar: imagem, nome, descrição, atributos e medidores, e um atributo como 1d8+2 cortante rola no clique. A mesma espada pode estar com mais de um personagem, e cada mochila guarda a sua quantidade e os seus medidores. Os itens que já estavam nas fichas passam para o catálogo. Campanha aberta nesta versão não abre mais nas anteriores.",
+          en: "The Items window keeps the catalog in folders, with search. An item's card is edited in place: image, name, description, attributes and meters, and an attribute like 1d8+2 slashing rolls on click. The same sword can be with more than one character, and each backpack keeps its own quantity and meters. Items that were already on sheets move to the catalog. A campaign opened in this version no longer opens in earlier ones.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O item no mapa, nos pontos e na mesa",
+          en: "Items on the map, on pins and at the table",
+        },
+        detalhe: {
+          pt: "Arraste um item da janela Itens para um personagem, para o mapa, para um ponto de anotação ou para o handout. No mapa, a peça mostra o nome do item e o botão de transmitir. Mostrar na mesa leva o cartão do item para a TV e os celulares, sem o que está escondido, e a mochila do celular mostra atributos e medidores.",
+          en: "Drag an item from the Items window onto a character, the map, a map pin or the handout. On the map, the piece shows the item's name and the button to put it on air. Show at the table sends the item's card to the TV and the phones, without what's hidden, and the backpack on the phone shows attributes and meters.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Zoom no mapa do celular e da TV",
+          en: "Zoom on the map on phones and the TV",
+        },
+        detalhe: {
+          pt: "Pinça, Ctrl com a roda, Ctrl com + − 0 ou os botões no canto do mapa, até 400%. O zoom só aproxima dentro do que o mestre enquadrou, nunca mostra além, e cada troca de câmera volta ao enquadramento dele.",
+          en: "Pinch, Ctrl with the wheel, Ctrl with + − 0 or the buttons in the corner of the map, up to 400%. Zoom only closes in on what the GM framed, never shows beyond it, and every camera change goes back to the GM's framing.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O celular do jogador em tela cheia",
+          en: "The player's phone in full screen",
+        },
+        detalhe: {
+          pt: "A página entra em tela cheia no primeiro toque dentro da mesa, e a barra do navegador some, com a ficha, o chat e o saquinho no lugar. Um botão no alto liga e desliga, e o celular lembra a escolha. No iPhone o navegador não permite.",
+          en: "The page goes full screen on the first tap inside the table, and the browser bar disappears, with the sheet, the chat and the dice bag in place. A button at the top turns it on and off, and the phone remembers the choice. On iPhone the browser doesn't allow it.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As janelas do Mestre esticam por todas as bordas e cantos",
+          en: "GM windows stretch from every edge and corner",
+        },
+        detalhe: {
+          pt: "Antes, só pelo canto de baixo à direita. Para alargar uma ficha para a esquerda, era preciso arrastar a janela, esticar e arrastar de volta.",
+          en: "Before, only from the bottom right corner. To widen a sheet to the left, you had to drag the window, stretch it and drag it back.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As colunas do Mestre abrem e fecham pelo cabeçalho",
+          en: "GM columns open and close from the header",
+        },
+        detalhe: {
+          pt: "Um botão em cada ponta do cabeçalho, que mostra se a coluna está aberta. E ao arrastar uma nota ou um quadro para o lado do mapa, a tela mostra onde ele vai abrir antes de soltar: Dividir à esquerda, Dividir à direita ou Abrir como aba.",
+          en: "A button at each end of the header, showing whether the column is open. And when dragging a note or a board beside the map, the screen shows where it will open before you let go: Split left, Split right or Open as a tab.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O quadro só vai ao ar pela paleta",
+          en: "Boards only go on air from the palette",
+        },
+        detalhe: {
+          pt: "O Colocar no ar saiu do cabeçalho e do menu do quadro: um clique distraído punha as anotações na TV. Na paleta (Ctrl+K), transmitir pelo nome do quadro continua funcionando.",
+          en: "Put on air left the header and the board's menu: one absent-minded click put your notes on the TV. In the palette (Ctrl+K), putting it on air by the board's name still works.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Fichas com muitas perícias e dados ficaram mais leves",
+          en: "Sheets with many skills and dice got lighter",
+        },
+        detalhe: {
+          pt: "Com cem perícias, editar uma ficou cinco vezes mais rápido, e buscar na barra lateral, dez. Trocar de grupo também ficou mais leve.",
+          en: "With a hundred skills, editing one got five times faster, and searching the sidebar ten times. Switching groups got lighter too.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No celular com o mapa em tela cheia, o que o mestre mostra aparece",
+          en: "On a phone with the map in full screen, what the GM shows now appears",
+        },
+        detalhe: {
+          pt: "O jogador com o mapa em tela cheia não via o item, a carta ou o retrato que o mestre punha em evidência.",
+          en: "Players with the map in full screen didn't see the item, card or portrait the GM put in the spotlight.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O botão de som da TV aparece de novo",
+          en: "The TV's sound button shows again",
+        },
+        detalhe: {
+          pt: "Quando sobrava tela em cima e embaixo do mapa, ele ficava invisível, mas continuava clicável.",
+          en: "When there was room above and below the map, it was invisible but still clickable.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No saquinho do celular, rolar a lista não arremessa mais um dado",
+          en: "In the phone's dice bag, scrolling the list no longer throws a die",
+        },
+        detalhe: {
+          pt: "Os dados ficam parados, e só as últimas rolagens rolam. Com o celular deitado, os dados cabem em duas fileiras.",
+          en: "The dice stay put, and only the recent rolls scroll. With the phone sideways, the dice fit in two rows.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.5.1",
+    data: "2026-10-13",
+    mudancas: [
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No AppImage, rolar dado não trava mais a janela",
+          en: "In the AppImage, rolling dice no longer freezes the window",
+        },
+        detalhe: {
+          pt: "Desde a 1.4.0, o dado rolado depois de alguns segundos parado congelava a janela inteira por até oito segundos antes de cair, pela ficha, pelo saquinho ou pela paleta. Era o som dos dados acordando.",
+          en: "Since 1.4.0, a die rolled after a few idle seconds froze the whole window for up to eight seconds before falling, from the sheet, the dice bag or the command palette. It was the dice sound waking up.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.5.0",
+    data: "2026-10-13",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Cada plugin tem a sua página, com as telas e o passo a passo",
+          en: "Each plugin has its own page, with screenshots and a step by step",
+        },
+        detalhe: {
+          pt: "No Catálogo, clicar num plugin abre a página dele, como numa loja de extensões: o ícone, quem fez, a versão e o que o autor escreveu sobre ele, com imagens. Os plugins instalados abrem a mesma página, em Configurações → Plugins → Instalados, com o Atualizar quando há versão nova.",
+          en: "In the Catalog, clicking a plugin opens its page, like in an extension store: the icon, who made it, the version and what its author wrote about it, with images. Installed plugins open the same page, in Settings → Plugins → Installed, with Update when there's a new version.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Os plugins instalados mostram o ícone",
+          en: "Installed plugins show their icon",
+        },
+        detalhe: {
+          pt: "A lista de Instalados mostra o ícone de cada plugin ao lado do nome. OBS, Ordem Paranormal e Tormenta20 já trazem o deles: é só atualizar pelo Catálogo. Quem escreve plugin declara o icone no manifest.json.",
+          en: "The Installed list shows each plugin's icon next to its name. OBS, Ordem Paranormal and Tormenta20 already ship theirs: just update them from the Catalog. Plugin authors declare the icone in manifest.json.",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.4.0",
+    data: "2026-10-09",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha em PDF vira personagem",
+          en: "A PDF sheet becomes a character",
+        },
+        detalhe: {
+          pt: "Na lista de Personagens, Importar ficha em PDF lê a ficha editável e mostra antes o que vira atributo, medidor e detalhe. Quem ensina a ler cada ficha é um plugin: Tormenta20 e Ordem Paranormal já estão no Catálogo.",
+          en: "In the Characters list, Import PDF sheet reads the fillable sheet and shows first what becomes an attribute, meter and detail. A plugin teaches how to read each sheet: Tormenta20 and Ordem Paranormal are already in the Catalog.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O sistema de jogo vem de um plugin",
+          en: "The game system comes from a plugin",
+        },
+        detalhe: {
+          pt: "Criar campanha ganha o campo Sistema de jogo, e a Configuração da campanha o tópico Sistema: atributos, medidores, detalhes da ficha e condições do sistema entram na campanha, e o que faltar pode ir para os personagens que já existem. O de Ordem Paranormal escreve os atributos no círculo do ritual.",
+          en: "Create campaign gains a Game system field, and Campaign settings a System topic: the system's attributes, meters, sheet details and conditions go into the campaign, and whatever is missing can go to the characters that already exist. The Ordem Paranormal one writes the attributes on the ritual circle.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A janela do personagem ganhou abas, atributos e detalhes da ficha",
+          en: "The character window has tabs, attributes and sheet details",
+        },
+        detalhe: {
+          pt: "O retrato, o nome e quem joga ficam no alto, com as abas Ficha, Inventário e Arquivos embaixo. Atributos como FOR 4, e detalhes como perícias e poderes em grupos, numa barra lateral com busca. O molde fica na Configuração da campanha, em Atributos e Detalhes da ficha, com aplicar em todos.",
+          en: "The portrait, the name and who plays stay at the top, with the Sheet, Inventory and Files tabs below. Attributes like STR 4, and details like skills and powers in groups, in a sidebar with search. The template lives in Campaign settings, under Attributes and Sheet details, with apply to all.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Rolar pela ficha, e expressões com modificador",
+          en: "Roll from the sheet, and expressions with modifiers",
+        },
+        detalhe: {
+          pt: "Um detalhe pode rolar a expressão daquele personagem, como 2d20+10, com um clique na ficha ou no celular. Na paleta (Ctrl+K) e no saquinho, 1d20+5 e 2d6+1d4+3 rolam os dados e somam o resto.",
+          en: "A detail can roll that character's expression, like 2d20+10, with one click on the sheet or on the phone. In the palette (Ctrl+K) and the dice bag, 1d20+5 and 2d6+1d4+3 roll the dice and add the rest.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha inteira no celular, numa tela refeita",
+          en: "The whole sheet on the phone, on a redone screen",
+        },
+        detalhe: {
+          pt: "O jogador vê atributos e detalhes da ficha, com busca, e rola os detalhes dali. Mochila e saquinho viram bolinhas flutuantes, o celular deitado ganha uma barra lateral, e cada personagem tem o próprio caderno.",
+          en: "Players see attributes and sheet details, with search, and roll details from there. Backpack and dice bag become floating bubbles, a phone held sideways gets a sidebar, and each character has its own notebook.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Buscar, instalar e atualizar plugins pelo Catálogo",
+          en: "Search, install and update plugins from the Catalog",
+        },
+        detalhe: {
+          pt: "Em Configurações → Plugins → Catálogo: busca por nome ou tag, instala com um clique e avisa quando o plugin instalado tem versão nova. Plugin que executa código pede confirmação antes.",
+          en: "In Settings → Plugins → Catalog: search by name or tag, install with one click and get told when an installed plugin has a new version. A plugin that runs code asks for confirmation first.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Levar mapas, personagens e configurações de uma campanha para outra",
+          en: "Take maps, characters and settings from one campaign to another",
+        },
+        detalhe: {
+          pt: "Exportar… e Importar… no menu da campanha, na lista de mapas e na de personagens: escolha o que vai num zip, com as imagens, os sons e os efeitos que aquilo usa. Importar nunca sobrescreve o que a campanha já tem, e oferece baixar os plugins que faltam.",
+          en: "Export… and Import… in the campaign menu, the map list and the character list: choose what goes into a zip, with the images, sounds and effects it uses. Importing never overwrites what the campaign already has, and offers to download missing plugins.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Importar uma pasta, arquivos soltos ou um vault do Obsidian",
+          en: "Import a folder, loose files or an Obsidian vault",
+        },
+        detalhe: {
+          pt: "Pelo botão Importar em Arquivos, ou arrastando do gerenciador de arquivos para o painel. Do Obsidian, notas, boards (.canvas) e anexos entram na mesma árvore de pastas, e um resumo mostra tudo antes de gravar.",
+          en: "With the Import button in Files, or by dragging from your file manager onto the panel. From Obsidian, notes, boards (.canvas) and attachments come in with the same folder tree, and a summary shows everything before saving.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Imagens e arquivos moram em Arquivos, junto das notas e dos quadros",
+          en: "Images and files live in Files, with notes and boards",
+        },
+        detalhe: {
+          pt: "A aba Biblioteca saiu, e o acervo virou uma pasta dentro de Arquivos. Os sons continuam em Sons. Campanha aberta nesta versão não abre mais nas anteriores.",
+          en: "The Library tab is gone, and your collection became a folder inside Files. Sounds stay in Sounds. A campaign opened in this version no longer opens in earlier ones.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O dado faz barulho ao cair",
+          en: "Dice make a sound when they fall",
+        },
+        detalhe: {
+          pt: "Uma jogada de verdade no impacto e um plim quando ele para, no Mestre. Segue o volume Sistema e desliga em Configurações → Ajustes → Som dos dados.",
+          en: "A real roll on impact and a ping when it stops, on the GM screen. It follows the System volume and turns off in Settings → Options → Dice sounds.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A ficha pergunta antes de apagar atributo, detalhe, medidor ou item",
+          en: "The sheet asks before deleting an attribute, detail, meter or item",
+        },
+        detalhe: {
+          pt: "A ficha não tem Ctrl+Z, e um clique a mais na lixeira apagava sem volta.",
+          en: "The sheet has no Ctrl+Z, and one extra click on the trash can deleted it for good.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Formas e setas do quadro sempre à mão, com canto redondo",
+          en: "Board shapes and arrows are always hand-drawn, with rounded corners",
+        },
+        detalhe: {
+          pt: "A opção saiu: tudo no quadro tem o traço rabiscado, também o que já estava desenhado.",
+          en: "The option is gone: everything on the board has the sketchy stroke, including what was already drawn.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "As condições voltaram a desenhar chama, fagulha e área",
+          en: "Conditions draw flames, sparks and areas again",
+        },
+        detalhe: {
+          pt: "Desde a 1.2.0, nenhum efeito de condição aparecia no palco.",
+          en: "Since 1.2.0, no condition effect showed up on the stage.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O token com imagem que não abre não some mais do palco",
+          en: "Tokens whose image fails to load no longer vanish from the stage",
+        },
+        detalhe: {
+          pt: "Arquivo apagado, mapa que saiu do disco ou ícone sem rede viram um xadrez magenta e preto, nas três telas.",
+          en: "A deleted file, a map moved off the disk or an icon without network turns into a magenta and black checkerboard, on all three screens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "No Linux, menus e balões não piscam mais ao abrir e fechar",
+          en: "On Linux, menus and tooltips no longer flicker when opening and closing",
+        },
+        detalhe: {
+          pt: "Com o WebKitGTK 2.54, balão, menu, popover e ícones de hover piscavam no primeiro e no último quadro da animação.",
+          en: "With WebKitGTK 2.54, tooltips, menus, popovers and hover icons flickered on the first and last frame of the animation.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O balão de dica não tapa mais o clique no que está embaixo",
+          en: "Tooltips no longer block clicks on what is underneath",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O Tab não passeia mais o foco pelos botões",
+          en: "Tab no longer walks the focus across the buttons",
+        },
+        detalhe: {
+          pt: "E um Espaço depois disso apertava o botão marcado sem ninguém pedir.",
+          en: "And a Space after that pressed the highlighted button without anyone asking.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "Texto longo e imagem larga não vazam mais da nota",
+          en: "Long text and wide images no longer spill out of a note",
+        },
+        detalhe: {
+          pt: "E soltar uma imagem de Arquivos no espaço vazio abaixo do texto agora funciona.",
+          en: "And dropping an image from Files on the empty space below the text works now.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "A câmera que segue tokens funciona no mapa duplicado",
+          en: "Cameras that follow tokens work on a duplicated map",
+        },
+        detalhe: {
+          pt: "Ela continuava procurando os tokens do original.",
+          en: "It kept looking for the original's tokens.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O Ver no GitHub do Catálogo abre o repositório do plugin",
+          en: "View on GitHub in the Catalog opens the plugin's repository",
+        },
+      },
+    ],
+  },
+  {
+    versao: "1.3.0",
+    data: "2026-10-08",
+    mudancas: [
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As ferramentas do Mestre ficam numa barra no topo",
+          en: "The GM tools sit in a bar at the top",
+        },
+        detalhe: {
+          pt: "Selecionar, Deslocar, Laser, Lápis, Borracha, Texto e Elementos numa barra só, no topo e ao centro. Nos cantos de cima, à esquerda o que é consulta (pontos, áreas, jogadores) e à direita o que ajusta a cena. Cada ferramenta abre o painel dela no canto de baixo.",
+          en: "Select, Pan, Laser, Pencil, Eraser, Text and Elements in a single bar, at the top and centered. In the top corners, what you look up (pins, areas, players) is on the left and what adjusts the scene is on the right. Each tool opens its own panel in the bottom corner.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Lápis macio, borracha que corta e um painel de texto",
+          en: "A smooth pencil, an eraser that cuts and a text panel",
+        },
+        detalhe: {
+          pt: "O lápis ganhou largura, opacidade e suavizar, e o risco sai em curva macia. A borracha apaga só o pedaço por onde passa, ou o risco inteiro. O texto ganhou fonte, tamanho, alinhamento e opacidade. Alt + roda, ou [ e ], mudam o tamanho do pincel.",
+          en: "The pencil gained width, opacity and smoothing, and strokes come out as soft curves. The eraser removes only the piece it passes over, or the whole stroke. Text gained font, size, alignment and opacity. Alt + wheel, or [ and ], change the brush size.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Névoa dinâmica: a lanterna dos tokens revela o mapa",
+          en: "Dynamic fog: token lanterns reveal the map",
+        },
+        detalhe: {
+          pt: "Uma área de névoa dinâmica abre onde a lanterna de um token alcança e fecha quando a luz sai. Paredes e portas param a revelação. E a borracha da névoa, no gizmo da área, fura só aquela área.",
+          en: "A dynamic fog area opens wherever a token's lantern reaches and closes when the light leaves. Walls and doors stop the reveal. And the fog eraser, in the area's gizmo, cuts holes in that area only.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Laser para apontar no mapa sem marcar nada",
+          en: "A laser to point at the map without marking anything",
+        },
+        detalhe: {
+          pt: "Na barra do topo: segure e risque, e a mesa vê um rastro vermelho que some sozinho. Parado com o botão apertado, fica um ponto aceso. Nada entra na cena.",
+          en: "In the top bar: hold and drag, and the table sees a red trail that fades on its own. Held still, it stays as a lit dot. Nothing goes into the scene.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "As câmeras salvas ganharam foto, numa faixa embaixo do palco",
+          en: "Saved cameras have a photo now, in a strip below the stage",
+        },
+        detalhe: {
+          pt: "A faixa recolhe, muda de altura e separa Câmeras e Tripés. Cada cartão mostra o que a câmera enquadra.",
+          en: "The strip collapses, changes height and splits Cameras and Tripods. Each card shows what the camera frames.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Paredes editáveis e céu no 2.5D",
+          en: "Editable walls and a sky in 2.5D",
+        },
+        detalhe: {
+          pt: "No 2.5D, clique numa parede para mover, mudar de tamanho e de altura, girar e trocar a cor da face, com sugestões tiradas do mapa e conta-gotas. Em Configurações do mapa → Fora do mapa, o Céu no 2.5D pode ser uma cor ou uma imagem panorâmica que gira com a câmera.",
+          en: "In 2.5D, click a wall to move it, change its size and height, rotate it and change its face color, with suggestions taken from the map and an eyedropper. In Map settings → Outside the map, the Sky in 2.5D can be a color or a panoramic image that turns with the camera.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A figura em pé vira para o lado em que olha",
+          en: "Standing figures turn toward where they face",
+        },
+        detalhe: {
+          pt: "No 2.5D, o botão de setas no gizmo da peça liga \"Espelhar para onde olha\".",
+          en: "In 2.5D, the arrows button in the piece's gizmo turns on \"Mirror toward where it faces\".",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "A lanterna do token tem intensidade e uma roda para mirar",
+          en: "Token lanterns have an intensity and a wheel to aim",
+        },
+        detalhe: {
+          pt: "No menu da lanterna, fraca, média ou forte. Com o token selecionado, o alcance aparece em volta dele: arraste a ponta em volta para mirar, e para longe ou para perto para mudar o alcance. No 2.5D, a roda do olhar também mira a lanterna. E tokens e mobília agora ficam bem pequenos no 2D, como no 2.5D.",
+          en: "In the lantern menu, Dim, Medium or Bright. With the token selected, its reach shows around it: drag the tip around to aim, and farther or closer to change the reach. In 2.5D, the facing ring aims the lantern too. And tokens and furniture can now get very small in 2D, as in 2.5D.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Brilho, contraste, saturação e matiz na janela do espectador",
+          en: "Brightness, contrast, saturation and hue in the spectator window",
+        },
+        detalhe: {
+          pt: "Para acertar a imagem na TV, no monitor ou no projetor da mesa sem mexer no mapa. Vale para a campanha toda, em Configuração da campanha → Espectador, e para um mapa só, em Configurações do mapa. O Mestre e os celulares não mudam.",
+          en: "To get the picture right on the table's TV, monitor or projector without touching the map. It works for the whole campaign, in Campaign settings → Spectator, and for a single map, in Map settings. The GM screen and the phones do not change.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O Discord mostra o que o Mestre está fazendo",
+          en: "Discord shows what the GM is doing",
+        },
+        detalhe: {
+          pt: "\"Jogando ATO20\" no perfil, com o que você está fazendo (Editando mapa, Mestrando campanha), o tempo de sessão e quantos jogadores estão na mesa. O título da janela diz o mesmo. Desliga em Configurações → Ajustes → Mostrar no Discord, e o nome da campanha só aparece se você ligar.",
+          en: "\"Playing ATO20\" on your profile, with what you are doing (Editing a map, Running a campaign), the session time and how many players are at the table. The window title says the same. Turn it off in Settings → Options → Show on Discord, and the campaign name only shows if you turn it on.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "O catálogo de plugins dentro do aplicativo",
+          en: "The plugin catalog inside the app",
+        },
+        detalhe: {
+          pt: "Em Configurações → Plugins, a aba Catálogo mostra os plugins do site, com o que cada um faz, se executa código e se já está instalado.",
+          en: "In Settings → Plugins, the Catalog tab shows the plugins from the website, with what each one does, whether it runs code and whether it is already installed.",
+        },
+      },
+      {
+        tipo: "novidade",
+        titulo: {
+          pt: "Plugins desenham munição bala por bala",
+          en: "Plugins can draw ammo one bullet at a time",
+        },
+        detalhe: {
+          pt: "Os pontos de um medidor de plugin podem ser estreitos, como uma bala de pé, e virar um ponto com \"×30\" quando o máximo passa de um teto, para o pente cheio caber na ficha.",
+          en: "The points of a plugin meter can be narrow, like a standing bullet, and turn into one point with \"×30\" when the maximum goes past a cap, so a full magazine fits on the sheet.",
+        },
+      },
+      {
+        tipo: "correcao",
+        titulo: {
+          pt: "O mapa ampliado não borra mais ao arrastar ou selecionar",
+          en: "The zoomed-in map no longer blurs while dragging or selecting",
+        },
+        detalhe: {
+          pt: "Arrastar um token, puxar a câmera ou clicar no vazio deixava o mapa embaçado no zoom. A roda da lanterna e o token deitado no 2.5D do Mestre também ficaram nítidos.",
+          en: "Dragging a token, pulling the camera or clicking on empty space left the map blurry when zoomed in. The lantern wheel and tokens lying down in the GM's 2.5D are sharp now too.",
+        },
+      },
+    ],
+  },
+  {
     versao: "1.2.0",
     data: "2026-10-06",
     mudancas: [

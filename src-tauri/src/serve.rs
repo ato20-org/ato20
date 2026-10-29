@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::{IpAddr, SocketAddr, TcpListener, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::{
@@ -11,11 +12,11 @@ use axum::extract::{
 use axum::http::header::{
     ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, LOCATION,
 };
-use axum::http::{HeaderValue, Request, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, Uri};
 use axum::middleware::{self, Next};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, patch, post, put};
+use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
@@ -25,12 +26,17 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+pub(crate) mod expressao;
+pub mod mcp;
 mod page;
 
 use crate::error::{AppError, AppResult};
 use crate::estante;
 use crate::extensoes;
-use crate::vault::{animacao, assets, characters, documentos, fio, inventory, players, variantes, Vault};
+use crate::vault::{
+    animacao, assets, characters, detalhes, documentos, fio, inventory, itens, players, variantes,
+    Vault,
+};
 use page::ErrorPage;
 
 /// A campanha aberta, compartilhada entre a janela e o daemon.
@@ -69,6 +75,9 @@ pub struct DaemonAddr {
     /// `None` quando nao ha rota de rede -- maquina sem Wi-Fi nem cabo. A tela
     /// diz isso, em vez de mostrar um endereco que nao responderia.
     pub lan_url: Option<String>,
+    /// A porta onde o daemon escuta. Vai no endereco que o mestre digita sem
+    /// porta, e nos que `enderecos` monta.
+    pub porta: u16,
     /// Segredo exigido nas rotas que ESCREVEM.
     ///
     /// A porta agora esta na REDE, e nao mais so em loopback: sem o token,
@@ -79,6 +88,112 @@ pub struct DaemonAddr {
 }
 
 const TOKEN_HEADER: &str = "x-ato20-token";
+
+/// Os cabecalhos que um proxy local poe ao repassar uma requisicao de fora.
+///
+/// O Funnel do Tailscale, o cloudflared e o ngrok chegam ao daemon PELO
+/// loopback, e cada um anuncia o cliente de verdade num destes. A presenca de
+/// qualquer um diz que a requisicao atravessou a rua, por mais que o socket
+/// diga 127.0.0.1.
+const CABECALHOS_DE_PROXY: [&str; 4] = [
+    "x-forwarded-for",
+    "forwarded",
+    "x-real-ip",
+    "cf-connecting-ip",
+];
+
+/// A requisicao nasceu nesta maquina, sem proxy no meio.
+///
+/// E o que `is_loopback` sozinho dizia enquanto a porta so ia ate o Wi-Fi.
+/// Com a mesa na internet por um tunel local, o socket passou a mentir: o
+/// jogador de outra cidade chega de 127.0.0.1. Um tunel TCP cru (`ssh -R`,
+/// bore) nao poe cabecalho nenhum e continua passando por aqui -- e por isso
+/// que os fluxos do Mestre pedem o token alem disto. Ver `require_mestre`.
+fn desta_maquina(addr: &SocketAddr, headers: &HeaderMap) -> bool {
+    addr.ip().is_loopback()
+        && !CABECALHOS_DE_PROXY
+            .iter()
+            .any(|nome| headers.contains_key(*nome))
+}
+
+/// Quem pede, para contar os erros de codigo.
+///
+/// Atras de um proxy local, o cliente de verdade vem no cabecalho, e so se
+/// confia nele vindo do loopback: de fora, qualquer um o escreveria para
+/// zerar a propria conta.
+fn cliente_de(addr: &SocketAddr, headers: &HeaderMap) -> IpAddr {
+    if addr.ip().is_loopback() {
+        let anunciado = ["x-forwarded-for", "cf-connecting-ip", "x-real-ip"]
+            .iter()
+            .find_map(|nome| {
+                headers
+                    .get(*nome)?
+                    .to_str()
+                    .ok()?
+                    .split(',')
+                    .next()?
+                    .trim()
+                    .parse()
+                    .ok()
+            });
+        if let Some(ip) = anunciado {
+            return ip;
+        }
+    }
+
+    addr.ip()
+}
+
+/// Os erros de codigo da mesa, por cliente.
+///
+/// O codigo tem 31^6 combinacoes, perto de 900 milhoes. Na rede de casa isso
+/// bastava; na internet, sem limite, um script varre em dias. Com dez erros a
+/// cada dez minutos por endereco, sao seculos. Quem acerta nunca encosta no
+/// limite, e o jogador que erra a digitacao tres vezes nem sabe que ele existe.
+struct Tentativas(Mutex<HashMap<IpAddr, (u32, Instant)>>);
+
+const ERROS_POR_JANELA: u32 = 10;
+const JANELA_DE_ERROS: Duration = Duration::from_secs(10 * 60);
+/// Quantos clientes se lembra. Cheio, saem os de janela vencida; ainda
+/// cheio, a conta recomeca. E o que impede uma varredura de muitos IPs de
+/// crescer o mapa sem fim.
+const CLIENTES_LEMBRADOS: usize = 4096;
+
+impl Tentativas {
+    fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+
+    fn bloqueado(&self, cliente: IpAddr, agora: Instant) -> bool {
+        let mapa = self.0.lock().expect("tentativas envenenadas");
+
+        mapa.get(&cliente).is_some_and(|(erros, desde)| {
+            *erros >= ERROS_POR_JANELA && agora.duration_since(*desde) < JANELA_DE_ERROS
+        })
+    }
+
+    fn errou(&self, cliente: IpAddr, agora: Instant) {
+        let mut mapa = self.0.lock().expect("tentativas envenenadas");
+
+        if mapa.len() >= CLIENTES_LEMBRADOS && !mapa.contains_key(&cliente) {
+            mapa.retain(|_, (_, desde)| agora.duration_since(*desde) < JANELA_DE_ERROS);
+            if mapa.len() >= CLIENTES_LEMBRADOS {
+                mapa.clear();
+            }
+        }
+
+        let (erros, desde) = mapa.entry(cliente).or_insert((0, agora));
+        if agora.duration_since(*desde) >= JANELA_DE_ERROS {
+            *erros = 0;
+            *desde = agora;
+        }
+        *erros += 1;
+    }
+}
+
+/// Marca a resposta de codigo errado, para o `limitar_codigo` contar.
+#[derive(Clone, Copy)]
+struct CodigoErrado;
 
 /// Quantos estados o canal guarda para quem esta lendo devagar.
 ///
@@ -298,6 +413,10 @@ pub struct Daemon {
     /// chegar a mesma recusa -- e o mapa da aba Mesa esperava na fila atras
     /// dos retratos, que ela pede nessa variante a cada abertura.
     sem_variante: Mutex<HashSet<String>>,
+    /// Os erros de codigo da mesa. Ver `limitar_codigo`.
+    tentativas: Tentativas,
+    /// O cano do MCP ate a janela, e o token dele. Ver `mcp`.
+    mcp: Arc<mcp::Ponte>,
 }
 
 impl Daemon {
@@ -334,7 +453,17 @@ impl Daemon {
             estante,
             mini_gate: tokio::sync::Semaphore::new(2),
             sem_variante: Mutex::new(HashSet::new()),
+            tentativas: Tentativas::new(),
+            // Desligado ate quem sobe o daemon dizer outra coisa: os testes
+            // que nao tratam do MCP nao precisam saber dele.
+            mcp: Arc::new(mcp::Ponte::new(None)),
         }
+    }
+
+    /// O cano do MCP que a janela tambem segura. Ver `mcp::Ponte`.
+    fn com_mcp(mut self, ponte: Arc<mcp::Ponte>) -> Self {
+        self.mcp = ponte;
+        self
     }
 
     /// Onde o daemon acha as pastas dos plugins, para servir as paginas deles.
@@ -397,6 +526,7 @@ pub fn spawn(
     web_root: Option<PathBuf>,
     estante: PathBuf,
     extensoes: PathBuf,
+    mcp: Arc<mcp::Ponte>,
 ) -> AppResult<Started> {
     let listener = bind()?;
     let port = listener.local_addr()?.port();
@@ -405,7 +535,11 @@ pub fn spawn(
     let token = uuid::Uuid::new_v4().simple().to_string();
     let lan_url = lan_ip().map(|ip| format!("http://{ip}:{port}"));
 
-    let state = Arc::new(Daemon::new(vault, token.clone(), web_root, estante).com_extensoes(extensoes));
+    let state = Arc::new(
+        Daemon::new(vault, token.clone(), web_root, estante)
+            .com_extensoes(extensoes)
+            .com_mcp(mcp),
+    );
     let evidence = Arc::clone(&state.evidence);
 
     std::thread::Builder::new()
@@ -443,6 +577,7 @@ pub fn spawn(
         addr: DaemonAddr {
             url: format!("http://127.0.0.1:{port}"),
             lan_url,
+            porta: port,
             token,
         },
         evidence,
@@ -477,31 +612,216 @@ fn bind() -> AppResult<TcpListener> {
 
 /// O IP desta maquina na rede local.
 ///
-/// Sem crate de enumeracao de interfaces: abrir um socket UDP e "conectar" a um
-/// endereco roteavel nao envia pacote nenhum, e faz o sistema escolher a
-/// interface de saida pela propria tabela de rotas. E isso que se quer -- a
-/// interface por onde os celulares da casa chegam -- e nao a primeira da lista,
-/// que costuma ser docker ou uma VPN.
+/// A rota primeiro: abrir um socket UDP e "conectar" a um endereco roteavel nao
+/// envia pacote nenhum, e faz o sistema escolher a interface de saida pela
+/// propria tabela de rotas. E isso que se quer -- a interface por onde os
+/// celulares da casa chegam -- e nao a primeira da lista, que costuma ser
+/// docker ou uma VPN.
+///
+/// A lista so quando nao ha rota nenhuma. Ver `ip_da_rede_sem_rota`.
 fn lan_ip() -> Option<IpAddr> {
     // Dois alvos: um publico, e um privado para o caso de a casa nao ter saida
     // para a internet. Nenhum dos dois recebe nada.
-    for target in ["1.1.1.1:80", "192.168.0.1:80"] {
-        let Ok(socket) = UdpSocket::bind("0.0.0.0:0") else {
-            continue;
-        };
+    ALVOS_DA_REDE_LOCAL
+        .into_iter()
+        .find_map(ip_de_saida)
+        .or_else(|| ip_da_rede_sem_rota(&placas()))
+}
 
-        if socket.connect(target).is_err() {
-            continue;
-        }
+const ALVOS_DA_REDE_LOCAL: [&str; 2] = ["1.1.1.1:80", "192.168.0.1:80"];
 
-        if let Ok(addr) = socket.local_addr() {
-            if !addr.ip().is_loopback() && !addr.ip().is_unspecified() {
-                return Some(addr.ip());
-            }
-        }
+/// O IP desta maquina que o sistema usaria para chegar a `alvo`.
+///
+/// O truque do `lan_ip`: `connect` em UDP so consulta a tabela de rotas, e
+/// nenhum pacote sai.
+fn ip_de_saida(alvo: &str) -> Option<IpAddr> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect(alvo).ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
+
+/// Uma placa de rede ligada, com o que o convite pergunta a ela.
+#[derive(Debug, Clone)]
+struct Placa {
+    nome: String,
+    ip: IpAddr,
+    /// tun, WireGuard, PPP. A VPN do trabalho e assim, e o celular da mesa
+    /// nunca esta do outro lado dela.
+    ponto_a_ponto: bool,
+}
+
+/// As placas ligadas desta maquina, so com IPv4.
+///
+/// So IPv4 porque o endereco vira `http://{ip}:{porta}` no QR, e IPv6 ali
+/// pediria colchetes. Sem o 169.254 que o sistema inventa quando o DHCP nao
+/// responde: ninguem alcanca aquilo.
+fn placas() -> Vec<Placa> {
+    let Ok(lista) = if_addrs::get_if_addrs() else {
+        return Vec::new();
+    };
+
+    lista
+        .into_iter()
+        .filter(|placa| placa.is_oper_up() && !placa.is_loopback() && !placa.is_link_local())
+        .filter(|placa| placa.ip().is_ipv4())
+        .map(|placa| Placa {
+            ip: placa.ip(),
+            ponto_a_ponto: placa.is_p2p(),
+            nome: placa.name,
+        })
+        .collect()
+}
+
+/// A placa e do ZeroTier.
+///
+/// O ZeroTier nao tem faixa de IP propria: cada rede escolhe a sua, quase
+/// sempre uma privada como a do Wi-Fi de casa, e a faixa nao diz nada. O nome
+/// diz. Ele chama a placa de `zt` mais o id da rede no Linux (`ztr2qsmswx`), de
+/// `feth` no macOS, e o Windows mostra o nome amigavel do adaptador
+/// (`ZeroTier One [8056c2e21c000001]`).
+fn e_zerotier(nome: &str) -> bool {
+    let nome = nome.to_ascii_lowercase();
+
+    nome.starts_with("zt") || nome.starts_with("feth") || nome.contains("zerotier")
+}
+
+fn ip_do_zerotier(placas: &[Placa]) -> Option<IpAddr> {
+    placas
+        .iter()
+        .find(|placa| e_zerotier(&placa.nome))
+        .map(|placa| placa.ip)
+}
+
+/// Pedacos do nome das placas de maquina virtual e de conteiner. Elas tem IP
+/// privado como o do Wi-Fi, e nenhum celular esta do outro lado. Os nomes do
+/// Linux (`docker0`, `virbr0`, `vboxnet0`) e os do Windows (`vEthernet (WSL)`,
+/// `VirtualBox Host-Only Network`, `VMware Network Adapter VMnet8`).
+const PLACAS_VIRTUAIS: [&str; 12] = [
+    "docker",
+    "br-",
+    "veth",
+    "virbr",
+    "vboxnet",
+    "virtualbox",
+    "vmnet",
+    "vmware",
+    "lxc",
+    "lxd",
+    "podman",
+    "vethernet",
+];
+
+/// A rede local de uma maquina sem rota para lugar nenhum.
+///
+/// A LAN party sem gateway -- IP fixo, ou um roteador que nao anuncia saida --
+/// nao tem por onde a sonda sair, e os celulares estao nela do mesmo jeito.
+/// Sobra a lista: a primeira placa com IP privado que nao seja o ZeroTier, um
+/// tunel ponto a ponto ou uma maquina virtual.
+fn ip_da_rede_sem_rota(placas: &[Placa]) -> Option<IpAddr> {
+    placas
+        .iter()
+        .find(|placa| {
+            let IpAddr::V4(ip) = placa.ip else {
+                return false;
+            };
+            let nome = placa.nome.to_ascii_lowercase();
+
+            ip.is_private()
+                && !placa.ponto_a_ponto
+                && !e_zerotier(&placa.nome)
+                && !PLACAS_VIRTUAIS.iter().any(|virtual_| nome.contains(virtual_))
+        })
+        .map(|placa| placa.ip)
+}
+
+/// Uma rede por onde a mesa alcanca esta maquina.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rede {
+    Local,
+    Tailscale,
+    Hamachi,
+    Radmin,
+    Zerotier,
+}
+
+/// O daemon numa dessas redes.
+#[derive(Debug, Clone, Serialize)]
+pub struct Endereco {
+    pub rede: Rede,
+    pub url: String,
+}
+
+/// De que rede e este IP, pela faixa.
+///
+/// As VPNs de jogo se reconhecem pela faixa que cada uma toma para si: o
+/// Tailscale usa o 100.64.0.0/10 (o espaco de CGNAT), o Hamachi o 25.0.0.0/8 e
+/// o Radmin o 26.0.0.0/8. O ZeroTier nao entra: cada rede dele escolhe a
+/// propria faixa, e ele se reconhece pelo nome da placa -- ver `e_zerotier`.
+///
+/// O resto e rede local. Uma maquina ligada direto num CGNAT de operadora (um
+/// modem USB, raro) seria lida como Tailscale -- o endereco ainda funcionaria,
+/// so com o nome errado no botao.
+fn classificar(ip: IpAddr) -> Rede {
+    let IpAddr::V4(ip) = ip else {
+        return Rede::Local;
+    };
+
+    match ip.octets() {
+        [100, b, ..] if (64..128).contains(&b) => Rede::Tailscale,
+        [25, ..] => Rede::Hamachi,
+        [26, ..] => Rede::Radmin,
+        _ => Rede::Local,
     }
+}
 
-    None
+/// Os enderecos do daemon em cada rede que responde agora.
+///
+/// Calculado a cada pergunta, e nao na abertura como o `lan_url`: a VPN se
+/// liga com o aplicativo ja aberto, e o mestre que ligou o Tailscale no meio da
+/// tarde nao deveria ter de reabrir nada para o convite mostra-la.
+///
+/// Um alvo por rede: a rota ate ele diz por que interface se sai, e a faixa do
+/// IP dela diz se e a rede procurada. Sem a VPN, a rota ate 25.0.0.1 cai no
+/// gateway da casa, o IP volta como rede local, e o Hamachi fica de fora. O
+/// ZeroTier, sem faixa, vem pelo nome da placa.
+pub fn enderecos(porta: u16) -> Vec<Endereco> {
+    let placas = placas();
+    let zerotier = ip_do_zerotier(&placas);
+
+    let sondas: [(Rede, &[&str]); 4] = [
+        (Rede::Local, &ALVOS_DA_REDE_LOCAL),
+        // O endereco de servico do proprio Tailscale: so tem rota pela
+        // interface dele quando ele esta de pe.
+        (Rede::Tailscale, &["100.100.100.100:80"]),
+        (Rede::Hamachi, &["25.0.0.1:80"]),
+        (Rede::Radmin, &["26.0.0.1:80"]),
+    ];
+
+    let achados = sondas.into_iter().filter_map(|(rede, alvos)| {
+        alvos
+            .iter()
+            .filter_map(|alvo| ip_de_saida(alvo))
+            // A rede do ZeroTier pode ser justo a 192.168.0.0/24, e ai a rota
+            // ate o alvo privado sai por ela: o IP e privado, mas nao e a casa.
+            .find(|ip| classificar(*ip) == rede && Some(*ip) != zerotier)
+            .or_else(|| {
+                (rede == Rede::Local)
+                    .then(|| ip_da_rede_sem_rota(&placas))
+                    .flatten()
+            })
+            .map(|ip| (rede, ip))
+    });
+
+    achados
+        .chain(zerotier.map(|ip| (Rede::Zerotier, ip)))
+        .map(|(rede, ip)| Endereco {
+            rede,
+            url: format!("http://{ip}:{porta}"),
+        })
+        .collect()
 }
 
 /// As rotas.
@@ -556,14 +876,37 @@ pub fn router(state: Arc<Daemon>) -> Router {
             ),
         )
         .route("/plugin/{id}/{*arquivo}", get(serve_plugin))
-        .route("/sala/rolagens", get(rolls))
-        .route("/sala/movimentos", get(moves))
-        .route("/sala/acoes", get(actions))
+        .route(
+            "/sala/rolagens",
+            get(rolls).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
+        .route(
+            "/sala/movimentos",
+            get(moves).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
+        .route(
+            "/sala/acoes",
+            get(actions).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
         .route(
             "/sala/mensagens",
             // O GET e da janela do Mestre (loopback, como `/sala/rolagens`); o
             // POST tambem, mas escreve na campanha, e por isso leva o token.
-            get(fio_do_mestre).merge(
+            get(fio_do_mestre)
+                .layer(middleware::from_fn_with_state(
+                    Arc::clone(&state),
+                    require_mestre,
+                ))
+                .merge(
                 post(fala_do_mestre)
                     .layer(DefaultBodyLimit::max(FALA_DO_MESTRE_MAX_BYTES))
                     .layer(middleware::from_fn_with_state(
@@ -579,7 +922,13 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 require_token,
             )),
         )
-        .route("/sala/pings", get(pings))
+        .route(
+            "/sala/pings",
+            get(pings).layer(middleware::from_fn_with_state(
+                Arc::clone(&state),
+                require_mestre,
+            )),
+        )
         .nest("/eu", player_routes(Arc::clone(&state)))
         .route(
             "/sala/publicar",
@@ -595,6 +944,16 @@ pub fn router(state: Arc<Daemon>) -> Router {
                 )),
         )
         .route("/debug/palco", get(debug_palco_get).post(debug_palco_post))
+        // O MCP. Os portoes sao do proprio handler, e nao uma camada como o
+        // `require_token`: a recusa tem de sair em JSON-RPC, que e o que o
+        // cliente do protocolo sabe mostrar. Ver `mcp`.
+        .route(
+            "/mcp",
+            post(mcp::receber)
+                .get(mcp::sem_fluxo)
+                .delete(mcp::sem_fluxo)
+                .layer(DefaultBodyLimit::max(mcp::CORPO_MAX)),
+        )
         .route("/saude", get(|| async { "ok" }))
         // As telas mudaram de nome, e os enderecos antigos continuam de pe.
         //
@@ -612,6 +971,10 @@ pub fn router(state: Arc<Daemon>) -> Router {
         .route("/plateia/", get(|uri: Uri| async move { renomeada(uri, "/jogador") }))
         // Tudo que nao casou com as rotas acima e a tela do espectador.
         .fallback(get(serve_web))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            limitar_codigo,
+        ))
         // A janela do Mestre roda em outra origem (`http://localhost:3000` em
         // dev, o protocolo do Tauri empacotado), entao o `fetch` dela e
         // cross-origin. Liberar e seguro porque quem autoriza escrita e o
@@ -695,7 +1058,6 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/anexos/{autor}/{arquivo}/{variante}",
             get(read_character_file_variante),
         )
-        .route("/personagens/{id}/nota", get(read_character_note).put(write_character_note))
         // O caderno: notas do JOGADOR, que nao sao de personagem nenhum. Sem
         // `ligado` pelo meio -- o dono e o token, e ele entra no `where` de
         // cada consulta.
@@ -712,12 +1074,38 @@ fn player_routes(state: Arc<Daemon>) -> Router<Arc<Daemon>> {
             "/personagens/{id}/inventario/{itemId}",
             patch(update_inventory_item).delete(remove_inventory_item),
         )
+        // Os detalhes da ficha, so leitura, e a rolagem dos que o molde liga.
+        // Quem le a expressao e sorteia e o daemon -- ver `roll_detail`.
+        .route("/personagens/{id}/detalhes", get(character_details))
+        .route(
+            "/personagens/{id}/detalhes/{detalheId}/rolar",
+            post(roll_detail),
+        )
+        // A conta escrita entre chaves no texto do detalhe ("Soco {1d4}"): o
+        // celular diz qual, e o daemon a confere na ficha. Ver `roll_in_text`.
+        .route(
+            "/personagens/{id}/detalhes/{detalheId}/rolar-no-texto",
+            post(roll_in_text),
+        )
+        // O atributo que e um dado (a AGI d8), pela mesma razao: quem sorteia
+        // e o daemon. Ver `roll_attribute`.
+        .route(
+            "/personagens/{id}/atributos/{atributoId}/rolar",
+            post(roll_attribute),
+        )
         .route(
             "/personagens/{id}/inventario/{itemId}/imagem",
             // Desligado pelo mesmo motivo de `/anexos`: quem conta os bytes e o
             // handler, e o padrao de 2 MB do axum cortava o stream antes do
-            // teto, entregando ao cliente um "load failed" sem causa.
-            put(set_inventory_image).layer(DefaultBodyLimit::disable()),
+            // teto, entregando ao cliente um "load failed" sem causa. No `GET`
+            // ele nao muda nada -- nao ha corpo.
+            get(read_inventory_image)
+                .put(set_inventory_image)
+                .layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/personagens/{id}/inventario/{itemId}/imagem/{variante}",
+            get(read_inventory_image_variante),
         )
         .layer(middleware::from_fn_with_state(state, require_player))
 }
@@ -738,6 +1126,89 @@ async fn require_token(
     }
 
     next.run(request).await
+}
+
+#[derive(Debug, Deserialize)]
+struct TokenQuery {
+    token: Option<String>,
+}
+
+/// Exige o MESTRE: esta maquina, sem proxy, e com o token.
+///
+/// Para os fluxos que so a janela do Mestre le: as rolagens cruas, o fio com
+/// os sussurros, as acoes, os movimentos e os pings. Loopback bastava enquanto
+/// a porta so ia ate o Wi-Fi. Com a mesa na internet por um tunel local o
+/// socket mente, e o token e a prova que nao atravessa a rua: ele nasce no
+/// processo, e so a janela o recebe, pelo IPC.
+///
+/// Token na query, alem do cabecalho, porque `EventSource` nao manda
+/// cabecalho. A URL fica na janela do Mestre e no loopback.
+///
+/// Sem `ConnectInfo` e recusa, como no `publish`: endereco ausente nao pode
+/// virar permissao por omissao.
+async fn require_mestre(
+    State(state): State<Arc<Daemon>>,
+    Query(query): Query<TokenQuery>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let daqui = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .is_some_and(|ConnectInfo(addr)| desta_maquina(addr, request.headers()));
+    if !daqui {
+        return fail(StatusCode::FORBIDDEN, "so a janela do Mestre le isto");
+    }
+
+    let provided = request
+        .headers()
+        .get(TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .or(query.token.as_deref());
+    if provided != Some(state.token.as_str()) {
+        return fail(StatusCode::UNAUTHORIZED, "token ausente ou invalido");
+    }
+
+    next.run(request).await
+}
+
+/// Recusa quem errou o codigo da mesa vezes demais. Ver `Tentativas`.
+///
+/// Uma camada no roteador inteiro, e nao uma checagem em cada rota que pede
+/// codigo: `code_matches` marca a recusa, e e aqui que ela se conta. Uma rota
+/// nova com codigo nasce limitada.
+///
+/// Esta maquina, sem proxy, nunca e barrada: e a janela do Mestre e a TV dele,
+/// e uma enxurrada de erros vinda de fora nao pode trancar o mestre da propria
+/// mesa.
+async fn limitar_codigo(
+    State(state): State<Arc<Daemon>>,
+    request: AxumRequest,
+    next: Next,
+) -> Response {
+    let cliente = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .filter(|ConnectInfo(addr)| !desta_maquina(addr, request.headers()))
+        .map(|ConnectInfo(addr)| cliente_de(addr, request.headers()));
+
+    let Some(cliente) = cliente else {
+        return next.run(request).await;
+    };
+
+    if state.tentativas.bloqueado(cliente, Instant::now()) {
+        return fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            "codigo errado vezes demais; espere alguns minutos",
+        );
+    }
+
+    let resposta = next.run(request).await;
+    if resposta.extensions().get::<CodigoErrado>().is_some() {
+        state.tentativas.errou(cliente, Instant::now());
+    }
+
+    resposta
 }
 
 /// Resolve o token do jogador e o deixa na requisicao.
@@ -845,7 +1316,10 @@ fn code_matches(state: &Daemon, provided: Option<&str>) -> Result<(), Response> 
         return Ok(());
     }
 
-    Err(fail(StatusCode::FORBIDDEN, "codigo da mesa invalido"))
+    let mut recusa = fail(StatusCode::FORBIDDEN, "codigo da mesa invalido");
+    recusa.extensions_mut().insert(CodigoErrado);
+
+    Err(recusa)
 }
 
 /// O que o espectador precisa saber da mesa que encontrou.
@@ -890,9 +1364,10 @@ async fn check(
 async fn publish(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
 
@@ -919,9 +1394,10 @@ async fn publish(
 async fn publish_declarativo(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
 
@@ -979,10 +1455,11 @@ impl CanalDePlugin {
 async fn publicar_no_canal(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     AxumPath((id, canal)): AxumPath<(String, String)>,
     body: String,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "publicar so a partir desta maquina");
     }
     if !extensoes::id_valido(&id) || !extensoes::id_valido(&canal) {
@@ -1095,7 +1572,6 @@ async fn serve_plugin(
     // por `caminho_relativo_seguro` e so tem imagem raster (ver
     // `IMAGENS_DE_MEDIDOR`), entao nada aqui abre um `.svg` ou um `.html`.
     let de_estilo = manifesto
-        .contribui
         .imagens_servidas()
         .iter()
         .any(|(_, imagem)| *imagem == arquivo.as_str());
@@ -1151,6 +1627,17 @@ async fn serve_plugin(
     }
 }
 
+/// De quanto em quanto o `/sala/live` diz que esta vivo, com a cena parada.
+///
+/// Um evento com nome (`vivo`) e com `data`, e nao o comentario do keep-alive
+/// padrao: o navegador nao entrega comentario ao JavaScript, e descarta evento
+/// sem `data`. So assim o vigia de quem assiste (`createSubscriberChannel`)
+/// separa cena parada de fluxo morto -- o socket meio fechado de uma TV que
+/// perdeu o Wi-Fi nao avisa ninguem, e quem so escuta nao tem escrita que
+/// falhe. O relogio zera a cada quadro, entao com a cena andando nao sai
+/// batimento nenhum.
+const BATIMENTO_DA_SALA: Duration = Duration::from_secs(5);
+
 /// `GET /sala/live?codigo=XXXXXX` -- a cena, em SSE.
 ///
 /// SSE e nao WebSocket: o fluxo e de mao unica a 10Hz, o `EventSource` reconecta
@@ -1186,8 +1673,13 @@ async fn live(
     )
     // A rede local derruba conexao ociosa, e celular com a tela apagada e
     // exatamente isso. O keep-alive do SSE e o que mantem o socket vivo entre
-    // duas cenas.
-    .keep_alive(KeepAlive::default()))
+    // duas cenas -- e, com nome e mais curto, o que diz a TV que ele esta vivo.
+    // Ver `BATIMENTO_DA_SALA`.
+    .keep_alive(
+        KeepAlive::new()
+            .interval(BATIMENTO_DA_SALA)
+            .event(Event::default().event("vivo").data("1")),
+    ))
 }
 
 // --- depuracao do palco ------------------------------------------------------
@@ -1219,8 +1711,9 @@ async fn debug_palco_post(State(state): State<Arc<Daemon>>, body: String) -> Res
 async fn debug_palco_get(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "so a partir desta maquina");
     }
 
@@ -1261,6 +1754,27 @@ pub struct Rolagem {
     /// `valorDaRolagem`, num lugar so. Ver `types/dado.ts`.
     valor: u32,
     quando: i64,
+    /// A jogada com nome de que este dado faz parte: os dois d20 da Defesa
+    /// levam o mesmo, para a bandeja do Mestre os juntar numa linha e somar o
+    /// `+5`. O dado avulso do saquinho vai sem. Ver `Lance` em `types/dado.ts`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lance: Option<Lance>,
+    /// Caiu, e nao conta: nao foi o maior do termo. Ver `fio::Dado::descartado`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    descartado: bool,
+}
+
+/// Uma rolagem com nome: "Dante · Defesa", `2d20+5`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lance {
+    id: String,
+    rotulo: String,
+    modificador: i64,
+    /// As siglas que a conta leu, e quanto valiam: `{1d20+@AGI}` rolou com a
+    /// AGI 1. Ver `fio::Sigla`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    siglas: Vec<fio::Sigla>,
 }
 
 /// Os solidos que existem. Recusar o resto e o que impede um `faces: 1000000`
@@ -1302,6 +1816,8 @@ async fn roll(
         faces: body.faces,
         valor,
         quando: crate::vault::now_ms(),
+        lance: None,
+        descartado: false,
     };
 
     // O fio tambem, e AQUI, e nao na janela do Mestre: quem sorteia e o
@@ -1323,9 +1839,14 @@ async fn roll(
         para: None,
         texto: None,
         rolagem: Some(fio::Rolagem {
-            dados: vec![fio::Dado { faces: rolagem.faces, valor: rolagem.valor }],
+            dados: vec![fio::Dado {
+                faces: rolagem.faces,
+                valor: rolagem.valor,
+                descartado: false,
+            }],
             modificador: 0,
             rotulo: None,
+            siglas: Vec::new(),
         }),
     };
     if let Err(resposta) = escrever_no_fio(&state, fio::Registro::Linha(linha)) {
@@ -1363,8 +1884,9 @@ async fn roll(
 async fn rolls(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "as rolagens sao desta maquina"));
     }
 
@@ -1562,8 +2084,9 @@ async fn fio_do_jogador(
 async fn fio_do_mestre(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "o fio inteiro e desta maquina"));
     }
 
@@ -1613,9 +2136,10 @@ pub struct FalaDoMestreBody {
 async fn fala_do_mestre(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     axum::Json(body): axum::Json<FalaDoMestreBody>,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "o Mestre fala desta maquina");
     }
 
@@ -1686,9 +2210,10 @@ async fn fala_do_mestre(
 async fn apagar_do_fio(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     AxumPath(id): AxumPath<String>,
 ) -> Response {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return fail(StatusCode::FORBIDDEN, "o Mestre apaga desta maquina");
     }
     if id.len() > ID_MAX {
@@ -1900,8 +2425,9 @@ async fn act(
 async fn actions(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "as acoes sao desta maquina"));
     }
 
@@ -1946,8 +2472,9 @@ async fn character_extensoes(
 async fn moves(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "os movimentos sao desta maquina"));
     }
 
@@ -2062,8 +2589,9 @@ async fn ping(
 async fn pings(
     State(state): State<Arc<Daemon>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>>, Response> {
-    if !addr.ip().is_loopback() {
+    if !desta_maquina(&addr, &headers) {
         return Err(fail(StatusCode::FORBIDDEN, "os pings sao desta maquina"));
     }
 
@@ -2468,8 +2996,26 @@ async fn read_character_file_variante(
         return fail(StatusCode::NOT_FOUND, "variante desconhecida");
     };
 
-    let origem = characters::anexo_caminho(&vault, &id, autor, &arquivo);
-    let chave = characters::anexo_chave(&id, autor, &arquivo);
+    anexo_na_variante(&state, &vault, &id, autor, arquivo, variante, request).await
+}
+
+/// A reducao de um anexo de personagem, ou o original quando ela nao sai.
+///
+/// O corpo de `read_character_file_variante`, separado quando a foto do item
+/// passou a ser servida tambem pela rota do inventario -- ver
+/// `read_inventory_image_variante`. Quem chama ja conferiu que o pedido pode
+/// ver este arquivo; aqui so se reduz e se entrega.
+async fn anexo_na_variante(
+    state: &Arc<Daemon>,
+    vault: &Vault,
+    id: &str,
+    autor: characters::Autor,
+    arquivo: String,
+    variante: variantes::Variante,
+    request: Request<Body>,
+) -> Response {
+    let origem = characters::anexo_caminho(vault, id, autor, &arquivo);
+    let chave = characters::anexo_chave(id, autor, &arquivo);
 
     // Pelo tipo declarado, e antes de tentar: mandar um PDF ao decodificador de
     // imagem uma vez por requisicao gastaria disco e um `spawn_blocking` para
@@ -2478,9 +3024,9 @@ async fn read_character_file_variante(
 
     let recusa = sem_variante_chave(variante, &chave, &origem);
 
-    let caminho = if !reduzivel || ja_recusada(&state, &recusa) {
+    let caminho = if !reduzivel || ja_recusada(state, &recusa) {
         None
-    } else if let Some(pronta) = variantes::pronta(&vault, variante, &chave, &origem) {
+    } else if let Some(pronta) = variantes::pronta(vault, variante, &chave, &origem) {
         // Caminho quente, e sem tomar o semaforo: depois da primeira vez isto e
         // um `stat` e um `ServeFile` de alguns KB.
         Some(pronta)
@@ -2499,7 +3045,7 @@ async fn read_character_file_variante(
         {
             Ok(Ok(caminho)) => Some(caminho),
             Ok(Err(cause)) => {
-                recusou(&state, recusa, &arquivo, variante, cause);
+                recusou(state, recusa, &arquivo, variante, cause);
                 None
             }
             Err(cause) => {
@@ -2510,7 +3056,7 @@ async fn read_character_file_variante(
     };
 
     let Some(caminho) = caminho else {
-        return anexo_original(&vault, &id, autor, &arquivo);
+        return anexo_original(vault, id, autor, &arquivo);
     };
 
     // O tipo sai da VARIANTE e nao do anexo: a miniatura e sempre PNG e a de
@@ -2525,7 +3071,7 @@ async fn read_character_file_variante(
         Ok(response) => response.into_response(),
         Err(cause) => {
             log::error!("{} de {arquivo} em {}: {cause}", variante.nome(), caminho.display());
-            anexo_original(&vault, &id, autor, &arquivo)
+            anexo_original(vault, id, autor, &arquivo)
         }
     }
 }
@@ -2600,86 +3146,42 @@ async fn remove_character_file(
     }
 }
 
-#[derive(Debug, Serialize)]
-struct NotaBody {
-    texto: String,
-}
-
-/// `GET /eu/personagens/{id}/nota`
-async fn read_character_note(
-    State(state): State<Arc<Daemon>>,
-    axum::Extension(player): axum::Extension<players::Player>,
-    AxumPath(id): AxumPath<String>,
-) -> Response {
-    let vault = match ligado(&state, &player.id, &id) {
-        Ok(vault) => vault,
-        Err(response) => return response,
-    };
-
-    match players::note(&vault, &id, &player.id) {
-        Ok(texto) => axum::Json(NotaBody { texto }).into_response(),
-        Err(cause) => {
-            log::error!("nota de {} sobre {id}: {cause}", player.id);
-            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler a nota")
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct WriteNota {
-    texto: String,
-}
-
-/// `PUT /eu/personagens/{id}/nota`
-///
-/// A nota e do PAR (personagem, jogador), e o jogador nunca informa o proprio
-/// id: ele vem do token. Nao ha id a trocar para escrever na nota de outro.
-async fn write_character_note(
-    State(state): State<Arc<Daemon>>,
-    axum::Extension(player): axum::Extension<players::Player>,
-    AxumPath(id): AxumPath<String>,
-    axum::Json(body): axum::Json<WriteNota>,
-) -> Response {
-    let vault = match ligado(&state, &player.id, &id) {
-        Ok(vault) => vault,
-        Err(response) => return response,
-    };
-
-    match players::set_note(&vault, &id, &player.id, &body.texto) {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(cause) => {
-            log::error!("nota de {} sobre {id}: {cause}", player.id);
-            fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao gravar a nota")
-        }
-    }
-}
-
-// --- caderno do jogador -----------------------------------------------------
+// --- caderno do personagem -------------------------------------------------
 //
-// O que o jogador anota na sessao e nao e sobre ficha nenhuma. Estas rotas nao
-// passam por `ligado`, e nao e esquecimento: nota de caderno nao tem personagem
-// do outro lado. Quem separa o caderno de um jogador do de outro e o
-// `jogador_id` no `where` de cada consulta -- ver `players::update_note`.
+// O que o jogador anota na sessao, no caderno de um dos personagens dele. Ler e
+// criar passam por `ligado`: o caderno e do par jogador e personagem, e o
+// personagem tem de ser dele. Mudar e apagar vao pelo id da nota, e quem separa
+// o caderno de um jogador do de outro e o `jogador_id` no `where` de cada
+// consulta -- ver `players::update_note`.
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CorpoNota {
+    /// O personagem dono do caderno. Exigido so na criacao.
+    personagem_id: Option<String>,
     titulo: Option<String>,
     texto: Option<String>,
     tags: Option<Vec<String>>,
 }
 
-/// `GET /eu/notas` -- o caderno deste jogador.
+#[derive(Debug, Deserialize)]
+pub struct DoPersonagem {
+    personagem: String,
+}
+
+/// `GET /eu/notas?personagem={id}` -- o caderno deste jogador sobre um dos
+/// personagens dele.
 async fn my_notes(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
+    Query(query): Query<DoPersonagem>,
 ) -> Response {
-    let guard = state.vault.read().expect("vault envenenado");
-    let vault = match vault_vivo(&guard) {
+    let vault = match ligado(&state, &player.id, &query.personagem) {
         Ok(vault) => vault,
-        Err(resposta) => return resposta,
+        Err(response) => return response,
     };
 
-    match players::notes(vault, &player.id) {
+    match players::character_notes(&vault, &player.id, &query.personagem) {
         Ok(notas) => axum::Json(notas).into_response(),
         Err(cause) => {
             log::error!("caderno de {}: {cause}", player.id);
@@ -2699,15 +3201,18 @@ async fn new_note(
     axum::Extension(player): axum::Extension<players::Player>,
     axum::Json(body): axum::Json<CorpoNota>,
 ) -> Response {
-    let guard = state.vault.read().expect("vault envenenado");
-    let vault = match vault_vivo(&guard) {
+    let Some(personagem) = body.personagem_id.as_deref() else {
+        return fail(StatusCode::BAD_REQUEST, "a nota precisa de um personagem");
+    };
+    let vault = match ligado(&state, &player.id, personagem) {
         Ok(vault) => vault,
-        Err(resposta) => return resposta,
+        Err(response) => return response,
     };
 
     let criada = players::create_note(
-        vault,
+        &vault,
         &player.id,
+        personagem,
         body.titulo.as_deref().unwrap_or_default(),
         body.texto.as_deref().unwrap_or_default(),
         body.tags.as_deref().unwrap_or_default(),
@@ -2889,7 +3394,12 @@ fn recusa(cause: crate::error::AppError, o_que: &str) -> Response {
 ///
 /// Filtrado AQUI, e nao na tela: o item escondido que chega ao celular e some
 /// no React ja vazou -- esta no JSON que o navegador guardou, e a aba de rede
-/// do celular o mostra. Ver `inventory::visiveis`.
+/// do celular o mostra. O mesmo vale para o atributo e o medidor escondidos
+/// dos itens que passam. Ver `inventory::visiveis`.
+///
+/// So o inventario deste personagem, cada entrada com o item dela. O catalogo
+/// inteiro da campanha nunca sai por aqui: o que o celular sabe de um item e
+/// estar na mochila de um personagem dele.
 async fn character_inventory(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2900,7 +3410,7 @@ async fn character_inventory(
         Err(response) => return response,
     };
 
-    match inventory::load(&vault, &id) {
+    match inventory::listar(&vault, &id) {
         Ok(itens) => {
             axum::Json(inventory::visiveis(itens, characters::Autor::Jogador)).into_response()
         }
@@ -2915,8 +3425,13 @@ async fn character_inventory(
 ///
 /// Entra sempre como `Autor::Jogador`, e isso nao e campo do corpo: o autor sai
 /// de QUEM esta chamando. Aceita-lo faria o celular criar item que o mestre nao
-/// distinguiria dos dele. O `escondido` do corpo e ignorado pelo mesmo motivo,
-/// dentro de `inventory::add`.
+/// distinguiria dos dele. O `escondido` e a `imagem` do corpo sao ignorados
+/// pelo mesmo motivo, dentro de `inventory::add`: a foto entra pelo multipart.
+/// `atributos` e `medidores` tambem: a ficha do item e do mestre.
+///
+/// O item nasce no catalogo da campanha guardando este personagem como o
+/// caminho por onde foi criado -- e por ele, e so por ele, que o jogador volta a
+/// edita-lo. Ver `inventory::pode_mexer`.
 async fn add_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2928,17 +3443,31 @@ async fn add_inventory_item(
         Err(response) => return response,
     };
 
+    // Do celular, item so com nome. O `add` ainda batiza o vazio de "Item sem
+    // nome" para o Mestre, que cria pelo "+" e renomeia na hora; aqui a tela ja
+    // pede o nome antes de gravar, e o corpo sem nome e de cliente que pulou a
+    // tela -- o que deixava a grade cheia de "Item sem nome" que ninguem quis.
+    if novo.nome.trim().is_empty() {
+        return fail(StatusCode::BAD_REQUEST, "o item precisa de um nome");
+    }
+
     match inventory::add(&vault, &id, characters::Autor::Jogador, novo) {
-        Ok(item) => (StatusCode::CREATED, axum::Json(item)).into_response(),
+        Ok(item) => {
+            (StatusCode::CREATED, axum::Json(inventory::sem_ocultos(item))).into_response()
+        }
         Err(cause) => recusa(cause, &format!("item novo em {id}")),
     }
 }
 
 /// `PATCH /eu/personagens/{id}/inventario/{itemId}`
 ///
-/// So o que o proprio jogador criou -- `inventory::update` recusa o resto, e a
-/// recusa vira 409. A tela nao deveria nem oferecer o botao nesse caso, e a
-/// checagem existe porque a tela nao e onde uma permissao se decide.
+/// So o que o proprio jogador criou, por ESTE personagem -- `inventory::update`
+/// recusa o resto, e a recusa vira 409. A tela nao deveria nem oferecer o botao
+/// nesse caso, e a checagem existe porque a tela nao e onde uma permissao se
+/// decide. `atuais` (o valor dos medidores) e ignorado -- e do mestre --, e as
+/// listas do catalogo nem sao campo do patch; a resposta sai sem o que e
+/// escondido, como a lista: o item do proprio jogador pode ter ganho do mestre
+/// um atributo que ele nao ve.
 async fn update_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2951,12 +3480,15 @@ async fn update_inventory_item(
     };
 
     match inventory::update(&vault, &id, &item_id, patch, characters::Autor::Jogador) {
-        Ok(item) => axum::Json(item).into_response(),
+        Ok(item) => axum::Json(inventory::sem_ocultos(item)).into_response(),
         Err(cause) => recusa(cause, &format!("item {item_id} de {id}")),
     }
 }
 
 /// `DELETE /eu/personagens/{id}/inventario/{itemId}`
+///
+/// Tira o item da mochila, e da campanha se ninguem mais o carrega. Ver
+/// `inventory::remove`.
 async fn remove_inventory_item(
     State(state): State<Arc<Daemon>>,
     axum::Extension(player): axum::Extension<players::Player>,
@@ -2981,6 +3513,10 @@ async fn remove_inventory_item(
 /// o nome saneado, o teto de 64 MB e a rota `/mini` que ja existem -- e chega a
 /// mesa, quando o mestre quiser, por `character_attachment_share`.
 ///
+/// Fica na pasta DESTE personagem, e o item passa a dizer isso. Quando o mestre
+/// da o item a outro, a foto nao se copia: quem carrega o item por outro
+/// personagem a ve por `read_inventory_image`.
+///
 /// O item e conferido ANTES do upload, e a razao e nao gravar 60 MB para
 /// descobrir depois que o item e do mestre: `set_imagem_anexo` recusaria, e o
 /// arquivo ja estaria no disco.
@@ -2997,10 +3533,10 @@ async fn set_inventory_image(
 
     let autor = characters::Autor::Jogador;
 
-    match inventory::load(&vault, &id) {
-        Ok(itens) => match itens.iter().find(|item| item.id == item_id) {
-            Some(item) if item.autor == autor => {}
-            Some(_) => return fail(StatusCode::FORBIDDEN, "este item e do mestre"),
+    match inventory::listar(&vault, &id) {
+        Ok(itens) => match itens.iter().find(|no| no.item.id == item_id) {
+            Some(no) if inventory::pode_mexer(&no.item, &id, autor) => {}
+            Some(_) => return fail(StatusCode::FORBIDDEN, "este item nao e seu"),
             None => return fail(StatusCode::NOT_FOUND, "item nao encontrado"),
         },
         Err(cause) => {
@@ -3026,9 +3562,101 @@ async fn set_inventory_image(
         Err(cause) => return recusa(cause, &format!("imagem do item {item_id}")),
     };
 
-    match inventory::set_imagem_anexo(&vault, &id, &item_id, autor, &anexo.arquivo, autor) {
-        Ok(item) => axum::Json(item).into_response(),
+    match inventory::set_imagem_anexo(&vault, &id, &item_id, &anexo.arquivo, autor) {
+        Ok(item) => axum::Json(inventory::sem_ocultos(item)).into_response(),
         Err(cause) => recusa(cause, &format!("imagem do item {item_id}")),
+    }
+}
+
+/// Onde mora a foto de um item que este personagem carrega e o jogador ve.
+///
+/// `None` -- e 404 -- para tudo que nao e isso: item que nao esta nesta
+/// mochila, item escondido nela, item sem imagem, e imagem do acervo, que o
+/// celular busca pela rota publica `/asset/{id}` e nao precisa de token.
+///
+/// A conferencia e pelo inventario DESTE personagem, e e o que permite servir
+/// um arquivo de outra pasta: o jogador da Mira nao alcanca os anexos do Edgar,
+/// mas a carta que o Edgar escreveu e o mestre deu a Mira esta na mochila dela,
+/// e a foto e parte do item. Nada alem da foto de um item visivel atravessa.
+///
+/// O personagem da imagem vira caminho no disco, e por isso e conferido como
+/// nome simples mesmo vindo do catalogo: quem escreve `Imagem::Anexo` e o
+/// proprio daemon ou o mestre, mas a rota esta na rede, e a conferencia custa
+/// uma comparacao.
+fn foto_do_item(
+    vault: &Vault,
+    personagem: &str,
+    item_id: &str,
+) -> Result<(String, characters::Autor, String), Response> {
+    let itens = match inventory::listar(vault, personagem) {
+        Ok(itens) => inventory::visiveis(itens, characters::Autor::Jogador),
+        Err(cause) => {
+            log::error!("inventario de {personagem}: {cause}");
+            return Err(fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o inventario"));
+        }
+    };
+
+    match itens.into_iter().find(|no| no.item.id == item_id).and_then(|no| no.item.imagem) {
+        Some(itens::Imagem::Anexo {
+            personagem: dono,
+            autor,
+            arquivo,
+        }) if nome_simples(&dono) => Ok((dono, autor, arquivo)),
+        _ => Err(fail(StatusCode::NOT_FOUND, "imagem nao encontrada")),
+    }
+}
+
+/// Um nome que pode ser um componente de caminho: sem barra, sem `..`.
+fn nome_simples(nome: &str) -> bool {
+    !nome.is_empty() && nome != "." && nome != ".." && !nome.contains(['/', '\\', '\0'])
+}
+
+/// `GET /eu/personagens/{id}/inventario/{itemId}/imagem`
+///
+/// A foto de um item da mochila deste personagem, inteira. Ver `foto_do_item`
+/// para o que passa e por que um arquivo de outra pasta pode passar.
+async fn read_inventory_image(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    match foto_do_item(&vault, &id, &item_id) {
+        Ok((dono, autor, arquivo)) => anexo_original(&vault, &dono, autor, &arquivo),
+        Err(response) => response,
+    }
+}
+
+/// `GET /eu/personagens/{id}/inventario/{itemId}/imagem/{variante}` -- `mini`
+/// ou `tela`.
+///
+/// A mesma reducao de `/anexos/{autor}/{arquivo}/{variante}`, e com a MESMA
+/// chave de cache: a chave e do arquivo no disco, e a miniatura feita para o
+/// Edgar serve a Mira.
+async fn read_inventory_image_variante(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, item_id, variante)): AxumPath<(String, String, String)>,
+    request: Request<Body>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let Some(variante) = variantes::Variante::de_nome(&variante) else {
+        return fail(StatusCode::NOT_FOUND, "variante desconhecida");
+    };
+
+    match foto_do_item(&vault, &id, &item_id) {
+        Ok((dono, autor, arquivo)) => {
+            anexo_na_variante(&state, &vault, &dono, autor, arquivo, variante, request).await
+        }
+        Err(response) => response,
     }
 }
 
@@ -3238,6 +3866,437 @@ async fn remove_attachment(
             fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao remover o anexo")
         }
     }
+}
+
+// --- os detalhes da ficha ------------------------------------------------------
+
+/// Um detalhe como o celular o ve: so leitura, e sem as opcoes da escolha.
+///
+/// A expressao vai junto quando o detalhe rola, e so entao: e o que o botao
+/// mostra ("2d20+5"), para o jogador saber o que vai cair. Mostrar nao e
+/// confiar -- quem rola le a expressao da ficha de novo. Ver `roll_detail`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetalheDoJogador {
+    id: String,
+    rotulo: String,
+    tipo: detalhes::Tipo,
+    grupo: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    valor: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    descricao: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rolagem: Option<String>,
+}
+
+/// A ficha de detalhes de um personagem, para o celular.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DetalhesDoJogador {
+    /// Na ordem do molde. O grupo que a ficha tem e o molde nao, a tela poe no
+    /// fim, como a do Mestre.
+    grupos: Vec<detalhes::Grupo>,
+    detalhes: Vec<DetalheDoJogador>,
+}
+
+/// `GET /eu/personagens/{id}/detalhes`
+///
+/// So leitura, e nao e limitacao de tela: quem escreve a ficha e o mestre,
+/// como nos medidores. Detalhe nao tem `escondido`, entao nao ha o que filtrar
+/// alem do que o celular nao usa.
+async fn character_details(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let (Ok(molde), Ok(lista)) = (detalhes::molde(&vault), detalhes::load(&vault, &id)) else {
+        log::error!("detalhes do personagem {id}: falha ao ler");
+        return fail(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "falha ao ler os detalhes",
+        );
+    };
+
+    let rolaveis = detalhes::Rolaveis::do_molde(&molde);
+    let detalhes = lista
+        .into_iter()
+        .map(|detalhe| DetalheDoJogador {
+            rolagem: rolaveis.expressao(&detalhe).map(str::to_string),
+            id: detalhe.id,
+            rotulo: detalhe.rotulo,
+            tipo: detalhe.tipo,
+            grupo: detalhe.grupo,
+            valor: detalhe.valor,
+            descricao: detalhe.descricao,
+        })
+        .collect();
+
+    axum::Json(DetalhesDoJogador {
+        grupos: molde.grupos,
+        detalhes,
+    })
+    .into_response()
+}
+
+/// O que volta ao celular: o lance, e os dados com a face de cada um.
+#[derive(Debug, Serialize)]
+struct RolagemDoDetalhe {
+    lance: Lance,
+    rolagens: Vec<Rolagem>,
+}
+
+/// `POST /eu/personagens/{id}/detalhes/{detalheId}/rolar` -- o jogador rola a
+/// Defesa do proprio personagem.
+///
+/// O corpo e VAZIO de proposito. O celular diz qual detalhe, e o resto sai
+/// daqui: a expressao gravada na ficha, o d20 ligado no molde, o nome do
+/// personagem no rotulo. Um corpo com a expressao deixaria um cliente
+/// modificado rolar `1d20+50` com o nome da Luta do Dante; um com o rotulo, por
+/// em nome de outro personagem uma rolagem que ele nao fez. Sorteado aqui pela
+/// mesma razao de `roll`.
+///
+/// Uma linha no fio para o gesto inteiro, e um `Rolagem` por dado na bandeja,
+/// todos com o mesmo `lance`.
+async fn roll_detail(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, detalhe_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+
+    let lido = (|| -> AppResult<Option<(String, String, String)>> {
+        let rolaveis = detalhes::Rolaveis::do_molde(&detalhes::molde(&vault)?);
+        let Some(detalhe) = detalhes::load(&vault, &id)?
+            .into_iter()
+            .find(|d| d.id == detalhe_id)
+        else {
+            return Ok(None);
+        };
+        let Some(expressao) = rolaveis.expressao(&detalhe).map(str::to_string) else {
+            return Ok(None);
+        };
+        let nome = characters::load(&vault)?
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| p.nome)
+            .unwrap_or_default();
+        Ok(Some((expressao, nome, detalhe.rotulo)))
+    })();
+
+    let (texto, nome, rotulo) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o detalhe que nao existe e para o que nao rola: o
+        // celular so oferece o botao nos que rolam, e o d20 desligado no molde
+        // entre a tela abrir e o toque chega aqui.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "este detalhe nao rola"),
+        Err(cause) => {
+            log::error!("rolagem do detalhe {detalhe_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o detalhe");
+        }
+    };
+
+    rolar_da_ficha(&state, &player, &texto, &[], &nome, rotulo, &detalhe_id)
+}
+
+/// O que o celular manda para rolar uma conta do texto do detalhe: ela COMO
+/// ESTA ESCRITA, sem as chaves -- `1d4`, `AGId20>+5`.
+#[derive(Debug, Deserialize)]
+struct RolarNoTextoBody {
+    texto: String,
+}
+
+/// `POST /eu/personagens/{id}/detalhes/{detalheId}/rolar-no-texto` -- o jogador
+/// rola uma conta que o mestre escreveu entre chaves no valor ou na descricao
+/// do detalhe: "Soco com mao livre {1d4}".
+///
+/// O corpo diz QUAL conta, e nao e a conta que vale: o daemon so rola a que
+/// esta escrita entre chaves NAQUELE detalhe, e a le de novo. E o que guarda a
+/// razao do corpo vazio de `roll_detail` -- um cliente modificado que pedisse
+/// `1d20+50` recebe 404, porque ninguem escreveu `{1d20+50}` ali. As siglas
+/// (`{AGId20>+5}`) e as mencoes (`{1d20+@Luta}`) valem a ficha agora, e nao a
+/// que o celular tinha na tela.
+async fn roll_in_text(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, detalhe_id)): AxumPath<(String, String)>,
+    axum::Json(body): axum::Json<RolarNoTextoBody>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+    let pedida = body.texto.trim();
+
+    type Lido = (
+        String,
+        Vec<characters::Atributo>,
+        Vec<detalhes::Detalhe>,
+        String,
+    );
+    let lido = (|| -> AppResult<Option<Lido>> {
+        let ficha = detalhes::load(&vault, &id)?;
+        let Some(detalhe) = ficha.iter().find(|d| d.id == detalhe_id) else {
+            return Ok(None);
+        };
+        // O numero nao tem chave; o texto e a escolha guardam texto.
+        let valor = detalhe.valor.as_ref().and_then(serde_json::Value::as_str);
+        let escrita = [valor, detalhe.descricao.as_deref()]
+            .into_iter()
+            .flatten()
+            .any(|texto| {
+                expressao::entre_chaves(texto)
+                    .into_iter()
+                    .any(|conta| conta.trim() == pedida)
+            });
+        if !escrita {
+            return Ok(None);
+        }
+        let rotulo = detalhe.rotulo.clone();
+        let (nome, atributos) = characters::load(&vault)?
+            .into_iter()
+            .find(|p| p.id == id)
+            .map(|p| (p.nome, p.atributos))
+            .unwrap_or_default();
+        Ok(Some((nome, atributos, ficha, rotulo)))
+    })();
+
+    let (nome, atributos, ficha, rotulo) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o detalhe que nao existe e para a conta que nao
+        // esta nele: o mestre pode ter apagado a conta entre a tela abrir e o
+        // toque.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "esta conta nao esta na ficha"),
+        Err(cause) => {
+            log::error!("rolagem no texto do detalhe {detalhe_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o detalhe");
+        }
+    };
+    let siglas = siglas_da_ficha(&atributos, &ficha);
+
+    rolar_da_ficha(&state, &player, pedida, &siglas, &nome, rotulo, &detalhe_id)
+}
+
+/// O que a conta le da ficha: os atributos pela sigla, e os detalhes que
+/// guardam numero pelo rotulo, so com `@`. Os atributos antes: com a sigla e o
+/// rotulo iguais, a mencao e o atributo. Espelha `atributosDaConta`, em
+/// `rolagens-no-texto.ts`.
+fn siglas_da_ficha<'a>(
+    atributos: &'a [characters::Atributo],
+    ficha: &'a [detalhes::Detalhe],
+) -> Vec<expressao::AtributoDaConta<'a>> {
+    let dos_atributos = atributos.iter().map(|atributo| expressao::AtributoDaConta {
+        sigla: &atributo.sigla,
+        valor: atributo.valor,
+        rolagem: atributo.rolagem.as_deref(),
+        so_com_arroba: false,
+    });
+    let dos_detalhes = ficha.iter().filter_map(|detalhe| {
+        let valor = expressao::numero_do_detalhe(detalhe.valor.as_ref()?)?;
+        Some(expressao::AtributoDaConta {
+            sigla: &detalhe.rotulo,
+            valor,
+            rolagem: None,
+            so_com_arroba: true,
+        })
+    });
+
+    dos_atributos.chain(dos_detalhes).collect()
+}
+
+/// `POST /eu/personagens/{id}/atributos/{atributoId}/rolar` -- o jogador rola a
+/// AGI d8 do proprio personagem.
+///
+/// O corpo vazio pela razao do `roll_detail`: o dado sai da ficha, e nao do
+/// celular. So rola o atributo que E um dado (`Atributo::rolagem`); o numero
+/// nao tem o que sortear.
+async fn roll_attribute(
+    State(state): State<Arc<Daemon>>,
+    axum::Extension(player): axum::Extension<players::Player>,
+    AxumPath((id, atributo_id)): AxumPath<(String, String)>,
+) -> Response {
+    let vault = match ligado(&state, &player.id, &id) {
+        Ok(vault) => vault,
+        Err(response) => return response,
+    };
+    type Lido = (
+        String,
+        String,
+        String,
+        Vec<characters::Atributo>,
+        Vec<detalhes::Detalhe>,
+    );
+    let lido = (|| -> AppResult<Option<Lido>> {
+        let Some(personagem) = characters::load(&vault)?.into_iter().find(|p| p.id == id) else {
+            return Ok(None);
+        };
+        let Some((rolagem, sigla)) = personagem
+            .atributos
+            .iter()
+            .find(|a| a.id == atributo_id)
+            .and_then(|a| Some((a.rolagem.clone()?, a.sigla.clone())))
+        else {
+            return Ok(None);
+        };
+        // A ficha inteira, para o dado com mencao: "d20-@NEX".
+        let ficha = detalhes::load(&vault, &id)?;
+        Ok(Some((rolagem, personagem.nome, sigla, personagem.atributos, ficha)))
+    })();
+
+    let (texto, nome, sigla, atributos, ficha) = match lido {
+        Ok(Some(lido)) => lido,
+        // O mesmo 404 para o atributo que nao existe e para o que e numero: o
+        // celular so oferece o dado nos que sao dado.
+        Ok(None) => return fail(StatusCode::NOT_FOUND, "este atributo nao rola"),
+        Err(cause) => {
+            log::error!("rolagem do atributo {atributo_id}: {cause}");
+            return fail(StatusCode::INTERNAL_SERVER_ERROR, "falha ao ler o atributo");
+        }
+    };
+
+    // O dado de um atributo so le o que e numero: nenhum dado chama outro.
+    // Ver `nomesDoDadoDoAtributo` no TS.
+    let numeros: Vec<_> = siglas_da_ficha(&atributos, &ficha)
+        .into_iter()
+        .filter(|sigla| sigla.rolagem.is_none())
+        .collect();
+
+    rolar_da_ficha(&state, &player, &texto, &numeros, &nome, sigla, &atributo_id)
+}
+
+/// Sorteia uma expressao da ficha em nome do jogador: a linha no fio, os dados
+/// na bandeja e a resposta com o lance. E o miolo do `roll_detail`, do
+/// `roll_attribute` e do `roll_in_text`, que so diferem em de onde a expressao
+/// vem.
+///
+/// `atributos` sao os que as siglas leem -- so a conta do texto as tem; a
+/// `rolagem` gravada le sem elas. `rotulo` e o do detalhe ou a sigla; o nome
+/// do personagem vai na frente, como o Mestre escreve. `de_onde` e o id, para
+/// o log.
+fn rolar_da_ficha(
+    state: &Arc<Daemon>,
+    player: &players::Player,
+    texto: &str,
+    atributos: &[expressao::AtributoDaConta],
+    nome: &str,
+    rotulo: String,
+    de_onde: &str,
+) -> Response {
+    // A expressao foi gravada pelo Mestre, que a leu com o leitor do TS. Ela
+    // so falha aqui se os dois leitores divergirem, ou se o arquivo foi
+    // escrito por fora.
+    let Ok((expressao, usadas)) = expressao::ler_lembrando(texto, atributos) else {
+        log::warn!("{de_onde}: a expressao {texto:?} nao serve");
+        return fail(StatusCode::UNPROCESSABLE_ENTITY, "esta expressao nao serve");
+    };
+
+    let rotulo: String = if nome.is_empty() {
+        rotulo
+    } else {
+        format!("{nome} · {rotulo}")
+    }
+    .chars()
+    .take(fio::MAX_ROTULO)
+    .collect();
+    let quando = crate::vault::now_ms();
+    let lance = Lance {
+        id: uuid::Uuid::new_v4().to_string(),
+        rotulo: rotulo.clone(),
+        modificador: expressao.modificador,
+        siglas: usadas
+            .iter()
+            .take(fio::MAX_SIGLAS)
+            .map(|usada| fio::Sigla {
+                sigla: usada.sigla.to_string(),
+                valor: usada.valor,
+                rolagem: usada.rolagem.map(str::to_string),
+            })
+            .collect(),
+    };
+
+    let mut rolagens = Vec::new();
+    for jogada in &expressao.dados {
+        // O termo inteiro antes: e preciso saber os seis valores para marcar os
+        // cinco que nao contam (`6d20>`). Ver `expressao::descartados`.
+        let mut gravados = Vec::new();
+        for _ in 0..jogada.quantidade {
+            let Some(valor) = sortear_face(jogada.faces) else {
+                return fail(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "sem fonte de aleatoriedade",
+                );
+            };
+            gravados.push(valor);
+        }
+        let fora = expressao::descartados(jogada.faces, &gravados, jogada.manter);
+
+        for (valor, descartado) in gravados.into_iter().zip(fora) {
+            rolagens.push(Rolagem {
+                id: uuid::Uuid::new_v4().to_string(),
+                jogador_id: player.id.clone(),
+                jogador: player.nome.clone(),
+                faces: jogada.faces,
+                valor,
+                quando,
+                lance: Some(lance.clone()),
+                descartado,
+            });
+        }
+    }
+
+    // O id da linha e o do LANCE: a linha conta o gesto inteiro, e cada dado
+    // da bandeja tem o seu. Falhar em gravar nao recusa a rolagem, como em
+    // `roll`.
+    let linha = fio::Linha {
+        id: lance.id.clone(),
+        quando,
+        autor: fio::Autor::Jogador {
+            id: player.id.clone(),
+            nome: player.nome.clone(),
+        },
+        para: None,
+        texto: None,
+        rolagem: Some(fio::Rolagem {
+            dados: rolagens
+                .iter()
+                .map(|r| fio::Dado {
+                    faces: r.faces,
+                    valor: r.valor,
+                    descartado: r.descartado,
+                })
+                .collect(),
+            modificador: expressao.modificador,
+            rotulo: Some(rotulo),
+            siglas: lance.siglas.clone(),
+        }),
+    };
+    if let Err(resposta) = escrever_no_fio(&state, fio::Registro::Linha(linha)) {
+        log::warn!(
+            "rolagem {} ficou fora do fio: {}",
+            lance.id,
+            resposta.status()
+        );
+    }
+
+    for rolagem in &rolagens {
+        if let Ok(corpo) = serde_json::to_string(rolagem) {
+            let _ = state.rolagens_tx.send(corpo);
+        }
+    }
+
+    (
+        StatusCode::CREATED,
+        axum::Json(RolagemDoDetalhe { lance, rolagens }),
+    )
+        .into_response()
 }
 
 // --- as telas ---------------------------------------------------------------
@@ -3715,6 +4774,275 @@ mod tests {
     use super::*;
     use axum::body::to_bytes;
     use axum::http::Request as HttpRequest;
+
+    #[test]
+    fn a_faixa_diz_de_que_vpn_e_o_ip() {
+        let rede = |ip: &str| classificar(ip.parse().expect("ip"));
+
+        assert_eq!(rede("100.72.208.2"), Rede::Tailscale);
+        assert_eq!(rede("100.64.0.1"), Rede::Tailscale);
+        assert_eq!(rede("100.127.255.254"), Rede::Tailscale);
+        // Fora do /10: 100.63 e 100.128 sao enderecos publicos comuns.
+        assert_eq!(rede("100.63.0.1"), Rede::Local);
+        assert_eq!(rede("100.128.0.1"), Rede::Local);
+        assert_eq!(rede("25.12.34.56"), Rede::Hamachi);
+        assert_eq!(rede("26.1.2.3"), Rede::Radmin);
+        assert_eq!(rede("192.168.7.40"), Rede::Local);
+        assert_eq!(rede("10.147.17.5"), Rede::Local);
+        assert_eq!(rede("fd7a:115c:a1e0::1"), Rede::Local);
+    }
+
+    #[test]
+    fn o_proxy_no_loopback_nao_e_esta_maquina() {
+        let loopback: SocketAddr = "127.0.0.1:50000".parse().expect("addr");
+        let wifi: SocketAddr = "192.168.7.99:50000".parse().expect("addr");
+        let mut funnel = HeaderMap::new();
+        funnel.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.5, 100.100.100.100"),
+        );
+
+        assert!(desta_maquina(&loopback, &HeaderMap::new()));
+        assert!(!desta_maquina(&loopback, &funnel));
+        assert!(!desta_maquina(&wifi, &HeaderMap::new()));
+
+        // O cliente de verdade vem do cabecalho so pelo loopback: de fora,
+        // quem o escrevesse zeraria a propria conta.
+        assert_eq!(
+            cliente_de(&loopback, &funnel),
+            "203.0.113.5".parse::<IpAddr>().expect("ip")
+        );
+        assert_eq!(cliente_de(&wifi, &funnel), wifi.ip());
+    }
+
+    /// Um GET de quem chega pelo Funnel: loopback, com o cliente no cabecalho.
+    fn pelo_funnel(uri: &str, cliente: &str) -> HttpRequest<Body> {
+        from_ip(
+            HttpRequest::builder()
+                .uri(uri)
+                .header("x-forwarded-for", cliente)
+                .body(Body::empty())
+                .expect("request"),
+            "127.0.0.1",
+        )
+    }
+
+    #[tokio::test]
+    async fn os_fluxos_do_mestre_pedem_o_token_e_recusam_o_proxy() {
+        let (_dir, state, _codigo) = daemon();
+
+        for rota in [
+            "/sala/rolagens",
+            "/sala/movimentos",
+            "/sala/acoes",
+            "/sala/pings",
+            "/sala/mensagens",
+        ] {
+            // Loopback sem token: um tunel TCP cru chega assim, sem cabecalho.
+            let sem_token = router(Arc::clone(&state))
+                .oneshot(from_ip(
+                    HttpRequest::builder()
+                        .uri(rota)
+                        .body(Body::empty())
+                        .expect("request"),
+                    "127.0.0.1",
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(sem_token.status(), StatusCode::UNAUTHORIZED, "{rota}");
+
+            // Pelo Funnel, nem com o token: o token nunca deveria estar la fora.
+            let pelo_proxy = router(Arc::clone(&state))
+                .oneshot(pelo_funnel(&format!("{rota}?token=segredo"), "203.0.113.5"))
+                .await
+                .expect("resposta");
+            assert_eq!(pelo_proxy.status(), StatusCode::FORBIDDEN, "{rota}");
+
+            let mestre = router(Arc::clone(&state))
+                .oneshot(from_ip(
+                    HttpRequest::builder()
+                        .uri(format!("{rota}?token=segredo"))
+                        .body(Body::empty())
+                        .expect("request"),
+                    "127.0.0.1",
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(mestre.status(), StatusCode::OK, "{rota}");
+        }
+    }
+
+    #[tokio::test]
+    async fn quem_erra_o_codigo_demais_espera() {
+        let (_dir, state, codigo) = daemon();
+
+        let pedir = |codigo: &str, ip: &str| {
+            from_ip(
+                HttpRequest::builder()
+                    .uri(format!("/sala?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+                ip,
+            )
+        };
+
+        for _ in 0..ERROS_POR_JANELA {
+            let errado = router(Arc::clone(&state))
+                .oneshot(pedir("ZZZZZZ", "192.168.7.99"))
+                .await
+                .expect("resposta");
+            assert_eq!(errado.status(), StatusCode::FORBIDDEN);
+        }
+
+        // Barrado mesmo com o codigo certo: senao a varredura so pararia de
+        // contar no acerto.
+        let barrado = router(Arc::clone(&state))
+            .oneshot(pedir(&codigo, "192.168.7.99"))
+            .await
+            .expect("resposta");
+        assert_eq!(barrado.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let vizinho = router(Arc::clone(&state))
+            .oneshot(pedir(&codigo, "192.168.7.50"))
+            .await
+            .expect("resposta");
+        assert_eq!(vizinho.status(), StatusCode::OK);
+
+        // Pelo Funnel todos chegam do loopback, e a conta e por cliente.
+        for _ in 0..ERROS_POR_JANELA {
+            router(Arc::clone(&state))
+                .oneshot(pelo_funnel("/sala?codigo=ZZZZZZ", "203.0.113.5"))
+                .await
+                .expect("resposta");
+        }
+        let de_fora = router(Arc::clone(&state))
+            .oneshot(pelo_funnel(
+                &format!("/sala?codigo={codigo}"),
+                "203.0.113.5",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(de_fora.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let outro_de_fora = router(Arc::clone(&state))
+            .oneshot(pelo_funnel(
+                &format!("/sala?codigo={codigo}"),
+                "203.0.113.6",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(outro_de_fora.status(), StatusCode::OK);
+
+        // Esta maquina nunca e trancada para fora da propria mesa.
+        for _ in 0..ERROS_POR_JANELA * 2 {
+            router(Arc::clone(&state))
+                .oneshot(pedir("ZZZZZZ", "127.0.0.1"))
+                .await
+                .expect("resposta");
+        }
+        let mestre = router(state)
+            .oneshot(pedir(&codigo, "127.0.0.1"))
+            .await
+            .expect("resposta");
+        assert_eq!(mestre.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn a_janela_de_erros_vence_e_a_conta_recomeca() {
+        let tentativas = Tentativas::new();
+        let cliente: IpAddr = "203.0.113.5".parse().expect("ip");
+        let inicio = Instant::now();
+
+        for _ in 0..ERROS_POR_JANELA {
+            tentativas.errou(cliente, inicio);
+        }
+        assert!(tentativas.bloqueado(cliente, inicio));
+
+        let depois = inicio + JANELA_DE_ERROS;
+        assert!(!tentativas.bloqueado(cliente, depois));
+
+        tentativas.errou(cliente, depois);
+        assert!(!tentativas.bloqueado(cliente, depois));
+    }
+
+    fn placa(nome: &str, ip: &str) -> Placa {
+        Placa {
+            nome: nome.into(),
+            ip: ip.parse().expect("ip"),
+            ponto_a_ponto: false,
+        }
+    }
+
+    #[test]
+    fn o_zerotier_se_reconhece_pelo_nome_em_cada_sistema() {
+        assert!(e_zerotier("ztr2qsmswx"));
+        assert!(e_zerotier("feth2318"));
+        assert!(e_zerotier("ZeroTier One [8056c2e21c000001]"));
+
+        assert!(!e_zerotier("wlan0"));
+        assert!(!e_zerotier("Wi-Fi"));
+        assert!(!e_zerotier("tailscale0"));
+        assert!(!e_zerotier("Ethernet"));
+
+        let lista = [placa("wlan0", "192.168.0.12"), placa("ztr2qsmswx", "10.147.17.5")];
+        assert_eq!(ip_do_zerotier(&lista), Some("10.147.17.5".parse().unwrap()));
+        assert_eq!(ip_do_zerotier(&lista[..1]), None);
+    }
+
+    #[test]
+    fn sem_rota_a_rede_local_e_a_placa_que_sobra() {
+        let mut tunel = placa("wg0", "10.8.0.2");
+        tunel.ponto_a_ponto = true;
+
+        // Na ordem em que o sistema costuma listar: as virtuais primeiro.
+        let lista = [
+            placa("docker0", "172.17.0.1"),
+            placa("vEthernet (WSL)", "172.29.16.1"),
+            placa("VirtualBox Host-Only Network", "192.168.56.1"),
+            placa("ztr2qsmswx", "10.147.17.5"),
+            tunel,
+            placa("tailscale0", "100.72.208.2"),
+            placa("enp3s0", "10.0.0.15"),
+        ];
+        assert_eq!(
+            ip_da_rede_sem_rota(&lista),
+            Some("10.0.0.15".parse().unwrap())
+        );
+
+        // So virtual e VPN: nenhuma casa para chamar.
+        assert_eq!(ip_da_rede_sem_rota(&lista[..6]), None);
+        // IP publico direto na placa nao e rede de casa.
+        assert_eq!(ip_da_rede_sem_rota(&[placa("eth0", "203.0.113.5")]), None);
+    }
+
+    #[test]
+    fn so_entra_a_rede_que_respondeu_pela_faixa_dela() {
+        // A maquina do teste pode ter qualquer rede, ou nenhuma. O que vale
+        // sempre: cada endereco e da rede que diz ser, e nenhuma aparece duas
+        // vezes.
+        let enderecos = enderecos(20200);
+        let mut vistas = Vec::new();
+
+        for endereco in &enderecos {
+            let ip = endereco
+                .url
+                .trim_start_matches("http://")
+                .trim_end_matches(":20200")
+                .parse()
+                .expect("ip no endereco");
+
+            // O ZeroTier vem pelo nome da placa, e a faixa dele e qualquer uma.
+            if endereco.rede != Rede::Zerotier {
+                assert_eq!(classificar(ip), endereco.rede, "{}", endereco.url);
+            }
+            assert!(
+                !vistas.contains(&endereco.rede),
+                "{:?} repetida",
+                endereco.rede
+            );
+            vistas.push(endereco.rede);
+        }
+    }
 
     fn daemon() -> (tempfile::TempDir, Arc<Daemon>, String) {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4487,6 +5815,36 @@ mod tests {
         assert!(text.contains(r#""id":"s1""#), "estado atual não veio: {text}");
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn live_parado_manda_vivo_com_nome_e_data() {
+        let (_dir, state, codigo) = daemon();
+
+        // Sem nada publicado: o fluxo abre mudo, e o primeiro pedaco so pode
+        // ser o batimento. O relogio pausado anda sozinho ate ele.
+        let sse = router(Arc::clone(&state))
+            .oneshot(
+                HttpRequest::builder()
+                    .uri(format!("/sala/live?codigo={codigo}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("resposta");
+
+        assert_eq!(sse.status(), StatusCode::OK);
+
+        let antes = tokio::time::Instant::now();
+        let mut body = sse.into_body().into_data_stream();
+        let primeiro = body.next().await.expect("batimento").expect("bytes");
+        let text = String::from_utf8_lossy(&primeiro);
+
+        assert_eq!(antes.elapsed(), BATIMENTO_DA_SALA);
+        // Com nome, para nao cair no `onmessage` como quadro; com `data`,
+        // porque o navegador descarta evento sem ela.
+        assert!(text.contains("event: vivo"), "batimento sem nome: {text:?}");
+        assert!(text.contains("data: 1"), "batimento sem data: {text:?}");
+    }
+
     #[tokio::test]
     async fn codigo_da_mesa_nao_diferencia_maiuscula() {
         let (_dir, state, codigo) = daemon();
@@ -5114,24 +6472,473 @@ mod tests {
         String::from_utf8_lossy(&bytes).to_string()
     }
 
+    // --- detalhes da ficha --------------------------------------------------
+
+    /// Um grupo Combate com a Defesa rolavel e a Protecao nao, as duas com
+    /// expressao na ficha do Corvo. Devolve o id da Defesa e o da Protecao.
+    fn ficha_de_combate(state: &Arc<Daemon>, personagem: &str) -> (String, String) {
+        let guard = state.vault.read().expect("vault");
+        let vault = guard.as_ref().expect("campanha");
+
+        detalhes::criar_grupo(
+            vault,
+            detalhes::PatchGrupo {
+                nome: Some("Combate".into()),
+                exibicao: None,
+            },
+        )
+        .expect("grupo");
+
+        let novo = |rotulo: &str, rolagem: &str| detalhes::NovoDetalhe {
+            grupo: "Combate".into(),
+            rotulo: rotulo.into(),
+            tipo: detalhes::Tipo::Numero,
+            valor: Some(serde_json::json!(17)),
+            opcoes: Vec::new(),
+            descricao: Some("Quanto custa acertar".into()),
+            rolagem: Some(rolagem.into()),
+        };
+
+        let defesa = detalhes::criar_modelo(vault, novo("Defesa", "")).expect("modelo");
+        detalhes::editar_modelo(
+            vault,
+            &defesa.id,
+            detalhes::PatchDetalhe {
+                rolavel: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("rolavel");
+        detalhes::criar_modelo(vault, novo("Protecao", "")).expect("modelo");
+
+        let defesa = detalhes::criar(vault, personagem, novo("Defesa", "2d20+5")).expect("defesa");
+        let protecao =
+            detalhes::criar(vault, personagem, novo("Protecao", "1d6")).expect("protecao");
+
+        (defesa.id, protecao.id)
+    }
+
+    #[tokio::test]
+    async fn os_detalhes_chegam_com_a_expressao_so_do_que_rola() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        ficha_de_combate(&state, &personagem);
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "GET",
+                &format!("/eu/personagens/{personagem}/detalhes"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let ficha: serde_json::Value = serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(ficha["grupos"][0]["nome"], "Combate");
+
+        let lista = ficha["detalhes"].as_array().expect("detalhes");
+        let achar = |rotulo: &str| {
+            lista
+                .iter()
+                .find(|d| d["rotulo"] == rotulo)
+                .expect(rotulo)
+                .clone()
+        };
+        assert_eq!(achar("Defesa")["rolagem"], "2d20+5");
+        assert_eq!(achar("Defesa")["valor"], 17);
+        assert_eq!(achar("Defesa")["descricao"], "Quanto custa acertar");
+        // A Protecao tem expressao na ficha, mas o molde nao liga o d20 dela.
+        assert!(achar("Protecao").get("rolagem").is_none());
+    }
+
+    #[tokio::test]
+    async fn rolar_o_detalhe_cai_na_bandeja_e_numa_linha_do_fio() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (defesa, _) = ficha_de_combate(&state, &personagem);
+        let mut bandeja = state.rolagens_tx.subscribe();
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/detalhes/{defesa}/rolar"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        let lance = &rolagem["lance"];
+        assert_eq!(lance["rotulo"], "Corvo · Defesa");
+        assert_eq!(lance["modificador"], 5);
+
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 2);
+        for dado in dados {
+            assert_eq!(dado["faces"], 20);
+            assert!((1..=20).contains(&dado["valor"].as_u64().expect("valor")));
+            assert_eq!(dado["lance"]["id"], lance["id"]);
+            assert_eq!(dado["jogador"], "Edgar");
+        }
+
+        // Os dois dados na bandeja do Mestre, com o lance.
+        for _ in 0..2 {
+            let anunciado: serde_json::Value =
+                serde_json::from_str(&bandeja.try_recv().expect("anunciado")).expect("json");
+            assert_eq!(anunciado["lance"]["id"], lance["id"]);
+        }
+
+        // Uma linha so, com o id do lance, os dois dados, o rotulo e o +5.
+        let linhas = fio_gravado(&state);
+        assert_eq!(linhas.len(), 1);
+        assert_eq!(linhas[0].id, lance["id"].as_str().expect("id"));
+        let no_fio = linhas[0].rolagem.as_ref().expect("rolagem");
+        assert_eq!(no_fio.dados.len(), 2);
+        assert_eq!(no_fio.modificador, 5);
+        assert_eq!(no_fio.rotulo.as_deref(), Some("Corvo · Defesa"));
+    }
+
+    #[tokio::test]
+    async fn so_rola_o_detalhe_que_o_molde_liga_e_que_e_dele() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (defesa, protecao) = ficha_de_combate(&state, &personagem);
+
+        for (token, detalhe) in [
+            // O d20 desligado no molde: a expressao existe e nao rola.
+            (&token_a, &protecao),
+            // Detalhe que nao existe.
+            (&token_a, &"chute".to_string()),
+            // Personagem de outro jogador.
+            (&token_b, &defesa),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/detalhes/{detalhe}/rolar"),
+                    None,
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{detalhe}");
+        }
+
+        let leitura = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_b,
+                "GET",
+                &format!("/eu/personagens/{personagem}/detalhes"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(leitura.status(), StatusCode::NOT_FOUND);
+        assert!(
+            fio_gravado(&state).is_empty(),
+            "rolagem recusada entrou no fio"
+        );
+    }
+
+    #[tokio::test]
+    async fn rola_so_o_atributo_que_e_dado_e_que_e_dele() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (agi, forca) = no_vault(&state, |vault| {
+            let agi = characters::criar_atributo(vault, &personagem, "AGI", 0).expect("agi");
+            characters::editar_atributo(
+                vault,
+                &personagem,
+                &agi.id,
+                characters::PatchAtributo {
+                    rolagem: Some("1d8+1".into()),
+                    ..Default::default()
+                },
+            )
+            .expect("dado");
+            let forca = characters::criar_atributo(vault, &personagem, "FOR", 3).expect("for");
+            (agi.id, forca.id)
+        });
+
+        let response = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "POST",
+                &format!("/eu/personagens/{personagem}/atributos/{agi}/rolar"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["rotulo"], "Corvo · AGI");
+        assert_eq!(rolagem["lance"]["modificador"], 1);
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 1);
+        assert_eq!(dados[0]["faces"], 8);
+        assert_eq!(fio_gravado(&state).len(), 1);
+
+        for (token, atributo) in [
+            // O numero nao tem o que sortear.
+            (&token_a, &forca),
+            // Atributo que nao existe.
+            (&token_a, &"chute".to_string()),
+            // Personagem de outro jogador.
+            (&token_b, &agi),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/atributos/{atributo}/rolar"),
+                    None,
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{atributo}");
+        }
+        assert_eq!(fio_gravado(&state).len(), 1, "rolagem recusada entrou no fio");
+    }
+
+    #[tokio::test]
+    async fn o_dado_do_atributo_le_so_os_numeros_da_ficha() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let (agi, vig) = no_vault(&state, |vault| {
+            let dado = |sigla: &str, rolagem: &str| {
+                let atributo = characters::criar_atributo(vault, &personagem, sigla, 0).expect("atributo");
+                characters::editar_atributo(
+                    vault,
+                    &personagem,
+                    &atributo.id,
+                    characters::PatchAtributo {
+                        rolagem: Some(rolagem.into()),
+                        ..Default::default()
+                    },
+                )
+                .expect("dado");
+                atributo.id
+            };
+            detalhes::criar(
+                vault,
+                &personagem,
+                detalhes::NovoDetalhe {
+                    grupo: "Identidade".into(),
+                    rotulo: "NEX".into(),
+                    tipo: detalhes::Tipo::Numero,
+                    valor: Some(serde_json::json!(5)),
+                    opcoes: Vec::new(),
+                    descricao: None,
+                    rolagem: None,
+                },
+            )
+            .expect("nex");
+            // A VIG menciona a AGI, que e dado: um dado nao le outro.
+            (dado("AGI", "d20-@NEX"), dado("VIG", "d6+@AGI"))
+        });
+        let rolar = |atributo: &str| {
+            como(
+                &token_a,
+                "POST",
+                &format!("/eu/personagens/{personagem}/atributos/{atributo}/rolar"),
+                None,
+            )
+        };
+
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&agi))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["modificador"], -5);
+        assert_eq!(rolagem["rolagens"][0]["faces"], 20);
+        assert_eq!(
+            rolagem["lance"]["siglas"],
+            serde_json::json!([{ "sigla": "NEX", "valor": 5 }])
+        );
+
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&vig))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(fio_gravado(&state).len(), 1, "rolagem recusada entrou no fio");
+    }
+
+    #[tokio::test]
+    async fn rola_so_a_conta_que_esta_escrita_no_texto_do_detalhe() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let soco = no_vault(&state, |vault| {
+            characters::criar_atributo(vault, &personagem, "AGI", 3).expect("agi");
+            detalhes::criar(
+                vault,
+                &personagem,
+                detalhes::NovoDetalhe {
+                    grupo: "Pericias".into(),
+                    rotulo: "Luta".into(),
+                    tipo: detalhes::Tipo::Numero,
+                    valor: Some(serde_json::json!(4)),
+                    opcoes: Vec::new(),
+                    descricao: None,
+                    rolagem: None,
+                },
+            )
+            .expect("luta");
+            detalhes::criar(
+                vault,
+                &personagem,
+                detalhes::NovoDetalhe {
+                    grupo: "Ataques".into(),
+                    rotulo: "Soco".into(),
+                    tipo: detalhes::Tipo::Texto,
+                    valor: Some(serde_json::json!("{1d4}")),
+                    opcoes: Vec::new(),
+                    descricao: Some("Soco com mao livre { AGId20>+2 }, ou {1d20+@Luta}".into()),
+                    rolagem: None,
+                },
+            )
+            .expect("soco")
+            .id
+        });
+        let rolar = |token: &str, detalhe: &str, texto: &str| {
+            como(
+                token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/detalhes/{detalhe}/rolar-no-texto"),
+                Some(&serde_json::json!({ "texto": texto }).to_string()),
+            )
+        };
+
+        // A do valor, e a da descricao com a sigla lida na ficha: tres d20.
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&token_a, &soco, "1d4"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["rotulo"], "Corvo · Soco");
+        assert_eq!(rolagem["rolagens"].as_array().expect("rolagens").len(), 1);
+        assert_eq!(rolagem["rolagens"][0]["faces"], 4);
+
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&token_a, &soco, "AGId20>+2"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["modificador"], 2);
+        let dados = rolagem["rolagens"].as_array().expect("rolagens");
+        assert_eq!(dados.len(), 3);
+        assert_eq!(dados.iter().filter(|d| d["descartado"] == true).count(), 2);
+
+        // A mencao le o detalhe Luta da ficha, que guarda numero.
+        let response = router(Arc::clone(&state))
+            .oneshot(rolar(&token_a, &soco, "1d20+@Luta"))
+            .await
+            .expect("resposta");
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let rolagem: serde_json::Value =
+            serde_json::from_str(&corpo(response).await).expect("json");
+        assert_eq!(rolagem["lance"]["modificador"], 4);
+        assert_eq!(rolagem["rolagens"].as_array().expect("rolagens").len(), 1);
+        // A Luta vai junto, com o valor de agora, para o historico dizer de
+        // onde veio o +4: na bandeja e no fio.
+        assert_eq!(
+            rolagem["lance"]["siglas"],
+            serde_json::json!([{ "sigla": "Luta", "valor": 4 }])
+        );
+        let fio = fio_gravado(&state);
+        assert_eq!(fio.len(), 3);
+        let siglas = &fio[2].rolagem.as_ref().expect("rolagem").siglas;
+        assert_eq!(siglas.len(), 1);
+        assert_eq!((siglas[0].sigla.as_str(), siglas[0].valor), ("Luta", 4));
+
+        for (token, detalhe, texto) in [
+            // A conta que ninguem escreveu ali.
+            (&token_a, soco.as_str(), "1d20+50"),
+            // Detalhe que nao existe.
+            (&token_a, "chute", "1d4"),
+            // Personagem de outro jogador.
+            (&token_b, soco.as_str(), "1d4"),
+        ] {
+            let response = router(Arc::clone(&state))
+                .oneshot(rolar(token, detalhe, texto))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{texto}");
+        }
+        assert_eq!(fio_gravado(&state).len(), 3, "rolagem recusada entrou no fio");
+    }
+
     // --- inventario ---------------------------------------------------------
+
+    /// Roda algo com a campanha do daemon, como o mestre faria pelo IPC.
+    fn no_vault<T>(state: &Arc<Daemon>, rodar: impl FnOnce(&Vault) -> T) -> T {
+        let guard = state.vault.read().expect("vault");
+        rodar(guard.as_ref().expect("campanha"))
+    }
+
+    /// `com_personagem`, mais o Lobo vinculado a Mira -- o segundo jogador.
+    /// Devolve os dois tokens, o Corvo (do Edgar) e o Lobo (da Mira).
+    async fn com_dois_personagens(
+        state: Arc<Daemon>,
+        codigo: &str,
+    ) -> (String, String, String, String) {
+        let (token_a, token_b, corvo) = com_personagem(Arc::clone(&state), codigo).await;
+
+        let lobo = no_vault(&state, |vault| {
+            let lobo = characters::create(vault, "Lobo").expect("personagem");
+            let jogadores = players::list(vault).expect("jogadores");
+            let mira = jogadores.iter().find(|j| j.nome == "Mira").expect("mira");
+            players::link(vault, &mira.id, &lobo.id).expect("vinculo");
+            lobo.id
+        });
+
+        (token_a, token_b, corvo, lobo)
+    }
+
+    fn do_mestre(nome: &str) -> inventory::Novo {
+        inventory::Novo {
+            nome: nome.into(),
+            ..inventory::Novo::default()
+        }
+    }
+
+    /// Um PUT multipart da foto de um item, campo `file`.
+    fn foto(token: &str, uri: &str, nome: &str, bytes: &str) -> HttpRequest<Body> {
+        let corpo = format!(
+            "--X\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{nome}\"\r\nContent-Type: image/png\r\n\r\n{bytes}\r\n--X--\r\n"
+        );
+
+        let mut envio = como(token, "PUT", uri, None);
+        *envio.body_mut() = Body::from(corpo);
+        envio.headers_mut().insert(
+            "content-type",
+            "multipart/form-data; boundary=X".parse().expect("header"),
+        );
+        envio
+    }
 
     #[tokio::test]
     async fn item_escondido_nao_chega_ao_celular() {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
-            inventory::add(
-                vault,
-                &personagem,
-                characters::Autor::Mestre,
-                inventory::Novo { nome: "Tocha".into(), ..inventory::Novo::default() },
-            )
-            .expect("item");
+        no_vault(&state, |vault| {
+            inventory::add(vault, &personagem, characters::Autor::Mestre, do_mestre("Tocha"))
+                .expect("item");
 
             inventory::add(
                 vault,
@@ -5144,7 +6951,7 @@ mod tests {
                 },
             )
             .expect("item");
-        }
+        });
 
         let lista = router(Arc::clone(&state))
             .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
@@ -5161,23 +6968,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn celular_ve_o_item_que_o_mestre_deu() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        no_vault(&state, |vault| {
+            let bau = itens::criar(
+                vault,
+                characters::Autor::Mestre,
+                None,
+                itens::Novo {
+                    nome: "Chave do bau".into(),
+                    ..itens::Novo::default()
+                },
+            )
+            .expect("item");
+            // Um item da campanha que nao e de ninguem nao aparece...
+            itens::criar(
+                vault,
+                characters::Autor::Mestre,
+                None,
+                itens::Novo {
+                    nome: "Ainda no bau".into(),
+                    ..itens::Novo::default()
+                },
+            )
+            .expect("item");
+            // ...e o que o mestre deu, sim.
+            inventory::dar(vault, &personagem, &bau.id, Some(2)).expect("dar");
+        });
+
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
+            .await
+            .expect("resposta");
+        assert_eq!(lista.status(), StatusCode::OK);
+
+        let json: serde_json::Value = serde_json::from_str(&corpo(lista).await).expect("json");
+        let lista = json.as_array().expect("lista");
+        assert_eq!(lista.len(), 1, "{json}");
+        assert_eq!(lista[0]["nome"], "Chave do bau");
+        assert_eq!(lista[0]["quantidade"], 2);
+        assert_eq!(lista[0]["autor"], "mestre");
+        assert_eq!(lista[0]["escondido"], false);
+    }
+
+    #[tokio::test]
     async fn jogador_nao_mexe_no_item_do_mestre() {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        let item = {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
+        let item = no_vault(&state, |vault| {
             inventory::add(
                 vault,
                 &personagem,
                 characters::Autor::Mestre,
-                inventory::Novo { nome: "Espada do mestre".into(), ..inventory::Novo::default() },
+                do_mestre("Espada do mestre"),
             )
             .expect("item")
+            .item
             .id
-        };
+        });
 
         let base = format!("/eu/personagens/{personagem}/inventario/{item}");
 
@@ -5193,12 +7044,67 @@ mod tests {
             .expect("resposta");
         assert_eq!(apagar.status(), StatusCode::CONFLICT);
 
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(&token, &format!("{base}/imagem"), "minha.png", "png"))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::FORBIDDEN);
+
         // E o item continua o que era.
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        let itens = inventory::load(vault, &personagem).expect("itens");
+        let itens = no_vault(&state, |vault| inventory::listar(vault, &personagem).expect("itens"));
         assert_eq!(itens.len(), 1);
-        assert_eq!(itens[0].nome, "Espada do mestre");
+        assert_eq!(itens[0].item.nome, "Espada do mestre");
+        assert!(itens[0].item.imagem.is_none());
+    }
+
+    #[tokio::test]
+    async fn jogador_nao_mexe_no_item_de_outro_jogador_nem_na_propria_mochila() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, corvo, lobo) = com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        // A jogadora do Lobo escreveu a carta; o mestre deu uma ao Corvo.
+        let carta = no_vault(&state, |vault| {
+            let carta = inventory::add(
+                vault,
+                &lobo,
+                characters::Autor::Jogador,
+                do_mestre("Carta da Mira"),
+            )
+            .expect("item")
+            .item
+            .id;
+            inventory::dar(vault, &corvo, &carta, None).expect("dar");
+            carta
+        });
+
+        let base = format!("/eu/personagens/{corvo}/inventario/{carta}");
+
+        // Esta na mochila do Corvo, e foi um jogador que escreveu -- mas nao por
+        // este personagem.
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "PATCH", &base, Some(r#"{"nome":"Carta do Edgar"}"#)))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::CONFLICT);
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(&token_a, "DELETE", &base, None))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::CONFLICT);
+
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(&token_a, &format!("{base}/imagem"), "outra.png", "png"))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::FORBIDDEN);
+
+        no_vault(&state, |vault| {
+            let do_corvo = inventory::listar(vault, &corvo).expect("itens");
+            assert_eq!(do_corvo.len(), 1);
+            assert_eq!(do_corvo[0].item.nome, "Carta da Mira");
+            assert_eq!(itens::load(vault).expect("catalogo").len(), 1);
+        });
     }
 
     #[tokio::test]
@@ -5219,22 +7125,186 @@ mod tests {
             .expect("resposta");
 
         assert_eq!(criado.status(), StatusCode::CREATED);
+        let json: serde_json::Value = serde_json::from_str(&corpo(criado).await).expect("json");
+        assert_eq!(json["criadoPor"], personagem.as_str());
+        assert_eq!(json["quantidade"], 2);
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        let itens = inventory::load(vault, &personagem).expect("itens");
+        let itens = no_vault(&state, |vault| inventory::listar(vault, &personagem).expect("itens"));
 
         assert_eq!(itens.len(), 1);
-        assert_eq!(itens[0].nome, "Corda");
+        assert_eq!(itens[0].item.nome, "Corda");
         assert_eq!(itens[0].quantidade, 2);
-        assert_eq!(itens[0].autor, characters::Autor::Jogador);
+        assert_eq!(itens[0].item.autor, characters::Autor::Jogador);
+        assert_eq!(itens[0].item.criado_por.as_deref(), Some(personagem.as_str()));
         assert!(!itens[0].escondido, "o corpo escondeu um item do jogador");
+    }
+
+    /// O mestre poe no item a ficha com uma linha visivel e uma escondida de
+    /// cada: atributos "Comprimento" e "Segredo", medidores "fios" e
+    /// "maldicao", e o valor de cada um na mochila deste personagem.
+    fn ficha_com_segredo(state: &Arc<Daemon>, personagem: &str, item: &str) {
+        no_vault(state, |vault| {
+            let patch: itens::Patch = serde_json::from_value(serde_json::json!({
+                "atributos": [
+                    { "id": "comprimento", "nome": "Comprimento", "valor": "15 m" },
+                    { "id": "segredo", "nome": "Segredo", "valor": "corda de enforcado", "escondido": true }
+                ],
+                "medidores": [
+                    { "id": "fios", "nome": "Fios", "cor": "#a3a3a3", "maximo": 3 },
+                    { "id": "maldicao", "nome": "Maldicao", "cor": "#7f1d1d", "maximo": 5, "escondido": true }
+                ]
+            }))
+            .expect("patch");
+            itens::editar(vault, item, patch).expect("ficha");
+
+            let valores: inventory::Patch =
+                serde_json::from_value(serde_json::json!({ "atuais": { "fios": 2, "maldicao": 4 } }))
+                    .expect("valores");
+            inventory::update(vault, personagem, item, valores, characters::Autor::Mestre)
+                .expect("valores");
+        });
+    }
+
+    /// O que o celular recebeu nao tem nada do que e escondido.
+    fn sem_segredo(json: &serde_json::Value) {
+        let texto = json.to_string();
+        assert!(!texto.contains("corda de enforcado"), "vazou: {texto}");
+        assert!(!texto.contains("Maldicao") && !texto.contains("maldicao"), "vazou: {texto}");
+        assert_eq!(json["atributos"][0]["valor"], "15 m", "{texto}");
+        assert_eq!(json["medidores"][0]["id"], "fios", "{texto}");
+        assert_eq!(json["atuais"], serde_json::json!({ "fios": 2 }), "{texto}");
+    }
+
+    #[tokio::test]
+    async fn atributo_e_medidor_escondidos_nao_chegam_ao_celular() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        // Do proprio jogador, de proposito: o autor do item nao e dono do
+        // segredo que o mestre pos nele, e e o unico caso em que o PATCH passa.
+        let corda = no_vault(&state, |vault| {
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Jogador,
+                do_mestre("Corda"),
+            )
+            .expect("item")
+            .item
+            .id
+        });
+        ficha_com_segredo(&state, &personagem, &corda);
+
+        let lista = router(Arc::clone(&state))
+            .oneshot(como(&token, "GET", &format!("/eu/personagens/{personagem}/inventario"), None))
+            .await
+            .expect("resposta");
+        assert_eq!(lista.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(lista).await).expect("json");
+        sem_segredo(&json[0]);
+
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                &format!("/eu/personagens/{personagem}/inventario/{corda}"),
+                Some(r#"{"nome":"Corda velha"}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(editar).await).expect("json");
+        assert_eq!(json["nome"], "Corda velha");
+        sem_segredo(&json);
+    }
+
+    #[tokio::test]
+    async fn celular_nao_escreve_atributo_nem_medidor() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        // Criando, com a ficha no corpo: o item nasce sem ela.
+        let criado = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "POST",
+                &format!("/eu/personagens/{personagem}/inventario"),
+                Some(
+                    r##"{"nome":"Corda","atributos":[{"nome":"Dano","valor":"1d4"}],
+                        "medidores":[{"id":"fios","nome":"Fios","cor":"#fff","maximo":3}]}"##,
+                ),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(criado.status(), StatusCode::CREATED);
+        let json: serde_json::Value = serde_json::from_str(&corpo(criado).await).expect("json");
+        assert!(json.get("atributos").is_none(), "{json}");
+        assert!(json.get("medidores").is_none(), "{json}");
+        let corda = json["id"].as_str().expect("id").to_string();
+
+        no_vault(&state, |vault| {
+            let catalogo = itens::load(vault).expect("catalogo");
+            assert!(catalogo[0].atributos.is_empty() && catalogo[0].medidores.is_empty());
+        });
+
+        // Editando: nem o valor do medidor, nem as listas do catalogo.
+        ficha_com_segredo(&state, &personagem, &corda);
+        let editar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "PATCH",
+                &format!("/eu/personagens/{personagem}/inventario/{corda}"),
+                Some(r#"{"atuais":{"fios":0,"maldicao":0},"atributos":[],"medidores":[]}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(editar.status(), StatusCode::OK);
+
+        no_vault(&state, |vault| {
+            let entrada = &inventory::load(vault, &personagem).expect("entradas")[0];
+            assert_eq!(entrada.medidores.get("fios"), Some(&2));
+            assert_eq!(entrada.medidores.get("maldicao"), Some(&4));
+            let catalogo = itens::load(vault).expect("catalogo");
+            assert_eq!(catalogo[0].atributos.len(), 2);
+            assert_eq!(catalogo[0].medidores.len(), 2);
+        });
+    }
+
+    #[tokio::test]
+    async fn o_celular_nao_cria_item_sem_nome() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        for corpo_json in [r#"{"nome":""}"#, r#"{"nome":"   "}"#, r#"{}"#] {
+            let response = router(Arc::clone(&state))
+                .oneshot(como(
+                    &token,
+                    "POST",
+                    &format!("/eu/personagens/{personagem}/inventario"),
+                    Some(corpo_json),
+                ))
+                .await
+                .expect("resposta");
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{corpo_json}");
+        }
+
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &personagem).expect("itens").is_empty());
+            assert!(itens::load(vault).expect("catalogo").is_empty());
+        });
     }
 
     #[tokio::test]
     async fn inventario_de_personagem_de_outro_responde_404() {
         let (_dir, state, codigo) = daemon();
         let (_, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            inventory::add(vault, &personagem, characters::Autor::Mestre, do_mestre("Tocha"))
+                .expect("item")
+                .item
+                .id
+        });
 
         // Token valido, personagem que nao e dele: 404, e nao 403 -- dizer
         // "existe mas nao e seu" confirmaria a existencia a quem chutou o id.
@@ -5245,6 +7315,16 @@ mod tests {
                 format!("/eu/personagens/{personagem}/inventario"),
                 Some(r#"{"nome":"Gazua"}"#),
             ),
+            (
+                "GET",
+                format!("/eu/personagens/{personagem}/inventario/{item}/imagem"),
+                None,
+            ),
+            (
+                "GET",
+                format!("/eu/personagens/{personagem}/inventario/{item}/imagem/mini"),
+                None,
+            ),
         ] {
             let response = router(Arc::clone(&state))
                 .oneshot(como(&token_b, metodo, &uri, corpo_json))
@@ -5254,9 +7334,9 @@ mod tests {
             assert_eq!(response.status(), StatusCode::NOT_FOUND, "{metodo} {uri}");
         }
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+        no_vault(&state, |vault| {
+            assert_eq!(inventory::listar(vault, &personagem).expect("itens").len(), 1);
+        });
     }
 
     #[tokio::test]
@@ -5264,12 +7344,7 @@ mod tests {
         let (_dir, state, codigo) = daemon();
         let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
-        let item = {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-
-            item_do_jogador(vault, &personagem)
-        };
+        let item = no_vault(&state, |vault| item_do_jogador(vault, &personagem));
 
         let base = format!("/eu/personagens/{personagem}/inventario/{item}");
 
@@ -5279,11 +7354,9 @@ mod tests {
             .expect("resposta");
         assert_eq!(editar.status(), StatusCode::OK);
 
-        {
-            let guard = state.vault.read().expect("vault");
-            let vault = guard.as_ref().expect("campanha");
-            assert_eq!(inventory::load(vault, &personagem).expect("itens")[0].quantidade, 5);
-        }
+        no_vault(&state, |vault| {
+            assert_eq!(inventory::listar(vault, &personagem).expect("itens")[0].quantidade, 5);
+        });
 
         let apagar = router(Arc::clone(&state))
             .oneshot(como(&token, "DELETE", &base, None))
@@ -5291,9 +7364,164 @@ mod tests {
             .expect("resposta");
         assert_eq!(apagar.status(), StatusCode::NO_CONTENT);
 
-        let guard = state.vault.read().expect("vault");
-        let vault = guard.as_ref().expect("campanha");
-        assert!(inventory::load(vault, &personagem).expect("itens").is_empty());
+        // Ninguem mais carregava: sai da campanha tambem.
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &personagem).expect("itens").is_empty());
+            assert!(itens::load(vault).expect("catalogo").is_empty());
+        });
+    }
+
+    #[tokio::test]
+    async fn apagar_o_proprio_item_que_outro_carrega_so_tira_da_mochila() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, _, corvo, lobo) = com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            let item = item_do_jogador(vault, &corvo);
+            inventory::dar(vault, &lobo, &item, None).expect("dar");
+            item
+        });
+
+        let apagar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "DELETE",
+                &format!("/eu/personagens/{corvo}/inventario/{item}"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(apagar.status(), StatusCode::NO_CONTENT);
+
+        no_vault(&state, |vault| {
+            assert!(inventory::listar(vault, &corvo).expect("itens").is_empty());
+            assert_eq!(inventory::listar(vault, &lobo).expect("itens")[0].item.id, item);
+            assert_eq!(itens::load(vault).expect("catalogo").len(), 1);
+        });
+    }
+
+    #[tokio::test]
+    async fn a_foto_do_item_chega_a_quem_o_carrega_por_outro_personagem() {
+        let (_dir, state, codigo) = daemon();
+        let (token_a, token_b, corvo, lobo) =
+            com_dois_personagens(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| item_do_jogador(vault, &corvo));
+
+        // O Edgar sobe a foto pelo Corvo.
+        let subir = router(Arc::clone(&state))
+            .oneshot(foto(
+                &token_a,
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                "corda.png",
+                "bytes da corda",
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(subir.status(), StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_str(&corpo(subir).await).expect("json");
+        assert_eq!(json["imagem"]["tipo"], "anexo");
+        assert_eq!(json["imagem"]["personagem"], corvo.as_str());
+
+        // O mestre da a corda tambem ao Lobo, da Mira.
+        no_vault(&state, |vault| {
+            inventory::dar(vault, &lobo, &item, None).expect("dar");
+        });
+
+        let da_mira = format!("/eu/personagens/{lobo}/inventario/{item}/imagem");
+
+        // A Mira ve a foto pela mochila do Lobo, apesar de ela morar na pasta
+        // do Corvo -- e a miniatura cai no original, que nao e PNG de verdade.
+        for uri in [da_mira.clone(), format!("{da_mira}/mini")] {
+            let lida = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+            assert_eq!(lida.status(), StatusCode::OK, "{uri}");
+            assert_eq!(corpo(lida).await, "bytes da corda", "{uri}");
+        }
+
+        // Pelo Corvo, que nao e dela, nao.
+        let pelo_corvo = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_b,
+                "GET",
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(pelo_corvo.status(), StatusCode::NOT_FOUND);
+
+        // Escondida na mochila do Lobo, a foto some com o item.
+        no_vault(&state, |vault| {
+            inventory::update(
+                vault,
+                &lobo,
+                &item,
+                inventory::Patch {
+                    escondido: Some(true),
+                    ..inventory::Patch::default()
+                },
+                characters::Autor::Mestre,
+            )
+            .expect("esconder");
+        });
+
+        for uri in [da_mira.clone(), format!("{da_mira}/mini")] {
+            let escondida = router(Arc::clone(&state))
+                .oneshot(como(&token_b, "GET", &uri, None))
+                .await
+                .expect("resposta");
+            assert_eq!(escondida.status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+
+        // E o dono continua vendo pela mochila dele.
+        let do_edgar = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "GET",
+                &format!("/eu/personagens/{corvo}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(do_edgar.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn imagem_do_acervo_nao_sai_pela_rota_do_inventario() {
+        let (_dir, state, codigo) = daemon();
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+
+        let item = no_vault(&state, |vault| {
+            inventory::add(
+                vault,
+                &personagem,
+                characters::Autor::Mestre,
+                inventory::Novo {
+                    nome: "Elmo".into(),
+                    imagem: Some(itens::Imagem::Asset { id: "asset-1".into() }),
+                    ..inventory::Novo::default()
+                },
+            )
+            .expect("item")
+            .item
+            .id
+        });
+
+        // O celular busca o acervo por `/asset/{id}`, que e publico; esta rota e
+        // so para a foto atras do token.
+        let lida = router(Arc::clone(&state))
+            .oneshot(como(
+                &token,
+                "GET",
+                &format!("/eu/personagens/{personagem}/inventario/{item}/imagem"),
+                None,
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(lida.status(), StatusCode::NOT_FOUND);
     }
 
     fn item_do_jogador(vault: &Vault, personagem: &str) -> String {
@@ -5304,6 +7532,7 @@ mod tests {
             inventory::Novo { nome: "Corda".into(), ..inventory::Novo::default() },
         )
         .expect("item")
+        .item
         .id
     }
 
@@ -5335,7 +7564,7 @@ mod tests {
 
         for uri in [
             format!("/eu/personagens/{personagem}/anexos"),
-            format!("/eu/personagens/{personagem}/nota"),
+            format!("/eu/notas?personagem={personagem}"),
         ] {
             let response = router(Arc::clone(&state))
                 .oneshot(como(&token_b, "GET", &uri, None))
@@ -5349,23 +7578,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nota_e_do_par_personagem_jogador() {
+    async fn o_caderno_e_do_personagem_e_so_do_dono_dele() {
         let (_dir, state, codigo) = daemon();
-        let (token_a, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
-
-        let uri = format!("/eu/personagens/{personagem}/nota");
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let corpo_nota = format!(r#"{{"personagemId":"{personagem}","texto":"o alcapao range"}}"#);
 
         let gravou = router(Arc::clone(&state))
-            .oneshot(como(&token_a, "PUT", &uri, Some(r#"{"texto":"o alcapao range"}"#)))
+            .oneshot(como(&token_a, "POST", "/eu/notas", Some(&corpo_nota)))
             .await
             .expect("resposta");
-        assert_eq!(gravou.status(), StatusCode::NO_CONTENT);
+        assert_eq!(gravou.status(), StatusCode::CREATED);
 
         let leu = router(Arc::clone(&state))
-            .oneshot(como(&token_a, "GET", &uri, None))
+            .oneshot(como(&token_a, "GET", &format!("/eu/notas?personagem={personagem}"), None))
             .await
             .expect("resposta");
         assert!(corpo(leu).await.contains("o alcapao range"));
+
+        // Sem personagem, a nota nao tem caderno onde entrar.
+        let sem = router(Arc::clone(&state))
+            .oneshot(como(
+                &token_a,
+                "POST",
+                "/eu/notas",
+                Some(r#"{"texto":"solta"}"#),
+            ))
+            .await
+            .expect("resposta");
+        assert_eq!(sem.status(), StatusCode::BAD_REQUEST);
+
+        // E no caderno do personagem dos outros, nem escrever: 404, como ler.
+        let alheia = router(Arc::clone(&state))
+            .oneshot(como(&token_b, "POST", "/eu/notas", Some(&corpo_nota)))
+            .await
+            .expect("resposta");
+        assert_eq!(alheia.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -5733,7 +7980,7 @@ mod tests {
         let aceito = router(state)
             .oneshot(from_ip(
                 HttpRequest::builder()
-                    .uri("/sala/rolagens")
+                    .uri("/sala/rolagens?token=segredo")
                     .body(Body::empty())
                     .expect("request"),
                 "127.0.0.1",
@@ -5792,7 +8039,7 @@ mod tests {
 
     async fn fio_do_mestre_agora(state: &Arc<Daemon>) -> Vec<serde_json::Value> {
         let response = router(Arc::clone(state))
-            .oneshot(como_mestre(None, "GET", "/sala/mensagens", None, "127.0.0.1"))
+            .oneshot(como_mestre(Some("segredo"), "GET", "/sala/mensagens", None, "127.0.0.1"))
             .await
             .expect("resposta");
 
@@ -6358,7 +8605,7 @@ mod tests {
         let pedir = |ip: &str| {
             from_ip(
                 HttpRequest::builder()
-                    .uri("/sala/movimentos")
+                    .uri("/sala/movimentos?token=segredo")
                     .body(Body::empty())
                     .expect("request"),
                 ip,
@@ -6387,16 +8634,17 @@ mod tests {
     #[tokio::test]
     async fn o_caderno_de_um_jogador_nao_alcanca_o_do_outro() {
         let (_dir, state, codigo) = daemon();
-
-        let token_a = token_de(Arc::clone(&state), &codigo, "Edgar").await;
-        let token_b = token_de(Arc::clone(&state), &codigo, "Mira").await;
+        let (token_a, token_b, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
+        let caderno = format!("/eu/notas?personagem={personagem}");
 
         let criada = router(Arc::clone(&state))
             .oneshot(como(
                 &token_a,
                 "POST",
                 "/eu/notas",
-                Some(r#"{"titulo":"O alcapao","texto":"atras do balcao"}"#),
+                Some(&format!(
+                    r#"{{"personagemId":"{personagem}","titulo":"O alcapao","texto":"atras do balcao"}}"#
+                )),
             ))
             .await
             .expect("resposta");
@@ -6404,13 +8652,13 @@ mod tests {
         assert_eq!(criada.status(), StatusCode::CREATED);
         let nota = primeiro_id(&corpo(criada).await);
 
-        // O caderno do outro nem sabe que ela existe.
+        // O outro nem chega ao caderno: o personagem nao e dele.
         let dele = router(Arc::clone(&state))
-            .oneshot(como(&token_b, "GET", "/eu/notas", None))
+            .oneshot(como(&token_b, "GET", &caderno, None))
             .await
             .expect("resposta");
 
-        assert_eq!(corpo(dele).await, "[]");
+        assert_eq!(dele.status(), StatusCode::NOT_FOUND);
 
         // E mexer na nota alheia e 404, nao 403: dizer "existe mas nao e sua"
         // confirmaria a nota de outro a quem chutou o id.
@@ -6428,7 +8676,7 @@ mod tests {
 
         // E continua inteira para o dono.
         let minha = router(state)
-            .oneshot(como(&token_a, "GET", "/eu/notas", None))
+            .oneshot(como(&token_a, "GET", &caderno, None))
             .await
             .expect("resposta");
 
@@ -6438,14 +8686,16 @@ mod tests {
     #[tokio::test]
     async fn campo_ausente_no_patch_nao_apaga_o_que_esta_gravado() {
         let (_dir, state, codigo) = daemon();
-        let token = token_de(Arc::clone(&state), &codigo, "Edgar").await;
+        let (token, _, personagem) = com_personagem(Arc::clone(&state), &codigo).await;
 
         let criada = router(Arc::clone(&state))
             .oneshot(como(
                 &token,
                 "POST",
                 "/eu/notas",
-                Some(r#"{"titulo":"A taverna","texto":"o dono mentiu","tags":["pista"]}"#),
+                Some(&format!(
+                    r#"{{"personagemId":"{personagem}","titulo":"A taverna","texto":"o dono mentiu","tags":["pista"]}}"#
+                )),
             ))
             .await
             .expect("resposta");

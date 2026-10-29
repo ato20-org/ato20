@@ -5,14 +5,16 @@ import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu
 
 import { cn } from "@/lib/utils"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
+import { useContainerDosPortais } from "@/components/ui/container-dos-portais"
 
 function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
 }
 
 function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props) {
+  const container = useContainerDosPortais()
   return (
-    <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />
+    <ContextMenuPrimitive.Portal data-slot="context-menu-portal" container={container} {...props} />
   )
 }
 
@@ -42,7 +44,7 @@ function ContextMenuContent({
     "align" | "alignOffset" | "side" | "sideOffset"
   >) {
   return (
-    <ContextMenuPrimitive.Portal>
+    <ContextMenuPrimitive.Portal container={useContainerDosPortais()}>
       <ContextMenuPrimitive.Positioner
         className="isolate z-50 outline-none"
         align={align}

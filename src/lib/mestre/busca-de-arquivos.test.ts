@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Nota, Pasta, Scene } from "@/types/scene";
+import type { AssetMeta, Nota, Pasta, Scene } from "@/types/scene";
 
 import { buscarArquivos, trechoCom } from "./busca-de-arquivos";
 
@@ -65,13 +65,20 @@ describe("buscarArquivos", () => {
   const notas = [nota("n1", "Rumores"), nota("n2", "Chefe", "p2")];
   const textos = { "n2.md": "O goblin guarda a chave do altar." };
 
+  const acervo = [
+    { id: "a1", kind: "image", name: "goblin-rei.png", mimeType: "image/png", size: 1, createdAt: 1, folderId: "p2" },
+    { id: "a2", kind: "file", name: "regras.pdf", mimeType: "application/pdf", size: 1, createdAt: 2 },
+  ] satisfies AssetMeta[];
+
   const achar = (busca: string) =>
-    buscarArquivos({ quadros, pastas, notas, textos }, busca).map((achado) =>
+    buscarArquivos({ quadros, pastas, notas, textos, acervo }, busca).map((achado) =>
       achado.tipo === "pasta"
         ? `pasta:${achado.pasta.id}@${achado.depth}`
         : achado.tipo === "cena"
           ? `cena:${achado.scene.id}@${achado.depth}${achado.trecho ? "+" : ""}`
-          : `nota:${achado.nota.id}@${achado.depth}${achado.trecho ? "+" : ""}`,
+          : achado.tipo === "acervo"
+            ? `acervo:${achado.asset.id}@${achado.depth}`
+            : `nota:${achado.nota.id}@${achado.depth}${achado.trecho ? "+" : ""}`,
     );
 
   it("busca vazia não acha nada", () => {
@@ -88,11 +95,16 @@ describe("buscarArquivos", () => {
   });
 
   it("pasta achada vem com tudo o que tem dentro", () => {
-    expect(achar("ato")).toEqual(["pasta:p1@0", "pasta:p2@1", "nota:n2@2"]);
+    expect(achar("ato")).toEqual(["pasta:p1@0", "pasta:p2@1", "nota:n2@2", "acervo:a1@2"]);
+  });
+
+  it("o arquivo do acervo se acha pelo nome, depois das notas, com a pasta aberta", () => {
+    expect(achar("regras")).toEqual(["acervo:a2@0"]);
+    expect(achar("rei")).toEqual(["pasta:p1@0", "pasta:p2@1", "acervo:a1@2"]);
   });
 
   it("nota ainda não lida acha só pelo título", () => {
-    expect(achar("goblin")).toEqual(["pasta:p1@0", "pasta:p2@1", "nota:n2@2+"]);
+    expect(achar("goblin")).toEqual(["pasta:p1@0", "pasta:p2@1", "nota:n2@2+", "acervo:a1@2"]);
     expect(
       buscarArquivos({ quadros, pastas, notas, textos: {} }, "goblin"),
     ).toEqual([]);

@@ -6,8 +6,10 @@ import type { Alvo } from "@/lib/paineis";
  * arrasto: a zona só existe no meio do gesto, e fica por cima do que está
  * embaixo dela.
  */
-export function zonaDeSplitSob(x: number, y: number): Alvo | null {
-  const zona = document
+export function zonaDeSplitSob(x: number, y: number, documento: Document = document): Alvo | null {
+  // No documento do gesto: numa janela solta não há zona, e o ponto de lá
+  // procurado no Mestre poderia cair numa por coincidência.
+  const zona = documento
     .elementFromPoint(x, y)
     ?.closest<HTMLElement>("[data-zona-de-split]");
   const painel = zona?.dataset.painel;

@@ -16,6 +16,7 @@ import {
 } from "@/components/playground/declarativo";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { t } from "@/lib/i18n/mestre";
+import { compor, filtroDaImagem } from "@/lib/imagem-do-espectador";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { Spotlight } from "@/types/scene";
@@ -103,7 +104,10 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     spotlight,
     rolagens,
     pings,
+    disparados,
+    laser,
     declarativoVersao,
+    imagem,
     synced,
     stalled,
   } = useSubscription(codigo, base);
@@ -120,6 +124,10 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
   // `EspectadorStage` -- sem ela, a janela mostrava o mapa de prumo enquanto a
   // TV mostrava o 2.5D.
   const deEsguelha = Boolean(tripe);
+  // O ajuste de imagem da TV, igual ao do `EspectadorStage`: esta janela é a
+  // prévia dele. O palco do Mestre fica com o mapa como é, e sem ela o mestre
+  // mexeria nas réguas às cegas, olhando para a sala.
+  const filtro = filtroDaImagem(compor(imagem, cena?.imagem));
 
   return (
     // `aspect-video` E `flex-1`: a janela flutuante nasce sem altura e cresce
@@ -130,8 +138,14 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
     //
     // `overflow-hidden` e `isolate`: o palco faz o próprio recorte, mas a
     // cortina e o aviso são `absolute` e não podem sair da janela.
+    //
+    // O ajuste de imagem na caixa inteira, como a TV faz no palco, na cortina
+    // e na evidência. O aviso de "nada no ar" vai junto, e só aparece sem cena.
     <DeclarativoProvider valor={declarativo}>
-    <div className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black">
+    <div
+      className="relative isolate flex aspect-video min-h-0 w-full flex-1 flex-col overflow-hidden bg-black"
+      style={{ filter: filtro }}
+    >
       <SceneStage
         viewport={deEsguelha ? undefined : viewport}
         corDoVazio={cena?.corDoVazio}
@@ -147,6 +161,8 @@ function MiniplayerPalco({ codigo, base }: { codigo: string; base: string }) {
               fichas={fichas}
               rolagens={rolagens}
               pings={pings}
+              disparados={disparados}
+              laser={laser}
               variante="tela"
               smooth
               tripe={tripe}
@@ -192,6 +208,14 @@ function EvidenciaEmMiniatura({ spotlight }: { spotlight: Spotlight | null }) {
           className="max-h-full min-h-0 w-auto max-w-full flex-1 object-contain select-none"
           draggable={false}
         />
+      ) : null}
+      {/* O cartão do item, em miniatura: só o nome. A descrição numa janela de
+          320 pixels seria uma linha cortada, e quem transmitiu sabe o que
+          escreveu. */}
+      {spotlight.item ? (
+        <span className="max-w-full truncate px-2 text-xs font-medium text-white">
+          {spotlight.item.nome}
+        </span>
       ) : null}
       <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/90">
         <Eye className="size-3" aria-hidden />

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -22,10 +21,10 @@ import {
 import { useDadosNaMesa } from "@/hooks/use-dados-na-mesa";
 import { useGestoDeArremesso } from "@/hooks/use-gesto-de-arremesso";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
-import { DadoFacetas } from "@/components/mestre/dado-facetas";
+import { DadoFacetas, svgDasFacetas } from "@/components/mestre/dado-facetas";
+import { HistoricoDeDados, useDadosNoAr } from "@/components/playground/historico-de-dados";
 import {
   desenharDado,
-  duracaoDaQueda,
   orientacaoParaValor,
   quatDoEixo,
   quatMul,
@@ -39,10 +38,10 @@ import {
   tipoDado,
   valorDaRolagem,
   entraNaSoma,
-  textoDoResultado,
-  type Dado,
+  type Lance,
   type TipoDado,
 } from "@/types/dado";
+import { textoDoModificador } from "@/lib/mestre/expressao-de-rolagem";
 
 /** Diâmetro da bolinha, em pixel de tela. */
 const BOLINHA = 44;
@@ -330,9 +329,26 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
    * conta como zero está errada para a mesa que jogou. Ver `valorDaRolagem`.
    */
   const pousados = dados
-    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado.faces))
+    .filter((dado) => !noAr.has(dado.id) && entraNaSoma(dado))
     .map((dado) => valorDaRolagem(dado.faces, dado.valor));
-  const soma = pousados.reduce((total, valor) => total + valor, 0);
+
+  /**
+   * Os lances dos dados na mesa, um por id: o `+10` da Luta entra UMA vez na
+   * conta, e não uma por d20. Contam mesmo com dado ainda no ar -- o
+   * modificador não cai, ele já é sabido.
+   */
+  const lances = new Map<string, Lance>();
+  for (const dado of dados) if (dado.lance) lances.set(dado.lance.id, dado.lance);
+  const modificadores = [...lances.values()]
+    .map((lance) => lance.modificador)
+    .filter((modificador) => modificador !== 0);
+  const soma =
+    pousados.reduce((total, valor) => total + valor, 0) +
+    modificadores.reduce((total, modificador) => total + modificador, 0);
+
+  // A mesa inteira é de UM lance com nome: a linha diz de quem é a conta.
+  const doLance =
+    lances.size === 1 && dados.every((dado) => dado.lance) ? [...lances.values()][0]?.rotulo : undefined;
 
   /**
    * Pega um dado do saquinho e arremessa.
@@ -403,10 +419,11 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
           Só os que já pousaram. Enquanto algum está no ar, a conta diz quantos
           faltam em vez de embutir um valor que ninguém viu cair — ver
           `useDadosNoAr`. */}
-      {pousados.length >= 2 || (pousados.length >= 1 && noAr.size > 0) ? (
+      {pousados.length >= 2 ||
+      (pousados.length >= 1 && (noAr.size > 0 || modificadores.length > 0)) ? (
         <div className="flex items-baseline gap-2 border-t pt-2.5">
-          <span className="text-muted-foreground flex-1 text-xs font-medium">
-            {t.saquinho.naMesa}
+          <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-medium">
+            {doLance ?? t.saquinho.naMesa}
           </span>
 
           {/* Os termos, na ordem em que caíram: é o que deixa conferir a conta
@@ -418,6 +435,14 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
               soma quer o valor. */}
           <span className="text-muted-foreground/70 text-[11px] tabular-nums">
             {pousados.join(" + ")}
+            {/* O modificador separado dos dados, e não somado neles: é o que
+                deixa ver que o 24 é 18 + 1 de dado e 5 de bônus. */}
+            {modificadores.map((modificador, i) => (
+              <span key={i} className="text-foreground/80 font-medium">
+                {" "}
+                {textoDoModificador(modificador)}
+              </span>
+            ))}
           </span>
 
           {/* Em vão próprio, e não emendado nos termos: escrito na mesma linha,
@@ -434,65 +459,11 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
         </div>
       ) : null}
 
-      {historico.length > 0 ? (
-        <div className="space-y-1.5 border-t pt-2.5">
-          <p className="text-muted-foreground text-xs font-medium">
-            {t.saquinho.ultimas}
-          </p>
-
-          <ul className="space-y-0.5">
-            {historico.map((rolagem) => {
-              const tipo = tipoDado(rolagem.faces);
-
-              /**
-               * Rolagem que ainda está caindo entra como reticências.
-               *
-               * A rolagem nasce no arremesso, junto do dado e com o MESMO id, e
-               * o valor já está nela enquanto o dado tomba — então a lista
-               * entregava o resultado antes da queda, que é justo a parte que a
-               * mesa está olhando. Sumir com a linha seria pior: ela apareceria
-               * do nada empurrando as outras para baixo.
-               *
-               * Casa pelo id porque é ele que liga os dois. Rolagem sem dado
-               * correspondente já foi recolhida, e recolhida é pousada.
-               */
-              const caindo = noAr.has(rolagem.id);
-
-              return (
-                <li
-                  key={rolagem.id}
-                  className="flex items-center gap-2 text-xs"
-                >
-                  <span
-                    aria-hidden
-                    className="size-2.5 shrink-0 rounded-full border border-white/20"
-                    style={{ background: tipo.hex }}
-                  />
-                  <span className="text-muted-foreground flex-1 truncate">
-                    {tipo.nome}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-semibold tabular-nums",
-                      caindo && "text-muted-foreground/50",
-                    )}
-                  >
-                    {caindo
-                      ? "…"
-                      : textoDoResultado(rolagem.faces, rolagem.valor)}
-                  </span>
-                  <span className="text-muted-foreground/70 tabular-nums">
-                    {new Date(rolagem.quando).toLocaleTimeString(undefined, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
+      <HistoricoDeDados
+        historico={historico}
+        noAr={noAr}
+        titulo={t.saquinho.ultimas}
+      />
 
       {dados.length > 0 ? (
         <Button
@@ -510,51 +481,6 @@ function ConteudoDoSaquinho({ palco }: { palco: () => DOMRect | null }) {
 }
 
 /**
- * Os dados que ainda estão no ar, por id.
- *
- * Existe porque nada no saquinho pode revelar um dado antes de ele pousar. O
- * valor é sorteado no ARREMESSO — é o que torna a jogada conferível, ver
- * `Dado` —, então ele já está no store enquanto o dado ainda tomba. Somar ou
- * listar esse valor entrega o resultado antes da queda, e a queda é a parte que
- * a mesa está olhando.
- *
- * Por `setTimeout` até o instante exato em que cada um assenta, e não por
- * `requestAnimationFrame`: não há nada para animar aqui, só um momento em que a
- * conta muda. Um laço de sessenta quadros por segundo para redesenhar uma linha
- * de texto uma vez seria desperdício, e a `DadoLayer` já tem o laço que precisa
- * existir.
- */
-function useDadosNoAr(dados: Dado[]): ReadonlySet<string> {
-  const [noAr, setNoAr] = useState<ReadonlySet<string>>(() => new Set());
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const recalcular = () => {
-      const agora = Date.now();
-      const restante = dados.map(
-        (dado) => dado.lancadoEm + duracaoDaQueda(dado) * 1000 - agora,
-      );
-
-      setNoAr(
-        new Set(dados.filter((_, i) => restante[i] > 0).map((dado) => dado.id)),
-      );
-
-      const proximo = restante.filter((ms) => ms > 0);
-      // Mais um quadro de folga, para o instante do acordar já estar depois do
-      // assentamento e não empatado com ele.
-      if (proximo.length > 0)
-        timer = setTimeout(recalcular, Math.min(...proximo) + 16);
-    };
-
-    recalcular();
-    return () => clearTimeout(timer);
-  }, [dados]);
-
-  return noAr;
-}
-
-/**
  * Um dado parado, no mesmo renderizador do que rola no tabuleiro.
  *
  * Não é ícone nem imagem: são as mesmas faces, a mesma projeção e o mesmo
@@ -566,7 +492,23 @@ function useDadosNoAr(dados: Dado[]): ReadonlySet<string> {
  * Mostra o MAIOR número de cada dado. Duplo propósito: identifica o dado sem
  * precisar de rótulo — `20` só existe no d20 — e é o que a mesa quer ver.
  */
-function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+export function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+  const { desenho, raio } = desenhoParado(tipo, tamanho);
+
+  return (
+    <svg
+      width={tamanho}
+      height={tamanho}
+      viewBox={`0 0 ${tamanho} ${tamanho}`}
+      aria-hidden
+    >
+      <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} />
+    </svg>
+  );
+}
+
+/** A pose de retrato do dado parado, projetada. Ver `DadoEstatico`. */
+function desenhoParado(tipo: TipoDado, tamanho: number) {
   const rotulos = rotulosDoDado(tipo.faces);
 
   /**
@@ -601,14 +543,31 @@ function DadoEstatico({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
     raio,
   });
 
-  return (
-    <svg
-      width={tamanho}
-      height={tamanho}
-      viewBox={`0 0 ${tamanho} ${tamanho}`}
-      aria-hidden
-    >
-      <DadoFacetas tipo={tipo} desenho={desenho} raio={raio} />
-    </svg>
-  );
+  return { desenho, raio };
+}
+
+const imagensDoDado = new Map<string, string>();
+
+/**
+ * O `DadoEstatico` numa `<img>`: o mesmo desenho, em um nó só.
+ *
+ * Para onde o mesmo dado parado se repete muitas vezes -- a ficha, com um por
+ * perícia rolável e até cinco por termo. Em SVG vivo eram vinte nós por d20 e,
+ * medido na webview, cem perícias com três dados levavam 210 ms para abrir o
+ * grupo, metade deles nos dados. A imagem sai uma vez por tipo e tamanho, e o
+ * motor reaproveita o raster entre as cópias. Ver `svgDasFacetas`.
+ */
+export function DadoEmImagem({ tipo, tamanho }: { tipo: TipoDado; tamanho: number }) {
+  const chave = `${tipo.faces}:${tipo.hex}:${tipo.tinta}:${tamanho}`;
+  let endereco = imagensDoDado.get(chave);
+
+  if (!endereco) {
+    const { desenho, raio } = desenhoParado(tipo, tamanho);
+    endereco = `data:image/svg+xml,${encodeURIComponent(svgDasFacetas(tipo, desenho, raio, tamanho))}`;
+    imagensDoDado.set(chave, endereco);
+  }
+
+  // Um `data:` gerado aqui: não há o que o `next/image` otimizar.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={endereco} alt="" width={tamanho} height={tamanho} draggable={false} aria-hidden className="shrink-0" />;
 }

@@ -1,20 +1,28 @@
 import {
+  Activity,
+  BookCopy,
+  BookMarked,
   BookOpen,
   Clapperboard,
   Dices,
   Files,
+  History,
   Image,
+  Images,
   Layers,
   Library,
-  LibraryBig,
   MessagesSquare,
   MonitorPlay,
   Music,
+  Package,
+  PackageOpen,
   Paperclip,
   Puzzle,
   ScrollText,
   SlidersHorizontal,
+  Sparkles,
   SquareUser,
+  Swords,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -47,22 +55,55 @@ export function iconeDaJanela(conteudo: ConteudoJanela): LucideIcon {
       return Dices;
     case "chat":
       return MessagesSquare;
+    case "historico":
+      return History;
     case "cenas":
       return Clapperboard;
     case "quadros":
       // Arquivos, como no Obsidian: quadros e notas na mesma árvore.
       return Files;
+    // Várias imagens, e não uma: `Image` já é a imagem aberta numa janela, e a
+    // Galeria é de onde ela se abre.
+    case "galeria":
+      return Images;
     // O mesmo do botão ao lado do + de Personagens, que é a porta dela.
     case "retratos":
       return SquareUser;
     case "camadas":
       return Layers;
-    case "imagens":
-      return LibraryBig;
     case "sons":
       return Music;
+    case "iniciativa":
+      return Swords;
     case "personagens":
       return Users;
+    // A caixa, e não a mochila: o catálogo é o que a campanha TEM, e não o que
+    // alguém carrega. É o mesmo desenho do item sem imagem nas grades.
+    case "itens":
+      return Package;
+    // A caixa aberta: é o item que se abriu para ler.
+    case "item":
+      return PackageOpen;
+    // O livro marcado: o que se prepara antes e se consulta durante.
+    case "compendio":
+      return BookMarked;
+    // As cópias: o que se guardou daqui para levar a outra mesa.
+    case "compendio-ato20":
+      return BookCopy;
+    // Ficha, como a do personagem: é a mesma coisa, só que ainda do plugin.
+    case "ficha-do-plugin":
+      return ScrollText;
+    // O do item de sempre: é a mesma coisa, só que ainda do plugin.
+    case "item-do-plugin":
+      return Package;
+    // Um verbete é texto de consulta: o ritual, o talento.
+    case "verbete-do-plugin":
+      return BookOpen;
+    // Os mesmos das abas do Compêndio, que é de onde as duas mais abrem.
+    case "efeito":
+      return Sparkles;
+    case "condicao":
+      return Activity;
     case "personagem":
       // Ficha, e não pessoa: `Users` já é a lista, e duas telas com o mesmo
       // ícone na mesma tira não distinguem nada.

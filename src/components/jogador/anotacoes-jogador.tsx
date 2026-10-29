@@ -1,26 +1,23 @@
 "use client";
 
+import { useState } from "react";
+
 import { CadernoJogador } from "@/components/jogador/caderno-jogador";
-import { MyCharacters } from "@/components/jogador/my-characters";
+import { EscolhaDePersonagem } from "@/components/jogador/escolha-de-personagem";
+import { usePersonagensDoJogador } from "@/hooks/use-personagens-do-jogador";
+import { t } from "@/lib/i18n/jogador";
 
 /**
- * A aba de anotações do jogador.
+ * A aba de anotações do jogador: o caderno do PERSONAGEM.
  *
- * Duas coisas, e a ordem entre elas é a decisão: em cima o CADERNO — o que se
- * escreve numa sessão e não é sobre a ficha de ninguém: o nome do NPC que
- * mentiu, o número que o mestre falou uma vez, a suspeita que ainda não virou
- * nada. Embaixo, as notas de cada PERSONAGEM, que antes moravam no cartão da
- * ficha.
+ * Um caderno por personagem, e não um do jogador mais uma nota solta em cada
+ * personagem: eram dois lugares para escrever sobre a mesma coisa, um embaixo
+ * do outro na mesma aba, e a pergunta que sobrava era qual deles valia. Quem
+ * joga com dois escolhe de qual no alto, como na mochila -- o que o Corvo
+ * descobriu não se mistura com o que a Mira sabe.
  *
- * Estavam em dois lugares da interface e a pergunta que sobrava era qual delas
- * valia. Agora anotar é um lugar só — e o que separa as duas continua sendo
- * real: o caderno não pertence a personagem nenhum, e quem joga com dois, ou
- * troca de personagem no meio da campanha, o levaria junto.
- *
- * O caderno era uma caixa de texto de vinte mil caracteres, e virou uma lista
- * de notas com título, etiquetas e menção — ver `CadernoJogador`. O que mudou
- * não foi o tamanho: uma campanha inteira num campo só não tem como ser
- * procurada nem retomada três semanas depois.
+ * O caderno é uma lista de notas com título, etiquetas e menção; a nota abre
+ * no meio da tela. Ver `CadernoJogador`.
  */
 export function AnotacoesJogador({
   codigo,
@@ -30,14 +27,40 @@ export function AnotacoesJogador({
   /** Quem está com o retrato no ar, por id de personagem. Ver `CadernoJogador`. */
   emCena: Set<string>;
 }) {
+  const personagens = usePersonagensDoJogador(codigo);
+  const [escolhido, setEscolhido] = useState<string | null>(null);
+
+  if (personagens === null) {
+    return <p className="text-muted-foreground text-xs">{t.caderno.abrindo}</p>;
+  }
+
+  const personagem =
+    personagens.find((atual) => atual.id === escolhido) ?? personagens[0];
+
+  if (!personagem) {
+    return (
+      <p className="text-muted-foreground text-xs leading-snug">{t.caderno.semPersonagem}</p>
+    );
+  }
+
   return (
-    <CadernoJogador
-      codigo={codigo}
-      emCena={emCena}
-      // Embaixo da lista, e não ao lado: some enquanto uma nota está aberta,
-      // que é quando a tela inteira é para escrever. Vazio quando o mestre
-      // ainda não entregou personagem nenhum — e aí não desenha nada.
-      rodape={<MyCharacters codigo={codigo} secao="notas" />}
-    />
+    <div className="flex h-full min-h-0 flex-col gap-3">
+      <EscolhaDePersonagem
+        personagens={personagens}
+        escolhido={personagem.id}
+        onEscolher={setEscolhido}
+      />
+      <div className="min-h-0 flex-1">
+        <CadernoJogador
+          // Um caderno por personagem: trocar de personagem fecha a nota aberta
+          // e a busca do outro.
+          key={personagem.id}
+          codigo={codigo}
+          personagemId={personagem.id}
+          deQuem={personagens.length === 1 ? personagem.nome : undefined}
+          emCena={emCena}
+        />
+      </div>
+    </div>
   );
 }

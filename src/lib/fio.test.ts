@@ -74,6 +74,21 @@ describe("aplicarNoFio", () => {
 });
 
 describe("a rolagem no fio", () => {
+  it("pula o descartado na soma, e escreve a regra na notação", () => {
+    const teste = {
+      rotulo: "Diabo · Luta",
+      modificador: 45,
+      dados: [
+        { faces: 20 as const, valor: 3, descartado: true },
+        { faces: 20 as const, valor: 17 },
+        { faces: 20 as const, valor: 9, descartado: true },
+      ],
+    };
+
+    expect(totalDaRolagem(teste)).toBe(62);
+    expect(textoDaRolagem(teste)).toBe("Diabo · Luta: 3d20>+45 = 62");
+  });
+
   it("lê o d10 no zero como dez, e soma o modificador", () => {
     const rolagem = { dados: [{ faces: 10 as const, valor: 0 }], modificador: 3, rotulo: "Dano" };
 

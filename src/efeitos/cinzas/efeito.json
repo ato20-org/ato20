@@ -1,0 +1,42 @@
+{
+  "id": "cinzas",
+  "titulo": "Cinzas",
+  "dica": "Cinza caindo do céu, como depois de um incêndio ou perto do vulcão.",
+  "ambiente": {
+    "cor": "#a8a29e",
+    "camadas": [
+      {
+        "imagem": "cinzas-longe-512.webp",
+        "mipmaps": {
+          "256": "cinzas-longe-256.webp",
+          "512": "cinzas-longe-512.webp",
+          "1024": "cinzas-longe-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.4,
+        "direcao": 95,
+        "velocidade": 0.09,
+        "opacidade": 0.75,
+        "balanco": 0.1
+      },
+      {
+        "imagem": "cinzas-perto-512.webp",
+        "mipmaps": {
+          "256": "cinzas-perto-256.webp",
+          "512": "cinzas-perto-512.webp",
+          "1024": "cinzas-perto-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.8,
+        "direcao": 100,
+        "velocidade": 0.15,
+        "opacidade": 0.85,
+        "balanco": 0.12
+      }
+    ],
+    "veu": {
+      "cor": "#44403c",
+      "opacidade": 0.14
+    }
+  }
+}

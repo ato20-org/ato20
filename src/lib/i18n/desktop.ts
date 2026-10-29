@@ -6,14 +6,13 @@ import { escolher } from "@/lib/i18n/idioma";
  */
 const pt = {
   janela: {
-    editando: (cena: string) => `Editando ${cena}`,
     minimizar: "Minimizar",
     maximizar: "Maximizar",
     restaurar: "Restaurar",
     fechar: "Fechar",
     confirmarFechar: "Fechar o ATO20?",
     confirmarFecharExplicacao:
-      "A campanha fecha junto, e a TV e os celulares perdem a conexão com a mesa.",
+      "A campanha fecha junto, e a janela do espectador e os celulares perdem a conexão com a mesa.",
   },
 
   configuracoes: {
@@ -25,6 +24,8 @@ const pt = {
       versao: "Versão",
       teclado: "Teclado",
       plugins: "Plugins",
+      mcp: "IA",
+      sobre: "Sobre",
     },
     ajustesAjuda:
       "O que o ATO20 e os plugins deixam ajustar, por máquina e por campanha. A campanha vence.",
@@ -45,7 +46,7 @@ const pt = {
     idioma: {
       titulo: "Idioma",
       explicacao:
-        "Trocar reinicia a janela. A campanha aberta volta sozinha, e a TV e os celulares acompanham.",
+        "Trocar reinicia a janela. A campanha aberta volta sozinha, e a janela do espectador e os celulares acompanham.",
       doSistema: (nome: string) => `Do sistema (${nome})`,
     },
     versao: {
@@ -71,8 +72,84 @@ const pt = {
         "Estendem o que o ATO20 faz. Podem executar código com o alcance da janela.",
       habilitar: (nome: string) => `Habilitar ${nome}`,
       desinstalar: (nome: string) => `Desinstalar ${nome}`,
+      abrirPagina: (nome: string) => `Abrir a página de ${nome}`,
       tambemTema: "Esta extensão também traz um tema.",
       tema: "Tema",
+      abaInstalados: "Instalados",
+      abaCatalogo: "Catálogo",
+      catalogo: {
+        buscando: "Buscando o catálogo…",
+        erro: "Não deu para abrir o catálogo. Confira a conexão com a internet.",
+        tentarDeNovo: "Tentar de novo",
+        formatoNovo: "O catálogo mudou de formato. Atualize o ATO20 para ver a lista.",
+        vazio: "Nenhum plugin no catálogo ainda.",
+        comoInstalar:
+          "Instalar baixa o plugin do GitHub e o importa. Quando sai versão nova, o botão vira Atualizar.",
+        por: (autor: string) => `por ${autor}`,
+        instalado: "Instalado",
+        versao: (versao: string) => `v${versao}`,
+        api: (api: number) => `API ${api}`,
+        lendoReadme: "Lendo o README…",
+        semReadme: "Não deu para ler o README deste plugin. Ele continua no GitHub.",
+        semRepositorio:
+          "Este plugin não diz de onde veio: o manifest.json dele não tem repositorio, e sem ele não há README para mostrar.",
+        pedeVersaoNova: "Pede ATO20 mais novo",
+        pedeVersaoNovaNota: (api: number, atual: number) =>
+          `Este plugin usa a API ${api}, e este ATO20 fala a ${atual}.`,
+        verNoGithub: "Ver no GitHub",
+        buscar: "Buscar por nome, autor ou tag",
+        buscarRotulo: "Buscar plugins",
+        achados: (achados: number, total: number) => `${achados} de ${total}`,
+        nada: (busca: string) => `Nenhum plugin com “${busca}”.`,
+        limparBusca: "Limpar a busca",
+        instalar: "Instalar",
+        atualizar: "Atualizar",
+        instalando: "Instalando…",
+        atualizando: "Atualizando…",
+        instaladoAgora: (nome: string) => `${nome} instalado.`,
+        atualizado: (nome: string) => `${nome} atualizado.`,
+        falhou: (nome: string) => `Não deu para instalar ${nome}.`,
+        versaoInstalada: (versao: string) => `Versão ${versao} instalada`,
+        confirmarInstalar: (nome: string) => `Instalar ${nome}?`,
+        confirmarAtualizar: (nome: string) => `Atualizar ${nome}?`,
+        confirmarTexto:
+          "Este plugin executa código, com o alcance da janela do Mestre: lê e muda a campanha aberta. Instale só se você confia em quem o escreveu.",
+      },
+    },
+    mcp: {
+      ajuda: "Uma IA desta máquina mexendo na campanha aberta, pelo MCP.",
+      ligar: "Deixar uma IA mexer nas campanhas",
+      ligarExplicacao:
+        "Liga o MCP: um programa de IA desta máquina, como o Claude Code ou o Cursor, passa a ler e a mudar a campanha aberta: criar notas, cenas, personagens e itens, e escrever no fio da mesa. Ele não apaga nada. Só programas com o token entram, e só desta máquina.",
+      claudeCode: "Claude Code",
+      claudeCodeExplicacao: "Rode no terminal, uma vez:",
+      outros: "Outros clientes",
+      outrosExplicacao:
+        "Endereço HTTP do MCP, com o token no cabeçalho Authorization. A maioria aceita esta configuração:",
+      copiar: "Copiar",
+      copiado: "Copiado",
+      trocarToken: "Trocar o token",
+      trocarTokenExplicacao:
+        "O token antigo para de valer na hora, e todo cliente configurado com ele precisa do novo.",
+      precisaAberto:
+        "O ATO20 precisa estar aberto para o cliente conectar. Se o cliente abriu antes, reconecte por ele (no Claude Code, /mcp).",
+      erro: "Não deu para ler o estado do MCP.",
+    },
+    sobre: {
+      saudacao:
+        "Oi! O ATO20 é um projeto pessoal, gratuito e feito no Brasil. Obrigado por levá-lo para a sua mesa. Se quiser contar como foi, mandar uma ideia ou avisar de um problema, é só chamar.",
+      projeto: "O projeto",
+      contato: "Contato",
+      apoiar: "Apoiar",
+      site: "Site",
+      codigo: "Código",
+      email: "E-mail",
+      x: "X",
+      instagram: "Instagram",
+      kofi: "Ko-fi",
+      copiarEmail: "Copiar o e-mail",
+      emailCopiado: "E-mail copiado",
+      semNavegador: "Não foi possível abrir o navegador.",
     },
   },
 
@@ -105,10 +182,38 @@ const pt = {
     volumeDisparo: "Volume dos disparos",
     idioma: "Idioma",
     idiomaDescricao: "O idioma da interface. Do sistema segue o sistema operacional.",
+    discord: "Mostrar no Discord",
+    discordDescricao:
+      "O que você está fazendo aparece no seu perfil, como \"Jogando ATO20\". Só com o Discord aberto nesta máquina.",
+    discordCampanha: "Mostrar o nome da campanha no Discord",
+    discordCampanhaDescricao:
+      "Desligado, o perfil diz só o que você faz. O nome da cena nunca aparece: quem joga com você poderia ler.",
+    somDosDados: "Som dos dados",
+    somDosDadosDescricao:
+      "Os dados que caem no Mestre fazem barulho, os seus e os dos jogadores. Segue o volume do sistema.",
+  },
+
+  /**
+   * O título da janela e o cartão do Discord. Cada coisa que o mestre faz tem
+   * duas formas: a longa é a primeira linha quando ele está sozinho, e a curta
+   * vai na segunda quando a primeira já diz "Mestrando".
+   */
+  presenca: {
+    noMenu: "No menu",
+    preparando: "Preparando campanha",
+    mapa: { longo: "Editando mapa", curto: "No mapa" },
+    quadro: { longo: "Editando quadro", curto: "No quadro" },
+    fundo: { longo: "Editando cena", curto: "Na cena" },
+    esguelha: { longo: "Mesa 2.5D", curto: "Na mesa 2.5D" },
+    regras: { longo: "Lendo as regras", curto: "Nas regras" },
+    mestrando: "Mestrando campanha",
+    mestrandoNome: (campanha: string) => `Mestrando ${campanha}`,
+    conhecer: "Conhecer o ATO20",
   },
 
   novidades: {
     oQueMudou: "O que mudou",
+    oQueMudouNa: (versao: string) => `O que mudou na ${versao}`,
     estaVersao: "esta versão",
     antesDisso: "Antes disso",
     novidades: "Novidades",
@@ -116,6 +221,7 @@ const pt = {
     contarNovidades: (n: number) => (n === 1 ? "1 novidade" : `${n} novidades`),
     contarCorrecoes: (n: number) => (n === 1 ? "1 correção" : `${n} correções`),
     releasesNoGithub: "Releases no GitHub",
+    apoiar: "Apoie no Ko-fi",
     semNavegador: "Não foi possível abrir o navegador.",
   },
 
@@ -135,7 +241,6 @@ const pt = {
 
 const en: typeof pt = {
   janela: {
-    editando: (cena) => `Editing ${cena}`,
     minimizar: "Minimize",
     maximizar: "Maximize",
     restaurar: "Restore",
@@ -154,6 +259,8 @@ const en: typeof pt = {
       versao: "Version",
       teclado: "Keyboard",
       plugins: "Plugins",
+      mcp: "AI",
+      sobre: "About",
     },
     ajustesAjuda:
       "Everything ATO20 and its plugins let you adjust, per machine and per campaign. The campaign wins.",
@@ -200,8 +307,84 @@ const en: typeof pt = {
         "Extend what ATO20 does. They can run code with the reach of the window.",
       habilitar: (nome) => `Enable ${nome}`,
       desinstalar: (nome) => `Uninstall ${nome}`,
+      abrirPagina: (nome) => `Open the ${nome} page`,
       tambemTema: "This plugin also ships a theme.",
       tema: "Theme",
+      abaInstalados: "Installed",
+      abaCatalogo: "Catalog",
+      catalogo: {
+        buscando: "Fetching the catalog…",
+        erro: "Couldn't open the catalog. Check your internet connection.",
+        tentarDeNovo: "Try again",
+        formatoNovo: "The catalog changed format. Update ATO20 to see the list.",
+        vazio: "No plugins in the catalog yet.",
+        comoInstalar:
+          "Install downloads the plugin from GitHub and imports it. When a new version is out, the button turns into Update.",
+        por: (autor) => `by ${autor}`,
+        instalado: "Installed",
+        versao: (versao) => `v${versao}`,
+        api: (api) => `API ${api}`,
+        lendoReadme: "Reading the README…",
+        semReadme: "Couldn't read this plugin's README. It's still on GitHub.",
+        semRepositorio:
+          "This plugin doesn't say where it came from: its manifest.json has no repositorio, and without one there's no README to show.",
+        pedeVersaoNova: "Needs a newer ATO20",
+        pedeVersaoNovaNota: (api, atual) =>
+          `This plugin uses API ${api}, and this ATO20 speaks ${atual}.`,
+        verNoGithub: "See on GitHub",
+        buscar: "Search by name, author or tag",
+        buscarRotulo: "Search plugins",
+        achados: (achados, total) => `${achados} of ${total}`,
+        nada: (busca) => `No plugin matches “${busca}”.`,
+        limparBusca: "Clear the search",
+        instalar: "Install",
+        atualizar: "Update",
+        instalando: "Installing…",
+        atualizando: "Updating…",
+        instaladoAgora: (nome) => `${nome} installed.`,
+        atualizado: (nome) => `${nome} updated.`,
+        falhou: (nome) => `Could not install ${nome}.`,
+        versaoInstalada: (versao) => `Version ${versao} installed`,
+        confirmarInstalar: (nome) => `Install ${nome}?`,
+        confirmarAtualizar: (nome) => `Update ${nome}?`,
+        confirmarTexto:
+          "This plugin runs code, with the same access as the GM window: it reads and changes the open campaign. Only install it if you trust whoever wrote it.",
+      },
+    },
+    mcp: {
+      ajuda: "An AI on this machine working on the open campaign, through MCP.",
+      ligar: "Let an AI work on your campaigns",
+      ligarExplicacao:
+        "Turns MCP on: an AI program on this machine, like Claude Code or Cursor, can read and change the open campaign: create notes, scenes, characters and items, and write in the table chat. It deletes nothing. Only programs with the token get in, and only from this machine.",
+      claudeCode: "Claude Code",
+      claudeCodeExplicacao: "Run this in a terminal, once:",
+      outros: "Other clients",
+      outrosExplicacao:
+        "The MCP HTTP address, with the token in the Authorization header. Most clients take this configuration:",
+      copiar: "Copy",
+      copiado: "Copied",
+      trocarToken: "Change the token",
+      trocarTokenExplicacao:
+        "The old token stops working right away, and every client set up with it needs the new one.",
+      precisaAberto:
+        "ATO20 has to be open for the client to connect. If the client started first, reconnect from it (in Claude Code, /mcp).",
+      erro: "Couldn't read the MCP state.",
+    },
+    sobre: {
+      saudacao:
+        "Hi! ATO20 is a personal project, free and made in Brazil. Thanks for bringing it to your table. If you'd like to tell me how it went, share an idea or report a problem, just reach out.",
+      projeto: "The project",
+      contato: "Contact",
+      apoiar: "Support",
+      site: "Website",
+      codigo: "Code",
+      email: "Email",
+      x: "X",
+      instagram: "Instagram",
+      kofi: "Ko-fi",
+      copiarEmail: "Copy the email",
+      emailCopiado: "Email copied",
+      semNavegador: "Could not open the browser.",
     },
   },
 
@@ -232,10 +415,33 @@ const en: typeof pt = {
     volumeDisparo: "Sound cue volume",
     idioma: "Language",
     idiomaDescricao: "The interface language. System follows the operating system.",
+    discord: "Show on Discord",
+    discordDescricao:
+      "What you are doing shows on your profile, as \"Playing ATO20\". Only with Discord open on this machine.",
+    discordCampanha: "Show the campaign name on Discord",
+    discordCampanhaDescricao:
+      "When off, your profile only says what you are doing. The scene name never shows: your players could read it.",
+    somDosDados: "Dice sounds",
+    somDosDadosDescricao:
+      "Dice falling on the GM screen make noise, yours and your players'. Follows the system volume.",
+  },
+
+  presenca: {
+    noMenu: "In the menu",
+    preparando: "Preparing a campaign",
+    mapa: { longo: "Editing a map", curto: "On the map" },
+    quadro: { longo: "Editing a board", curto: "On the board" },
+    fundo: { longo: "Editing a scene", curto: "In a scene" },
+    esguelha: { longo: "2.5D table", curto: "At the 2.5D table" },
+    regras: { longo: "Reading the rules", curto: "In the rules" },
+    mestrando: "Running a campaign",
+    mestrandoNome: (campanha) => `Running ${campanha}`,
+    conhecer: "Check out ATO20",
   },
 
   novidades: {
     oQueMudou: "What's new",
+    oQueMudouNa: (versao) => `What's new in ${versao}`,
     estaVersao: "this version",
     antesDisso: "Before that",
     novidades: "New",
@@ -243,6 +449,7 @@ const en: typeof pt = {
     contarNovidades: (n) => (n === 1 ? "1 new feature" : `${n} new features`),
     contarCorrecoes: (n) => (n === 1 ? "1 fix" : `${n} fixes`),
     releasesNoGithub: "Releases on GitHub",
+    apoiar: "Support on Ko-fi",
     semNavegador: "Could not open the browser.",
   },
 

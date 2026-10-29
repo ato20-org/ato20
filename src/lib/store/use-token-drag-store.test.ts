@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  aceita,
+  assetIdDoArrasto,
+  chaveDoAlvo,
+  membroDaPasta,
+  type DestinoDoArrasto,
+  type FonteDoArrasto,
+} from "@/lib/store/use-token-drag-store";
+
+const emChamas = { nome: "Em chamas", cor: "#f59e0b", icone: "chama", efeito: "chamas" };
+
+const condicao: FonteDoArrasto = { tipo: "condicao", condicaoId: "c1", condicao: emChamas };
+const efeito: FonteDoArrasto = { tipo: "efeito", efeitoId: "campanha/fogo", condicao: emChamas };
+const area: FonteDoArrasto = { tipo: "area", efeitoId: "campanha/chao", cor: "#f59e0b" };
+const personagem: FonteDoArrasto = { tipo: "personagem", personagemId: "p1", assetId: "a1" };
+const acervo: FonteDoArrasto = { tipo: "acervo", assetId: "a2" };
+
+const peca: DestinoDoArrasto = { tipo: "peca", itemId: "i1" };
+
+describe("a condição arrastada até uma peça", () => {
+  it("cai na peça, a condição e o efeito", () => {
+    expect(aceita(condicao, peca)).toBe(true);
+    expect(aceita(efeito, peca)).toBe(true);
+  });
+
+  it("não cai no chão do mapa: não há imagem a pôr lá", () => {
+    expect(aceita(condicao, { tipo: "palco" })).toBe(false);
+    expect(aceita(efeito, { tipo: "palco" })).toBe(false);
+  });
+
+  it("para o token e a imagem, a peça não é alvo", () => {
+    expect(aceita(personagem, peca)).toBe(false);
+    expect(aceita(acervo, peca)).toBe(false);
+    // E o chão continua recebendo os dois.
+    expect(aceita(personagem, { tipo: "palco" })).toBe(true);
+    expect(aceita(acervo, { tipo: "palco" })).toBe(true);
+  });
+
+  it("não cai em nenhum outro lugar", () => {
+    const outros: DestinoDoArrasto[] = [
+      { tipo: "inventario", personagemId: "p1" },
+      { tipo: "personagem", personagemId: "p1" },
+      { tipo: "pasta-itens", pastaId: undefined },
+      { tipo: "handout" },
+      { tipo: "ponto", pinId: "x" },
+      { tipo: "pasta-arquivos", pastaId: undefined },
+      { tipo: "nota" },
+      { tipo: "split", painel: "x", zona: "centro" },
+    ];
+
+    for (const destino of outros) {
+      expect(aceita(condicao, destino)).toBe(false);
+      expect(aceita(efeito, destino)).toBe(false);
+    }
+  });
+
+  it("não leva arquivo do acervo, e todas as peças têm um alvo só", () => {
+    expect(assetIdDoArrasto(condicao)).toBeUndefined();
+    expect(assetIdDoArrasto(efeito)).toBeUndefined();
+    expect(chaveDoAlvo(peca)).toBe(chaveDoAlvo({ tipo: "peca", itemId: "outra" }));
+  });
+});
+
+describe("o efeito de área arrastado até o mapa", () => {
+  it("cai no chão, e não numa peça", () => {
+    expect(aceita(area, { tipo: "palco" })).toBe(true);
+    expect(aceita(area, peca)).toBe(false);
+  });
+
+  it("não cai em lista nenhuma", () => {
+    expect(aceita(area, { tipo: "nota" })).toBe(false);
+    expect(aceita(area, { tipo: "pasta-arquivos", pastaId: undefined })).toBe(false);
+    expect(aceita(area, { tipo: "handout" })).toBe(false);
+  });
+
+  it("não leva arquivo do acervo: a sombra é o círculo", () => {
+    expect(assetIdDoArrasto(area)).toBeUndefined();
+  });
+});
+
+describe("o card arrastado até uma pasta do Compêndio", () => {
+  const pasta = (lista: Parameters<typeof membroDaPasta>[1]) =>
+    ({ tipo: "pasta-compendio", lista, pastaId: "p" }) as const;
+  const envenenado = { nome: "Envenenado", cor: "#22c55e", icone: "circulo" };
+
+  it("cada aba recebe o que é dela, pelo id que a pasta guarda", () => {
+    expect(membroDaPasta({ tipo: "molde", personagemId: "goblin", assetId: "a" }, "compendio")).toBe("goblin");
+    expect(membroDaPasta({ tipo: "molde-item", itemId: "espada" }, "compendio-itens")).toBe("espada");
+    expect(membroDaPasta({ tipo: "condicao", condicaoId: "c1", condicao: envenenado }, "compendio-condicoes")).toBe("c1");
+    expect(membroDaPasta({ tipo: "area", efeitoId: "e1", cor: "#f00" }, "compendio-efeitos")).toBe("e1");
+    expect(membroDaPasta({ tipo: "disparo", efeitoId: "d1" }, "compendio-disparos")).toBe("d1");
+    expect(membroDaPasta({ tipo: "ambiente", efeitoId: "a1" }, "compendio-ambientes")).toBe("a1");
+  });
+
+  it("a pasta de outra aba recusa, e a do ATO20 não entra na campanha", () => {
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00" }, pasta("compendio-disparos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00", doAto20: true }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "molde", personagemId: "g", assetId: "a" }, pasta("compendio-itens"))).toBe(false);
+  });
+
+  it("a ficha do plugin cai no mapa, mesmo sem imagem, e não entra em pasta", () => {
+    const ficha: FonteDoArrasto = {
+      tipo: "molde-plugin",
+      extensaoId: "ordem-paranormal",
+      colecaoId: "ameacas",
+      moldeId: "zumbi",
+    };
+
+    // A imagem por URL só é baixada ao trazer: a sombra é a caixa.
+    expect(aceita(ficha, { tipo: "palco" })).toBe(true);
+    expect(aceita({ ...ficha, url: "blob:zumbi" }, { tipo: "palco" })).toBe(true);
+    // A sombra não pede o acervo: a URL do card já vem pronta.
+    expect(assetIdDoArrasto({ ...ficha, url: "blob:zumbi" })).toBeUndefined();
+    // As pastas são da campanha, e a ficha ainda não é.
+    expect(aceita(ficha, pasta("compendio"))).toBe(false);
+  });
+
+  it("o item do plugin só cai no mapa com a imagem, e não entra em pasta", () => {
+    const pistola: FonteDoArrasto = {
+      tipo: "item-plugin",
+      extensaoId: "ordem-paranormal",
+      colecaoId: "armas",
+      itemId: "pistola",
+    };
+
+    // A peça é a imagem: sem ela, o item entra em jogo pelo botão.
+    expect(aceita(pistola, { tipo: "palco" })).toBe(false);
+    expect(aceita({ ...pistola, url: "blob:pistola" }, { tipo: "palco" })).toBe(true);
+    expect(assetIdDoArrasto({ ...pistola, url: "blob:pistola" })).toBeUndefined();
+    expect(aceita({ ...pistola, url: "blob:pistola" }, pasta("compendio-itens"))).toBe(false);
+  });
+
+  it("o disparo não cai no mapa: ele sai pela mira", () => {
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, { tipo: "palco" })).toBe(false);
+    expect(aceita({ tipo: "disparo", efeitoId: "d1" }, pasta("compendio-disparos"))).toBe(true);
+  });
+
+  it("o ambiente não cai no mapa, e só a pasta dele o recebe", () => {
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, { tipo: "palco" })).toBe(false);
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, pasta("compendio-ambientes"))).toBe(true);
+    expect(aceita({ tipo: "ambiente", efeitoId: "a1" }, pasta("compendio-efeitos"))).toBe(false);
+    expect(aceita({ tipo: "area", efeitoId: "e1", cor: "#f00" }, pasta("compendio-ambientes"))).toBe(false);
+  });
+});

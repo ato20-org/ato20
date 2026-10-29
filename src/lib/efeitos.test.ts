@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { EFEITOS_DE_AREA } from "@/lib/area-de-efeito";
+
 import {
   baseDoEfeito,
+  EFEITOS_PARA_A_FIGURA,
+  especieDoEfeito,
+  projetilDoDisparo,
   focoDaArea,
   camadasDaFigura,
   definicaoDoEfeito,
@@ -18,14 +23,27 @@ import {
 
 describe("EFEITOS_DE_FABRICA", () => {
   it("são as pastas de src/efeitos, descobertas, em ordem de título", () => {
-    // Em ordem de título: "Congelado", "Em chamas", "Envenenado", "Molhado",
-    // "Sangrando".
+    // Em ordem de título: "Bola de fogo", "Brasas", "Chuva", "Cinzas",
+    // "Congelado", "Em chamas", "Envenenado", "Jato d'água", "Molhado",
+    // "Neblina", "Neve", "Nuvem venenosa", "Raio de gelo", "Sangrando", "Sopro
+    // de fogo", "Tempestade".
     expect(EFEITOS_DE_FABRICA.map((efeito) => efeito.id)).toEqual([
+      "bola-de-fogo",
+      "brasas",
+      "chuva",
+      "cinzas",
       "congelado",
       "chamas",
       "envenenado",
+      "jato-de-agua",
       "molhado",
+      "neblina",
+      "neve",
+      "nuvem-venenosa",
+      "raio-de-gelo",
       "sangrando",
+      "sopro-de-fogo",
+      "tempestade",
     ]);
     expect(definicaoDoEfeito("chamas")?.origem).toMatchObject({ app: "chamas" });
   });
@@ -324,6 +342,60 @@ describe("os efeitos da campanha", () => {
     expect(particulasDosEfeitos([{ efeito: "campanha/brasa", cor: "#fff" }], daCampanha)!.imagem).toBeUndefined();
   });
 });
+
+describe("as espécies de efeito", () => {
+  it("o disparo vence: ele também leva chão e elementos, e não é de área", () => {
+    expect(especieDoEfeito({ disparo: { forma: "linha" }, area: { cor: "#f00" } })).toBe("disparo");
+    expect(especieDoEfeito({ area: {} })).toBe("area");
+    expect(especieDoEfeito({})).toBe("personagem");
+  });
+
+  it("os disparos de fábrica ficam fora das listas de área e da condição", () => {
+    const disparos = ["bola-de-fogo", "raio-de-gelo", "jato-de-agua", "sopro-de-fogo", "nuvem-venenosa"];
+    const ids = (lista: ReadonlyArray<{ id: string }>) => lista.map((efeito) => efeito.id);
+
+    expect(ids(EFEITOS_DE_AREA)).toEqual(["congelado", "chamas", "envenenado", "molhado"]);
+    for (const id of disparos) expect(ids(EFEITOS_PARA_A_FIGURA)).not.toContain(id);
+    expect(ids(EFEITOS_PARA_A_FIGURA)).toContain("chamas");
+  });
+});
+
+describe("um disparo de fábrica usa a arte de outro pack", () => {
+  it("o projétil da bola de fogo é a chama de Em chamas, com o topo para trás", () => {
+    const projetil = projetilDoDisparo({ efeito: "bola-de-fogo", cor: "#f59e0b" })!;
+
+    expect(projetil.url).toBe(definicaoDoEfeito("chamas")!.origem && urlDoPack("chamas", "chama-128.webp"));
+    expect(projetil.giro).toBe(-90);
+    expect(projetil.cores).toEqual({ cor: "#f59e0b" });
+  });
+
+  it("a cópia para a campanha aponta para a pasta dona da arte, e desenha igual", () => {
+    const copia = copiaParaACampanha(definicaoDoEfeito("bola-de-fogo")!, "campanha/b0", "Bola");
+
+    expect(copia.disparo!.projetil!.imagem).toBe("fabrica:chamas/chama-128.webp");
+    expect(copia.area!.foco!.imagem).toBe("fabrica:chamas/chama-128.webp");
+    expect(copia.base!.imagem).toBe("fabrica:chamas/chao-de-fogo-128.webp");
+    expect(urlDaImagemDaCampanha(copia.disparo!.projetil!.imagem)).toBe(urlDoPack("chamas", "chama-128.webp"));
+  });
+
+  it("sem projétil próprio, voa o elemento da área, deitado para trás", () => {
+    const deFora = {
+      "campanha/sem": {
+        ...copiaParaACampanha(definicaoDoEfeito("sopro-de-fogo")!, "campanha/sem", "Sem"),
+        origem: { acervo: true as const },
+      },
+    };
+    const projetil = projetilDoDisparo({ efeito: "campanha/sem", cor: "#fff" }, deFora)!;
+
+    expect(projetil.url).toBe(urlDoPack("chamas", "chama-128.webp"));
+    expect(projetil.giro).toBe(-90);
+  });
+});
+
+/** O endereço de uma imagem de um pack de fábrica, como o build a serve. */
+function urlDoPack(pasta: string, arquivo: string): string | undefined {
+  return urlDaImagemDaCampanha(`fabrica:${pasta}/${arquivo}`) ?? undefined;
+}
 
 describe("a condição que configura o fogo de fábrica", () => {
   const copia = copiaParaACampanha(definicaoDoEfeito("chamas")!, "campanha/a1b2c3d4", "Em chamas");

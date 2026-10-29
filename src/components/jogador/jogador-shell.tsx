@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import {
-  Dices,
   FolderOpen,
+  Maximize,
   MessagesSquare,
+  Minimize,
   NotebookPen,
-  Package,
   User,
 } from "lucide-react";
 
@@ -16,29 +16,37 @@ import logo from "@/assets/logo-white.png";
 import { AnotacoesJogador } from "@/components/jogador/anotacoes-jogador";
 import { ChatJogador } from "@/components/jogador/chat-jogador";
 import { DadosNaTela } from "@/components/jogador/dados-na-tela";
+import { LixeiraDoDado } from "@/components/jogador/lixeira-do-dado";
+import { LimparDadosDaTela } from "@/components/jogador/limpar-dados-da-tela";
 import { MyCharacters } from "@/components/jogador/my-characters";
+import { MochilaFlutuante } from "@/components/jogador/mochila-jogador";
+import { BarraLateralDoJogador } from "@/components/jogador/barra-lateral-jogador";
 import { JogadorStage } from "@/components/jogador/jogador-stage";
 import {
   JogadorToolbar,
   ToolbarItem,
 } from "@/components/jogador/jogador-toolbar";
-import { Dock, DockButton, Drawer } from "@/components/jogador/jogador-rails";
-import { ConteudoDoSaquinho } from "@/components/jogador/saquinho-jogador";
+import { SaquinhoFlutuante } from "@/components/jogador/saquinho-jogador";
 import { PlayerEntrada } from "@/components/jogador/player-entrada";
 import { PlayerMenu } from "@/components/jogador/player-menu";
 import { SessionAudio } from "@/components/playground/session-audio";
 import { SpotlightLayer } from "@/components/playground/spotlight-layer";
+import { Button } from "@/components/ui/button";
 import {
   useSubscription,
   type Subscription,
 } from "@/hooks/use-scene-broadcast";
 import { useFioDoJogador } from "@/hooks/use-fio-do-jogador";
+import { useFullscreen } from "@/hooks/use-fullscreen";
 import { t } from "@/lib/i18n/jogador";
 import { useFioStore } from "@/lib/store/use-fio-store";
 import { usePlayerStore } from "@/lib/store/use-player-store";
 import { cn } from "@/lib/utils";
+import { usePersonagensDoJogador } from "@/hooks/use-personagens-do-jogador";
+import { useDefinirVezDaMesa } from "@/lib/store/use-vez-da-mesa-store";
 import { useSwipeTabs } from "@/hooks/use-swipe-tabs";
 import { useTabbedLayout } from "@/hooks/use-tabbed-layout";
+import { useTelaCheiaDaPagina } from "@/hooks/use-tela-cheia-da-pagina";
 import {
   DeclarativoProvider,
   useDeclarativoDaMesa,
@@ -52,41 +60,13 @@ import { useFichasVersaoStore } from "@/lib/store/use-fichas-versao-store";
  * mesmo tempo, e lá o desenho é outro: trilhas nas bordas e gavetas por cima
  * do mapa — ver `LandscapeLayout`.
  */
-const STACKED_TABS = ["personagem", "chat", "anotacoes"] as const;
+// Na ordem da barra, que é a do deslizar: Personagem e Arquivos à esquerda do
+// saquinho, Chat e Anotações à direita.
+const STACKED_TABS = ["personagem", "arquivos", "chat", "anotacoes"] as const;
 
 type StackedTab = (typeof STACKED_TABS)[number];
 
-/** As ferramentas das trilhas da tela deitada. */
-const FERRAMENTAS = {
-  personagem: {
-    lado: "esquerda",
-    rotulo: t.ferramentas.personagem,
-    icone: <User />,
-  },
-  inventario: {
-    lado: "esquerda",
-    rotulo: t.ferramentas.inventario,
-    icone: <Package />,
-  },
-  arquivos: {
-    lado: "esquerda",
-    rotulo: t.ferramentas.arquivos,
-    icone: <FolderOpen />,
-  },
-  dados: { lado: "direita", rotulo: t.ferramentas.saquinho, icone: <Dices /> },
-  chat: {
-    lado: "direita",
-    rotulo: t.ferramentas.chat,
-    icone: <MessagesSquare />,
-  },
-  anotacoes: {
-    lado: "direita",
-    rotulo: t.ferramentas.anotacoes,
-    icone: <NotebookPen />,
-  },
-} as const;
 
-type Ferramenta = keyof typeof FERRAMENTAS;
 
 /**
  * A visão do jogador: a cena, e a ficha do personagem.
@@ -107,6 +87,31 @@ export function JogadorShell({
   const tabbed = useTabbedLayout();
 
   /**
+   * A tela cheia do mapa, aqui e não no `JogadorStage`.
+   *
+   * Girar o celular troca o layout (`useTabbedLayout`), e cada layout tem o
+   * seu `JogadorStage`: com o estado lá dentro, a tela cheia -- que trava a
+   * tela deitada -- desmontava o palco que a pediu e voltava ao normal.
+   *
+   * E o pedido nativo é da PÁGINA, e não da moldura do mapa. Com a moldura em
+   * tela cheia o navegador só desenha ela e os filhos, e a imagem que o mestre
+   * põe em evidência (`SpotlightLayer`, irmã das abas) sumia: o jogador em
+   * tela cheia não via nada do que era transmitido. Quem estica a moldura
+   * sobre a tela é o CSS (`fixed inset-0 z-50`), como no iPhone, onde a API
+   * nativa não existe; a nativa só tira a barra do navegador, e a evidência,
+   * em `z-60`, fica por cima dos dois jeitos.
+   *
+   * Não é a `telaCheia` lá embaixo: aquela é a da página inteira
+   * (`useTelaCheiaDaPagina`), que deixa a ficha e o chat onde estão; esta
+   * estica o mapa sobre eles.
+   */
+  const telaCheiaDoMapa = useFullscreen();
+  const telaCheiaDaMesa = {
+    expandida: telaCheiaDoMapa.expanded,
+    onTelaCheia: () => telaCheiaDoMapa.toggle(document.documentElement),
+  };
+
+  /**
    * Procura a credencial guardada assim que a tela abre.
    *
    * Aqui, e não dentro de uma aba: é o resultado disto que decide se a tela
@@ -121,6 +126,9 @@ export function JogadorShell({
   /** Sem nome não há mesa: a tela inteira vira a porta de entrada. */
   const status = usePlayerStore((state) => state.status);
   const dentro = status === "dentro";
+
+  // A página inteira em tela cheia, a partir do primeiro toque dentro da mesa.
+  const telaCheia = useTelaCheiaDaPagina(dentro);
 
   // O fio da campanha, assinado aqui pelo mesmo motivo da cena logo abaixo: a
   // aba do chat desmontada não pode perder a conversa. Só com ficha — o fio é
@@ -137,6 +145,9 @@ export function JogadorShell({
 
   // A versão do elenco vai para um store, e não por prop: a ficha mora seis
   // camadas abaixo, em duas disposições de tela. Ver `useFichasVersaoStore`.
+  // A vez, para a marca nos retratos da cena. Ver `useVezDaMesaStore`.
+  useDefinirVezDaMesa(live.iniciativa?.vezDe ?? null);
+
   const definirFichasVersao = useFichasVersaoStore((state) => state.definir);
   useEffect(() => {
     definirFichasVersao(live.fichasVersao);
@@ -167,13 +178,16 @@ export function JogadorShell({
     // `h-dvh` fixa a altura na viewport real do celular, já descontando a
     // barra do navegador.
     <main className="flex h-dvh min-w-0 flex-col overflow-hidden">
-      {/* Baixo quando deitado: 40px em vez de 48. A altura é o que falta nesse
-          formato, e uma faixa que só diz o nome da mesa não é onde ela se
-          gasta. */}
+      {/* Só em pé. Deitado a altura é o que falta, e uma faixa que só diz o
+          nome da mesa não é onde ela se gasta: o mapa fica com ela, e o menu
+          do jogador (com o nome da mesa no topo) vai para a trilha direita. */}
+      {/* A faixa de cima: de que mesa é, e quem joga com o menu (nome, idioma,
+          sair). FINA deitado -- 32px em vez de 49 --, onde a altura é o que
+          falta e a faixa só precisa dizer as duas coisas. */}
       <header
         className={cn(
-          "flex shrink-0 items-center gap-2 border-b px-4 select-none",
-          tabbed ? "py-1.5" : "py-2",
+          "relative flex shrink-0 items-center gap-2 border-b select-none",
+          tabbed ? "px-3 py-0.5" : "px-4 py-2",
         )}
       >
         {/* A marca, e não o ícone de celular: o aparelho o jogador já sabe que
@@ -182,29 +196,61 @@ export function JogadorShell({
           src={logo}
           alt="ATO20"
           priority
-          className="h-4 w-auto shrink-0 opacity-80"
+          className={cn("w-auto shrink-0 opacity-80", tabbed ? "h-3.5" : "h-4")}
         />
         {/* O nome da mesa, e não o código: quem já entrou não precisa mais do
             código, e precisa saber que entrou na mesa certa. */}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate font-medium",
+            tabbed ? "text-xs" : "text-sm",
+          )}
+        >
           {nomeDaMesa}
         </span>
+
+        {/* A página inteira em tela cheia. Na faixa, e não no menu da conta:
+            é um toque só, e quem saiu sem querer pelo gesto do sistema acha o
+            caminho de volta sem abrir nada. Sem a API (iPhone), nada. */}
+        {telaCheia.suportada ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={cn("shrink-0 opacity-70", tabbed && "size-6")}
+            aria-label={telaCheia.ativa ? t.telaCheia.sair : t.telaCheia.entrar}
+            onClick={telaCheia.alternar}
+          >
+            {telaCheia.ativa ? <Minimize /> : <Maximize />}
+          </Button>
+        ) : null}
 
         {/* Quem joga, no canto da faixa — e o menu de trocar de nome ou sair.
             Some sozinho enquanto não há jogador. */}
         <PlayerMenu codigo={codigo} />
+
+        {dentro ? (
+          <IndicadorDaVez
+            codigo={codigo}
+            vezDe={live.iniciativa?.vezDe ?? null}
+            fina={tabbed}
+          />
+        ) : null}
+
+        {/* Pendurado embaixo da faixa enquanto houver dado na tela. Ver
+            `LimparDadosDaTela`. */}
+        {dentro ? <LimparDadosDaTela /> : null}
       </header>
 
       {dentro ? (
         <DeclarativoProvider valor={declarativo}>
           {tabbed ? (
-            <LandscapeLayout codigo={codigo} live={live} emCena={emCena} />
+            <LandscapeLayout codigo={codigo} live={live} emCena={emCena} {...telaCheiaDaMesa} />
           ) : (
-            <StackedLayout codigo={codigo} live={live} emCena={emCena} />
+            <StackedLayout codigo={codigo} live={live} emCena={emCena} {...telaCheiaDaMesa} />
           )}
         </DeclarativoProvider>
       ) : (
-        <PlayerEntrada codigo={codigo} />
+        <PlayerEntrada codigo={codigo} nomeDaMesa={nomeDaMesa} />
       )}
 
       {/* Os dados, sobre a página inteira. O celular na mão é a mesa: o dado
@@ -217,6 +263,9 @@ export function JogadorShell({
       {dentro ? (
         <>
           <DadosNaTela codigo={codigo} />
+          {/* Onde o dado da mesa se solta para sair dela, no pé da tela.
+              Ver `LixeiraDoDado`. */}
+          <LixeiraDoDado />
 
           {/* Fora das abas: a trilha não pode parar porque o jogador foi
               consultar a própria ficha. Música cortada no meio quebra a imersão
@@ -250,140 +299,103 @@ export function JogadorShell({
   );
 }
 
+/**
+ * A vez do jogador: a moldura amarela na tela inteira e "Sua vez" no meio da
+ * faixa de cima.
+ *
+ * Amarelo, a cor que a rodada tem na janela do Mestre: é o mesmo aviso nas
+ * duas pontas. A moldura cobre a tela INTEIRA, e não só o mapa, porque o
+ * jogador pode estar na ficha ou no chat quando a vez chega -- e fica acima da
+ * imagem em evidência (`z-60`), que de outro modo a esconderia.
+ *
+ * A vez é dele quando o personagem da vez é um dos SEUS. Monta só com o
+ * jogador dentro da mesa: antes disso a lista de personagens nem pode ser
+ * lida.
+ */
+function IndicadorDaVez({
+  codigo,
+  vezDe,
+  fina,
+}: {
+  codigo: string;
+  vezDe: string | null;
+  /** A faixa fina, com o celular deitado. */
+  fina: boolean;
+}) {
+  const meus = usePersonagensDoJogador(codigo);
+  const minhaVez = vezDe !== null && (meus ?? []).some((personagem) => personagem.id === vezDe);
+
+  if (!minhaVez) return null;
+
+  return (
+    <>
+      <span
+        role="status"
+        className={cn(
+          "pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 font-semibold whitespace-nowrap text-amber-950 shadow",
+          fina ? "px-2 py-px text-[10px]" : "px-3 py-0.5 text-xs",
+        )}
+      >
+        {t.suaVez}
+      </span>
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-70 border-4 border-amber-400"
+      />
+    </>
+  );
+}
+
 type LayoutProps = {
   codigo: string;
   live: Subscription;
   /** Ver `emCena`, no `JogadorShell`. */
   emCena: Set<string>;
+  /** A tela cheia do mapa. Ver `telaCheia`, no `JogadorShell`. */
+  expandida: boolean;
+  onTelaCheia: () => void;
 };
 
 /**
- * Tela deitada: a cena ocupa tudo, e as ferramentas vivem nas bordas.
+ * Tela deitada: o mapa e, colada à direita, a barra lateral do jogador.
  *
  * O formato deitado é o da mesa: quem está com o celular de lado, ou no
- * monitor, está OLHANDO a cena — e tudo o que não é ela é ferramenta. Por isso
- * aqui não há aba nem painel fixo: duas docas flutuantes seguram cinco
- * ferramentas nas bordas, e o mapa fica com a tela inteira por baixo delas.
- *
- * Uma gaveta por vez, e as duas trilhas dividem o mesmo estado. Duas gavetas
- * abertas ao mesmo tempo cercariam a cena pelos dois lados, que é exatamente o
- * que os painéis fixos faziam de errado. Tocar na ferramenta aberta fecha —
- * o mesmo botão que abriu.
+ * monitor, está OLHANDO a cena. A barra lateral fica FIXA e junta em abas o
+ * que é do jogador -- a ficha, a mochila, o chat, as notas, os arquivos. O
+ * saquinho é uma bolinha que flutua sobre a cena, como a do Mestre, e se
+ * arrasta para onde não atrapalha. Ver `BarraLateralDoJogador` e
+ * `SaquinhoFlutuante`.
  */
-function LandscapeLayout({ codigo, live, emCena }: LayoutProps) {
-  const [aberta, setAberta] = useState<Ferramenta | null>(null);
-  const naoLidas = useFioStore((state) => state.naoLidas);
-
-  /**
-   * O botão do saquinho na doca — que aqui é a BOCA dele.
-   *
-   * Deitado não há bolinha: o saquinho é este botão da borda, e a gaveta que
-   * ele abre é o interior. Recolher suga os dados para cá, e não para o botão
-   * de recolher lá dentro — o dado entra pela boca, e a boca é o que continua à
-   * vista com a gaveta aberta.
-   */
-  const botaoDoSaquinho = useRef<HTMLButtonElement>(null);
-
-  function bocaDoSaquinho(): { clientX: number; clientY: number } | undefined {
-    const rect = botaoDoSaquinho.current?.getBoundingClientRect();
-    if (!rect) return undefined;
-
-    return {
-      clientX: rect.left + rect.width / 2,
-      clientY: rect.top + rect.height / 2,
-    };
-  }
-
-  function alternar(ferramenta: Ferramenta) {
-    setAberta((atual) => (atual === ferramenta ? null : ferramenta));
-  }
-
-  function botoes(lado: "esquerda" | "direita") {
-    return (Object.keys(FERRAMENTAS) as Ferramenta[])
-      .filter((chave) => FERRAMENTAS[chave].lado === lado)
-      .map((chave) => (
-        <DockButton
-          key={chave}
-          ref={chave === "dados" ? botaoDoSaquinho : undefined}
-          ativo={aberta === chave}
-          rotulo={FERRAMENTAS[chave].rotulo}
-          icone={FERRAMENTAS[chave].icone}
-          aviso={chave === "chat" && aberta !== "chat" && naoLidas > 0}
-          onClick={() => alternar(chave)}
-        />
-      ));
-  }
-
+function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutProps) {
   return (
-    // `relative`: é a moldura em que as docas e a gaveta se posicionam. A cena
-    // ocupa tudo por baixo — o jogador confere a ficha sem perder de vista o
-    // que está acontecendo no mapa.
-    <div className="relative min-h-0 min-w-0 flex-1 p-2">
-      <JogadorStage
-        codigo={codigo}
-        scene={live.scene}
-        portraits={live.portraits}
-        fichas={live.fichas}
-        efeitos={live.efeitos}
-        rolagens={live.rolagens}
-        pings={live.pings}
-        synced={live.synced}
-        stalled={live.stalled}
-      />
+    <div className="flex min-h-0 min-w-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 p-1.5">
+        <JogadorStage
+          codigo={codigo}
+          scene={live.scene}
+          portraits={live.portraits}
+          fichas={live.fichas}
+          efeitos={live.efeitos}
+          rolagens={live.rolagens}
+          iniciativa={live.iniciativa}
+          pings={live.pings}
+          disparados={live.disparados}
+          laser={live.laser}
+          segurados={live.segurados}
+          synced={live.synced}
+          stalled={live.stalled}
+          conexao={live.conexao}
+          expandida={expandida}
+          onTelaCheia={onTelaCheia}
+        />
+      </div>
 
-      <Dock lado="esquerda">{botoes("esquerda")}</Dock>
-      <Dock lado="direita">{botoes("direita")}</Dock>
+      <BarraLateralDoJogador codigo={codigo} emCena={emCena} />
 
-      {aberta ? (
-        <Drawer
-          lado={FERRAMENTAS[aberta].lado}
-          titulo={FERRAMENTAS[aberta].rotulo}
-          icone={FERRAMENTAS[aberta].icone}
-          onFechar={() => setAberta(null)}
-        >
-          <ConteudoDaFerramenta
-            codigo={codigo}
-            ferramenta={aberta}
-            emCena={emCena}
-            bocaDoSaquinho={bocaDoSaquinho}
-          />
-        </Drawer>
-      ) : null}
+      {/* Abaixo da faixa fina de cima (~33px) e até perto do pé da tela. */}
+      <SaquinhoFlutuante reservaEmcima={44} reservaEmbaixo={12} />
     </div>
   );
-}
-
-/** O que cada gaveta mostra. */
-function ConteudoDaFerramenta({
-  codigo,
-  ferramenta,
-  emCena,
-  bocaDoSaquinho,
-}: {
-  codigo: string;
-  ferramenta: Ferramenta;
-  emCena: Set<string>;
-  /** Para onde os dados são sugados ao recolher. Ver `LandscapeLayout`. */
-  bocaDoSaquinho: () => { clientX: number; clientY: number } | undefined;
-}) {
-  if (ferramenta === "dados")
-    return <ConteudoDoSaquinho boca={bocaDoSaquinho} />;
-  if (ferramenta === "anotacoes")
-    return <AnotacoesJogador codigo={codigo} emCena={emCena} />;
-  // Altura FIXA, ao contrário das outras gavetas, que crescem com o conteúdo:
-  // o chat rola por dentro e tem o campo preso embaixo, e uma gaveta do
-  // tamanho da conversa empurraria o campo para fora da tela. A margem negativa
-  // devolve o recuo da gaveta — a lista vai de borda a borda.
-  if (ferramenta === "chat")
-    return (
-      <div className="-m-3 h-[min(28rem,70dvh)]">
-        <ChatJogador codigo={codigo} emCena={emCena} />
-      </div>
-    );
-
-  // As três do personagem são o mesmo componente, cada uma pedindo o seu
-  // pedaço: a ficha com o retrato, o inventário, os arquivos.
-  return <MyCharacters codigo={codigo} secao={ferramenta} />;
 }
 
 /**
@@ -393,8 +405,9 @@ function ConteudoDaFerramenta({
  * o conteúdo ao mesmo tempo. Presa, e não rolando junto: perder o mapa de
  * vista ao consultar a própria ficha é o oposto do que serve numa mesa.
  */
-function StackedLayout({ codigo, live, emCena }: LayoutProps) {
+function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutProps) {
   const [tab, setTab] = useState<StackedTab>("personagem");
+
   const swipe = useSwipeTabs(STACKED_TABS, tab, setTab);
   const naoLidas = useFioStore((state) => state.naoLidas);
 
@@ -408,9 +421,16 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
           fichas={live.fichas}
           efeitos={live.efeitos}
           rolagens={live.rolagens}
+          iniciativa={live.iniciativa}
           pings={live.pings}
+          disparados={live.disparados}
+          laser={live.laser}
+          segurados={live.segurados}
           synced={live.synced}
           stalled={live.stalled}
+          conexao={live.conexao}
+          expandida={expandida}
+          onTelaCheia={onTelaCheia}
         />
       </div>
 
@@ -418,14 +438,29 @@ function StackedLayout({ codigo, live, emCena }: LayoutProps) {
         <Painel codigo={codigo} tab={tab} emCena={emCena} />
       </div>
 
+      {/* O inventário fora das abas: uma bolinha arrastável e o painel colado
+          nela. Ver `MochilaFlutuante`. */}
+      <MochilaFlutuante codigo={codigo} />
+
       <JogadorToolbar
         esquerda={
-          <ToolbarItem
-            ativo={tab === "personagem"}
-            icone={<User />}
-            rotulo={t.ferramentas.personagem}
-            onClick={() => setTab("personagem")}
-          />
+          <>
+            <ToolbarItem
+              ativo={tab === "personagem"}
+              icone={<User />}
+              rotulo={t.ferramentas.personagem}
+              onClick={() => setTab("personagem")}
+            />
+            {/* Aba própria, e não o fim da aba Personagem: a ficha, o retrato e
+                os anexos ficavam embaixo dos detalhes e do inventário, a várias
+                rolagens de distância, e arquivo se abre uma vez por sessão. */}
+            <ToolbarItem
+              ativo={tab === "arquivos"}
+              icone={<FolderOpen />}
+              rotulo={t.ferramentas.arquivos}
+              onClick={() => setTab("arquivos")}
+            />
+          </>
         }
         direita={
           <>
@@ -491,6 +526,14 @@ function Painel({
     );
   }
 
+  if (tab === "arquivos") {
+    return (
+      <div className="h-full space-y-6 overflow-y-auto p-3 pb-10">
+        <MyCharacters codigo={codigo} secao="arquivos" />
+      </div>
+    );
+  }
+
   // Sem o esmaecido das bordas, ao contrário das outras áreas roláveis do
   // aplicativo: aqui embaixo é TEXTO de ficha, e no celular a máscara apagava
   // justamente a primeira e a última linha do que se foi ler. Numa lista de
@@ -499,7 +542,9 @@ function Painel({
   // esmaecer -- e que aqui também não serve, porque o problema não é a caixa
   // não rolar, é o conteúdo ser leitura.
   return (
-    <div className="h-full space-y-4 overflow-y-auto p-3 pb-10">
+    // Sem recuo no alto: o nome do personagem prende no topo da rolagem, e o
+    // recuo deixaria uma faixa de texto passando por cima dele.
+    <div className="h-full overflow-y-auto px-3 pb-10">
       <MyCharacters codigo={codigo} />
     </div>
   );

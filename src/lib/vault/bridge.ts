@@ -2,6 +2,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
+import type { EnderecoDetectado, EstadoDoTailscale } from "@/lib/endereco-da-mesa";
 import { comum } from "@/lib/i18n/comum";
 import { idioma } from "@/lib/i18n/idioma";
 
@@ -155,6 +156,8 @@ export type DaemonAddr = {
    * diz isso, em vez de mostrar um endereço que não responderia.
    */
   lanUrl: string | null;
+  /** A porta do daemon. É a que vai num endereço que o mestre digita sem porta. */
+  porta: number;
   /** Segredo das rotas que escrevem. */
   token: string;
 };
@@ -188,4 +191,35 @@ let addrConhecido: DaemonAddr | null = null;
  */
 export function daemonAddrSeConhecido(): DaemonAddr | null {
   return addrConhecido;
+}
+
+/**
+ * Os endereços do daemon em cada rede que responde AGORA: a local e as VPNs
+ * de jogo que o Rust reconhece pela faixa.
+ *
+ * Sem cache, ao contrário do `daemonAddr`: o `lanUrl` é fixo desde a abertura,
+ * e isto existe justamente para ver a VPN que foi ligada depois. A pergunta é
+ * barata (um socket UDP por rede, sem pacote nenhum na rede).
+ */
+export function enderecosDetectados(): Promise<EnderecoDetectado[]> {
+  return call<EnderecoDetectado[]>("enderecos_da_mesa");
+}
+
+/**
+ * O Tailscale desta máquina, pela CLI dele: logado, online, e se o Funnel
+ * está aberto para a mesa. Sem cache pelo mesmo motivo de
+ * `enderecosDetectados`.
+ */
+export function tailscaleEstado(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("tailscale_estado");
+}
+
+/** Abre a mesa para a internet pelo Funnel. Devolve como ficou. */
+export function abrirFunil(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("funil_abrir");
+}
+
+/** Fecha o Funnel da mesa. Devolve como ficou. */
+export function fecharFunil(): Promise<EstadoDoTailscale> {
+  return call<EstadoDoTailscale>("funil_fechar");
 }

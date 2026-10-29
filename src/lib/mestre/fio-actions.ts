@@ -7,7 +7,7 @@ import {
 } from "@/lib/configuracoes/registro";
 import { t } from "@/lib/i18n/mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
-import type { Dado } from "@/types/dado";
+import type { Dado, SiglaDoLance } from "@/types/dado";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
 
 /**
@@ -118,8 +118,15 @@ export function definirDadosAbertos(abertos: boolean): void {
  * Uma linha para o gesto inteiro: "2d6" da paleta são dois dados e uma
  * rolagem. Falhar não incomoda ninguém — o dado já está na mesa, e o fio é a
  * memória dele, não a jogada.
+ *
+ * `rotulo` e `modificador` são da rolagem que tem nome -- "Dante · Luta",
+ * `+10` --, a da ficha, e `siglas` as que a conta dela leu. A do saquinho e a
+ * da paleta vão sem os três.
  */
-export function anunciarDadosNoFio(dados: readonly Dado[]): void {
+export function anunciarDadosNoFio(
+  dados: readonly Dado[],
+  { rotulo, modificador, siglas }: { rotulo?: string; modificador?: number; siglas?: SiglaDoLance[] } = {},
+): void {
   if (dados.length === 0) return;
 
   const abertos = valorDe<boolean>(CHAVE_DADOS_ABERTOS) === true;
@@ -127,7 +134,12 @@ export function anunciarDadosNoFio(dados: readonly Dado[]): void {
 
   setTimeout(() => {
     void falarNoFio({
-      rolagem: { dados: dados.map(({ faces, valor }) => ({ faces, valor })) },
+      rolagem: {
+        dados: dados.map(({ faces, valor, descartado }) => ({ faces, valor, ...(descartado && { descartado }) })),
+        ...(modificador ? { modificador } : {}),
+        ...(rotulo ? { rotulo } : {}),
+        ...(siglas ? { siglas } : {}),
+      },
       para: abertos ? undefined : { tipo: "mestre" },
     }).catch(() => {
       // Sem daemon não há fio. A jogada já aconteceu no palco.

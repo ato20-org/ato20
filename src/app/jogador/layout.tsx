@@ -14,7 +14,9 @@ export default function JogadorLayout({ children }: LayoutProps<"/jogador">) {
   return (
     <>
       {children}
-      <Toaster theme="dark" />
+      {/* No alto: embaixo, no celular, ele cobria a barra de abas e as
+          bolinhas da mochila e do saquinho. */}
+      <Toaster theme="dark" position="top-center" />
     </>
   );
 }

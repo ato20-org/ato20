@@ -1,4 +1,4 @@
-import type { FacesDado } from "@/types/dado";
+import type { FacesDado, SiglaDoLance } from "@/types/dado";
 
 /**
  * O fio da campanha, como o daemon o grava e o anuncia.
@@ -31,6 +31,8 @@ export type DadoNoFio = {
   faces: FacesDado;
   /** O número GRAVADO, como em toda rolagem. Ver `valorDaRolagem`. */
   valor: number;
+  /** Caiu, e não conta: não foi o maior do termo. Ver `Dado.descartado`. */
+  descartado?: boolean;
 };
 
 /**
@@ -41,6 +43,8 @@ export type RolagemNoFio = {
   dados: DadoNoFio[];
   modificador?: number;
   rotulo?: string;
+  /** As siglas que a conta leu, e quanto valiam. Ver `SiglaDoLance`. */
+  siglas?: SiglaDoLance[];
 };
 
 export type LinhaDoFio = {

@@ -48,12 +48,11 @@ pub struct PlayerMeta {
 /// Nome do arquivo que descreve um jogador dentro de `jogadores/{id}/`.
 const PLAYER_META: &str = "_meta.json";
 
-/// As notas de um personagem, dentro de `personagens/{id}/`.
-///
-/// Arquivo proprio, e nao um campo do `personagens.json`: o indice e reescrito
-/// inteiro a cada renomeacao e a cada troca de miniatura, e carregar dentro
-/// dele o texto de todos os jogadores faria cada um desses gestos regravar
-/// paginas de nota.
+/// As notas soltas de um personagem, em `personagens/{id}/`, de zip anterior a
+/// v6 do banco. Nao se grava mais: desde a v6 o que o jogador escreve sobre o
+/// personagem e o caderno dele, que viaja no `_meta.json` do jogador com o
+/// personagem de cada nota. So se le, para o import de um zip antigo trazer o
+/// texto para dentro do caderno. Ver `restore_character_notes`.
 const CHARACTER_NOTES: &str = "_notas.json";
 
 /// Diretorio que NAO viaja.
@@ -98,13 +97,6 @@ pub fn export(vault: &Vault, dest: &Path) -> AppResult<()> {
     // texto dos jogadores, que e o que estava ilegivel de todo jeito.
     if let Err(cause) = write_player_meta(vault) {
         log::warn!("export sem o texto dos jogadores: {cause}");
-    }
-
-    // As notas de personagem, pelo mesmo motivo e com a mesma tolerancia: elas
-    // vivem no banco, que nao viaja, e um banco ilegivel nao pode custar o
-    // export das cenas e dos anexos.
-    if let Err(cause) = write_character_notes(vault) {
-        log::warn!("export sem as notas de personagem: {cause}");
     }
 
     let file = File::create(dest)?;
@@ -191,29 +183,6 @@ fn write_player_meta(vault: &Vault) -> AppResult<()> {
                 entrou_em: player.entrou_em,
                 token_hash: hash.unwrap_or_default(),
             },
-        )?;
-    }
-
-    Ok(())
-}
-
-/// Grava `personagens/{id}/_notas.json` para cada personagem do indice.
-fn write_character_notes(vault: &Vault) -> AppResult<()> {
-    for personagem in characters::load(vault)? {
-        let notas = players::notes_of_character(vault, &personagem.id)?;
-
-        // Personagem sem nota nenhuma nao ganha arquivo: um `{}` por
-        // personagem seria sujeira no zip e no diretorio de quem importa.
-        if notas.is_empty() {
-            continue;
-        }
-
-        let dir = characters::dir(vault, &personagem.id);
-        std::fs::create_dir_all(&dir)?;
-
-        write_json(
-            &dir.join(CHARACTER_NOTES),
-            &notas.into_iter().collect::<BTreeMap<String, String>>(),
         )?;
     }
 
@@ -369,10 +338,12 @@ fn read_config<R: Read + Seek>(arquivo: &mut ZipArchive<R>) -> AppResult<super::
 ///
 /// Levando o hash junto, o celular de cada jogador continua valendo -- e por
 /// isso a mesa nao precisa entrar de novo depois de o mestre trocar de maquina.
-/// Le de volta as notas de personagem que o zip trouxe.
+/// Le as notas soltas de um zip anterior a v6 e as poe no caderno de cada
+/// personagem, como a migracao fez com as do banco.
 ///
-/// Silencioso quando nao ha nada: campanha exportada por uma versao anterior
-/// nao tem `_notas.json`, e isso e estado valido, nao erro de importacao.
+/// Silencioso quando nao ha nada: o zip novo nao tem `_notas.json`, e isso e
+/// estado valido, nao erro de importacao. O arquivo sai depois de lido, para
+/// um export seguinte nao carregar adiante um formato morto.
 fn restore_character_notes(vault: &Vault) -> AppResult<()> {
     for personagem in characters::load(vault)? {
         let caminho = characters::dir(vault, &personagem.id).join(CHARACTER_NOTES);
@@ -383,8 +354,9 @@ fn restore_character_notes(vault: &Vault) -> AppResult<()> {
         };
 
         for (jogador_id, texto) in notas {
-            players::set_note(vault, &personagem.id, &jogador_id, &texto)?;
+            players::fold_old_character_note(vault, &personagem.id, &jogador_id, &texto)?;
         }
+        let _ = std::fs::remove_file(&caminho);
     }
 
     Ok(())
@@ -508,13 +480,13 @@ mod tests {
         );
     }
 
-    /// A nota do jogador sobre o personagem sobrevive ao zip.
+    /// O caderno do personagem sobrevive ao zip, com o personagem de cada nota.
     ///
-    /// Ela vive no SQLite, que NAO viaja: sem materializar, a campanha chegaria
+    /// Ele vive no SQLite, que NAO viaja: sem materializar, a campanha chegaria
     /// do outro lado com personagem e anexos intactos e sem uma linha do que os
     /// jogadores escreveram.
     #[test]
-    fn nota_de_personagem_viaja_no_zip() {
+    fn o_caderno_do_personagem_viaja_no_zip() {
         let dir = tempfile::tempdir().expect("tempdir");
         let vault = campanha(dir.path(), "A Marca do Javali");
 
@@ -524,19 +496,19 @@ mod tests {
         let jogador = edgar.id;
 
         players::link(&vault, &jogador, &personagem.id).expect("vinculo");
-        players::set_note(&vault, &personagem.id, &jogador, "o alcapao range").expect("nota");
+        players::create_note(&vault, &jogador, &personagem.id, "", "o alcapao range", &[])
+            .expect("nota");
 
         let zip_path = dir.path().join("saida.ato20.zip");
         export(&vault, &zip_path).expect("export");
 
         let importada = import(&zip_path, &dir.path().join("importadas")).expect("import");
 
-        // O id do jogador tambem viaja, no `_meta.json` dele: e o que faz a
-        // nota reencontrar o dono do outro lado.
-        assert_eq!(
-            players::note(&importada, &personagem.id, &jogador).expect("nota"),
-            "o alcapao range"
-        );
+        // O id do jogador tambem viaja, no `_meta.json` dele: e o que faz o
+        // caderno reencontrar o dono do outro lado, no personagem certo.
+        let notas = players::character_notes(&importada, &jogador, &personagem.id).expect("notas");
+        assert_eq!(notas.len(), 1);
+        assert_eq!(notas[0].texto, "o alcapao range");
         // E o vinculo NAO viaja, de proposito: quem senta na mesa e da maquina,
         // nao da campanha. O mestre revincula ao importar.
         assert!(players::characters_of(&importada, &jogador)
@@ -655,6 +627,7 @@ mod tests {
         players::create_note(
             &vault,
             &player.id,
+            "p1",
             "O poco",
             "a chave esta no poco",
             &["pista".into()],

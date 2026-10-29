@@ -36,6 +36,7 @@ import {
   retratosDaCena,
   scalePortraitGroup,
 } from "@/lib/geometry/portrait";
+import { janelaDe } from "@/lib/dom";
 import { computeSnap, SNAP_THRESHOLD_PX, type Guide } from "@/lib/geometry/snap";
 import { t } from "@/lib/i18n/personagens";
 import { removePortraitSelection } from "@/lib/mestre/item-actions";
@@ -733,6 +734,8 @@ function seguir(
   event.stopPropagation();
 
   const { pointerId, clientX: x0, clientY: y0 } = event;
+  // A janela do quadro: a do Mestre, ou a solta em que a janela Retratos está.
+  const vista = janelaDe(event.currentTarget as Node);
 
   const mover = (nativo: PointerEvent) => {
     if (nativo.pointerId !== pointerId) return;
@@ -741,13 +744,13 @@ function seguir(
   const soltar = (nativo: PointerEvent) => {
     if (nativo.pointerId !== pointerId) return;
 
-    window.removeEventListener("pointermove", mover);
-    window.removeEventListener("pointerup", soltar);
-    window.removeEventListener("pointercancel", soltar);
+    vista.removeEventListener("pointermove", mover);
+    vista.removeEventListener("pointerup", soltar);
+    vista.removeEventListener("pointercancel", soltar);
     onSoltar?.(nativo);
   };
 
-  window.addEventListener("pointermove", mover);
-  window.addEventListener("pointerup", soltar);
-  window.addEventListener("pointercancel", soltar);
+  vista.addEventListener("pointermove", mover);
+  vista.addEventListener("pointerup", soltar);
+  vista.addEventListener("pointercancel", soltar);
 }

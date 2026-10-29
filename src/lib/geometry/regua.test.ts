@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  caixaDaRegua,
   caixaDoRetangulo,
   formatarArea,
+  girarPonta,
   reguaVazia,
   moverRegua,
   rotuloDoMedidor,
+  trocarFormaDaRegua,
 } from "@/lib/geometry/regua";
 import type { Regua, SceneGrid } from "@/types/scene";
 
@@ -81,3 +84,57 @@ describe("gestos", () => {
     });
   });
 });
+
+describe("a régua travada", () => {
+  it("a ponta gira em volta da origem e a medida fica", () => {
+    const regua = medidor({ x: 100, y: 100, x2: 400, y2: 100 });
+
+    // Apontada para baixo, longe ou perto: continua com 300.
+    expect(girarPonta(regua, { x: 100, y: 900 })).toEqual({ x2: 100, y2: 400 });
+    expect(girarPonta(regua, { x: 100, y: 110 })).toEqual({ x2: 100, y2: 400 });
+
+    const diagonal = girarPonta(regua, { x: 200, y: 200 });
+    expect(Math.hypot(diagonal.x2 - 100, diagonal.y2 - 100)).toBeCloseTo(300);
+  });
+
+  it("com o ponteiro em cima da origem, a ponta fica", () => {
+    expect(girarPonta(medidor({ x2: 50 }), { x: 0, y: 0 })).toEqual({ x2: 50, y2: 0 });
+  });
+});
+
+describe("a caixa do que a régua desenha", () => {
+  it("o círculo é o quadrado do raio, e não a linha dele", () => {
+    expect(caixaDaRegua(medidor({ forma: "circulo", x: 100, y: 100, x2: 150, y2: 100 }))).toEqual({
+      minX: 50,
+      minY: 50,
+      maxX: 150,
+      maxY: 150,
+    });
+  });
+
+  it("o cone apontado para cima tem o alto no arco, e não numa ponta", () => {
+    const caixa = caixaDaRegua(medidor({ forma: "cone", x: 0, y: 0, x2: 0, y2: -100 }));
+
+    expect(caixa.minY).toBeCloseTo(-100);
+    expect(caixa.maxY).toBe(0);
+    // Sessenta graus de abertura: as bordas saem a 30 para cada lado.
+    expect(caixa.maxX).toBeCloseTo(50);
+  });
+});
+
+describe("trocar a forma da régua", () => {
+  it("guarda os dois pontos: a reta de 9 vira o círculo de raio 9", () => {
+    expect(trocarFormaDaRegua(medidor({ x2: 450 }), "circulo")).toEqual({ forma: "circulo" });
+    expect(trocarFormaDaRegua(medidor({ x2: 450 }), "linha")).toEqual({});
+  });
+
+  it("a régua deitada vira o quadrado do lado dela, e não um retângulo sem altura", () => {
+    expect(trocarFormaDaRegua(medidor({ x2: -300, y2: 2 }), "retangulo")).toEqual({
+      forma: "retangulo",
+      x2: -300,
+      y2: 300,
+    });
+    expect(trocarFormaDaRegua(medidor({ x2: 300, y2: 200 }), "retangulo")).toEqual({ forma: "retangulo" });
+  });
+});
+

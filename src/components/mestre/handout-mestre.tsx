@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 
+import { ItemAnexado } from "@/components/mestre/item-anexado";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
 import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useAssetList } from "@/hooks/use-asset-list";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
@@ -43,6 +44,7 @@ import { useSceneStore } from "@/lib/store/use-scene-store";
 import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { t } from "@/lib/i18n/arquivos";
+import { t as textoDosItens } from "@/lib/i18n/itens";
 import { cn } from "@/lib/utils";
 import { importAssets } from "@/lib/vault/assets";
 import type { AssetMeta, Scene } from "@/types/scene";
@@ -100,6 +102,7 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
   const publicarBoca = useHandoutStore((state) => state.publicarBoca);
   const sobreABoca = useHandoutStore((state) => state.sobreABoca);
   const guardar = useSceneStore((state) => state.guardarNoHandout);
+  const guardarItens = useSceneStore((state) => state.guardarItensNoHandout);
 
   // Uma imagem do acervo está pairando sobre a bolinha: o `useTokenDrag` já
   // decidiu que este é o destino, e a bolinha incha para dizer que recebe.
@@ -115,7 +118,9 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
   /** Engole o clique que fecha um arrasto da bolinha. Ver `SaquinhoDados`. */
   const arrastouEm = useRef(0);
 
-  const quantos = scene.handout?.length ?? 0;
+  const imagens = scene.handout?.length ?? 0;
+  const itens = scene.handoutItens?.length ?? 0;
+  const quantos = imagens + itens;
 
   // A boca é medida na hora, não copiada: a bolinha anda. Ver `naBoca`.
   useEffect(() => {
@@ -135,11 +140,18 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
     const { registrarAlvo } = useTokenDragStore.getState();
 
     return registrarAlvo("handout", (solto) => {
+      // O item da campanha fica guardado aqui como fica num ponto: preso, e
+      // sem sair de onde veio. Ver `Scene.handoutItens`.
+      if (solto.fonte.tipo === "item") {
+        guardarItens(sceneId.current, [solto.fonte.itemId]);
+        return;
+      }
+
       if (solto.fonte.tipo !== "acervo") return;
 
       guardar(sceneId.current, [solto.fonte.assetId]);
     });
-  }, [guardar]);
+  }, [guardar, guardarItens]);
 
   // Arquivo do sistema solto na bolinha: importa no acervo e guarda no handout.
   // O id da cena sai ANTES do `then`: a importação vai ao disco, e se o mestre
@@ -302,7 +314,12 @@ export function HandoutMestre({ scene }: { scene: Scene }) {
           <h3 className="text-sm font-medium">{t.handoutMestre.handoutDaCena}</h3>
           {quantos > 0 ? (
             <span className="text-muted-foreground text-xs tabular-nums">
-              {t.handoutMestre.contarImagens(quantos)}
+              {[
+                imagens > 0 ? t.handoutMestre.contarImagens(imagens) : null,
+                itens > 0 ? textoDosItens.contar(itens) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           ) : null}
         </div>
@@ -322,7 +339,9 @@ function ConteudoDoHandout({
 }) {
   const { assets } = useAssetList("image");
   const guardar = useSceneStore((state) => state.guardarNoHandout);
+  const tirarItem = useSceneStore((state) => state.tirarItemDoHandout);
   const ids = scene.handout ?? [];
+  const itens = scene.handoutItens ?? [];
 
   const escolher = () => void escolherParaHandout(scene.id, guardar);
 
@@ -342,7 +361,7 @@ function ConteudoDoHandout({
       (state) => state.arrasto?.destino?.tipo === "handout",
     ) || arquivoNoAr;
 
-  if (ids.length === 0) {
+  if (ids.length === 0 && itens.length === 0) {
     // Uma zona de soltar desenhada, e não só um parágrafo: texto em painel
     // vazio não é lido. A caixa tracejada com a imagem entrando é o mesmo
     // desenho que todo upload usa, e diz sozinha o que fazer.
@@ -383,6 +402,16 @@ function ConteudoDoHandout({
           assetId={assetId}
           asset={assets?.find((asset) => asset.id === assetId)}
           naMesa={naMesa.has(assetId)}
+        />
+      ))}
+
+      {/* Os itens depois das imagens, na mesma grade, como no ponto. */}
+      {itens.map((itemId) => (
+        <ItemAnexado
+          key={itemId}
+          itemId={itemId}
+          rotuloTirar={textoDosItens.anexado.tirarDoHandout}
+          onTirar={() => tirarItem(scene.id, itemId)}
         />
       ))}
 
@@ -460,7 +489,7 @@ function CelulaDoHandout({
             variant={noAr ? "default" : "secondary"}
             size="icon-xs"
             aria-label={
-              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNoEspectador(nome)
             }
             onPointerDown={(event) => event.stopPropagation()}
             onClick={noAr ? clear : () => transmit(assetId)}

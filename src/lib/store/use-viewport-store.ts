@@ -35,14 +35,13 @@ type ViewportStore = {
    */
   panMode: boolean;
   /**
-   * Quantos arrastos estão em curso no palco -- item, alça, postit, moldura.
+   * Quantos arrastos estão em curso no palco -- item, alça, postit, moldura,
+   * caixa de seleção.
    *
-   * Existe para o `SceneStage` saber que há GESTO mesmo com a câmera parada.
-   * O plano de conteúdo assenta em `zoom` (layout, nítido) quando a câmera
-   * para; mover um item dentro de um plano em `zoom` paga layout e re-raster
-   * do plano inteiro a cada quadro, e era isso que fazia um token já no mapa
-   * pesar na mão enquanto o fantasma da aba -- fora do plano -- corria leve.
-   * Com um gesto em curso o plano volta ao `transform`, e o compositor cuida.
+   * Quem lê é o `MestreStage`, que pausa os efeitos animados enquanto a mão
+   * anda. O `SceneStage` já leu, para derrubar o plano para `transform` no
+   * gesto, e deixou de ler: o mapa borrava a cada clique. Ver
+   * `conteudoNoLayout`.
    *
    * Contador e não booleano: dois ponteiros (toque) podem se sobrepor, e o
    * segundo a soltar é quem encerra.

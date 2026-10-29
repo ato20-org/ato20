@@ -1,4 +1,4 @@
-import { EFEITOS_DE_FABRICA, type LuzResolvida } from "@/lib/efeitos";
+import { EFEITOS_DE_FABRICA, especieDoEfeito, type LuzResolvida } from "@/lib/efeitos";
 import { paraCaixa, paraCena, pontosNaCaixa } from "@/lib/geometry/area-escondida";
 import {
   RAIO_MAXIMO_DO_EFEITO,
@@ -41,9 +41,13 @@ import {
  * fica numa caixa sem giro, e é ela que vai para o plano.
  */
 
-/** Os efeitos de FÁBRICA que servem a uma área: os que declaram `area`. */
+/**
+ * Os efeitos de FÁBRICA que servem a uma área: os que declaram `area` -- menos
+ * os disparos, que também a declaram (é o chão do cone e do estouro deles) e
+ * são outra espécie. Ver `especieDoEfeito`.
+ */
 export const EFEITOS_DE_AREA: ReadonlyArray<DefinicaoDeEfeito> = EFEITOS_DE_FABRICA.filter(
-  (efeito) => efeito.area,
+  (efeito) => especieDoEfeito(efeito) === "area",
 );
 
 /** A cor de uma área quando nem ela nem o efeito dizem a sua: a do fogo. */
@@ -74,7 +78,9 @@ export function efeitosEmAreaDaCampanha(
   efeitos: ReadonlyArray<DefinicaoDeEfeito> | null | undefined,
   dasCondicoes: ReadonlySet<string>,
 ): DefinicaoDeEfeito[] {
-  return (efeitos ?? []).filter((efeito) => efeito.area && !dasCondicoes.has(efeito.id));
+  return (efeitos ?? []).filter(
+    (efeito) => especieDoEfeito(efeito) === "area" && !dasCondicoes.has(efeito.id),
+  );
 }
 
 /**
@@ -89,7 +95,7 @@ export function efeitosEmAreaDosPlugins(
   deFora: Readonly<Record<string, DefinicaoDeEfeito>> | undefined,
 ): DefinicaoDeEfeito[] {
   return Object.values(deFora ?? {}).filter(
-    (efeito) => efeito.area && efeito.origem && "plugin" in efeito.origem,
+    (efeito) => especieDoEfeito(efeito) === "area" && efeito.origem && "plugin" in efeito.origem,
   );
 }
 
@@ -130,6 +136,15 @@ const PIXELS_POR_SEGMENTO = 64;
  * figura, por área.
  */
 const LADO_MAXIMO_DO_QUADRO = 512;
+
+/**
+ * O lado maior de um quadro da folha de uma área DE PASSAGEM -- o cone de um
+ * tiro, o estouro no fim da linha. A metade do da área: um quarto dos pixels
+ * para desenhar e para virar PNG, e é o PNG que custa. Medido na WebKitGTK, no
+ * `next dev`: o cone de seis casas levava 0,8 s no forno com 512, e cada tiro
+ * assa o seu. O fogo é macio, e ampliado o dobro ele continua fogo.
+ */
+export const LADO_DO_QUADRO_DE_PASSAGEM = 256;
 
 /** O lado de uma casa, em unidades de cena: a da grade, ou a da grade padrão. */
 export function ladoDaCasa(grid: SceneGrid | undefined): number {
@@ -343,6 +358,12 @@ export type OpcoesDoPlano = {
   divisoes?: number;
   /** O mínimo no menor lado. Ausente = sem mínimo. Ver `AreaDoEfeito.densidade`. */
   densidade?: number;
+  /**
+   * O lado maior de um quadro da folha, em pixels. Ausente = 512. O tiro pede
+   * menos: a folha dele dura um segundo e meio, e é assada de novo a cada tiro
+   * -- ver `LADO_DO_QUADRO_DE_PASSAGEM`.
+   */
+  ladoMaximoDoQuadro?: number;
 };
 
 /**
@@ -519,7 +540,7 @@ export function planoDaArea(
 
   const pixels = Math.min(
     PIXELS_POR_SEGMENTO / lado,
-    LADO_MAXIMO_DO_QUADRO / Math.max(caixa.width, caixa.height),
+    (opcoes.ladoMaximoDoQuadro ?? LADO_MAXIMO_DO_QUADRO) / Math.max(caixa.width, caixa.height),
   );
   const quadro = {
     largura: Math.max(1, Math.round(caixa.width * pixels)),

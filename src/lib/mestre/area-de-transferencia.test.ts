@@ -54,8 +54,6 @@ const poligono: Forma = {
   fundo: "#22c55e33",
   opacidadeDoTraco: 0.8,
   opacidadeDoFundo: 0.25,
-  arredondado: true,
-  aMao: true,
   pontos: [0, 0, 1, 0, 0.5, 1],
 };
 
@@ -149,8 +147,6 @@ describe("área de transferência", () => {
       fundo: "#22c55e33",
       opacidadeDoTraco: 0.8,
       opacidadeDoFundo: 0.25,
-      arredondado: true,
-      aMao: true,
       pontos: [0, 0, 1, 0, 0.5, 1],
     });
     expect(postits![1]).toMatchObject({

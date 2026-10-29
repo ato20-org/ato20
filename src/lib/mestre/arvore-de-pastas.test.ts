@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   achatarArvore,
   caminhoDaPasta,
+  conteudoDaPasta,
   descendentes,
   pastaDoMembro,
   pastasDaLista,
+  trilhaDaPasta,
 } from "@/lib/mestre/arvore-de-pastas";
 import type { Pasta } from "@/types/scene";
 
@@ -103,5 +105,38 @@ describe("pastaDoMembro", () => {
 
     expect(pastaDoMembro(deGente, "goblin")).toBe("t");
     expect(pastaDoMembro(deGente, "orc")).toBeUndefined();
+  });
+});
+
+describe("conteudoDaPasta", () => {
+  const pastaDe = (item: Item) => item.pastaId;
+  const ver = (pastaId: string | undefined) => {
+    const dentro = conteudoDaPasta(itens, pastas, pastaDe, pastaId);
+    return {
+      pastas: dentro.pastas.map(({ pasta, total }) => `${pasta.id}:${total}`),
+      itens: dentro.itens.map((item) => item.id),
+    };
+  };
+
+  it("na raiz: as pastas de cima, com tudo o que têm embaixo, e o que está solto", () => {
+    // O "5" aponta para pasta que sumiu: cai na raiz, como na árvore.
+    expect(ver(undefined)).toEqual({ pastas: ["a:2", "c:1"], itens: ["1", "5"] });
+  });
+
+  it("dentro de uma pasta: só as filhas dela e o que mora nela", () => {
+    expect(ver("a")).toEqual({ pastas: ["b:1"], itens: ["2"] });
+    expect(ver("b")).toEqual({ pastas: [], itens: ["3"] });
+  });
+
+  it("pasta que sumiu é a raiz", () => {
+    expect(ver("sumiu")).toEqual(ver(undefined));
+  });
+});
+
+describe("trilhaDaPasta", () => {
+  it("as pastas do caminho, da de cima até ela", () => {
+    expect(trilhaDaPasta(pastas, "b").map((pasta) => pasta.nome)).toEqual(["Capítulo 1", "Cidade"]);
+    expect(trilhaDaPasta(pastas, undefined)).toEqual([]);
+    expect(trilhaDaPasta(pastas, "sumiu")).toEqual([]);
   });
 });

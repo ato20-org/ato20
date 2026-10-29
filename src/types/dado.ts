@@ -81,7 +81,10 @@ export const TIPOS_DADO: readonly TipoDado[] = [
   { faces: 100, nome: "d%", hex: "#0f766e", tinta: "#ccfbf1", escala: 1.02 },
   { faces: 8, nome: "d8", hex: "#15803d", tinta: "#dcfce7", escala: 0.92 },
   { faces: 6, nome: "d6", hex: "#b45309", tinta: "#fef3c7", escala: 0.82 },
-  { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#44403c", escala: 1.22 },
+  // Tinta quase preta, e não o cinza-escuro de antes: é osso CLARO, e no cinza
+  // o número nascia com pouco contraste. O dado mais claro do jogo precisa da
+  // tinta mais escura para o número se ler.
+  { faces: 4, nome: "d4", hex: "#e7e5e4", tinta: "#1c1917", escala: 1.22 },
   // Por último, porque não é dado. Dourada, com a tinta escura: moeda é a
   // única coisa do saquinho que a mesa reconhece pelo brilho antes da forma.
   { faces: 2, nome: t.dados.moeda, hex: "#ca8a04", tinta: "#422006", escala: 1.1 },
@@ -146,10 +149,52 @@ export function textoDoResultado(faces: FacesDado, gravado: number): string {
  * Se o que caiu entra na soma da mesa.
  *
  * A moeda não: "cara mais quatro" não é conta que exista. Um d% sozinho entra
- * -- vale o que está gravado, e com um d10 ao lado a soma é a porcentagem.
+ * -- vale o que está gravado, e com um d10 ao lado a soma é a porcentagem. E o
+ * dado DESCARTADO não: o d20 que não foi o maior dos seis caiu, e não conta.
+ * Ver `descartadosDe`.
  */
-export function entraNaSoma(faces: FacesDado): boolean {
-  return faces !== 2;
+export function entraNaSoma(dado: { faces: FacesDado; descartado?: boolean }): boolean {
+  return dado.faces !== 2 && !dado.descartado;
+}
+
+/**
+ * Quais dados de um termo ficam FORA da soma: todos menos o maior, ou todos
+ * menos o menor. Ver `Manter` em `expressao-de-rolagem`.
+ *
+ * Pelo valor, e não pelo gravado: o zero do d10 vale dez, e é o maior. No
+ * empate, fica o primeiro, e os outros iguais a ele são os descartados.
+ */
+export function descartadosDe(
+  faces: FacesDado,
+  gravados: readonly number[],
+  manter: "maior" | "menor" | undefined,
+): boolean[] {
+  if (!manter || gravados.length < 2) return gravados.map(() => false);
+
+  const valores = gravados.map((gravado) => valorDaRolagem(faces, gravado));
+  const alvo = manter === "maior" ? Math.max(...valores) : Math.min(...valores);
+  const fica = valores.indexOf(alvo);
+
+  return valores.map((_, i) => i !== fica);
+}
+
+/**
+ * A regra que os descartados de uma face contam, para a notação: `>` quando o
+ * que ficou é o maior, `<` quando é o menor, nada quando nenhum foi
+ * descartado. É o que faz o fio escrever `6d20>+45`, e não `6d20+45` com um
+ * total que não bate com a soma dos seis.
+ */
+export function regraDosDescartados(
+  dados: ReadonlyArray<{ faces: FacesDado; valor: number; descartado?: boolean }>,
+  faces: FacesDado,
+): ">" | "<" | "" {
+  const daFace = dados.filter((dado) => dado.faces === faces);
+  const fora = daFace.filter((dado) => dado.descartado);
+  const ficou = daFace.find((dado) => !dado.descartado);
+  if (fora.length === 0 || !ficou) return "";
+
+  const valor = (dado: { valor: number }) => valorDaRolagem(faces, dado.valor);
+  return fora.every((dado) => valor(dado) <= valor(ficou)) ? ">" : "<";
 }
 
 /**
@@ -233,6 +278,40 @@ export type Dado = {
   semente: number;
   /** Quando foi lançado, em `Date.now()`. A animação sai da idade dele. */
   lancadoEm: number;
+  /** A rolagem com nome de que este dado faz parte. Ver `Lance`. */
+  lance?: Lance;
+  /**
+   * Caiu, mas não conta: não foi o maior (ou o menor) do termo dele -- o d20
+   * que perdeu para o 17 nos seis do teste. A mesa o mostra apagado, e a soma
+   * o pula. Ver `descartadosDe`.
+   */
+  descartado?: boolean;
+};
+
+/**
+ * Uma rolagem com nome ou modificador -- "Dante · Luta", `2d20+10` --, que é
+ * o que os dados dela levam junto para o saquinho somar o `+10` e juntar os
+ * dois d20 numa linha. O dado do saquinho e o "2d6" da paleta vão sem.
+ */
+export type Lance = {
+  id: string;
+  rotulo?: string;
+  modificador: number;
+  /** As siglas que a conta leu, e quanto valiam. Ver `SiglaDoLance`. */
+  siglas?: SiglaDoLance[];
+};
+
+/**
+ * Uma sigla que a conta do lance leu, e quanto valia NA HORA: `{1d20+@AGI}`
+ * rolou com a AGI 1. É o que o histórico mostra ao lado do `+1`, e continua
+ * certo depois de a AGI subir. A sigla de um atributo, ou o rótulo de um
+ * detalhe (`@Luta`). Espelha `fio::Sigla`.
+ */
+export type SiglaDoLance = {
+  sigla: string;
+  valor: number;
+  /** O atributo que É um dado: `1d8`. */
+  rolagem?: string;
 };
 
 /** Uma linha do histórico. */
@@ -242,6 +321,9 @@ export type Rolagem = {
   /** O número gravado, como no `Dado`. Ver `valorDaRolagem`. */
   valor: number;
   quando: number;
+  lance?: Lance;
+  /** Caiu, e não conta. Ver `Dado.descartado`. */
+  descartado?: boolean;
 };
 
 /**

@@ -119,7 +119,9 @@ export function PlayersChip() {
           </TooltipContent>
         </Tooltip>
 
-        <PopoverContent className="w-72 p-0" side="bottom" align="end">
+        {/* Pelo começo: o chip mora na pílula do canto ESQUERDO, e alinhado
+            pelo fim a lista abriria para fora da tela. */}
+        <PopoverContent className="w-72 p-0" side="bottom" align="start">
           {!loaded ? (
             <div className="grid h-20 place-items-center">
               <Loader2

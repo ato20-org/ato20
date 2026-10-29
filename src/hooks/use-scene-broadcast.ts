@@ -10,9 +10,13 @@ import {
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
 import { seguirIdiomaDaMesa } from "@/lib/i18n/da-mesa";
 import { idioma } from "@/lib/i18n/idioma";
-import type { LiveState } from "@/lib/sync/channel";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
+import type { VezNaMesa } from "@/lib/iniciativa/rodadas";
+import type { EstadoDaConexao, LiveState } from "@/lib/sync/channel";
 import { sceneForTable } from "@/lib/sync/for-table";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import {
   type Ambiente,
@@ -47,6 +51,10 @@ const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
 
 /** Nenhum ping, pela mesma razão: o `PingLayer` filtra esta lista por cena. */
 const SEM_PINGS: Ping[] = [];
+const SEM_SEGURADOS: string[] = [];
+
+/** Nenhum tiro no ar, pela mesma razão dos pings. */
+const SEM_DISPARADOS: EfeitoDisparado[] = [];
 
 /**
  * Lado do Mestre: publica cena, trilha e retratos.
@@ -85,6 +93,47 @@ export function publicarCenaAoVivo(scene: Scene): void {
   publicadorAoVivo?.(scene);
 }
 
+/**
+ * O laser do mestre, pela mesma porta lateral do gesto.
+ *
+ * O rastro muda a cada amostra do mouse, e passar por estado do `MestreShell`
+ * seria um render da janela inteira por amostra -- o custo que o gesto já
+ * aprendeu a não pagar. O palco entrega o rastro aqui, e o publicador troca só
+ * este campo na última embalagem. Quem segura a cadência é o transporte, a
+ * 10 Hz, como a cena do arrasto.
+ *
+ * Fica guardado no módulo, e não só na última embalagem: qualquer quadro que
+ * o Mestre monte por outro motivo -- um ping, um retrato -- leva o rastro
+ * junto, em vez de apagá-lo da TV por um quadro.
+ *
+ * `undefined` tira o laser do quadro. Ver `LiveState.laser`.
+ */
+let laserNaMesa: LaserNaMesa | undefined;
+
+let publicadorDoLaser: (() => void) | null = null;
+
+export function publicarLaser(laser: LaserNaMesa | undefined): void {
+  laserNaMesa = laser;
+  publicadorDoLaser?.();
+}
+
+/**
+ * Os tokens na mão do mestre, pela mesma porta lateral do laser.
+ *
+ * Muda só ao pegar e ao soltar -- quem chama compara antes --, então não há
+ * cadência a segurar. Guardado no módulo pela razão do laser: o quadro que o
+ * Mestre monte por outro motivo leva a lista junto. Lista vazia tira o campo
+ * do quadro. Ver `LiveState.seguradosPeloMestre` e `useSeguradosDoMestre`.
+ */
+let seguradosNaMesa: string[] | undefined;
+
+let publicadorDosSegurados: (() => void) | null = null;
+
+export function publicarSegurados(ids: string[]): void {
+  seguradosNaMesa = ids.length > 0 ? ids : undefined;
+  publicadorDosSegurados?.();
+}
+
 export function usePublisher(state: LiveState, pronto = true): void {
   const channelRef = useRef<SceneChannel | null>(null);
 
@@ -116,8 +165,31 @@ export function usePublisher(state: LiveState, pronto = true): void {
       channel.publish(paraMesa);
     };
 
+    publicadorDoLaser = () => {
+      const channel = channelRef.current;
+      if (!channel || !pronto) return;
+
+      const paraMesa: LiveState = { ...stateRef.current, laser: laserNaMesa };
+      stateRef.current = paraMesa;
+      channel.publish(paraMesa);
+    };
+
+    publicadorDosSegurados = () => {
+      const channel = channelRef.current;
+      if (!channel || !pronto) return;
+
+      const paraMesa: LiveState = {
+        ...stateRef.current,
+        seguradosPeloMestre: seguradosNaMesa,
+      };
+      stateRef.current = paraMesa;
+      channel.publish(paraMesa);
+    };
+
     return () => {
       publicadorAoVivo = null;
+      publicadorDoLaser = null;
+      publicadorDosSegurados = null;
     };
   }, [pronto]);
 
@@ -154,9 +226,17 @@ export function usePublisher(state: LiveState, pronto = true): void {
       fichasVersao: state.fichasVersao,
       rolagens: state.rolagens,
       pings: state.pings,
+      disparados: state.disparados,
+      // Do módulo, como o idioma logo abaixo: o laser não passa pelo estado.
+      // Ver `publicarLaser`.
+      laser: laserNaMesa,
+      // Do módulo, pelo mesmo caminho do laser. Ver `publicarSegurados`.
+      seguradosPeloMestre: seguradosNaMesa,
       // Do módulo, e não do estado: o idioma é constante enquanto a janela
       // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
       idioma,
+      imagem: state.imagem,
+      iniciativa: state.iniciativa ?? null,
     };
 
     stateRef.current = paraMesa;
@@ -188,6 +268,9 @@ export function usePublisher(state: LiveState, pronto = true): void {
     state.fichasVersao,
     state.rolagens,
     state.pings,
+    state.disparados,
+    state.imagem,
+    state.iniciativa,
   ]);
 
   useEffect(() => {
@@ -224,14 +307,29 @@ export type Subscription = {
   rolagens: RolagemDaMesa[];
   /** Os pings no mapa agora. Ver `LiveState.pings`. */
   pings: Ping[];
+  /** Os efeitos disparados no ar. Ver `LiveState.disparados`. */
+  disparados: EfeitoDisparado[];
+  /** O laser do mestre, enquanto aceso. `null` = nenhum. Ver `LiveState.laser`. */
+  laser: LaserNaMesa | null;
+  /** Os itens na mão do mestre agora. Ver `LiveState.seguradosPeloMestre`. */
+  segurados: string[];
   /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
   declarativoVersao: number;
   /** A versão do elenco no Mestre. Ver `LiveState`. */
   fichasVersao: number;
+  /** O ajuste de imagem da campanha. `undefined` = neutro. Ver `LiveState.imagem`. */
+  imagem: AjusteDeImagem | undefined;
+  /** De quem é a vez, com a iniciativa rodando. Ver `LiveState.iniciativa`. */
+  iniciativa: VezNaMesa | null;
   /** Já chegou alguma coisa do daemon. */
   synced: boolean;
   /** Passou tempo demais sem nada. */
   stalled: boolean;
+  /**
+   * O fio com o daemon DEPOIS de aberto: `stalled` cobre a primeira espera, e
+   * isto cobre a queda no meio da sessão. `null` até a primeira conexão.
+   */
+  conexao: EstadoDaConexao | null;
 };
 
 /**
@@ -256,6 +354,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
   });
   const [synced, setSynced] = useState(false);
   const [stalled, setStalled] = useState(false);
+  const [conexao, setConexao] = useState<EstadoDaConexao | null>(null);
 
   useEffect(() => {
     const channel = createSubscriber(codigo, base);
@@ -268,7 +367,7 @@ export function useSubscription(codigo: string, base = ""): Subscription {
       setLive(state);
       setSynced(true);
       setStalled(false);
-    });
+    }, setConexao);
 
     // Sem pedido nem reenvio: o daemon manda o estado atual na conexão. O que
     // resta é o relógio que distingue "esperando" de "algo está errado".
@@ -304,9 +403,16 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     spotlight: live.spotlight,
     rolagens: live.rolagens ?? [],
     pings: live.pings ?? SEM_PINGS,
+    disparados: live.disparados ?? SEM_DISPARADOS,
+    laser: live.laser ?? null,
+    // Constante quando vazia, como os pings: a cena compara por identidade.
+    segurados: live.seguradosPeloMestre ?? SEM_SEGURADOS,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
+    imagem: live.imagem,
+    iniciativa: live.iniciativa ?? null,
     synced,
     stalled,
+    conexao,
   };
 }

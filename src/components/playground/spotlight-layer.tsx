@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Package } from "lucide-react";
 
 import { ImageZoom } from "@/components/attachments/image-zoom";
+import { DescricaoDoItem } from "@/components/playground/descricao-do-item";
+import { MedidoresDoItem } from "@/components/playground/medidores-do-item";
 import { useSpotlightUrl } from "@/hooks/use-spotlight-url";
 import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
@@ -79,6 +81,9 @@ export function SpotlightLayer({
     // veria, por baixo de um retângulo preto, justamente a imagem que o mestre
     // acabou de mandar olhar.
     <div
+      // A evidência não é mapa: na TV ela mora dentro da moldura que recebe o
+      // gesto do zoom, e arrastá-la não pode andar com o mapa escondido atrás.
+      data-sem-zoom
       className={cn(
         "fixed inset-0 z-60 flex flex-col items-center justify-center gap-3 bg-black/92 p-4 backdrop-blur-sm",
         // `key` na transmissão faz a entrada em fade repetir a cada imagem
@@ -87,7 +92,9 @@ export function SpotlightLayer({
       )}
       key={spotlight.since}
     >
-      {url ? (
+      {spotlight.item ? (
+        <CartaoDoItem item={spotlight.item} url={url} />
+      ) : url ? (
         dismissable ? (
           // O mesmo gesto que o jogador já tem nos próprios arquivos: roda,
           // pinça, arrasto e duplo toque. O `key` do contêiner é o `since`, e
@@ -125,6 +132,82 @@ export function SpotlightLayer({
           {t.evidencia.esconder}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * O cartão de um item da campanha: a imagem, quando há, e o nome e a descrição.
+ *
+ * A única evidência com texto, e o porquê está em `Spotlight.item`: o nome e a
+ * descrição de um item são o próprio item, e não anotação do mestre.
+ *
+ * Lado a lado quando a tela é deitada — a TV —, e um embaixo do outro em pé — o
+ * celular. A letra cresce com a tela, porque a TV é lida do sofá: o mesmo
+ * `text-sm` que serve ao celular seria uma linha cinza ilegível a três metros.
+ *
+ * Sem o zoom da imagem do `dismissable`: o cartão é para LER, e o texto ao lado
+ * já diz o que a imagem mostra. Quem precisa ver o detalhe da gravura na
+ * lâmina recebe a imagem sozinha se o mestre a transmitir pelo acervo.
+ */
+function CartaoDoItem({
+  item,
+  url,
+}: {
+  item: NonNullable<Spotlight["item"]>;
+  url: string | null;
+}) {
+  return (
+    <div className="flex max-h-full min-h-0 w-full max-w-6xl flex-1 flex-col items-center justify-center gap-6 landscape:flex-row">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={item.nome}
+          draggable={false}
+          // O `SpotlightLayer` e sobreposicao de tela inteira, montada fora do
+          // `SceneStage`: nao ha `zoom` no caminho dele.
+          // eslint-disable-next-line no-restricted-syntax
+          className="max-h-[55%] min-h-0 max-w-full object-contain select-none landscape:max-h-full landscape:max-w-[55%]"
+        />
+      ) : (
+        <Package className="size-24 shrink-0 text-white/30" aria-hidden />
+      )}
+
+      {/* Rola por dentro quando o texto é longo: cortar o fim da descrição
+          seria cortar justamente o que o mestre escreveu por último -- o "mas
+          cuidado com a lâmina". */}
+      <div className="flex max-h-full min-h-0 w-full max-w-2xl min-w-0 flex-col gap-4 overflow-y-auto text-white">
+        <h2 className="text-[clamp(1.5rem,4vw,3.5rem)] leading-tight font-semibold text-balance">
+          {item.nome}
+        </h2>
+
+        {/* Os atributos em pílulas, o nome apagado e o valor claro: é o que se
+            lê do sofá -- "Dano 1d8+2 cortante" --, e um quadro por atributo
+            ocuparia a TV inteira com bordas. */}
+        {item.atributos?.length ? (
+          <dl className="flex flex-wrap gap-2">
+            {item.atributos.map((atributo, indice) => (
+              <div
+                key={indice}
+                className="flex items-baseline gap-2 rounded-full bg-white/10 px-[0.9em] py-[0.35em] text-[clamp(0.9rem,1.6vw,1.4rem)]"
+              >
+                <dt className="text-white/55">{atributo.nome}</dt>
+                <dd className="font-medium">{atributo.valor}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+
+        {item.medidores?.length ? <MedidoresDoItem medidores={item.medidores} /> : null}
+
+        {item.descricao ? (
+          <DescricaoDoItem
+            texto={item.descricao}
+            className="text-[clamp(1rem,2vw,1.75rem)] leading-snug text-white/80"
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

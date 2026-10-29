@@ -11,8 +11,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { AmbienteNaLente } from "@/components/playground/ambiente-na-lente";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { CanvasItemView } from "@/components/playground/canvas-item-view";
+import { CeuPanoramico } from "@/components/playground/ceu-panoramico";
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { FogLayer } from "@/components/playground/fog-layer";
 import { FundoDaCena } from "@/components/playground/fundo-da-cena";
@@ -23,6 +25,8 @@ import {
   type PontaDoMedidor,
 } from "@/components/playground/regua-layer";
 import { InfoDoToken } from "@/components/playground/info-do-token";
+import { LaserLayer } from "@/components/playground/laser-layer";
+import { DisparoLayer } from "@/components/playground/disparo-layer";
 import { PingLayer } from "@/components/playground/ping-layer";
 import { PortraitLayer } from "@/components/playground/portrait-layer";
 import { SombraLayer } from "@/components/playground/sombra-layer";
@@ -37,12 +41,16 @@ import {
   type EfeitoPedido,
   type EfeitosDoPersonagem,
 } from "@/lib/condicao";
+import { useDeclarativo } from "@/components/playground/declarativo";
+import { AMBIENTE_DO_MESTRE, ambienteDaCena } from "@/lib/ambiente";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
 import { useChaoStore } from "@/lib/store/use-chao-store";
 import type { RolagemDaMesa } from "@/types/dado";
+import type { LaserNaMesa } from "@/types/laser";
+import type { EfeitoDisparado } from "@/types/efeito-disparado";
 import type { Ping } from "@/types/ping";
 import {
   ehQuadro,
@@ -132,6 +140,19 @@ type SceneLayerProps = {
    * `Ping.cenaId`.
    */
   pings?: Ping[];
+  /**
+   * Os efeitos disparados no ar, de TODAS as cenas -- filtrados aqui, como os
+   * pings. Ver `EfeitoDisparado`.
+   */
+  disparados?: EfeitoDisparado[];
+  /**
+   * O laser do mestre, como chegou no quadro. Filtrado aqui pela cena, como os
+   * pings.
+   *
+   * `undefined` é a tela que não recebe laser nenhum -- o próprio Mestre, que
+   * desenha o dele na hora, no plano de controles. Ali a camada nem monta.
+   */
+  laser?: LaserNaMesa | null;
   /**
    * Nome e medidores para desenhar sobre a cabeça dos tokens.
    *
@@ -226,6 +247,29 @@ type SceneLayerProps = {
    * que há algo sobre o piso, e não pintado nele.
    */
   semItens?: boolean | ((item: CanvasItem) => boolean);
+  /**
+   * O ambiente na metade, como o Mestre o vê (ver `AMBIENTE_DO_MESTRE`).
+   * Ausente = o do `variant`: só o Mestre de prumo passa `"mestre"`, e o de
+   * esguelha monta esta camada como `"mesa"` -- a névoa e o escuro de lá são
+   * os da mesa --, e diz isto à parte.
+   */
+  ambienteFraco?: boolean;
+  /**
+   * O ambiente sai da tela por um instante, sem desmontar: é o Mestre durante
+   * um arrasto. Medido na webview, arrastando a moldura com sessenta tokens, a
+   * chuva levava o palco de 56 a 50 quadros por segundo -- duas superfícies de
+   * tela inteira a mais por quadro do gesto --, e escondida, 56. O que o
+   * mestre olha no arrasto é para onde a coisa vai, como na pausa dos efeitos
+   * (ver `animarSo`).
+   */
+  ambienteEscondido?: boolean;
+  /**
+   * O escuro do mapa na força da mesa, e não na do mestre (ver
+   * `ESCURIDAO_DO_MESTRE`). É o Mestre vendo pelo token: o que ele não
+   * enxerga sai coberto por inteiro, e o breu dentro da linha de visão tem de
+   * ser o mesmo breu. Ver `VisaoDoToken`.
+   */
+  escuroDaMesa?: boolean;
 };
 
 /**
@@ -254,6 +298,8 @@ export function SceneLayer({
   portraits,
   rolagens,
   pings,
+  disparados,
+  laser,
   fichas,
   efeitos,
   onItemPointerDown,
@@ -268,6 +314,9 @@ export function SceneLayer({
   palco,
   esguelha,
   semItens,
+  ambienteFraco,
+  ambienteEscondido,
+  escuroDaMesa = false,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
   // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
@@ -309,6 +358,10 @@ export function SceneLayer({
     () => (pings ?? []).filter((ping) => ping.cenaId === scene.id),
     [pings, scene.id],
   );
+  const disparadosDaCena = useMemo(
+    () => (disparados ?? []).filter((disparo) => disparo.cenaId === scene.id),
+    [disparados, scene.id],
+  );
 
 
   /**
@@ -339,7 +392,19 @@ export function SceneLayer({
    * Sem o nó -- primeiro paint -- desenha onde está. É um quadro, e o quadro
    * seguinte já vai para o lugar certo.
    */
-  const { planoDeConteudo, fundoDoPalco } = useSceneScale();
+  const { planoDeConteudo, fundoDoPalco, planoDoAmbiente } = useSceneScale();
+  const { efeitos: deFora } = useDeclarativo();
+  const fraco = ambienteFraco ?? variant === "mestre";
+  // Fora da prévia: trinta cenas chovendo num quadrado de 56x32 é textura que
+  // ninguém olha. E só onde há lente -- o palco sem ela não tem onde chover.
+  const ambiente = useMemo(() => {
+    if (variante === "mini" || !planoDoAmbiente) return null;
+    const resolvido = ambienteDaCena(scene.ambiente, deFora, fraco ? AMBIENTE_DO_MESTRE : 1);
+    // O clarão é da mesa. No Mestre, era a tela de quem monta a cena piscando,
+    // e medido na webview com sessenta tokens, a tempestade parada perdia 15%
+    // dos quadros com ele, e 7% sem ele -- o mesmo que a chuva.
+    return fraco && resolvido?.relampago ? { ...resolvido, relampago: undefined } : resolvido;
+  }, [variante, planoDoAmbiente, scene.ambiente, deFora, fraco]);
 
   /**
    * Anuncia o chão enquanto esta camada estiver deitada, e o apaga ao sair.
@@ -426,6 +491,8 @@ export function SceneLayer({
           // A mesma dos itens: a sombra de uma figura é a figura, e ela lê o
           // arquivo que o token já baixou. Ver `SombraDaFigura`.
           variante={variante}
+          smooth={smooth}
+          naMao={naMao}
         />
       )}
 
@@ -514,7 +581,7 @@ export function SceneLayer({
           portaNaMao={portaNaMao}
           escuridao={scene.escuridao}
           corDoEscuro={scene.corDoEscuro}
-          variant={variant}
+          variant={escuroDaMesa ? "mesa" : variant}
           smooth={smooth}
           naMao={naMao}
           // A mesma dos itens e da sombra do sol: a silhueta sai do arquivo
@@ -527,11 +594,27 @@ export function SceneLayer({
         />
       )}
 
+      {/* Os tiros: por cima do escuro, que eles brilham, e embaixo da névoa,
+          que esconde o que a mesa não viu. Fora da prévia: tiro é evento, e a
+          miniatura nem os recebe. Ver `DisparoLayer`. */}
+      {variante === "mini" ? null : (
+        <DisparoLayer disparos={disparadosDaCena} grid={scene.grid} soBase={Boolean(esguelha)} />
+      )}
+
+      {/* As lanternas abrem a névoa dinâmica, e as paredes e portas param a
+          revelação como param a luz -- a mesma lista que a `LuzLayer` lê.
+          Na prévia, o bloco de sempre: ver `simples`. */}
       <FogLayer
         fog={scene.fog}
         variant={variant}
         smooth={smooth}
         onFogPointerDown={onFogPointerDown}
+        items={items}
+        paredes={scene.paredes}
+        portas={scene.portas}
+        portaNaMao={portaNaMao}
+        naMao={naMao}
+        simples={variante === "mini"}
       />
 
       {/* Depois da névoa: o medidor é instrumento sobre o mapa, e medir por
@@ -579,6 +662,10 @@ export function SceneLayer({
           do retrato, que é HUD. Ver `PingLayer`. */}
       <PingLayer pings={pingsDaCena} />
 
+      {laser !== undefined ? (
+        <LaserLayer laser={laser?.cenaId === scene.id ? laser : null} />
+      ) : null}
+
       {portraits && portraits.length > 0 ? (
         <PortraitLayer
           portraits={portraits}
@@ -616,6 +703,16 @@ export function SceneLayer({
     // da caixa. Na TV a caixa é o plano; no Mestre, a área do palco. A corrente
     // não está no `style`: quem a põe é o efeito lá em cima.
     <div className="absolute inset-0 overflow-hidden">
+      {/* O céu, antes de tudo: atrás do chão, e da caixa da câmera, que é a
+          tela no Mestre e o plano na TV. Sem ele, o vazio é a cor da cena.
+          Ver `Scene.ceuAssetId`. */}
+      {scene.ceuAssetId ? (
+        <CeuPanoramico
+          assetId={scene.ceuAssetId}
+          variante={variante === "mini" ? "tela" : variante}
+          camera={orbital}
+        />
+      ) : null}
       <div
         className="absolute inset-0"
         style={{
@@ -709,6 +806,13 @@ export function SceneLayer({
     <>
       {fundo}
       {planoDeConteudo ? createPortal(deitado, planoDeConteudo) : deitado}
+      {/* O ambiente vai à LENTE, fora dos planos: ver `planoDoAmbiente`. */}
+      {ambiente && planoDoAmbiente
+        ? createPortal(
+            <AmbienteNaLente ambiente={ambiente} escondido={ambienteEscondido} />,
+            planoDoAmbiente,
+          )
+        : null}
     </>
   );
 }

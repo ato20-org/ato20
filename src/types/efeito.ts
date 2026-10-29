@@ -41,11 +41,41 @@ export type DefinicaoDeEfeito = {
   /** O chão do efeito: a textura deitada que marca a área. Ver `BaseDoEfeito`. */
   base?: BaseDoEfeito;
   /**
+   * Como o efeito DISPARA: em linha, como a bola de fogo, ou em cone, como o
+   * sopro do dragão. Ausente = em linha, com os padrões. Ver `DisparoDoEfeito`.
+   */
+  disparo?: DisparoDoEfeito;
+  /**
+   * O efeito que cobre a CENA inteira: a chuva, a neve, a neblina. Ausente =
+   * não é de ambiente. Ver `AmbienteDoEfeito`.
+   */
+  ambiente?: AmbienteDoEfeito;
+  /**
    * De onde vêm as imagens. Não é o autor que escreve: quem publica preenche
    * -- o plugin e a versão dele, ou a pasta do próprio aplicativo, que vão na
    * URL. Ausente = sem imagem; um externo sem origem não desenha.
    */
   origem?: OrigemDoEfeito;
+  /**
+   * Um molde do Compêndio, e não um efeito em jogo: fora do seletor, do
+   * cardápio e da mesa. Espelho da marca em `efeitos.json` -- ver
+   * `efeitos::eh_molde`.
+   */
+  compendio?: boolean;
+  /** As tags do Compêndio, para filtrar. */
+  tags?: string[];
+  /**
+   * O molde do Compêndio de que este efeito em jogo é a cópia. O molde
+   * arrastado até um token vai ao jogo copiado, e o próximo token reaproveita
+   * a mesma cópia enquanto ela for igual ao molde. Ver `copiaEmJogo`.
+   */
+  molde?: string;
+  /**
+   * O efeito do Compêndio do ATO20 que o arrasto até um token trouxe para cá.
+   * O segundo token acha o que o primeiro trouxe, em vez de trazer de novo --
+   * o "Trazer" sempre dá id novo. Ver `doAto20EmJogo`.
+   */
+  ato20?: string;
 };
 
 /**
@@ -285,6 +315,153 @@ export type AreaDoEfeito = {
    * macio. Os mesmos campos de imagem da base.
    */
   foco?: Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores">;
+};
+
+/**
+ * O efeito DISPARADO: sai de um ponto e vai até outro -- a bola de fogo, o raio
+ * de gelo, o jato d'água, o sopro do dragão. É a terceira ESPÉCIE de efeito, ao
+ * lado do de personagem (a figura de quem tem a condição) e do de área (o
+ * chão): o efeito que declara este bloco é um disparo, e só ele dispara. Tem
+ * janela própria e listas próprias -- ver `especieDoEfeito`.
+ *
+ * Desenha com as camadas de sempre, que no disparo têm outro papel: o
+ * `projetil` (ou, sem ele, o elemento da área) é o que voa; as `particulas`
+ * são o rastro e o que o cone solta; o chão (`base`) e os elementos
+ * (`area.foco`) fazem o cone e o estouro no fim da linha. O `area.cor` é a cor
+ * do tiro.
+ *
+ * Quem decide a forma é o efeito, e não quem dispara: o mestre escolhe a "Bola
+ * de fogo", e ela sabe que vai reta e estoura. Os números são em CASAS da
+ * grade, como o mapa as mede. Ver `disparoDoEfeito`, que prende cada um.
+ */
+export type DisparoDoEfeito = {
+  /**
+   * `linha`: o projétil voa de A até B -- e estoura lá, se tiver `impacto`.
+   * `cone`: o leque se abre de A até a distância de B, na direção dele.
+   */
+  forma: "linha" | "cone";
+  /** A abertura do cone, em graus, de 10 a 160. Ausente = 60. */
+  abertura?: number;
+  /** Em casas por segundo, de 3 a 60. Ausente = 15. */
+  velocidade?: number;
+  /**
+   * Até onde vai, em casas, quando sai de um token para onde ele olha -- o
+   * disparo pelo botão direito, que não tem ponto B. De 1 a 30. Ausente = 6.
+   */
+  alcance?: number;
+  /** O lado do projétil da linha, em casas, de 0,3 a 3. Ausente = 1. */
+  tamanho?: number;
+  /**
+   * O raio do estouro no fim da linha, em casas, de 0 a 4. Zero = sem
+   * estouro: a flecha que só chega. Ausente = 1.
+   */
+  impacto?: number;
+  /**
+   * O que VOA na linha: uma imagem, com os campos de imagem da base. Ausente =
+   * o elemento da área (`area.foco`), ou o `externo`, deitado com o topo para
+   * trás -- a chama que vira cauda.
+   */
+  projetil?: ProjetilDoDisparo;
+  /** A faixa da cor do tiro, de A até o projétil. Ausente = sim. */
+  rastro?: boolean;
+  /** O brilho redondo em volta do projétil. Ausente = sim. */
+  brilho?: boolean;
+};
+
+/**
+ * A imagem do projétil. Desenhada como veio, ela voa para a DIREITA da imagem;
+ * o `giro` vira a imagem antes do voo -- `90` põe o topo na frente (o
+ * estilhaço que fura), `-90` o põe para trás (a chama que vira cauda).
+ */
+export type ProjetilDoDisparo = Pick<BaseDoEfeito, "imagem" | "quadros" | "mipmaps" | "cores"> & {
+  /** Em graus, no sentido horário: `0`, `90`, `-90` ou `180`. Ausente = 0. */
+  giro?: number;
+};
+
+/**
+ * O efeito de AMBIENTE: o clima que cobre a cena inteira -- a chuva, a neve,
+ * a neblina, a cinza que cai. É a quarta ESPÉCIE de efeito, ao lado do de
+ * personagem, do de área e do disparo: o efeito que declara este bloco é um
+ * ambiente, e não serve a figura, a chão nem a tiro. A cena aponta para um
+ * (`Scene.ambiente`), com a intensidade e o vento dela.
+ *
+ * Desenha NA LENTE: por cima da tela, e não no chão do mapa. A chuva cai de
+ * cima para baixo no 2D e no 2.5D, não amplia com o zoom e não anda com a
+ * câmera -- é o vidro por onde a mesa olha. Por isso também passa por cima da
+ * névoa e do escuro: não chove só onde a mesa já viu.
+ *
+ * Cada camada é uma textura EMENDÁVEL que desliza em laço, animada só por
+ * `transform` -- o compositor a move sem repintar nada. Duas ou três camadas
+ * de tamanhos e velocidades diferentes dão a profundidade: a gota fina e lenta
+ * lá atrás, a grossa e rápida na frente. Ver `planoDaCamada`.
+ */
+export type AmbienteDoEfeito = {
+  /**
+   * A cor do ambiente: a das camadas com `cores: "condicao"`, e a do véu
+   * quando ele não diz a sua. Ausente = um cinza azulado.
+   */
+  cor?: string;
+  /** As camadas, de TRÁS para a frente: de uma a quatro. Ver `CamadaDoAmbiente`. */
+  camadas: CamadaDoAmbiente[];
+  /**
+   * Uma cor sobre a tela inteira: o cinza da tempestade, o branco da nevasca.
+   * Ausente = sem véu.
+   */
+  veu?: VeuDoAmbiente;
+  /** O clarão do relâmpago. Ausente = sem. Ver `RelampagoDoAmbiente`. */
+  relampago?: RelampagoDoAmbiente;
+};
+
+/**
+ * Uma camada do ambiente: a textura, e como ela desliza.
+ *
+ * As medidas são em ALTURAS DA TELA, e não em pixels nem em casas: o ambiente
+ * não está no mapa, e a mesma chuva tem de ler igual na TV e no celular.
+ *
+ * A imagem tem os campos de imagem da base, menos os quadros: a camada anda
+ * deslizando, e uma folha de quadros pediria repintar a tela inteira a cada
+ * degrau.
+ */
+export type CamadaDoAmbiente = Pick<BaseDoEfeito, "imagem" | "mipmaps" | "cores"> & {
+  /** O lado do ladrilho, de 0,1 a 2 alturas da tela. Ausente = 0,5. */
+  escala?: number;
+  /**
+   * Para onde vai, em graus, no sentido horário a partir da direita -- o mesmo
+   * das partículas: 90 desce, 270 sobe, 0 vai para a direita. Fora dos eixos
+   * a textura inclina junto, como a chuva com vento. Ausente = 90.
+   */
+  direcao?: number;
+  /** Em alturas da tela por segundo, de 0 a 3. Zero = parada. Ausente = 1. */
+  velocidade?: number;
+  /** De 0 a 1. Ausente = 1. */
+  opacidade?: number;
+  /**
+   * O quanto ela balança de um lado para o outro enquanto cai, em vezes o
+   * ladrilho, de 0 a 0,5: o floco que dança. Ausente = 0.
+   */
+  balanco?: number;
+};
+
+/** O véu: uma cor parada sobre a tela inteira. */
+export type VeuDoAmbiente = {
+  /** Ausente = a cor do ambiente. */
+  cor?: string;
+  /** De 0 a 0,8: mais que isso apagaria a cena. */
+  opacidade: number;
+};
+
+/**
+ * O relâmpago: a tela clareia de repente, duas vezes seguidas, e apaga. Dois
+ * relógios de ritmos diferentes, para o clarão não cair sempre no mesmo
+ * compasso. Ver `RelampagoNaLente`.
+ */
+export type RelampagoDoAmbiente = {
+  /** Os segundos entre um clarão e outro, de 3 a 60. Ausente = 12. */
+  intervalo?: number;
+  /** Ausente = um branco azulado. */
+  cor?: string;
+  /** O quanto clareia, de 0 a 1. Ausente = 0,6. */
+  forca?: number;
 };
 
 /**

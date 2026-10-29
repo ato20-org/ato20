@@ -2,9 +2,13 @@
 
 import { useEffect } from "react";
 
+import { podeMoverNaVez, vezNaMesa } from "@/lib/iniciativa/rodadas";
+import { useGestoStore } from "@/lib/store/use-gesto-store";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
+import { useQuemMoveStore } from "@/lib/store/use-quem-move-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { destinoAceito, type MovimentoDoJogador } from "@/lib/sync/movimento";
-import { enderecoDosFluxos } from "@/lib/sync/fluxos-do-mestre";
+import { fluxoDoMestre } from "@/lib/sync/fluxos-do-mestre";
 import { daemonAddr } from "@/lib/vault/bridge";
 
 /**
@@ -38,10 +42,10 @@ export function useMovimentosDaMesa(): void {
     let cancelado = false;
 
     void daemonAddr().then(
-      ({ url }) => {
+      ({ url, token }) => {
         if (cancelado) return;
 
-        source = new EventSource(`${enderecoDosFluxos(url)}/sala/movimentos`);
+        source = new EventSource(fluxoDoMestre(url, token, "/sala/movimentos"));
 
         source.onmessage = (event) => {
           let movimento: MovimentoDoJogador;
@@ -54,14 +58,41 @@ export function useMovimentosDaMesa(): void {
             return;
           }
 
+          // Em combate, só o personagem da vez anda. O celular já não deixa
+          // pegar, mas o de uma versão anterior não sabe disso.
+          const vez = vezNaMesa(useIniciativaStore.getState().iniciativa);
+          if (!podeMoverNaVez(vez, movimento.personagemId)) return;
+
           const { board, updateItem } = useSceneStore.getState();
           const noAr = board?.scenes.find(
             (scene) => scene.id === board.liveSceneId,
           );
           if (!noAr) return;
 
+          // Na mão do mestre, o token é dele até soltar. Dois arrastos no
+          // mesmo token o puxariam de um lado para o outro, e o do jogador
+          // ainda passaria por cima do resultado do mestre ao chegar depois.
+          // O celular novo nem tenta -- ver `LiveState.seguradosPeloMestre` --,
+          // e o de uma versão anterior para aqui.
+          const gesto = useGestoStore.getState();
+          if (
+            gesto.sceneId === noAr.id &&
+            gesto.patches?.some((patch) => patch.id === movimento.itemId)
+          ) {
+            return;
+          }
+
           const destino = destinoAceito(noAr, movimento);
-          if (destino) updateItem(noAr.id, movimento.itemId, destino);
+          if (!destino) return;
+
+          updateItem(noAr.id, movimento.itemId, destino);
+          // E o palco mostra de quem é a mão. Só o aceito: o recusado não
+          // anda, e uma etiqueta num token parado diria que alguém o move.
+          // Ver `QuemMove`.
+          useQuemMoveStore.getState().marcar(movimento.itemId, {
+            jogadorId: movimento.jogadorId,
+            sceneId: noAr.id,
+          });
         };
       },
       () => {

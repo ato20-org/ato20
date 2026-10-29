@@ -9,8 +9,8 @@ import {
   ChevronsUp,
   ClipboardPaste,
   Copy,
-  Crosshair,
   CopyPlus,
+  Crosshair,
   Eye,
   EyeOff,
   FlipHorizontal,
@@ -24,15 +24,24 @@ import {
   LockOpen,
   Maximize,
   MousePointerSquareDashed,
+  PackageOpen,
   Plus,
   Radio,
+  RadioTower,
   RectangleHorizontal,
   ScanSearch,
   Scissors,
+  Swords,
   Trash2,
   Ungroup,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 
+import { abrirItem } from "@/components/mestre/acoes-do-item";
+import { useTransmissaoDoItem } from "@/hooks/use-transmissao-do-item";
+import { t as textoDosItens } from "@/lib/i18n/itens";
+import { useItemDaCampanha } from "@/lib/store/use-itens-store";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -84,11 +93,21 @@ import {
   useClipboardStore,
 } from "@/lib/store/use-clipboard-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
-import { temCamera, temLuz, type CameraSalva, type Scene } from "@/types/scene";
+import {
+  temAreaDeEfeito,
+  temCamera,
+  temLuz,
+  type CameraSalva,
+  type CanvasItem,
+  type Scene,
+} from "@/types/scene";
+import { useAbrirJanela } from "@/hooks/use-abrir-janela";
+import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
 import { BlocoDaLuz, SubmenuDaLanterna } from "@/components/mestre/menu-da-luz";
 import { BlocoDaPorta } from "@/components/mestre/menu-da-porta";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
 import { SubmenuDeCondicoes } from "@/components/mestre/menu-de-condicoes";
+import { SubmenuDeDisparo } from "@/components/mestre/menu-de-disparo";
 import { KIT_CONTEXTO } from "@/components/ui/menu-kit";
 import {
   ItensDeExtensao,
@@ -401,6 +420,14 @@ export function StageContextMenu({
             {/* Antes de copiar porque é a ação do token COMO personagem, e as
                 de baixo o tratam como imagem. Some quando o token não é de
                 ninguém, que é a maioria deles. */}
+            {/* A peça de item abre o item e o mostra na mesa, como no gizmo. Um
+                só, pela razão das aparências: "mostrar estes cinco" seria
+                cinco cartões disputando a mesma TV. */}
+            {selectedItems.length === 1 &&
+            selectedItems[0]?.itemId &&
+            !selectedItems[0].personagemId ? (
+              <BlocoDaPecaDeItem itemId={selectedItems[0].itemId} />
+            ) : null}
             {doToken ? (
               <SubmenuDeAparencias
                 kit={KIT_CONTEXTO}
@@ -411,9 +438,17 @@ export function StageContextMenu({
             {/* Da seleção inteira, e não só do token único: envenenar a horda
                 de uma vez é o pedido. Vale para o objeto também -- o barril em
                 chamas. Some quando não há nem um nem outro. */}
-            {deAlguem || comObjeto ? (
+            {deAlguem || comObjeto || temAreaDeEfeito(scene) ? (
               <>
-                <SubmenuDeCondicoes itens={selectedItems} />
+                {deAlguem || comObjeto ? <SubmenuDeCondicoes itens={selectedItems} /> : null}
+                {/* Junto das condições: é o outro gesto do meio do combate. De
+                    QUALQUER token, e não só do personagem -- o canhão posto
+                    como imagem também atira. Só no mapa, que é a cena que tem
+                    chão para o tiro cair. */}
+                {temAreaDeEfeito(scene) ? (
+                  <SubmenuDeDisparo itens={selectedItems} scene={scene} />
+                ) : null}
+                {deAlguem ? <BlocoDaIniciativa itens={selectedItems} /> : null}
                 <ContextMenuSeparator />
               </>
             ) : null}
@@ -790,6 +825,100 @@ function BlocoDaCamera({
         <Trash2 />
         {t.stageContextMenu.removerCamera}
       </ContextMenuItem>
+    </>
+  );
+}
+
+/**
+ * As duas linhas da peça de item: abrir, e mostrar na mesa.
+ *
+ * Componente, e não linhas soltas no menu, porque as duas precisam de hook -- o
+ * item do catálogo e o estado da transmissão --, e o menu é um só para tudo o
+ * que o palco seleciona. A peça de um item apagado não ganha nada aqui: ela
+ * voltou a ser só imagem.
+ */
+function BlocoDaPecaDeItem({ itemId }: { itemId: string }) {
+  const item = useItemDaCampanha(itemId);
+  const { noAr, alternar } = useTransmissaoDoItem(item);
+
+  if (!item) return null;
+
+  return (
+    <>
+      <ContextMenuItem onClick={() => abrirItem(item)}>
+        <PackageOpen />
+        {textoDosItens.peca.abrirItem}
+      </ContextMenuItem>
+      <ContextMenuItem onClick={alternar}>
+        {noAr ? <RadioTower /> : <Radio />}
+        {noAr ? textoDosItens.peca.tirar : textoDosItens.peca.transmitir}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+    </>
+  );
+}
+
+/**
+ * A iniciativa a partir da seleção: selecionar os tokens do combate no mapa e
+ * começar por eles, ou pôr e tirar quem chegou e quem saiu.
+ *
+ * Pelos PERSONAGENS da seleção, e não pelos tokens: dois goblins da mesma ficha
+ * são um só na ordem, como na janela. Token sem personagem não entra -- a ordem
+ * é de quem age, e o barril não age.
+ *
+ * Começar abre a janela de Iniciativa: é onde a ordem se arruma, e começar um
+ * combate sem ver a ordem deixaria o mestre procurando a janela no dock.
+ */
+function BlocoDaIniciativa({ itens }: { itens: CanvasItem[] }) {
+  const iniciativa = useIniciativaStore((state) => state.iniciativa);
+  const iniciar = useIniciativaStore((state) => state.iniciar);
+  const incluir = useIniciativaStore((state) => state.incluir);
+  const retirar = useIniciativaStore((state) => state.retirar);
+  const personagens = useCharactersStore((state) => state.personagens);
+  const abrirJanela = useAbrirJanela();
+
+  const ids = [
+    ...new Set(
+      itens.flatMap((item) =>
+        item.personagemId &&
+        personagens?.some((personagem) => personagem.id === item.personagemId)
+          ? [item.personagemId]
+          : [],
+      ),
+    ),
+  ];
+  if (ids.length === 0) return null;
+
+  if (!iniciativa.rodando)
+    return (
+      <ContextMenuItem
+        onClick={() => {
+          iniciar(ids);
+          abrirJanela({ tipo: "iniciativa" });
+        }}
+      >
+        <Swords />
+        {t.stageContextMenu.iniciarIniciativa(ids.length)}
+      </ContextMenuItem>
+    );
+
+  const fora = ids.filter((id) => !iniciativa.ordem.includes(id));
+  const dentro = ids.filter((id) => iniciativa.ordem.includes(id));
+
+  return (
+    <>
+      {fora.length > 0 ? (
+        <ContextMenuItem onClick={() => fora.forEach(incluir)}>
+          <UserPlus />
+          {t.stageContextMenu.porNaIniciativa(fora.length)}
+        </ContextMenuItem>
+      ) : null}
+      {dentro.length > 0 ? (
+        <ContextMenuItem onClick={() => dentro.forEach(retirar)}>
+          <UserMinus />
+          {t.stageContextMenu.tirarDaIniciativa(dentro.length)}
+        </ContextMenuItem>
+      ) : null}
     </>
   );
 }

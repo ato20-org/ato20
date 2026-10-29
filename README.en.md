@@ -9,14 +9,14 @@
 
 [Português](README.md) · **English**
 
-ATO20 is an open source VTT (*virtual tabletop*) built to make organizing and running
+ATO20 is a free VTT (*virtual tabletop*) built to make organizing and running
 tabletop RPG campaigns easier. At the table, advanced camera control brings real immersion to
 the players; away from it, the GM keeps the documents up to date and the story organized in
 one place.
 
 </div>
 
-Made for in-person play: the GM builds the next scene on the laptop while the table keeps
+Made for RPG over LAN, with VPN support: the GM builds the next scene on the laptop while the table keeps
 watching the current one on the spectator window, and every player follows along on their
 own phone.
 
@@ -29,14 +29,14 @@ own phone.
 On Linux, the AppImage runs without installing anything:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.2.0/ato20_1.2.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.11.0/ato20_1.11.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 On Windows, from PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.2.0/ato20_1.2.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.11.0/ato20_1.11.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -86,19 +86,33 @@ campaign file: a card on a board only points to it, so the same note shows up on
 without becoming two copies. Putting a board on air shows the whole sheet on the spectator
 window and on the phones.
 
+**Items** belong to the campaign, not to whoever carries them: the Items window keeps the
+catalog in folders, with search, and from there the sword goes into a character's backpack,
+onto the map, onto a pin's card or into the handout. Each item has an image, a Markdown
+description, free-form attributes ("Damage: 1d8+2 slashing", with the dice one click away)
+and meters whose value belongs to each backpack: Edgar's wand with 3 charges, Mira's with 5.
+Showing an item at the table puts its card on the TV and the phones, minus whatever is hidden.
+
 ![A note pinned to the map, then Board 1 opened from the Files tab: the Iron Front, with Bruno, the Enemy, the grenade, arrows and a sticky note](docs/midia/arquivos.gif)
 
 ## What already works
 
 - **GM: complete.** Opens the folder, saves scenes, sends images and sounds.
-- **Spectator and Player: on the local network.** The daemon serves both screens and
-  publishes the scene over SSE, so any device in the house can be the spectator window and
-  every player follows along on their phone.
+- **Spectator and Player: on the local network, over a VPN or over the internet.** The
+  daemon serves both screens and publishes the scene over SSE, so any device in the house can
+  be the spectator window and every player follows along on their phone. Players far away
+  join through a gaming VPN or Tailscale Funnel: see [Jogar a distância](docs/jogar-a-distancia.md)
+  (in Portuguese).
 - **Character sheet: on the Player screen.** Name, notebook and attachments, with one token
   per player in place of the RLS that did this job before.
 - **The phone plays.** The player sees the character linked to them (inventory, attachments
   and the meters the GM did not hide), rolls dice on the table and moves their own
   character's token. The daemon rolls the dice, not the device of whoever benefits from them.
+- **Initiative: the turn order.** The GM puts whoever is on the map into the order, from the
+  Initiative window or by right-clicking the tokens, and arranges it by dragging. The portrait
+  on the spectator window marks whose turn it is, the phone says "Your turn" and only lets the
+  character whose turn it is move, and each round keeps the dice, meters and conditions that
+  changed in it. Rolling initiative is left to each system's plugin.
 - **Zip export and import: done.** A campaign fits in one file, and the file opens on any
   other machine, with the table still working.
 - **Flathub: the package builds, and has not been submitted yet.** The manifest is in
@@ -146,24 +160,44 @@ The rest of the documentation is in Portuguese:
 | | |
 | --- | --- |
 | [Instalar](docs/instalar.md) | Install: PowerShell 7, the command that follows new versions, the other formats |
+| [Jogar a distância](docs/jogar-a-distancia.md) | Playing remotely: the table over the internet with Funnel, through a gaming VPN or your own address |
 | [A campanha](docs/campanha.md) | The campaign: the folder inside, how it saves, library folders, export and import |
 | [Três telas](docs/telas.md) | Three screens: GM, Spectator and Player, and why each runs where it does |
 | [O daemon](docs/daemon.md) | The daemon: routes, the table code, the write token |
 | [Jogadores](docs/jogadores.md) | Players: table and sheet, the token in place of RLS, attachments |
 | [Retratos de personagem](docs/retratos.md) | Character portraits: the portrait tied to the camera, and the live portrait |
+| [A IA na campanha](docs/mcp.md) | AI on the campaign: MCP, turning it on, the tools, why it runs inside the app, who gets in |
 | [Desenvolvimento](docs/desenvolvimento.md) | Development: running, measuring, how it is built, tests |
 | [Empacotar](docs/empacotar.md) | Packaging: the packages, the icon and the Flatpak |
 
 ## Contributing
 
-Coming soon.
+Bug, idea, translation, plugin or code: the way in is [Contributing](CONTRIBUTING.en.md), with
+what belongs in the core and what belongs in a plugin, how to run it, what to check before a
+PR and the license of contributions. Everyone who has contributed shows up on the
+[website](https://ato20.valbmig.com.br/#contribuidores).
 
 ## License
 
-MIT. The text is in [LICENSE](LICENSE).
+[PolyForm Perimeter 1.0.0](LICENSE). ATO20 is free, and the code stays open to read, study,
+modify and redistribute, for any purpose but one: offering other people a product that
+competes with ATO20, whether sold or given away.
 
-Permissive on purpose. What a license would defend here is someone running the project as a
-closed service, and that scenario does not exist: the daemon listens on the home network of
-whoever runs it, and there is nothing to host. Copyleft would cost contributors and leave
-third-party plugins in the gray zone of derivative work, which is exactly what we want to
-see appear.
+- A GM who charges for their table, a live stream, a group that plays every week: allowed.
+- Writing plugins, and selling them: allowed. A plugin adds to ATO20 instead of replacing it,
+  and carries whatever license its author chooses.
+- Renaming ATO20 and offering it as another product: not allowed.
+
+The plugin documentation, [docs/extensoes.md](docs/extensoes.md) and
+[docs/en/plugins.md](docs/en/plugins.md), is MIT ([LICENSE-MIT](LICENSE-MIT)), so its examples
+can go into any plugin without asking.
+
+Up to v1.7.0, ATO20 was released under MIT, and those versions remain MIT. The change applies
+from v1.8.0 on, and with it the project stops calling itself open source: Perimeter
+is not an OSI-approved license.
+
+The reason for the change is the risk MIT left open: someone taking ATO20 and selling it to
+people who do not know it is free. Copyleft would not solve that, since it also allows selling,
+and it would leave third-party plugins in the gray zone of derivative work. Perimeter blocks the
+clone without touching plugins, and the app's start screen says it is free, so whoever bought a
+copy finds out where the original is.

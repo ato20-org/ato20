@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "ato20",
-  "version": "1.2.0",
+  "version": "1.11.0",
   "identifier": "show.rpg.ato20",
   "build": {
     "frontendDist": "../out",
@@ -12,6 +12,8 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "create": false,
         "title": "ATO20",
         "width": 1440,
         "height": 900,
@@ -39,6 +41,8 @@
       "icons/icon.ico"
     ],
     "category": "RolePlayingGame",
+    "license": "LicenseRef-PolyForm-Perimeter-1.0.0",
+    "licenseFile": "../LICENSE",
     "android": {
       "debugApplicationIdSuffix": ".debug"
     },

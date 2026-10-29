@@ -38,10 +38,12 @@ import {
   fragmentoNoCursor,
   type Sugestao,
 } from "@/lib/mencoes/sugestao";
+import { ehElemento } from "@/lib/dom";
 import { normaliza } from "@/lib/search";
 import { idioma } from "@/lib/i18n/idioma";
 import { t as textos } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
+import { textoDasSiglas } from "@/lib/mestre/valor-do-atributo";
 import type { LinhaDoFio, RolagemNoFio } from "@/types/fio";
 
 /**
@@ -354,7 +356,11 @@ function RolagemView({
               t={t}
             />
           ) : (
-            <DadoParado key={i} faces={dado.faces} valor={dado.valor} tamanho={tamanho} />
+            // O descartado aparece apagado: caiu, e não conta. Ver
+            // `Dado.descartado`.
+            <span key={i} className={cn(dado.descartado && "opacity-35")}>
+              <DadoParado faces={dado.faces} valor={dado.valor} tamanho={tamanho} />
+            </span>
           ),
         )}
         {resto > 0 ? (
@@ -370,6 +376,9 @@ function RolagemView({
       >
         {rotulo ? <span className="text-foreground">{rotulo} · </span> : null}
         {notacao}
+        {/* As siglas que a conta leu, com o valor da hora: "1d20+1 · AGI 1"
+            diz de onde veio o +1. Ver `SiglaDoLance`. */}
+        {rolagem.siglas?.length ? <span className="opacity-70"> · {textoDasSiglas(rolagem.siglas)}</span> : null}
       </span>
 
       <span className="grid shrink-0 place-items-end">
@@ -711,7 +720,7 @@ export function CampoDoFio({
             // A lista vive num portal fora do campo, e escolher nela tira o
             // foco daqui. Sem esta guarda, ela fecharia no meio da escolha.
             const alvo = event.relatedTarget;
-            if (alvo instanceof Element && alvo.closest(`[${MARCA_LISTA}]`)) return;
+            if (ehElemento(alvo) && alvo.closest(`[${MARCA_LISTA}]`)) return;
 
             setFocado(false);
           }}

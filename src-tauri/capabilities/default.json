@@ -19,7 +19,25 @@
           "url": "http://localhost:*/*"
         },
         {
-          "url": "https://github.com/ato20-org/ato20/*"
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://login.tailscale.com/*"
+        },
+        {
+          "url": "https://ato20.valbmig.com.br/*"
+        },
+        {
+          "url": "https://ko-fi.com/*"
+        },
+        {
+          "url": "https://x.com/*"
+        },
+        {
+          "url": "https://www.instagram.com/*"
+        },
+        {
+          "url": "mailto:*"
         }
       ]
     },
@@ -29,6 +47,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-close",
+    "core:window:allow-set-title",
     "core:webview:allow-set-webview-zoom"
   ]
 }

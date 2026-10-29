@@ -9,14 +9,14 @@
 
 **Português** · [English](README.en.md)
 
-O ATO20 é um VTT (*virtual tabletop*) open source, pensado para facilitar a organização e o
+O ATO20 é um VTT (*virtual tabletop*) gratuito, pensado para facilitar a organização e o
 gerenciamento de campanhas de RPG. Na mesa, o controle de câmera avançado traz imersão de
 verdade aos jogadores; fora dela, o mestre mantém os documentos atualizados e a história
 organizada no mesmo lugar.
 
 </div>
 
-Feito para jogo presencial: o mestre monta a próxima cena no notebook enquanto a mesa
+Feito para RPG em LAN, com suporte a VPN: o mestre monta a próxima cena no notebook enquanto a mesa
 continua vendo a atual na janela do espectador, e cada jogador acompanha pelo próprio
 celular.
 
@@ -29,14 +29,14 @@ celular.
 No Linux, o AppImage roda sem instalar nada:
 
 ```bash
-curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.2.0/ato20_1.2.0_amd64.AppImage && chmod +x ato20.AppImage
+curl -fL -o ato20.AppImage https://github.com/ato20-org/ato20/releases/download/v1.11.0/ato20_1.11.0_amd64.AppImage && chmod +x ato20.AppImage
 ./ato20.AppImage
 ```
 
 No Windows, pelo PowerShell:
 
 ```powershell
-wget https://github.com/ato20-org/ato20/releases/download/v1.2.0/ato20_1.2.0_x64-setup.exe -OutFile ato20-setup.exe
+wget https://github.com/ato20-org/ato20/releases/download/v1.11.0/ato20_1.11.0_x64-setup.exe -OutFile ato20-setup.exe
 .\ato20-setup.exe
 ```
 
@@ -83,19 +83,32 @@ arquivo da campanha: o cartão no quadro só aponta para ela, então a mesma not
 dois quadros sem virar duas cópias. Pôr o quadro no ar mostra a folha inteira na janela do
 espectador e no celular.
 
+Os **itens** são da campanha, e não de quem os carrega: a janela Itens guarda o catálogo em
+pastas, com busca, e de lá a espada vai para a mochila de um personagem, para o mapa, para o
+cartão de um ponto ou para o handout. Cada item tem imagem, descrição em Markdown, atributos
+livres ("Dano: 1d8+2 cortante", com o dado a um clique) e medidores, cujo valor é de cada
+mochila — a varinha do Edgar com 3 cargas, a da Mira com 5. Mostrar um item na mesa põe o
+cartão dele na TV e nos celulares, sem o que está escondido.
+
 ![A nota fixada no mapa, depois o Quadro 1 aberto pela aba Arquivos: a Frente de Ferro, com Bruno, o Inimigo, a granada, setas e post-it](docs/midia/arquivos.gif)
 
 ## O que já funciona
 
 - **Mestre: completo.** Abre a pasta, grava as cenas, envia imagens e sons.
-- **Espectador e Jogador: na rede local.** O daemon serve as duas telas e publica a cena por
-  SSE, então qualquer aparelho da casa serve de janela do espectador e cada jogador
-  acompanha pelo celular.
+- **Espectador e Jogador: na rede local, numa VPN ou pela internet.** O daemon serve as duas
+  telas e publica a cena por SSE, então qualquer aparelho da casa serve de janela do
+  espectador e cada jogador acompanha pelo celular. Quem está longe entra por uma VPN de jogo
+  ou pelo Funnel do Tailscale: ver [Jogar a distância](docs/jogar-a-distancia.md).
 - **Ficha do personagem: no Jogador.** Nome, caderno de notas e anexos, com um token por jogador no
   lugar da RLS que fazia esse trabalho antes.
 - **O celular joga.** O jogador vê o personagem vinculado a ele — inventário, anexos e os
   medidores que o mestre não escondeu —, rola dado na mesa e move o token do próprio
   personagem. Quem sorteia o dado é o daemon, e não o aparelho de quem se beneficia dele.
+- **Iniciativa: a ordem da rodada.** O mestre põe na ordem quem está no mapa, pela janela
+  Iniciativa ou pelo botão direito nos tokens, e arruma arrastando. O retrato na janela do
+  espectador marca de quem é a vez, o celular avisa "Sua vez" e só deixa andar o personagem
+  da vez, e cada rodada guarda os dados, os medidores e as condições que mudaram nela. Rolar
+  a iniciativa fica com o plugin de cada sistema.
 - **Exportar e importar zip: pronto.** A campanha cabe num arquivo, e o arquivo abre em
   qualquer outra máquina — com a mesa continuando a valer.
 - **Flathub: o pacote já constrói, e ainda não foi submetido.** O manifesto está em
@@ -136,24 +149,45 @@ repetindo antes de acreditar.
 | | |
 | --- | --- |
 | [Instalar](docs/instalar.md) | PowerShell 7, o comando que acompanha a versão nova, os outros formatos |
+| [Jogar a distância](docs/jogar-a-distancia.md) | A mesa pela internet com o Funnel, por uma VPN de jogo ou por um endereço seu |
 | [A campanha](docs/campanha.md) | A pasta por dentro, como ela grava, pastas do acervo, exportar e importar |
 | [Três telas](docs/telas.md) | Mestre, Espectador e Jogador, e por que cada uma roda onde roda |
 | [O daemon](docs/daemon.md) | As rotas, o código da mesa, o token de escrita |
 | [Jogadores](docs/jogadores.md) | Mesa e ficha, o token no lugar da RLS, os anexos |
 | [Retratos de personagem](docs/retratos.md) | O retrato preso à câmera, e o retrato ao vivo |
 | [Plugins](docs/extensoes.md) | Temas, plugins de funcionalidade e a API |
+| [A IA na campanha](docs/mcp.md) | O MCP: ligar, as ferramentas, por que roda dentro do aplicativo, quem entra |
 | [Desenvolvimento](docs/desenvolvimento.md) | Rodar, medir, como está construído, testes |
 | [Empacotar](docs/empacotar.md) | Os pacotes, o ícone e o Flatpak |
 
 ## Contribuir
 
-Em breve.
+Defeito, ideia, tradução, plugin ou código: o caminho está em [Contribuir](CONTRIBUTING.md),
+com o que é do núcleo e o que é de plugin, como rodar, o que conferir antes do PR e a licença
+das contribuições. Quem já contribuiu aparece no
+[site](https://ato20.valbmig.com.br/#contribuidores).
 
 ## Licença
 
-MIT — o texto está em [LICENSE](LICENSE).
+[PolyForm Perimeter 1.0.0](LICENSE). O ATO20 é gratuito e o código continua aberto para ler,
+estudar, modificar e redistribuir, para qualquer fim, menos um: oferecer a outras pessoas um
+produto que concorra com o ATO20, vendido ou de graça.
 
-Permissiva de propósito. O que a licença defenderia aqui é o cenário de alguém rodar o
-projeto como serviço fechado, e ele não existe: o daemon escuta na rede da casa de quem
-opera, e não há o que hospedar. Copyleft custaria contribuidor e deixaria plugin de
-terceiro em zona cinzenta de obra derivada — justamente o que se quer que apareça.
+- Mestre que cobra pela mesa, transmissão ao vivo, grupo que joga toda semana: liberado.
+- Escrever plugin, e vender plugin: liberado. Plugin completa o ATO20 em vez de substituí-lo,
+  e leva a licença que o autor quiser.
+- Trocar o nome do ATO20 e oferecer como outro produto: não.
+
+A documentação de plugins, [docs/extensoes.md](docs/extensoes.md) e
+[docs/en/plugins.md](docs/en/plugins.md), é MIT ([LICENSE-MIT](LICENSE-MIT)), para os exemplos
+irem para dentro de qualquer plugin sem pergunta.
+
+Até a v1.7.0 o ATO20 saiu sob MIT, e essas versões continuam MIT. A troca vale a partir da
+v1.8.0, e com ela o projeto deixa de se chamar open source: a Perimeter não é uma
+licença aprovada pela OSI.
+
+O motivo da troca é o risco que a MIT deixava aberto: alguém pegar o ATO20 e vendê-lo a quem não
+sabe que ele é gratuito. Copyleft não resolveria, porque também permite vender, e deixaria plugin
+de terceiro em zona cinzenta de obra derivada. A Perimeter barra o clone sem tocar no plugin, e a
+porta do aplicativo diz que ele é gratuito, para quem comprou uma cópia descobrir onde está o
+original.

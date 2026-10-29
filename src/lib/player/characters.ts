@@ -154,14 +154,16 @@ export async function characterFileThumbUrl(
   id: string,
   autor: AnexoPersonagem["autor"],
   arquivo: string,
+  /** `mini` para o quadro da grade; `tela` para a foto grande do item aberto. */
+  variante: "mini" | "tela" = "mini",
 ): Promise<string> {
-  const chave = `${id}/${autor}/${arquivo}`;
+  const chave = `${id}/${autor}/${arquivo}/${variante}`;
 
   const cached = miniCache.get(chave);
   if (cached) return cached;
 
   const response = await fetch(
-    `/eu/personagens/${encodeURIComponent(id)}/anexos/${autor}/${encodeURIComponent(arquivo)}/mini`,
+    `/eu/personagens/${encodeURIComponent(id)}/anexos/${autor}/${encodeURIComponent(arquivo)}/${variante}`,
     { headers: authorized(codigo) },
   );
 
@@ -179,30 +181,4 @@ export function revokeCharacterFileUrl(id: string, anexo: AnexoPersonagem): void
 
   URL.revokeObjectURL(url);
   blobCache.delete(chave(id, anexo));
-}
-
-// --- nota -------------------------------------------------------------------
-
-export async function characterNote(codigo: string, id: string): Promise<string> {
-  const response = await fetch(`/eu/personagens/${encodeURIComponent(id)}/nota`, {
-    headers: authorized(codigo),
-  });
-
-  if (!response.ok) throw await fail(response, t.erros.lerNota);
-
-  return ((await response.json()) as { texto: string }).texto;
-}
-
-export async function writeCharacterNote(
-  codigo: string,
-  id: string,
-  texto: string,
-): Promise<void> {
-  const response = await fetch(`/eu/personagens/${encodeURIComponent(id)}/nota`, {
-    method: "PUT",
-    headers: { "content-type": "application/json", ...authorized(codigo) },
-    body: JSON.stringify({ texto }),
-  });
-
-  if (!response.ok) throw await fail(response, t.erros.gravarNota);
 }

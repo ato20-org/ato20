@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   desenharDado,
+  girar,
   orientacaoParaValor,
+  quatDoEixo,
   SOLIDOS,
 } from "@/lib/geometry/dado";
 import { rotulosDoDado } from "@/types/dado";
+
+// A mesma distância de câmera de `desenharDado`. Se mudar lá, muda aqui.
+const DISTANCIA = 4;
 
 describe("d%", () => {
   it("é o trapezoedro do d10 com as dezenas gravadas", () => {
@@ -64,6 +69,77 @@ describe("sortearValor", () => {
       const rotulos = rotulosDoDado(faces);
       for (let i = 0; i < 200; i++) {
         expect(rotulos).toContain(sortearValor(faces));
+      }
+    }
+  });
+});
+
+describe("culling em perspectiva", () => {
+  // Um punhado de orientações por sólido: alguns pousos e uns giros avulsos,
+  // para pegar faces de esguelha — é onde o corte frouxo errava.
+  const orientacoes = (faces: Parameters<typeof orientacaoParaValor>[0]) => [
+    orientacaoParaValor(faces, rotulosDoDado(faces)[0]),
+    quatDoEixo({ x: 1, y: 0, z: 0 }, 0.56),
+    quatDoEixo({ x: 1, y: 0, z: 0 }, 1.1),
+    quatDoEixo({ x: 0.5, y: 1, z: 0.3 }, 0.8),
+    quatDoEixo({ x: 0.3, y: 0.4, z: 1 }, 2.0),
+  ];
+
+  it("devolve EXATAMENTE as faces à frente do plano vistas da câmera", () => {
+    for (const faces of [4, 6, 8, 10, 12, 20, 100] as const) {
+      const solido = SOLIDOS[faces];
+      for (const q of orientacoes(faces)) {
+        const desenho = desenharDado({
+          faces,
+          orientacao: q,
+          cx: 0,
+          cy: 0,
+          raio: 40,
+        });
+        const visiveis = new Set(desenho.map((f) => Number(f.chave.slice(1))));
+
+        solido.faces.forEach((face, i) => {
+          const normal = girar(q, face.normal);
+          // A câmera está em (0,0,DISTANCIA) no espaço do sólido; a face é
+          // visível quando a câmera está do lado de fora do plano dela.
+          const aFrente = DISTANCIA * normal.z > face.distanciaPlano;
+          expect(visiveis.has(i)).toBe(aFrente);
+        });
+      }
+    }
+  });
+
+  it("corta faces que o critério ortográfico deixava passar", () => {
+    // A pose patológica do d20: inclinação de ~32° no eixo X. O corte por
+    // `normal.z > 0` via cinco faces de trás a mais, que sem z-buffer pintavam
+    // sobre a frente — a face que "ficava transparente".
+    const q = quatDoEixo({ x: 1, y: 0, z: 0 }, 0.5586);
+    const solido = SOLIDOS[20];
+    const desenho = desenharDado({
+      faces: 20,
+      orientacao: q,
+      cx: 0,
+      cy: 0,
+      raio: 40,
+    });
+    const ortografico = solido.faces.filter(
+      (f) => girar(q, f.normal).z > 0.001,
+    ).length;
+
+    expect(ortografico).toBeGreaterThan(desenho.length);
+  });
+});
+
+describe("ordem determinística dos vértices", () => {
+  // Cada face começa no vértice de MENOR índice. O índice é inteiro e igual em
+  // qualquer motor de JS, então a ordem — e com ela o `points` do polígono — sai
+  // idêntica no SSR (Node) e no cliente (WebKitGTK). Sem esta âncora, o corte em
+  // ±π do `atan2` girava a lista de uma posição entre os motores e dava hydration
+  // mismatch, visível na borda da moeda. Ver `poliedro`.
+  it("ancora cada face no vértice de menor índice", () => {
+    for (const solido of Object.values(SOLIDOS)) {
+      for (const face of solido.faces) {
+        expect(face.indices[0]).toBe(Math.min(...face.indices));
       }
     }
   });

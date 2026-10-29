@@ -88,7 +88,100 @@ export type Personagem = {
    * escondidas antes de responder, e campanha antiga não traz o campo.
    */
   condicoes?: Condicao[];
+  /**
+   * Os atributos deste personagem. Ver `Atributo`.
+   *
+   * Opcional porque campanha antiga não traz o campo, e o Rust não o grava
+   * vazio.
+   */
+  atributos?: Atributo[];
+  /**
+   * Um molde do Compêndio, e não um personagem em jogo: o goblin preparado, o
+   * NPC que ainda não apareceu. Fica fora da lista de Personagens, da mesa e
+   * dos celulares; pôr em jogo copia a ficha. Espelho de `Personagem::compendio`.
+   */
+  compendio?: boolean;
+  /** As tags do Compêndio, para filtrar o bestiário. Espelho de `Personagem::tags`. */
+  tags?: string[];
+  /**
+   * De que ficha de plugin este molde foi trazido, `{plugin}/{coleção}/{ficha}`.
+   * Só no molde: é de onde o próximo goblin arrastado do plugin sai, sem trazer
+   * a ficha de novo. Espelho de `Personagem::do_plugin`.
+   */
+  doPlugin?: string;
+  /**
+   * A aura de plugin, `{plugin}/{aura}`: a borda do card e o anel do rosto. Vem
+   * com a ficha trazida do bestiário, e o mestre a troca pelo menu. Espelho de
+   * `Personagem::aura`; ver `useAura`.
+   */
+  aura?: string;
   criadoEm: number;
+};
+
+/**
+ * Um atributo: uma sigla curta e um número. FOR 4, AGI 2.
+ *
+ * Genérico, como o medidor: a sigla é do sistema, e quem diz quais existem é o
+ * mestre. Sem teto e sem forma -- o atributo não sobe e desce na cena, ele é
+ * o número que se consulta. Inteiro, e pode ser negativo (o modificador).
+ *
+ * Ou um DADO: a AGI d8 do Savage Worlds guarda a expressão em `rolagem`, e a
+ * ficha mostra e rola o dado. O `valor` continua lá, para o plugin que só
+ * conhece número.
+ *
+ * O espelho em Rust é `vault::characters::Atributo`.
+ */
+export type Atributo = {
+  id: string;
+  sigla: string;
+  valor: number;
+  /**
+   * O dado que o atributo É, quando é um: `1d8`, `1d12+1`. Lida pelo mesmo
+   * leitor das rolagens (`lerExpressaoDeRolagem`). Ausente = o número.
+   */
+  rolagem?: string;
+  /** O que ele quer dizer, no hover do cartão. Ausente quando não há. */
+  descricao?: string;
+};
+
+export type PatchAtributo = {
+  sigla?: string;
+  valor?: number;
+  /** `""` apaga o dado, e o atributo volta a ser o número. */
+  rolagem?: string;
+  /** `""` apaga. */
+  descricao?: string;
+};
+
+/** Quantos atributos cabem num personagem. Espelha `MAX_ATRIBUTOS`. */
+export const MAX_ATRIBUTOS = 12;
+
+/** O teto do valor, para cima e para baixo. Espelha `MAX_VALOR_ATRIBUTO`. */
+export const MAX_VALOR_ATRIBUTO = 999;
+
+/** O teto da sigla, em caracteres. Espelha `MAX_SIGLA`. */
+export const MAX_SIGLA = 6;
+
+/** O teto da descrição, em caracteres. Espelha `MAX_DESCRICAO_ATRIBUTO`. */
+export const MAX_DESCRICAO_ATRIBUTO = 280;
+
+/**
+ * Um atributo de fábrica da campanha: a sigla e o valor com que ele nasce em
+ * cada ficha. Molde, e não vínculo -- ver `vault::atributos`.
+ */
+export type ModeloDeAtributo = {
+  id: string;
+  sigla: string;
+  valor: number;
+  descricao?: string;
+};
+
+/** O que voltou de materializar atributos de fábrica. Espelha `AplicacaoDeAtributo`. */
+export type AplicacaoDeAtributo = {
+  /** O recém-criado, quando houve um. */
+  modelo: ModeloDeAtributo | null;
+  /** Quantos personagens receberam ao menos um atributo. */
+  alcancados: number;
 };
 
 /**
@@ -290,6 +383,12 @@ export type PatchCondicao = {
   efeito?: string | null;
   escondido?: boolean;
 };
+
+/**
+ * Uma condição da biblioteca do Compêndio: a mesma do cardápio, e as tags. Mora
+ * em `compendio-condicoes.json`, e não no cardápio -- ver `compendio.rs`.
+ */
+export type MoldeDeCondicao = Condicao & { tags?: string[] };
 
 /**
  * Quantas condições cabem num personagem. Espelha `MAX_CONDICOES`.

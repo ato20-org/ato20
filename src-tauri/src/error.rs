@@ -6,7 +6,10 @@ use serde::{Serialize, Serializer};
 /// dois, e quem mostra escolhe -- ver `call` em `src/lib/vault/bridge.ts`. Um
 /// idioma guardado aqui seria estado a sincronizar com a configuracao da
 /// maquina, e o celular nem fala o idioma do Mestre necessariamente.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Serialize` para o motivo que vai DENTRO de uma resposta, e nao como o erro
+/// dela: a colecao do bestiario que quebrou, ao lado das que leram bem.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Texto {
     pub pt: String,
     pub en: String,
@@ -73,6 +76,19 @@ pub enum AppError {
     /// antes de comecar. A tela confere antes de mandar; isto e o Rust nao
     /// gravando no `assets.json` o que a tela deixou passar.
     SomInvalido(Texto),
+    /// Nao deu para baixar um plugin do catalogo: sem rede, GitHub fora, zip
+    /// grande demais.
+    ///
+    /// Variante propria porque a providencia e de REDE e nao do plugin: tentar
+    /// de novo mais tarde, e nao falar com quem o escreveu. O zip que chegou e
+    /// nao serve e `ExtensaoInvalida`. Ver `catalogo::instalar`.
+    DownloadFalhou(Texto),
+    /// A pasta escolhida para importar nao serve: nao e pasta, ou e grande
+    /// demais para ser o que se quer importar. Ver `importar::ler_pasta`.
+    PastaInvalida(Texto),
+    /// O pedido faz sentido, mas nao neste estado: ligar um molde do
+    /// Compendio a um jogador, por exemplo. A mensagem diz o que fazer.
+    Recusado(Texto),
 }
 
 impl std::fmt::Display for AppError {
@@ -104,6 +120,11 @@ impl std::fmt::Display for AppError {
                 "Esta extensao pede a API {pede} e este ATO20 fala a {temos}. Atualize o aplicativo."
             ),
             Self::SomInvalido(motivo) => write!(f, "{}", motivo.pt),
+            Self::DownloadFalhou(motivo) => {
+                write!(f, "Nao foi possivel baixar o plugin: {}.", motivo.pt)
+            }
+            Self::PastaInvalida(motivo) => write!(f, "{}", motivo.pt),
+            Self::Recusado(motivo) => write!(f, "{}", motivo.pt),
         }
     }
 }
@@ -125,6 +146,11 @@ impl AppError {
                 "This plugin needs API {pede} and this ATO20 speaks {temos}. Update the app."
             ),
             Self::SomInvalido(motivo) => motivo.en.clone(),
+            Self::DownloadFalhou(motivo) => {
+                format!("Could not download the plugin: {}.", motivo.en)
+            }
+            Self::PastaInvalida(motivo) => motivo.en.clone(),
+            Self::Recusado(motivo) => motivo.en.clone(),
         }
     }
 }
@@ -160,6 +186,9 @@ impl Serialize for AppError {
             Self::ExtensaoInvalida(_) => "extensao-invalida",
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
             Self::SomInvalido(_) => "som-invalido",
+            Self::DownloadFalhou(_) => "download",
+            Self::PastaInvalida(_) => "pasta-invalida",
+            Self::Recusado(_) => "recusado",
         };
 
         let mut out = serializer.serialize_struct("AppError", 3)?;

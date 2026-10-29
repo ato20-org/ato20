@@ -1,11 +1,15 @@
 import { efeitoValido } from "@/lib/efeitos";
-import type { CamadasDoMedidor, RotuloDoMedidor } from "@/lib/extensoes/manifesto";
+import type {
+  CamadasDoMedidor,
+  EstiloDeAtributosDeclarado,
+  RotuloDoMedidor,
+} from "@/lib/extensoes/manifesto";
 import type { NoSvg } from "@/lib/extensoes/svg-modelo";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 /**
- * O que os plugins DECLARAM para a mesa desenhar: os estilos de medidor, os
- * efeitos de condição, e quais plugins estão ligados.
+ * O que os plugins DECLARAM para a mesa desenhar: os estilos de medidor e de
+ * atributos, os efeitos de condição, e quais plugins estão ligados.
  *
  * Viaja por um canal próprio (`/sala/declarativo`), e não dentro do quadro de
  * 10 Hz: o quadro leva só `declarativoVersao`, um número, e quem assiste busca
@@ -39,6 +43,16 @@ export type EstiloDeMedidorPublicado = {
     }
 );
 
+/**
+ * Um jeito de desenhar os atributos, como viaja: o que o plugin declarou, e de
+ * quem é a imagem -- cada tela a busca pelo endereço dela, como as camadas do
+ * medidor. Ver `urlDaImagemDoEstilo`.
+ */
+export type EstiloDeAtributosPublicado = Omit<EstiloDeAtributosDeclarado, "id"> & {
+  plugin: string;
+  versao: string;
+};
+
 export type Declarativo = {
   versao: number;
   /** Por `{extensaoId}/{estiloId}`, a chave que o medidor guarda. */
@@ -48,6 +62,14 @@ export type Declarativo = {
    * um já vem com o prefixo. Ver `definicaoDoEfeito`.
    */
   efeitos: Record<string, DefinicaoDeEfeito>;
+  /** Por `{extensaoId}/{estiloId}`, como os de medidor. */
+  estilosDeAtributos: Record<string, EstiloDeAtributosPublicado>;
+  /**
+   * O estilo que a CAMPANHA escolheu para os atributos, `{plugin}/{estilo}`,
+   * ou `""` para os cartões de fábrica. Viaja aqui, e não na ficha: é um para
+   * a mesa inteira, e muda quando o mestre troca, não a cada quadro.
+   */
+  estiloDosAtributos: string;
   /**
    * Os ids dos plugins habilitados no Mestre.
    *
@@ -63,6 +85,8 @@ export const DECLARATIVO_VAZIO: Declarativo = {
   versao: 0,
   estilos: {},
   efeitos: {},
+  estilosDeAtributos: {},
+  estiloDosAtributos: "",
   plugins: [],
 };
 
@@ -77,6 +101,10 @@ export async function buscarDeclarativo(codigo: string, base = ""): Promise<Decl
     versao: typeof lido?.versao === "number" ? lido.versao : 0,
     estilos: lido?.estilos ?? {},
     efeitos: lerEfeitos(lido?.efeitos),
+    // De um Mestre anterior à API 11 os dois não vêm: cartões, como sempre.
+    estilosDeAtributos: lido?.estilosDeAtributos ?? {},
+    estiloDosAtributos:
+      typeof lido?.estiloDosAtributos === "string" ? lido.estiloDosAtributos : "",
     plugins: Array.isArray(lido?.plugins)
       ? lido.plugins.filter((id): id is string => typeof id === "string")
       : [],

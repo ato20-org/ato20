@@ -1,13 +1,16 @@
 "use client";
 
+import { toast } from "sonner";
 import { create } from "zustand";
 
 import { flushPortraits } from "@/lib/store/use-portrait-store";
 import { flushBoard } from "@/lib/store/use-scene-store";
+import { estiloDoSistema } from "@/lib/configuracoes/estilo-dos-atributos";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
 import { t } from "@/lib/i18n/mestre";
 import { aoSumirCampanha, isDesktop, VaultError } from "@/lib/vault/bridge";
+import { aplicarSistema } from "@/lib/vault/sistema";
 import {
   createCampaign,
   exportCampaign,
@@ -92,8 +95,20 @@ type CampaignStore = {
   choose: (path: string) => Promise<void>;
   /** Seletor nativo de pasta, para abrir uma campanha existente. */
   openFolder: () => Promise<void>;
-  /** Pede a pasta-mãe e cria a campanha dentro dela. */
-  create: (nome: string) => Promise<void>;
+  /**
+   * Pede a pasta-mãe e cria a campanha dentro dela, já com o sistema de um
+   * plugin, se o mestre escolheu um.
+   */
+  create: (nome: string, sistema?: { extensaoId: string; sistemaId: string } | null) => Promise<void>;
+  /**
+   * Cria a campanha numa pasta-mãe já escolhida. É o `create` sem o seletor:
+   * quem chama de fora da porta (o MCP) já sabe onde.
+   */
+  criarEm: (
+    parent: string,
+    nome: string,
+    sistema?: { extensaoId: string; sistemaId: string } | null,
+  ) => Promise<void>;
   /** Tira da lista de recentes. Não apaga nada do disco. */
   forget: (path: string) => Promise<void>;
   /**
@@ -321,23 +336,38 @@ export const useCampaignStore = create<CampaignStore>((set, get) => {
       await get().choose(path);
     },
 
-    async create(nome) {
+    async create(nome, sistema) {
       if (get().busy) return;
 
       const parent = await pickFolder(t.dialogos.ondeCriar);
       if (!parent) return;
 
-      // Depois do seletor, nunca antes: enquanto o diálogo do sistema está aberto
-      // não há trabalho em curso, e o que a pessoa tem de ver é o diálogo.
+      await get().criarEm(parent, nome, sistema);
+    },
+
+    async criarEm(parent, nome, sistema) {
+      if (get().busy) return;
+
+      // Depois do seletor do `create`, nunca antes: enquanto o diálogo do
+      // sistema está aberto não há trabalho em curso, e o que a pessoa tem de
+      // ver é o diálogo.
       set({ busy: true, status: "abrindo", error: null });
 
       try {
         await fecharOAnterior();
-        set({
-          campaign: await createCampaign(parent, nome),
-          status: "ready",
-          busy: false,
-        });
+        const campaign = await createCampaign(parent, nome);
+
+        // ANTES de abrir o Mestre: a campanha nasce com os medidores e o molde
+        // do sistema, e a primeira tela já os lê. Falhar aqui não desfaz a
+        // campanha -- ela existe, e o sistema se aplica de novo na
+        // Configuração.
+        if (sistema) {
+          await aplicarSistema(sistema.extensaoId, sistema.sistemaId, false)
+            .then((aplicado) => estiloDoSistema(aplicado.estiloDosAtributos))
+            .catch(() => toast.error(t.porta.sistemaFalhou));
+        }
+
+        set({ campaign, status: "ready", busy: false });
       } catch (cause) {
         set({ busy: false, status: "escolhendo", error: describe(cause) });
       }

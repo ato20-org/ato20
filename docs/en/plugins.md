@@ -3,6 +3,9 @@
 This is the English version of [docs/extensoes.md](../extensoes.md). When the
 two disagree, the Portuguese one is the source.
 
+This document is MIT ([LICENSE-MIT](../../LICENSE-MIT)), unlike the rest of ATO20: its
+examples can go into any plugin.
+
 A plugin is a **folder with a `manifest.json` inside**. Installing one means
 copying it onto the machine, through Settings → Plugins. It is the same format
 you publish on GitHub: whoever clones the repository already has exactly what
@@ -93,8 +96,36 @@ does can be listed and loaded late; one that only finds out by running forces
 the app to run all of them to know what exists.
 
 **`apiVersao` says what the plugin asks for, and the app refuses only a plugin
-that asks for more than it has.** Version 7 is the current one: it lets every
-text in the manifest come per language and gives the code `api.idioma` (see
+that asks for more than it has.** Version 13 is the current one: it added
+`itens`, the weapons, protection and other gear a plugin brings ready-made to
+the Compendium (see
+[Plugin items](#plugin-items-ready-made-weapons-and-gear-in-the-compendium)),
+`abas`, a new Compendium tab with entries you give to a character (see
+[Plugin tabs](#plugin-tabs-rituals-and-other-entries-in-the-compendium)), and
+the bestiary sheet's `aparencias`, which an earlier ATO20 would silently
+ignore. Version 12 added
+`bestiario`, the ready-made sheets a plugin brings to the Compendium (see
+[Plugin bestiary](#plugin-bestiary-ready-made-sheets-in-the-compendium)), and
+`auras`, the color, emblem and light a plugin marks folders, cards,
+characters and items with (see [Auras](#auras-the-plugins-color-emblem-and-light)),
+which an earlier ATO20 would silently ignore. Version 11 added
+`estilosDeAtributos` and the system's `estiloDosAtributos` (see
+[Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual)), which an
+earlier ATO20 would silently ignore, leaving the sheet on cards without saying
+why. Version 10 added
+`fichasPdf` (see [PDF sheet](#pdf-sheet-the-plugin-teaches-the-reading)) and
+`sistemas` (see [Game system](#game-system-the-campaign-defaults)), which an
+earlier ATO20 would silently ignore, leaving a plugin installed just
+for that doing nothing. Version 9 added the
+sheet attributes, the `secao:atributos` replacement and the `atributos` field
+on the character from `personagens.listar` (the abbreviation, the number and
+the optional description: STR 4). An earlier ATO20 would refuse the replacement as an unknown target.
+Version 8 added `proporcao` (proportion) and `ate` (up to) to the layered
+`pontos` (see [In image layers](#in-image-layers)), which an earlier ATO20
+would ignore silently (the narrow bullet would come out stretched into a
+square). Version 7
+let every text in the manifest come per language and gave the code
+`api.idioma` (see
 [Text in more than one language](#text-in-more-than-one-language)); an earlier
 ATO20 would refuse the map as unreadable JSON. Version 6 added
 condition `efeitos` (effects) (see
@@ -192,12 +223,20 @@ folder, through `api.extensao.url()`, and only weighs anything when installed.
 
 `api.janelas.abrir` and `fechar` (open and close) reach the plugin's windows
 and the built-in ones: a character's sheet, the list, the campaign settings.
-Wherever the window already is, docked or floating, opening it brings it into
-view instead of duplicating it. The plugin panel accepts a **`parametro`**
+Wherever the window already is, docked, floating or detached into a system
+window, opening it brings it into view instead of duplicating it. The plugin panel accepts a **`parametro`**
 (parameter): that is what lets the same panel open as "Edgar" and as "Mira", in
 two windows, each one remembering its own position. The body receives it as a
 prop. And a plugin only opens and closes **its own** windows: the plugin id is
 put into the key by the app, not by the plugin.
+
+A plugin panel can also go into a **detached window**, on the second monitor:
+the GM drags it out of ATO20, or uses the ↗ in its header. There the body is
+drawn into another document by the same JavaScript, and the global `document`
+and `window` are still the GM window's: listening to the pointer, looking under
+it or opening a portal needs the node's own document (`node.ownerDocument`, and
+its `defaultView`), and `node instanceof HTMLElement` is false for a node over
+there. The `api.ui` components already handle this on their own.
 
 ## Settings, like in VSCode
 
@@ -253,10 +292,16 @@ an attack button that already deals the damage, an abilities tab that rolls
 and applies. None of this exists out of the box, on purpose: what exists is the
 reach.
 
-`api.personagens.listar()` returns the **whole** character, meters and
-conditions included, hidden ones too: the reader is the GM, and the GM is the
+`api.personagens.listar()` returns the **whole** character, meters,
+conditions and attributes included, hidden ones too: the reader is the GM, and the GM is the
 one who decides what the table sees. `assinar` notifies on every reread of the
 cast.
+
+An attribute that is a **die** (the AGI d8 of a dice-as-attributes system)
+carries `rolagem`, its expression (`"1d8"`, `"1d12+1"`), next to `valor`.
+`valor` is still a number, the one the GM wrote before switching to the die:
+a plugin that only knows numbers keeps reading one. One that knows dice reads
+`rolagem`, with the same parser as the sheet's rolls.
 
 **Meters are adjusted in batches.** `ajustarMedidor(personagemId, medidorId,
 patch)` called ten times in the same loop becomes **one** write and **one**
@@ -341,6 +386,13 @@ them into view, and `janela:chat`/`janela:rolagens` work as replacement
 targets. The Rolls window is the dice one: that is where a dice-rules plugin
 plugs in.
 
+The Gallery (every image in the campaign, including the scene backdrop, the
+portrait and the character attachments that Files doesn't list) is built in
+too: `janelas.abrir({ tela: "galeria" })` brings it into view, `janela:galeria`
+works as a replacement target, and right-clicking a library image in it shows
+the `linha.imagem` items, with the same context (`{ assetId }`). Character
+attachments don't get them: they have no `assetId`.
+
 ## Extension points: menus, sections, replacements and tools
 
 The request was for a plugin to be able to create new options on elements and
@@ -367,9 +419,9 @@ it. Sticky notes and cards now accept right-click, which used to fall through
 to empty space.
 
 **Section on the sheet**: `secoes: [{ id, titulo, alvo: "ficha" }]`. It goes
-after the conditions and before the files, with the same frame as the built-in
-sections: it collapses, and remembers that it was collapsed. The body receives
-`personagemId`.
+in the Sheet tab, after the built-in sections and across the full width of the
+window, with the same frame as the built-in sections: it collapses, and
+remembers that it was collapsed. The body receives `personagemId`.
 
 **Replacement**: `substitutos: [{ alvo }]`, with `secao:medidores` (the body of
 a sheet section) or `janela:personagem` (the whole window). It is what lets a
@@ -379,7 +431,10 @@ registered, body that threw. Two plugins on the same target: the **first in
 name order** wins, which is predictable and needs no configuration; whoever
 wants the other one disables the first. The single point for the window is
 `JanelaCorpo`, floating and docked; for the section it is `SecaoFicha`. Without
-plugins, neither of them adds a single node to the tree.
+plugins, neither of them adds a single node to the tree. `secao:campos` and
+`secao:nota` still work, but they are no longer sections: the first is the body
+of the popover behind the header thumbnails, and the second the body of the
+button for who plays the character.
 
 **Tool**: the manifest `icone` is now a name from the `icones.ts` list (it used
 to be ignored); `opcoes` is a component that shows up as a pill next to the
@@ -469,7 +524,20 @@ and the slot says where the content goes:
     part (the paler ink to the right of the bar).
   - `pontos` (points): one point per unit, in a row that shrinks to fit.
     `cheio` (full) and `vazio` (empty) are images; without `vazio`, empty is
-    the faded `cheio`; with neither, dots in the meter color.
+    the faded `cheio`; with neither, dots in the meter color. `proporcao` is
+    the point's width as a fraction of its height, from 0.1 to 4 (absent is 1,
+    the square): a standing bullet is narrow, drawn on a canvas of the same
+    proportion, and twice as many fit before it shrinks. `ate` is the cap:
+    with the **maximum** above it, the row becomes one point and the number
+    (`×11`), in the color and outline of `texto` if there is one. By the
+    maximum and not the value, so a thirty-round magazine does not change
+    shape on the tenth shot; `0` is always the number. Using either one asks
+    for `apiVersao` 8.
+
+    ```json
+    "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
+                  "proporcao": 0.44, "ate": 12 }
+    ```
   - `sequencia` (sequence): `quadros` (frames), from 2 to 16, from empty to
     full. The first one only shows at zero; the others split the rest into
     equal bands. It is the heart that cracks as health drops.
@@ -770,6 +838,706 @@ a number, and every image raster and inside the folder, including those of the
 mipmaps and the color ramp. The base's total frame count must divide the
 elements': the fire's loop sets the sheet's loop.
 
+## Fired effect
+
+The third way an effect shows up, next to the figure and the ground: it GOES
+from one point to another -- the fireball, the ray of frost, the dragon's
+breath. It is a SPECIES of its own: the effect that declares `disparo` (shot)
+is a shot, only it can be fired, and it doesn't show up among the area effects
+or in a condition's picker, even though it carries `area` and `base` (they are
+its cone and its burst). It has its own list (the Shot tab inside Effects, in
+the Compendium) and its own editing window.
+
+It draws with the usual layers, each with another role:
+
+- **`disparo.projetil`** (projectile): what FLIES in a line -- the base's image
+  fields (`imagem`, `quadros`, `mipmaps`, `cores`) and `giro` (turn). Drawn as
+  it is, the image flies toward its right side; `giro` `90` puts the top in
+  front (the shard that pierces), `-90` puts it behind (the flame that becomes
+  a tail), `180` flips it. Without a projectile, the area's element
+  (`area.foco`, or the `externo`) flies, top facing back.
+- **`particulas`**: in a line, the trail -- they leave the projectile backward,
+  in a narrow fan. In a cone, what rises from the fan.
+- **`base`** and **`area.foco`**: the ground and the elements of the cone, and
+  those of the burst at the end of the line, baked by the area's engine. The
+  shot's color is `area.cor`.
+
+```json
+{ "id": "flecha-de-fogo", "titulo": "Fire arrow",
+  "area": { "cor": "#f59e0b" },
+  "disparo": { "forma": "linha", "velocidade": 24, "tamanho": 0.8, "impacto": 0,
+               "rastro": false,
+               "projetil": { "imagem": "fx/flecha.webp", "giro": 0 } } }
+```
+
+- **`forma`** (shape): `linha`, the projectile flies from A to B (and bursts
+  there, with `impacto`); `cone`, the fan opens from A out to B's distance,
+  toward it. The editor shows three: straight (`linha` with `impacto` `0`),
+  with burst, and cone.
+- **`abertura`** (opening): cone only, in degrees, from `10` to `160` (default
+  `60`).
+- **`velocidade`** (speed): in squares per second, from `3` to `60` (default
+  `15`). The flight stays between 0.12 and 2.5 seconds, near or far.
+- **`alcance`** (range): in squares, from `1` to `30` (default `6`): how far it
+  goes when it leaves a token toward where the token is looking, which is the
+  shot with no point B.
+- **`tamanho`** (size): the projectile's side, in squares, from `0.3` to `3`
+  (default `1`).
+- **`impacto`** (impact): the radius of the burst at the end of the line, in
+  squares, from `0` to `4` (default `1`). Zero is the arrow that just arrives.
+- **`rastro`** (trail) and **`brilho`** (glow): the streak in the shot's color
+  behind the projectile and the round glow around it. Absent, on; `false`
+  turns them off. The glow stays, even off, on a projectile with no image:
+  otherwise the shot would have no body.
+
+ATO20 ships five ready-made ones -- Fireball (with burst), Ray of frost
+(straight), Water jet (with burst), Fire breath and Poison cloud (cone) --,
+built-in packs that use the condition effects' art: a pack points to another's
+image with `../chamas/chama-128.webp`. The copy into the campaign stores
+`fabrica:chamas/chama-128.webp`, the owning folder's name.
+
+The GM fires from three places: **Shot** on the map ruler, right below Light
+(pick the effect, then two clicks on the map -- where from, where to --, or
+press on A and release on B; clicking a character fires from it and aiming at
+another lands on it; Shift locks the angle in fifteen-degree steps); any
+token's **right-click** menu, under "Fire", which shoots where the token is
+looking -- its lantern beam, or the beam's default -- out to the `alcance`, the
+whole selection at once; and the shot's **card** in the Compendium, which puts
+the crosshair in hand like the ruler button.
+
+The shot is an EVENT, like a ping: it is born in the GM window, travels in the
+frame already resolved (`LiveState.disparados`, with the points, the shape and
+the timing in scene units and milliseconds) and is gone when it ends -- nothing
+goes into the scene. The TV only needs the effect for the images, which is why
+a Compendium template goes into play as a copy at the moment of the shot --
+one per template, redone in place when the template changes, and never listed
+anywhere: the shot is edited in the Compendium. It
+draws above the darkness, since the shot glows, and below the fog, which hides
+what the table hasn't seen. Both points stay inside the plane, the cone and the
+burst are held to it, and the trail shrinks at the edge: the stage's rule. The
+cone's and the burst's sheets come out with frames of up to 256 pixels (the
+area's, 512), and are released when the shot ends: each shot bakes its own.
+
+Rust checks at import the shape (`linha` or `cone`), every number within the
+limits above, the `giro` (`0`, `90`, `-90` or `180`) and the projectile image
+like the others (raster, inside the folder, a full grid). The block alone draws
+nothing: the shot needs an image layer -- the projectile is enough.
+
+## Weather effect
+
+The fourth way an effect shows up: it covers the WHOLE scene -- the rain, the
+snow, the fog, the falling ash, the rising embers. It is a SPECIES of its own:
+the effect that declares `ambiente` (weather) is weather, and it doesn't show up
+among the area effects, the shots or a condition's picker. It has its own list
+(the Weather tab inside Effects, in the Compendium) and its own editing window.
+
+It draws ON THE LENS: over the screen, not on the map's floor. The rain falls
+top to bottom in 2D and in 2.5D, doesn't zoom and doesn't move with the camera
+-- it's the glass the table looks through. That's why it goes over the darkness
+and the fog: it doesn't rain only where the table has already seen. It stays
+under the portraits, the letterbox bars and the cut curtain, which are HUD.
+
+```json
+{ "id": "chuva-de-sangue", "titulo": "Blood rain",
+  "ambiente": {
+    "cor": "#991b1b",
+    "camadas": [
+      { "imagem": "fx/chuva-fina.webp", "cores": "condicao",
+        "escala": 0.3, "direcao": 95, "velocidade": 1.5, "opacidade": 0.6 },
+      { "imagem": "fx/chuva-grossa.webp", "cores": "condicao",
+        "escala": 0.7, "direcao": 95, "velocidade": 2.4 } ],
+    "veu": { "cor": "#1c0505", "opacidade": 0.25 },
+    "relampago": { "intervalo": 15, "forca": 0.5 } } }
+```
+
+- **`cor`** (color): the weather's color -- the one for layers with
+  `cores: "condicao"` (here "condition" means the weather, which has no
+  condition), and the veil's when it has none of its own. Default, a bluish
+  gray.
+- **`camadas`** (layers): BACK to front, one to four. Each is a texture that
+  TILES on all four edges and slides in a loop: it moves one tile and starts
+  over, and the seam hides the jump. The base's image fields -- `imagem`,
+  `mipmaps` (by the tile's side), `cores` -- minus `quadros`: the layer moves by
+  sliding, and a frame grid would repaint the whole screen at every step.
+  Grayscale art gets its color from the ramp, like the fire. Measures are in
+  SCREEN HEIGHTS, not in squares: the weather isn't on the map, and the same
+  rain reads the same on the TV and on a phone.
+  - **`escala`** (scale): the tile's side, from `0.1` to `2` heights (default
+    `0.5`).
+  - **`direcao`** (direction): where it goes, in degrees, clockwise from the
+    right: `90` falls, `270` rises, `0` goes right (default `90`). Off the axes,
+    the texture slants along, like rain in the wind: the axis is the nearest
+    one, and the rest becomes slant, up to 45 degrees.
+  - **`velocidade`** (speed): in screen heights per second, from `0` to `3`
+    (default `1`). Zero stands still.
+  - **`opacidade`** (opacity): from `0` to `1` (default `1`).
+  - **`balanco`** (sway): how much it swings side to side as it moves, in
+    tiles, from `0` to `0.5` (default `0`): the dancing snowflake.
+- **`veu`** (veil): a still color over the whole screen -- the storm's gray,
+  the blizzard's white. `opacidade` from `0` to `0.8`; with no `cor`, the
+  weather's.
+- **`relampago`** (lightning): the screen suddenly lights up, twice, and goes
+  dark. `intervalo`, the seconds between flashes, from `3` to `60` (default
+  `12`); `forca` (strength) from `0` to `1` (default `0.6`); with no `cor`, a
+  bluish white. Two clocks, the second weaker and on a rhythm that never lines
+  up with the first, both taken from the system time: the TV and the phones
+  flash together. Whoever asked the system for less motion doesn't see the
+  flash, and neither does the GM.
+
+The SCENE picks the weather and tunes it (`Scene.ambiente`): the effect's id,
+the `intensidade` (intensity, from `0.1` to `1`) and the `vento` (wind, from
+`-1`, to the left, to `1`). Intensity drops the FRONT layers first -- drizzle
+is the rain's fine layer -- and fades the rest, the veil and the flash. Wind
+slants what falls, up to 25 degrees, and pushes what goes sideways, even
+turning it around. The GM picks it in the map settings, or from the card in the
+Compendium ("Put in this scene").
+
+The scene points to the effect with no copy: the built-in and the plugin ones
+by id, and the campaign's by its Compendium template, which goes to the table
+along with the effects in play. Changing the template changes the TV's rain as
+the control moves.
+
+ATO20 ships six ready-made ones -- Rain, Storm (slanted rain, dark sky and
+lightning), Snow, Fog, Ash and Embers --, built-in packs in `src/efeitos/`.
+Storm uses Rain's art through `../chuva/chuva-longe-512.webp`.
+
+The cost was measured in the app's webview, with a hundred tokens changing ten
+times a second and the TV at 1920x1080: without weather, 2 to 3.5% dropped
+frames (runs differ by about two points); Snow and Embers, nearly the same;
+Rain, 4 to 6.5%; Fog and Storm, the most expensive, up to 8.5%. Each layer is
+ONE screen-sized surface for the compositor, and that is what weighs -- hence
+the cap of four, and the veil, which as its own element cost more than both
+rain layers, is painted as one layer's background. The flash only exists for
+the compositor while it lights up.
+
+The GM sees the weather at half strength and without the flash -- the screen of
+whoever is building the scene flashing weighed twice the rain --, and it hides
+while the GM drags something: dragging the camera frame with sixty tokens, the
+rain took the stage from 56 to 50 frames per second.
+
+Rust checks at import the layers (up to four, a raster image inside the folder,
+no `quadros`, every number within the limits above), the veil, the lightning
+and the `#rrggbb` colors. The block draws with a layer, a veil or lightning --
+the veil alone is already weather, the pitch black of a scene with no light at
+all.
+
+## PDF sheet: the plugin teaches the reading
+
+In the Characters list, **Import PDF sheet** builds a character from a filled-in
+fillable sheet: name, attributes, meters, details, and the PDF attached as the
+character's sheet. The app reads the form, but knows no sheet at all: the
+plugin is what says that `untitled13` is AGI in Ordem Paranormal. A sheet
+plugin is just the manifest, with no `principal`, and asks for **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "fichasPdf": [{
+    "id": "jogo-do-ano",
+    "titulo": "Tormenta20 (Jogo do Ano)",
+    "reconhecer": ["NOME DO PERSONAGEM", "ModFor", "PMs Totais"],
+    "nome": "NOME DO PERSONAGEM",
+    "atributos": [{ "sigla": "FOR", "campo": "For" }],
+    "medidores": [{ "nome": "PV", "atual": "PVs Atuais", "maximo": "PVs Totais", "cor": "#ef4444" }],
+    "detalhes": [
+      { "grupo": "Identidade", "rotulo": "Classe", "campo": "CLASSE" },
+      { "grupo": "Identidade", "rotulo": "Nível", "campo": "Lv", "tipo": "numero" },
+      { "grupo": "Descrição", "rotulo": "Histórico", "descricao": { "juntar": ["Hist1", "Hist2"] } }
+    ],
+    "listas": [{
+      "grupo": "Habilidades",
+      "itens": [
+        { "nome": "Hab1", "campo": "Custo1", "descricao": "Desc1" },
+        { "nome": "Hab2", "campo": "Custo2", "descricao": "Desc2" }
+      ]
+    }]
+  }]
+}
+```
+
+- **`reconhecer`** lists fields the PDF must have, ALL of them, to be this
+  sheet. Pick ones only it has: two or three are enough. When more than one
+  sheet recognizes the PDF, the one listing more fields wins, and the GM can
+  switch in the preview.
+- **A field is the form field's name**, as the PDF stores it. It never shows
+  on screen; to find it, open the sheet in a PDF form editor, which shows each
+  field's name, or read the annotations with pdf.js. Sheets with generic names
+  (`Campo de Texto15`, `untitled2`) work too: the name is fixed in that file,
+  and the table is built once, by looking at the position.
+- **A value comes from a field, from boxes, or from fields to join**:
+  `{ "caixas": ["FOR1", "FOR2", "FOR3"] }` is how many are checked, which is
+  how dot-based sheets store an attribute; `{ "juntar": [...] }` is text
+  written across several lines, one field per line. In the value the pieces
+  stay on one line, separated by ` · ` (`+5 · 2d12`); in the description, one
+  per line. Joined as a number, the first field that has one wins.
+- **`listas` are the sheet's tables** (Abilities & Rituals, Powers, Attacks):
+  each row becomes a detail in `grupo`, and the label is what the player wrote
+  in the `nome` field ("Golpe Pesado"). A row with an empty name is a row the
+  player did not use, and is left out without a warning.
+- **A number is what starts with a number**: `10`, `+2`, `-1`, `12/15` (the
+  12). `1d8` is not a number, on purpose.
+- **It matches what the campaign already has.** The character is born with
+  the campaign's default attributes, meters and details, and the sheet fills
+  in on top: the same abbreviation, the same meter name, the same detail group
+  and label. Only what has no match is created. The campaign's HP keeps the
+  color and style the GM chose.
+- **`descricao` is the detail's long text** (the background, the ability).
+  The text value is short (80 characters); anything longer goes to the
+  description on its own.
+- **An empty field is not written**, and the preview says what came back
+  blank. A sheet with an empty name is flagged as "blank".
+
+The app refuses at install time what saving would silently cut: an
+abbreviation longer than 6 characters, a meter name longer than 24, more
+attributes (12), meters (6) or details (200, list rows included) than a
+character holds, and the same abbreviation, meter or detail read twice.
+
+Only **fillable** sheets (with a form). Printed, scanned and flat sheets still
+go in as attachments: reading text by its position on the page would be
+guessing. And the plugin does not ship the publisher's PDF: the sheet belongs
+to whoever published it, and the plugin's README points to where to get it.
+
+## Game system: the campaign defaults
+
+A system plugin brings a game's defaults: the attributes, the meters, the
+sheet details template and the conditions menu. The GM **applies** it to a
+campaign, when creating it ("Game system", on the new campaign screen) or
+later, in Campaign settings, System. It is also just the manifest, and asks
+for **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "sistemas": [{
+    "id": "ordem",
+    "titulo": "Ordem Paranormal",
+    "atributos": [{ "sigla": "AGI", "valor": 1, "descricao": "Agilidade" }],
+    "medidores": [{ "nome": "PV", "cor": "#ef4444", "estilo": "barra", "maximo": 20 }],
+    "detalhes": {
+      "grupos": [{ "nome": "Identidade" }, { "nome": "Habilidades e rituais", "exibicao": "lista" }],
+      "modelos": [
+        { "grupo": "Identidade", "rotulo": "Classe", "tipo": "escolha",
+          "opcoes": ["Combatente", "Especialista", "Ocultista"] },
+        { "grupo": "Identidade", "rotulo": "NEX", "tipo": "numero", "valor": 5 }
+      ]
+    },
+    "condicoes": [{ "nome": "Sangrando", "cor": "#ef4444", "icone": "sangue", "efeito": "sangrando" }]
+  }]
+}
+```
+
+- **Applying adds, never replaces.** Anything the campaign already has with
+  the same name (the abbreviation, the meter, the detail's group and label,
+  the condition) stays as the GM left it, and anything past the campaign's
+  limit is left out with a warning. Applying twice duplicates nothing.
+- **It never goes in on its own.** A plugin is enabled for the whole machine,
+  and a D&D campaign on the same machine cannot wake up with Ordem's AGI. And
+  the campaign does not remember where the defaults came from: uninstalling
+  the plugin does not touch it.
+- **Existing characters** get what was missing if the GM ticks the option
+  when applying, through each list's usual "Apply to all".
+- **The texts are data**, not `TextoDePlugin`: the abbreviation, label, option
+  and condition name go into the campaign as they are.
+- **`estiloExtensao`** on a meter can point to ANOTHER plugin's style
+  (`ordem-segredo-na-floresta/pv`); without it installed, the bar uses `estilo`.
+- A condition's **`icone`** is a name from the app's icon list, and
+  **`efeito`** is a built-in effect (`sangrando`) or a plugin one
+  (`{plugin}/{effect}`).
+- **`estiloDosAtributos`** (API 11) is how the attributes are drawn,
+  `{plugin}/{style}`, from this plugin or another. Applying the system puts
+  the campaign on that drawing: see
+  [Plugin-drawn attributes](#plugin-drawn-attributes-the-ritual).
+- The limits are the campaign's: 12 attributes, 6 meters, 16 groups, 200
+  details and 16 conditions. A `escolha` (choice) detail needs options, and
+  each detail's group must be declared next to it.
+
+A plugin with a system **and** a PDF sheet closes the loop: use the system's
+groups and labels in the sheet, and the imported character lands right in the
+template.
+
+## Plugin bestiary: ready-made sheets in the Compendium
+
+A plugin brings ready-made sheets -- a system's threats, an adventure's NPCs
+-- and they show up in the campaign Compendium's Bestiary, after the GM's own
+templates: each collection is a folder, in a section named after the plugin,
+and a click opens it. The folder belongs to the plugin, not to the GM: it
+can't be renamed or moved, and it goes away with the plugin. While searching,
+the folders give way to the matching sheets, one section per collection. It is also
+just the manifest, and asks for **API 12**. The manifest declares the
+collection; the sheets live in a file next to it:
+
+```json
+"apiVersao": 12,
+"contribui": {
+  "bestiario": [{
+    "id": "threats",
+    "titulo": { "pt-BR": "Ameaças", "en": "Threats" },
+    "arquivo": "bestiary/threats.json",
+    "sistema": "ordem"
+  }]
+}
+```
+
+```json
+{
+  "grupos": [
+    { "nome": "Combat" },
+    { "nome": "Attacks", "exibicao": "lista" }
+  ],
+  "moldes": [{
+    "id": "blood-zombie",
+    "nome": "Blood Zombie",
+    "tags": ["Blood", "VD 40"],
+    "fonte": "Rulebook",
+    "miniatura": "bestiary/blood-zombie.webp",
+    "atributos": [{ "sigla": "AGI", "valor": 1 }, { "sigla": "FOR", "valor": 3 }],
+    "medidores": [{ "nome": "HP", "maximo": 45 }],
+    "detalhes": [
+      { "grupo": "Combat", "rotulo": "Defense", "tipo": "numero", "valor": 19 },
+      { "grupo": "Attacks", "rotulo": "Bite", "valor": "2d6+5 slashing",
+        "rolagem": "2d20+10", "descricao": "Standard. Attack." }
+    ]
+  }]
+}
+```
+
+- **Read-only, and always copied.** Clicking the plugin card opens the whole
+  sheet, read only, without bringing anything: browsing the threats doesn't
+  fill the campaign Compendium with copies. The card and the sheet have "Put
+  in play" and "Bring to the campaign". Bringing copies the sheet into the
+  campaign Compendium, where it is edited like any template; putting it in
+  play -- with the button or by dragging the card to the map -- comes out of
+  that template, brought right then if it wasn't there yet. The fourth goblin
+  doesn't bring the sheet again: the brought template remembers where it came
+  from (`doPlugin`), and bringing the same sheet again returns the same
+  template. Updating the plugin doesn't touch what the campaign already brought.
+- **The threat starts clean.** It doesn't get the campaign's default meters,
+  attributes and details -- an agent's NEX and Rank. It gets what the sheet
+  says.
+- **The meter wears the campaign.** The sheet's HP comes out with the color and
+  style of the campaign's HP template; only the maximum is the sheet's. `cor`
+  and `estilo` apply when the campaign has no template with that name.
+- **Groups live in the file**, not in each sheet. Bringing adds to the
+  campaign's template only the groups the sheet uses -- without their default
+  details --, and the detail keeps the group name as the campaign spells it.
+  Use your `sistema`'s groups and the threat lands on the usual sheet.
+- **`rolagem`** is the detail's roll expression, read by the same parser that
+  rolls at the table. Whether the detail gets the d20 is up to the campaign's
+  template (`rolavel`), by label.
+- **Rolls inside text:** in a text `valor` and in `descricao`, an expression
+  between braces becomes the roll button, on the GM's sheet and in the
+  bestiary preview: `"Damage: {2d10+50} Blood"`. Clicking rolls at the table
+  and posts to the feed with the sheet's name and the detail's label. A brace
+  that isn't an expression stays text, and on the phone the braces go away,
+  with no button (the daemon rolls there, and it only reads `rolagem`).
+- **A ruler inside text:** in the same places, a number with `m` between
+  braces becomes the measure button: `"Movement: {9m}"` puts a nine-meter
+  straight ruler on the map, and `"Blast: {6°}"` a circle with a six-meter
+  radius (`º` works as `°`). The ruler starts at the token of the sheet's
+  character, or at the center of what the GM is looking at when there's none
+  on the scene, like a bestiary sheet, with its measure locked: the tip turns
+  and the size stays, until the gizmo's padlock frees it. It's a ruler like the
+  toolbar's: the table sees it, and Ctrl+Z removes it. Commas work (`{1,5m}`), up to 300 m. On
+  the phone only the measure shows, with no button.
+- **Keep the highest, or the lowest:** `>` or `<` right after a dice term
+  keeps only its highest or lowest die. `6d20>+45` is six d20, the highest of
+  them plus 45, the Ordem test. `2d20<` is disadvantage. The other dice still
+  fall, dimmed, and stay out of the sum on the table, in the tray, in the
+  history and in the feed. It works in `rolagem` and between braces.
+- **An attribute's abbreviation between braces:** inside the braces, the
+  abbreviation of one of the sheet's attributes stands for its number when
+  rolling. `{1d20+FOR}` adds FOR, and `{AGId20>+5}` rolls as many d20 as AGI
+  and keeps the highest, the Ordem test. The rule is written once and each
+  threat rolls with its own attributes. Case doesn't matter, and an
+  abbreviation the sheet doesn't have leaves the braces as text. Zero or
+  negative quantities don't roll: what the system does with a zero attribute
+  is up to the plugin. An attribute that is a die goes in as the die: with
+  AGI d8, `{AGI+1}` rolls 1d8+1. Braces only: `rolagem` doesn't take
+  abbreviations yet, because the daemon is what rolls a detail from the phone.
+- **The `@` mention between braces:** an `@` in front reads an attribute's
+  abbreviation (`{1d20+@FOR}`, the same as `{1d20+FOR}`) or the label of a
+  detail on the same sheet that holds a number: `{1d20+@Luta}` adds Luta, and
+  `{@Ataquesd6}` rolls as many d6 as Ataques. Details only with `@`, and only
+  numeric ones (or text holding a whole number, like "3"): `{1d20+@Classe}`
+  with Classe "Combatente" leaves the braces as text. Labels may have spaces
+  (`@Bônus de Ataque`), case doesn't matter, and when an abbreviation and a
+  label are the same, the attribute wins.
+- **`retrato` and `miniatura`** are a file in the plugin folder or an `https`
+  URL with a site name. The file goes into the campaign's library when brought;
+  the URL is downloaded then, by the GM's machine, and the sheet comes in
+  without the image that didn't arrive, with a warning. The card only draws
+  images from the folder: it doesn't go to the network before anyone asks. One
+  image stands in for the missing other -- without a token the card couldn't be
+  dragged. Up to 2 MB, in the meter style's formats; a downloaded one goes
+  through the same limit, with its type checked from the bytes.
+- **`aparencias`** are the other looks of the same sheet, after the Default
+  one: `"aparencias": [{ "nome": "SB", "miniatura": "bestiary/ghoul-sb.webp" }]`.
+  Each has a `nome` and a `retrato` or a `miniatura`, in the form above, and
+  becomes one of the character's appearances, which the GM switches from its
+  menu, with no second sheet. Whatever the appearance doesn't say comes from
+  the sheet: one that only brings a token changes the piece on the map and
+  keeps the same face. Up to 8 per sheet, with names that don't repeat each
+  other or the Default one. Needs **API 13**: an older version ignores the
+  field, and the sheet comes in with only the Default one.
+- **`fonte`** shows on the card: the book, the supplement, the collection of
+  whoever made the sheet. It's where the credit stays in sight.
+- **`sistema`** is only a label: the id of a system from the same plugin.
+  Bringing doesn't apply the system.
+- **`aura`**, on the collection, is the id of an aura from the same plugin: it
+  paints the folder and frames each sheet's card. A sheet can bring its own (`"aura"` on the template), over the
+  collection's, and the brought sheet takes its aura into the campaign. See
+  [Auras](#auras-the-plugins-color-emblem-and-light).
+- **Checked on install, in full.** The file, each sheet and each image in the
+  folder: what saving would silently cut becomes an error at install time.
+  The limits are the campaign's (12 attributes, 6 meters, 16 groups, 200
+  details, 16 tags), plus 500 sheets and 4 MB per file, 60 characters in the
+  name and 120 in the source. A text detail holds up to 80 characters; the rest
+  goes in `descricao`, up to 2,000. A file that breaks after install shows in
+  the section with the reason, and the other collections carry on.
+- **Plugin off, collection out.** Turning it on and off shows and hides the
+  section right away.
+
+## Plugin items: ready-made weapons and gear in the Compendium
+
+A plugin brings ready-made items -- a system's weapons, protection, ammo,
+healing -- and they show in the Items tab of the campaign's Compendium, after
+the GM's item templates, the same way as the bestiary: each collection is a
+folder, in a section named after the plugin, and a search swaps the folders for
+the items that matched. It needs **API 13**. The manifest declares the
+collection, with the same fields as a bestiary one; the items live in a file
+next to it:
+
+```json
+"apiVersao": 13,
+"contribui": {
+  "itens": [{
+    "id": "weapons",
+    "titulo": { "pt-BR": "Armas", "en": "Weapons" },
+    "arquivo": "items/weapons.json",
+    "sistema": "ordem",
+    "aura": "arsenal"
+  }]
+}
+```
+
+```json
+{
+  "itens": [{
+    "id": "pistol",
+    "nome": "Pistol",
+    "tags": ["Firearm", "Simple weapon"],
+    "fonte": "Core Rulebook",
+    "atributos": [
+      { "nome": "Damage", "valor": "1d12 ballistic" },
+      { "nome": "Critical", "valor": "18" },
+      { "nome": "Range", "valor": "Short" }
+    ],
+    "medidores": [{ "nome": "Ammo", "maximo": 2 }]
+  }]
+}
+```
+
+- **The item is the campaign's.** `atributos` are the name and value pairs of
+  the item window, in its order, and the card shows the first two: put there
+  what decides between two weapons without opening the window. `medidores`
+  are the item's, with a name and a maximum -- the value belongs to each
+  backpack, and starts full. `descricao` is free text, and `imagem` works like
+  a bestiary sheet's portrait: a file in the folder or an `https` URL.
+- **Read only, and always copied.** Clicking the card opens the whole item,
+  read only. "Put in play" -- with the button, or by dragging a card with an
+  image to the map, which also places the token -- puts the item in the
+  campaign's Items catalog; "Bring to the campaign" leaves it as a template in
+  the Compendium, where it can be edited. Both come from the brought template,
+  which keeps where it came from (`doPlugin`): the second pistol does not bring
+  the item again, and updating the plugin does not touch what the campaign
+  already brought. The copy in the catalog does not keep the mark.
+- **`aura`**, on the collection or the item, paints the folder and frames the
+  card, and the brought item takes it into the campaign. See
+  [Auras](#auras-the-plugins-color-emblem-and-light).
+- **Checked on install, in full**, like the bestiary. The limits are the
+  campaign item's: 120 characters in the name, 4,000 in the description, 24
+  attributes (the name up to 40 characters and the value up to 120; the rest
+  goes in `descricao`), 6 meters, 16 tags, plus 500 items and 4 MB per file
+  and 120 characters in the source. A collection that breaks after install
+  shows with the reason, and the others carry on; plugin off, collection out.
+
+## Plugin tabs: rituals and other entries in the Compendium
+
+A plugin adds its own tab to the campaign's Compendium -- a system's rituals,
+talents, spells --, after the usual four. Each collection in the tab is a
+folder, with its aura, and while searching the folders give way to the entries
+that matched; the tag row shows the tab's entries' tags. Needs **API 13**. The
+manifest declares the tab, the sheet group that receives the entry and the
+collections, with the same fields as the bestiary's; the entries live in one
+file per collection:
+
+```json
+"contribui": {
+  "abas": [{
+    "id": "rituais",
+    "titulo": { "pt-BR": "Rituais", "en": "Rituals" },
+    "grupo": { "nome": "Rituais", "exibicao": "lista" },
+    "colecoes": [
+      { "id": "sangue", "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+        "arquivo": "rituais/sangue.json", "aura": "sangue" }
+    ]
+  }]
+}
+```
+
+```json
+{
+  "verbetes": [{
+    "id": "descarnar",
+    "nome": "Descarnar",
+    "tags": ["Sangue", "Desconjuração"],
+    "fonte": "Ordem Paranormal Wiki",
+    "imagem": "bestiario/elementos/sangue.webp",
+    "resumo": "Sangue",
+    "campos": [
+      { "rotulo": "Conjuração", "valor": "Derramar sangue humano sob o símbolo" }
+    ],
+    "descricao": "A pele do alvo é dilacerada: {1d10} de dano de Sangue."
+  }]
+}
+```
+
+- **Read and give.** An entry becomes neither a template nor an item: it's
+  reference text. Clicking the card opens the whole entry, with the `campos` as
+  lines and the `descricao` below; rolls and rulers between braces work as on
+  the sheet. "Give to…", in the card's menu and in the window, lists the
+  characters in play, and the entry goes onto the chosen one's sheet as a
+  **detail** in the tab's `grupo`: the `nome` is the label, the `resumo` the
+  value, and the description is the `descricao` with the fields below, one per
+  line. Giving it again doesn't duplicate it.
+- **The group joins the campaign template** the first time, with the tab's
+  `exibicao` -- `lista` draws like Attacks. A campaign that already has a group
+  with that name keeps its own. With no room in the template (16 groups), the
+  detail goes in anyway, at the end of the sheet, with a warning.
+- **No link.** The detail belongs to the campaign: a later plugin update
+  doesn't touch it, and the GM edits it like any detail.
+- **`imagem`** is a file in the plugin folder, like the bestiary's portrait;
+  the card doesn't go to the network. Without an image, the card shows a book.
+- **Checked on install, in full.** The tab needs a group (up to 24 characters)
+  and 1 to 32 collections; the file, 1 to 500 entries. `nome` holds up to 40
+  characters and `resumo` up to 80, the detail's label and value limits;
+  `descricao` up to 2,000; up to 12 `campos`, with a label of up to 40
+  characters and a value of up to 300; and the 16 tags. A collection that
+  breaks after install shows in its folder with the reason, and the others
+  carry on.
+- **Plugin off, tab out.** Turning it on and off shows and hides the tab right
+  away. It only exists in the campaign's Compendium: ATO20's keeps what the
+  campaign kept, and an entry isn't kept -- it's given.
+
+## Auras: the plugin's color, emblem and light
+
+An aura is the mark a plugin paints something with: a bestiary collection's
+folder, each sheet's card, and the campaign character or item that receives
+it. Ordem gives one to each element -- the Blood folder red, with the cross on
+its front, and the threat's card with red light running along its border --;
+a D&D plugin would give a golden "Legendary" to an item.
+Declared once and pointed to by id, like a meter style. Asks for **API 12**:
+
+```json
+"auras": [{
+  "id": "blood",
+  "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+  "cor": "#b3121f",
+  "emblema": "bestiary/elements/blood.webp",
+  "luz": { "efeito": "fluxo", "cores": ["#dc2626"] }
+}],
+"bestiario": [{ "id": "blood", "titulo": "Blood", "arquivo": "bestiary/blood.json", "aura": "blood" }]
+```
+
+- **`cor`** paints the folder and the card's border, in hex.
+- **`emblema`** is an image from the plugin folder, drawn on the front of the
+  folder. Raster, up to 2 MB, in the meter style formats, checked on install.
+  Pick the emblem's ink for contrast with `cor`: white on a dark folder, dark
+  on a light one. It stays on the GM's screen: the daemon doesn't publish it.
+- **`luz`** lights the border of the card under the pointer. The window
+  opened on the folder doesn't light up: around a grid of cards with colored
+  borders, it would be too much. The effect belongs to the CORE, from a
+  closed list, and the plugin picks which and in what colors (1 to 4):
+  - `fixa`: a steady glow.
+  - `pulso`: a glow that slowly breathes.
+  - `fluxo`: a throbbing glow, with light running along the four edges.
+  - `cintilar`: one glow per color, each flickering at its own pace.
+
+  Closed because of the GM's machine: each effect is a layer painted once,
+  with only its opacity or position animated -- what the GPU does without
+  repainting the window. Whoever asked the system for reduced motion gets a
+  steady light. A card only animates under the pointer; the others keep the
+  border and a steady glow.
+- **In the campaign**, the aura is `{plugin}/{id}`. A sheet brought from the
+  bestiary takes its own, and so does the copy in play. The GM gives, changes
+  or removes the aura of a template, an item or a character in play through
+  the "Aura" menu, which lists the enabled plugins' auras. In the Compendium
+  it is the card's border, and in the Characters list, the ring around the
+  face. With the plugin disabled it disappears from the screen and stays
+  saved, and comes back with it.
+
+## Plugin-drawn attributes: the ritual
+
+The attributes section can come from a plugin image, with each
+abbreviation's number in its spot: Ordem's ritual, with AGI, FOR, INT, PRE and
+VIG in the five circles. Declarative, like the layered meter, and for the same
+reason: the phone draws the same as the GM without a line of plugin code
+running outside the GM window. It asks for **API 11**:
+
+```json
+"estilosDeAtributos": [{
+  "id": "ritual",
+  "titulo": "Ritual",
+  "imagem": "atributos/ritual.png",
+  "proporcao": 1,
+  "lugares": [
+    { "sigla": "AGI", "x": 0.501, "y": 0.164, "tamanho": 0.085 },
+    { "sigla": "FOR", "x": 0.194, "y": 0.382, "tamanho": 0.085 }
+  ],
+  "texto": { "cor": "#ffffff", "contorno": "#000000" }
+}]
+```
+
+- **The image carries what doesn't change**: the drawing and each attribute's
+  name. The sheet writes only the number. Raster (png, webp, gif, jpg, avif),
+  up to 2 MB, served by the daemon file by file, like the meter layers.
+- **`proporcao`** (proportion) is the image height as a fraction of its
+  width, from 0.25 to 3: the sheet reserves the space before the image arrives
+  and doesn't jump. An image that doesn't match it stretches along with the
+  spots, and the number stays in its circle.
+- **Each spot** (`lugares`) is the CENTER of the number, `x` and `y` as
+  fractions of the image, and `tamanho` (size) is the number's font size as a
+  fraction of the WIDTH, from 0.02 to 0.4. Fractions, not pixels: the image
+  scales with the sheet column and the phone screen. Up to 12 spots,
+  abbreviations of up to 6 characters, no repeats.
+- **Abbreviations match regardless of case.** A sheet attribute with no spot
+  in the image (a table's LCK) goes on a card just below; a spot with no
+  attribute stays empty.
+- **`texto`** has the number's color and outline, hex only. Absent, white
+  with a near-black outline. The font is the app's.
+
+In the GM window, the number is a field: click and type, the arrow keys go up
+and down. Right-clicking the circle changes the abbreviation, writes the
+description or deletes it, and hovering shows the description. On the phone
+it is read-only, like the rest of the sheet.
+
+**The system picks**, not a selector: an Ordem campaign is a ritual one.
+Applying a system that declares `estiloDosAtributos` puts the campaign on that
+drawing; a system without one leaves it alone. The choice lives in the
+settings registry, at `ato20.ficha.estiloDosAtributos` (`""` means the cards),
+hidden from the Settings list, and travels in the zip. With the plugin
+disabled or the image missing from the folder, the sheet goes back to cards,
+and the choice waits in the file for the plugin to come back.
+
+In the development GM window (`next dev`, the window at
+`http://localhost:3000`) the image comes through the daemon, like on the
+phone: WebKitGTK does not request an `<img>` from the `ato20-ext` protocol on
+an http page. In the release build the window is `tauri://`, and the protocol
+serves it.
+
+The choice and the styles reach the phone through `/sala/declarativo`, along
+with the meter styles.
+
 ## The plugin's section on the phone, and the button that reaches the GM
 
 The **public** half of what a plugin stores on the character can become a
@@ -931,7 +1699,7 @@ character).
 ATO20 speaks Portuguese and English, and from **API 7** on, plugins can too.
 Every piece of text the manifest declares for someone to read (the plugin's
 `nome` and `descricao`, the `titulo` of a panel, command, tool, layer, menu
-item, section, page, meter style, effect and setting, the setting
+item, section, page, meter style, effect, PDF sheet, system and setting, the setting
 `descricao`, the panel `subtitulo`,
 the command `grupo`, the effect `dica`, and the `rotulo` and `campo` of portrait
 sources) accepts a string, as always, **or a per-language map**:
@@ -1007,12 +1775,40 @@ why plugin code reaches only the GM window. The deliberate exception is
 `paginas`: only those of the plugins that declare them, and sandboxed. See
 [Pages on the network](#pages-on-the-network-the-plugin-outside-the-gm-window).
 
+## Installing from the catalog
+
+The Catalog tab in Settings → Plugins lists the site's `plugins.json`, and each
+card has **Install**. Rust downloads the zip of the repository's default branch
+(`codeload.github.com/{owner}/{repo}/zip/HEAD`, the same as "Code → Download
+ZIP"), unzips it into a temporary folder and runs it through the same
+`extensoes::importar` as the Import button: the validation is the same. See
+`src-tauri/src/catalogo.rs`.
+
+- Only `https://github.com/{owner}/{repo}`. The zip address is built in Rust;
+  the screen never hands over a URL to download.
+- The manifest can sit at the root of the zip or inside the single folder
+  GitHub wraps around it (`repo-HEAD/`).
+- The manifest `id` must match the card's. Import overwrites by id, and a
+  repository carrying another plugin's id would wipe the wrong plugin.
+- Limits: 50 MB of zip, 200 MB unzipped, 5 thousand files. Zip-slip and
+  symbolic links are left out, as in the campaign import.
+- A plugin that runs code asks for confirmation first: when the catalog says
+  so, or when the repository's `manifest.json` has `principal`.
+
+Once installed, the card reads the repository's `manifest.json`
+(`raw.githubusercontent.com`) and shows **Update** when the `versao` there is
+newer than the installed one. Updating is installing again on top, and the old
+module is unloaded first. For your plugin to offer updates, bump the manifest
+`versao` with every change on the default branch.
+
 ## Trust
 
-There is no store, no review and no sandbox. Installing a code plugin means
-running the code of whoever wrote it, with the full reach of the window. The
-screen tells you what is a theme and what is a feature, and shows the author and
-the repository; the rest is the same trust you give to an editor extension.
+There is no store, no review and no sandbox. The catalog is a list, not an
+endorsement. Installing a code plugin means running the code of whoever wrote
+it, with the full reach of the window. The screen tells you what is a theme and
+what is a feature, shows the author and the repository and, in the catalog,
+asks for confirmation before installing code; the rest is the same trust you
+give to an editor extension.
 
 The guards that exist are against **malformed** plugins, not malicious ones:
 path traversal, a symbolic link planted in the folder, a URL template without

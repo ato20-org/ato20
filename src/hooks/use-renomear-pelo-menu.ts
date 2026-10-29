@@ -24,11 +24,24 @@ import { useRef } from "react";
  */
 export function useRenomearPeloMenu(comecar: () => void) {
   const pedido = useRef(false);
+  const segurarFoco = useRef(false);
 
   return {
     /** No `onClick` do item do menu, no lugar de começar a renomear. */
     pedir: () => {
       pedido.current = true;
+      segurarFoco.current = true;
+    },
+    /**
+     * No `finalFocus` do menu cujo gatilho CONTINUA na tela -- o cartão de
+     * pasta do Compêndio, que mostra o campo embaixo do ícone. Ali o menu
+     * devolve o foco ao gatilho DEPOIS do `onOpenChangeComplete`, com o campo
+     * já aberto, e o `blur` o fecha. Pedido o renomear, o menu não mexe no foco.
+     */
+    focoFinal: () => {
+      const devolver = !segurarFoco.current;
+      segurarFoco.current = false;
+      return devolver;
     },
     /** No `onOpenChangeComplete` do menu que tem o item. */
     aoFechar: (aberto: boolean) => {

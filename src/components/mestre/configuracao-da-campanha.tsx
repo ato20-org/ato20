@@ -11,12 +11,15 @@ import {
   type SetStateAction,
 } from "react";
 import {
+  Dices,
   Gauge,
+  Hash,
+  ListTree,
   Plus,
   Search,
-  Shapes,
   SlidersHorizontal,
   Sparkles,
+  Tv,
   Wand2,
   X,
 } from "lucide-react";
@@ -24,7 +27,15 @@ import {
   useEfeitosEmAreaDaCampanha,
   useEfeitosEmAreaDosPlugins,
 } from "@/components/mestre/efeito-da-area";
-import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
+import { guardarNaBiblioteca } from "@/components/mestre/compendio-condicoes";
+import { SistemaDaCampanha } from "@/components/mestre/sistema-da-campanha";
+import {
+  AtributosDaCampanha,
+  useAtributosDaCampanha,
+  type AtributosDaCampanhaLidos,
+} from "@/components/mestre/atributos-da-campanha";
+import { DetalhesDaCampanha } from "@/components/mestre/detalhes-da-campanha";
+import { useMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
@@ -38,11 +49,11 @@ import {
   SeloDoMedidor,
 } from "@/components/mestre/linha-de-medidor";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { ReguasDaImagem } from "@/components/mestre/reguas-da-imagem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -55,9 +66,9 @@ import { SUGESTOES } from "@/lib/condicao";
 import { t } from "@/lib/i18n/mestre";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import {
-  definirPadraoDoQuadro,
-  usePadraoDoQuadro,
-} from "@/lib/configuracoes/quadro";
+  definirImagemDaCampanha,
+  useImagemDaCampanha,
+} from "@/lib/configuracoes/espectador";
 import { escoposDe } from "@/lib/configuracoes/valor";
 import {
   TOPICOS_DA_CAMPANHA,
@@ -65,6 +76,8 @@ import {
   type TopicoDaCampanha,
 } from "@/lib/mestre/topicos-da-campanha";
 import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
+import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
+import { chaveDe } from "@/lib/store/use-window-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
@@ -91,9 +104,12 @@ const MAXIMO_INICIAL = 10;
 
 /** O ícone de cada tópico, na barra. Os textos moram em `TOPICOS_DA_CAMPANHA`. */
 const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
-  quadro: Shapes,
+  sistema: Dices,
   medidores: Gauge,
+  atributos: Hash,
+  detalhes: ListTree,
   efeitos: Sparkles,
+  espectador: Tv,
   ajustes: SlidersHorizontal,
 };
 
@@ -121,13 +137,15 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
  * por campanha, então moram aqui; a janela de Retratos fica com o elenco.
  */
 export function ConfiguracaoDaCampanhaBody() {
-  const [aberto, setAberto] = useState<TopicoDaCampanha>("quadro");
+  const [aberto, setAberto] = useState<TopicoDaCampanha>("medidores");
   const [busca, setBusca] = useState("");
 
   // No alto, e não dentro de cada tópico: a busca precisa dos nomes do que foi
   // criado -- "Envenenado" acha Condições --, e o tópico fechado não está
   // montado para contar.
   const medidores = useModelosDaCampanha();
+  const atributos = useAtributosDaCampanha();
+  const moldeDeDetalhes = useMoldeDeDetalhes();
   const { modelos: condicoes } = useCondicoesDaCampanha();
   const efeitosEmArea = useEfeitosEmAreaDaCampanha();
   const efeitosEmAreaDosPlugins = useEfeitosEmAreaDosPlugins();
@@ -135,8 +153,8 @@ export function ConfiguracaoDaCampanhaBody() {
 
   const ajustes = useMemo(
     () =>
-      Object.values(definicoes).filter((definicao) =>
-        escoposDe(definicao).includes("campanha"),
+      Object.values(definicoes).filter(
+        (definicao) => !definicao.oculta && escoposDe(definicao).includes("campanha"),
       ),
     [definicoes],
   );
@@ -146,6 +164,11 @@ export function ConfiguracaoDaCampanhaBody() {
   const topicos = useMemo(() => {
     const achados = topicosAchados(busca, {
       medidores: (medidores.modelos ?? []).map((modelo) => modelo.nome),
+      atributos: (atributos.modelos ?? []).map((modelo) => modelo.sigla),
+      detalhes: [
+        ...(moldeDeDetalhes?.grupos ?? []).map((grupo) => grupo.nome),
+        ...(moldeDeDetalhes?.modelos ?? []).map((modelo) => modelo.rotulo),
+      ],
       efeitos: [
         ...(condicoes ?? []).map((condicao) => condicao.nome),
         ...efeitosEmArea.map((efeito) => efeito.titulo),
@@ -168,6 +191,8 @@ export function ConfiguracaoDaCampanhaBody() {
   }, [
     busca,
     medidores.modelos,
+    atributos.modelos,
+    moldeDeDetalhes,
     condicoes,
     efeitosEmArea,
     efeitosEmAreaDosPlugins,
@@ -175,7 +200,7 @@ export function ConfiguracaoDaCampanhaBody() {
   ]);
 
   // O tópico aberto pode sumir -- o plugin do único ajuste foi desligado.
-  const atual = topicos.includes(aberto) ? aberto : "quadro";
+  const atual = topicos.includes(aberto) ? aberto : "medidores";
   const mostrados = buscando ? topicos : [atual];
 
   function abrir(chave: TopicoDaCampanha) {
@@ -267,6 +292,7 @@ export function ConfiguracaoDaCampanhaBody() {
                     chave={chave}
                     busca={busca}
                     medidores={medidores}
+                    atributos={atributos}
                   />
                 </div>
               ))
@@ -283,18 +309,33 @@ function Topico({
   chave,
   busca,
   medidores,
+  atributos,
 }: {
   chave: TopicoDaCampanha;
   busca: string;
   medidores: ModelosDaCampanha;
+  atributos: AtributosDaCampanhaLidos;
 }) {
   switch (chave) {
-    case "quadro":
-      return <PadraoDoQuadro />;
+    case "sistema":
+      return (
+        <SistemaDaCampanha
+          aoAplicar={() => {
+            medidores.reler();
+            atributos.reler();
+          }}
+        />
+      );
     case "medidores":
       return <MedidoresDaCampanha {...medidores} />;
+    case "atributos":
+      return <AtributosDaCampanha {...atributos} />;
+    case "detalhes":
+      return <DetalhesDaCampanha />;
     case "efeitos":
       return <EfeitosDaCampanha />;
+    case "espectador":
+      return <ImagemDaCampanha />;
     case "ajustes":
       return (
         <Secao
@@ -313,63 +354,22 @@ function Topico({
 }
 
 /**
- * O jeito com que os elementos NOVOS do quadro nascem nesta campanha.
+ * O ajuste de imagem da campanha na janela do espectador.
  *
- * Controles desenhados à mão para os dois padrões, como o zoom nas
- * Configurações gerais: a lista gerada de Ajustes também os mostra, mas é aqui
- * que o mestre vem procurar. A frase de baixo é a que responde "e o que já
- * está no quadro?", que é a primeira pergunta de quem liga.
+ * Réguas desenhadas à mão: a lista gerada de Ajustes também mostra os quatro
+ * números, mas é aqui que o mestre vem procurar, e é aqui que fica o atalho
+ * para a Janela Mesa, a prévia. Ver `lib/imagem-do-espectador`.
  */
-function PadraoDoQuadro() {
-  const { arredondado, aMao } = usePadraoDoQuadro();
+function ImagemDaCampanha() {
+  const imagem = useImagemDaCampanha();
 
   return (
     <Secao
-      titulo={t.configuracao.quadro}
-      descricao={t.configuracao.quadroDescricao}
+      titulo={t.configuracao.espectador}
+      descricao={t.configuracao.espectadorDescricao}
     >
-      <ul className="divide-y">
-        <LinhaDePadrao
-          titulo={t.configuracao.cantosArredondados}
-          descricao={t.configuracao.cantosArredondadosDescricao}
-          ligada={arredondado}
-          onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
-        />
-        <LinhaDePadrao
-          titulo={t.configuracao.tracoAMao}
-          descricao={t.configuracao.tracoAMaoDescricao}
-          ligada={aMao}
-          onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
-        />
-      </ul>
+      <ReguasDaImagem valor={imagem} onChange={definirImagemDaCampanha} />
     </Secao>
-  );
-}
-
-/** Uma chave com o que ela faz ao lado, como as das Configurações gerais. */
-function LinhaDePadrao({
-  titulo,
-  descricao,
-  ligada,
-  onMudar,
-}: {
-  titulo: string;
-  descricao: string;
-  ligada: boolean;
-  onMudar: (ligada: boolean) => void;
-}) {
-  return (
-    <li>
-      <label className="flex items-start gap-3 py-2">
-        <Switch checked={ligada} onCheckedChange={onMudar} aria-label={titulo} />
-        <span className="min-w-0">
-          <span className="block text-sm">{titulo}</span>
-          <span className="text-muted-foreground block text-[11px] leading-snug">
-            {descricao}
-          </span>
-        </span>
-      </label>
-    </li>
   );
 }
 
@@ -710,8 +710,6 @@ function EfeitosDaCampanha() {
 function CondicoesDaCampanha() {
   const { modelos, recarregar } = useCondicoesDaCampanha();
   const [ocupado, setOcupado] = useState(false);
-  /** A condição aberta na tela dela, pela engrenagem. `null` = a lista. */
-  const [configurando, setConfigurando] = useState<string | null>(null);
   /** A ordem depois de um arrasto, até o cardápio relido chegar. */
   const [arrastada, setArrastada] = useState<{
     de: Condicao[] | null;
@@ -782,22 +780,15 @@ function CondicoesDaCampanha() {
     }, t.configuracao.falhaAoCriarSugestoes);
   }
 
-  // A tela da condição, quando a engrenagem a abriu: o selo e o efeito dela.
-  const aberta = configurando ? lista.find((modelo) => modelo.id === configurando) : undefined;
-  if (aberta) {
-    return (
-      <TelaDaCondicao
-        modelo={aberta}
-        ocupado={ocupado}
-        onEditar={(patch) =>
-          void mexer(
-            () => editarCondicaoDaCampanha(aberta.id, patch),
-            t.configuracao.falhaAoGravar,
-          )
-        }
-        onVoltar={() => setConfigurando(null)}
-      />
-    );
+  /**
+   * Do menu para a biblioteca do Compêndio: abre o lugar no menu sem perder a
+   * condição. O efeito dela vai junto quando ninguém mais o usa -- ver
+   * `compendio::guardar_condicao`.
+   */
+  async function guardarNoCompendio(modelo: Condicao) {
+    setOcupado(true);
+    await guardarNaBiblioteca(modelo);
+    setOcupado(false);
   }
 
   return (
@@ -871,12 +862,21 @@ function CondicoesDaCampanha() {
                   t.configuracao.falhaAoGravar,
                 )
               }
-              onConfigurar={() => setConfigurando(modelo.id)}
+              // A engrenagem abre a janela da condição, ao lado, e a lista
+              // fica: o editor do efeito é comprido, e é o cardápio que o
+              // mestre está arrumando. Ver `CondicaoBody`.
+              onConfigurar={() =>
+                abrirJanela({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id })
+              }
+              guardar={{
+                rotulo: t.compendio.guardarNoCompendio,
+                onGuardar: () => void guardarNoCompendio(modelo),
+              }}
               onApagar={() =>
-                void mexer(
-                  () => removerCondicaoDaCampanha(modelo.id),
-                  t.configuracao.falhaAoApagarCondicao,
-                )
+                void mexer(async () => {
+                  await removerCondicaoDaCampanha(modelo.id);
+                  fecharJanela(chaveDe({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id }));
+                }, t.configuracao.falhaAoApagarCondicao)
               }
               dicaDoOlho={{
                 titulo: modelo.escondido

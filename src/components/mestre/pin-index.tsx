@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MapPin, Paperclip, Search } from "lucide-react";
+import {
+  MapPin,
+  Package,
+  Paperclip,
+  Search,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,7 +89,9 @@ export function PinIndex({ scene }: { scene: Scene }) {
 
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
-      <div className="bg-background/85 pointer-events-auto flex items-center gap-0.5 rounded-lg border p-1 backdrop-blur">
+      {/* Sem moldura: a moldura é a pílula do canto, que ele divide com as
+          áreas e os jogadores. Ver `MestreShell`. */}
+      <div className="flex items-center gap-0.5">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -176,6 +183,16 @@ export function PinIndex({ scene }: { scene: Scene }) {
                           <span className="text-muted-foreground mt-0.5 flex shrink-0 items-center gap-0.5 text-[10px]">
                             <Paperclip className="size-3" aria-hidden />
                             {pin.attachments.length}
+                          </span>
+                        ) : null}
+
+                        {/* Os itens contam à parte, com a caixa: "este ponto
+                            tem coisa para o grupo achar" é outra pergunta que
+                            "tem uma imagem para mostrar". */}
+                        {pin.itens?.length ? (
+                          <span className="text-muted-foreground mt-0.5 flex shrink-0 items-center gap-0.5 text-[10px]">
+                            <Package className="size-3" aria-hidden />
+                            {pin.itens.length}
                           </span>
                         ) : null}
                       </button>

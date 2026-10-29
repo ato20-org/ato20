@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { documentoDe, ehNo } from "@/lib/dom";
 
 /**
  * Um campo que renomeia: grava ao sair, desiste no Escape.
@@ -63,15 +64,17 @@ export function useCampoDeNome({
 
     function foraDaqui(event: PointerEvent) {
       const alvo = event.target;
-      if (!(alvo instanceof Node)) return;
+      if (!ehNo(alvo)) return;
       if (campo.current?.contains(alvo)) return;
 
       campo.current?.blur();
       terminar(rascunho);
     }
 
-    document.addEventListener("pointerdown", foraDaqui, true);
-    return () => document.removeEventListener("pointerdown", foraDaqui, true);
+    // O documento do CAMPO: numa janela solta, o clique fora é lá. Ver `lib/dom`.
+    const documento = documentoDe(campo.current);
+    documento.addEventListener("pointerdown", foraDaqui, true);
+    return () => documento.removeEventListener("pointerdown", foraDaqui, true);
   }, [rascunho, terminar]);
 
   return {

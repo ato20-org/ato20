@@ -4,6 +4,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { useSceneScale } from "@/components/playground/scene-stage";
 import { METROS_POR_QUADRADO } from "@/lib/geometry/grid";
+import { cursorDeGiro } from "@/lib/geometry/transform";
 import {
   aberturaDoCone,
   caixaDoRetangulo,
@@ -140,22 +141,38 @@ function MedidorView(props: ViewProps) {
         px={px}
       />
 
+      {/* Travada, só a ponta, e ela gira: a origem é o pivô, e puxá-la
+          mudaria a medida. O retângulo travado fica sem alça nenhuma -- os
+          lados dele são a medida, e não há o que girar. Ver `Regua.travada`. */}
       {selecionado && onAlcaPointerDown ? (
         <>
-          <Alca
-            em={{ x: medidor.x, y: medidor.y }}
-            px={px}
-            onPointerDown={(event) => onAlcaPointerDown(event, "origem")}
-          />
-          <Alca
-            em={{ x: medidor.x2, y: medidor.y2 }}
-            px={px}
-            onPointerDown={(event) => onAlcaPointerDown(event, "fim")}
-          />
+          {medidor.travada ? null : (
+            <Alca
+              em={{ x: medidor.x, y: medidor.y }}
+              px={px}
+              onPointerDown={(event) => onAlcaPointerDown(event, "origem")}
+            />
+          )}
+          {medidor.travada && medidor.forma === "retangulo" ? null : (
+            <Alca
+              em={{ x: medidor.x2, y: medidor.y2 }}
+              px={px}
+              cursor={medidor.travada ? cursorDeGiro(anguloDaPonta(medidor) + 45) : undefined}
+              onPointerDown={(event) => onAlcaPointerDown(event, "fim")}
+            />
+          )}
         </>
       ) : null}
     </g>
   );
+}
+
+/**
+ * Para onde a ponta aponta, em graus a partir da origem. O cursor de giro é
+ * desenhado para o nordeste (-45°), e quem chama soma os 45.
+ */
+function anguloDaPonta(medidor: Regua): number {
+  return (Math.atan2(medidor.y2 - medidor.y, medidor.x2 - medidor.x) * 180) / Math.PI;
 }
 
 /** Onde a conta fica escrita: onde a mão solta, ou o meio do que tem área. */
@@ -549,14 +566,19 @@ function Rotulo({
   );
 }
 
-/** Uma ponta pegável. Só no Mestre, e só no medidor selecionado. */
+/**
+ * Uma ponta pegável. Só no Mestre, e só no medidor selecionado. O `cursor` é o
+ * de giro na régua travada; ausente, a mira de esticar.
+ */
 function Alca({
   em,
   px,
+  cursor = "crosshair",
   onPointerDown,
 }: {
   em: Ponto;
   px: (valor: number) => number;
+  cursor?: string;
   onPointerDown: (event: ReactPointerEvent) => void;
 }) {
   return (
@@ -567,7 +589,7 @@ function Alca({
       fill="white"
       stroke="rgb(0 0 0 / 0.8)"
       strokeWidth={px(1.5)}
-      style={{ pointerEvents: "auto", cursor: "crosshair" }}
+      style={{ pointerEvents: "auto", cursor }}
       onPointerDown={onPointerDown}
     />
   );

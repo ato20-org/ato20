@@ -1,5 +1,6 @@
 "use client";
 
+import { fecharSolta, focarSolta, soltaDaChave, trocarSolta } from "@/lib/janelas-soltas";
 import { useLayoutStore } from "@/lib/store/use-layout-store";
 import { usePanelsStore } from "@/lib/store/use-panels-store";
 import {
@@ -18,13 +19,18 @@ import {
  * chamá-las -- um caminho só, para "onde esta janela está?" não ter duas
  * respostas.
  *
- * Uma janela tem duas casas possíveis, e quem pede não sabe qual: atracada
- * como aba de um grupo (`useLayoutStore`) ou flutuando na pilha
- * (`useWindowStore`). Sem esta pergunta, pedir uma tela JÁ ATRACADA abria uma
- * segunda cópia flutuante da mesma tela.
+ * Uma janela tem três casas possíveis, e quem pede não sabe qual: atracada
+ * como aba de um grupo (`useLayoutStore`), flutuando na pilha
+ * (`useWindowStore`) ou solta numa janela do sistema (`janelas-soltas`). Sem
+ * esta pergunta, pedir uma tela JÁ ATRACADA abria uma segunda cópia flutuante
+ * da mesma tela.
  */
 export function abrirJanela(conteudo: ConteudoJanela): void {
   const chave = chaveDe(conteudo);
+
+  // Solta, ela vem para a frente lá, no outro monitor.
+  if (focarSolta(chave)) return;
+
   const { layout, ativarAba } = useLayoutStore.getState();
 
   for (const lado of ["esquerda", "direita"] as const) {
@@ -53,6 +59,44 @@ export function abrirJanela(conteudo: ConteudoJanela): void {
  * uma pergunta a mais para chegar na mesma remoção.
  */
 export function fecharJanela(chave: string): void {
+  fecharSolta(chave);
+  tirarDoMestre(chave);
+}
+
+/**
+ * Tira a janela da pilha e das colunas, e não da janela solta: é o que a janela
+ * que SOLTA faz, e fechar tudo fecharia a solta que acabou de abrir.
+ */
+export function tirarDoMestre(chave: string): void {
   useWindowStore.getState().fechar(chave);
   useLayoutStore.getState().removerAba(chave);
+}
+
+/** A janela está aberta, atracada, flutuando ou solta? */
+export function janelaAberta(chave: string): boolean {
+  if (soltaDaChave(chave)) return true;
+
+  const { layout } = useLayoutStore.getState();
+  const atracada = (["esquerda", "direita"] as const).some((lado) =>
+    layout[lado].grupos.some((grupo) => grupo.abas.some((aba) => chaveDe(aba) === chave)),
+  );
+
+  return atracada || useWindowStore.getState().janelas.some((janela) => janela.chave === chave);
+}
+
+/**
+ * A coisa mudou de identidade, e a janela dela segue: fecha a antiga e abre a
+ * nova, mas só se a antiga estava aberta. É a condição que vai do Compêndio ao
+ * menu -- outro arquivo, outro id --, com a janela dela à vista: ficar com uma
+ * janela dizendo "não está mais aqui" seria a tela contando o que o mestre
+ * acabou de fazer como se fosse um erro.
+ */
+export function trocarJanela(antiga: ConteudoJanela, nova: ConteudoJanela): void {
+  const chave = chaveDe(antiga);
+  // Solta, a mesma janela do sistema passa a mostrar a nova.
+  if (trocarSolta(chave, nova)) return;
+  if (!janelaAberta(chave)) return;
+
+  fecharJanela(chave);
+  abrirJanela(nova);
 }

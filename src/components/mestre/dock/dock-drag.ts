@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { soltarJanela } from "@/components/mestre/janela-solta";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import {
   useDockDragStore,
@@ -21,6 +22,7 @@ import {
   useWindowStore,
   type ConteudoJanela,
 } from "@/lib/store/use-window-store";
+import { isDesktop } from "@/lib/vault/bridge";
 
 /**
  * Onde a borda deixa de dividir e passa a fundir.
@@ -210,6 +212,7 @@ export function useDockDrag() {
   const mirar = useDockDragStore((state) => state.mirar);
   const pegar = useDockDragStore((state) => state.pegar);
   const limpar = useDockDragStore((state) => state.limpar);
+  const marcarFora = useDockDragStore((state) => state.marcarFora);
 
   const atracar = useLayoutStore((state) => state.atracar);
   const layout = useLayoutStore((state) => state.layout);
@@ -219,6 +222,7 @@ export function useDockDrag() {
   const medida = useRef<Medida | null>(null);
   const alvo = useRef<{ alvo: AlvoDock; retangulo: Retangulo } | null>(null);
   const mexeu = useRef(false);
+  const fora = useRef(false);
 
   return useCallback(
     (
@@ -255,6 +259,7 @@ export function useDockDrag() {
       medida.current = medir(vazios);
       alvo.current = null;
       mexeu.current = false;
+      fora.current = false;
 
       startDrag(event, {
         onMove: (delta, nativo) => {
@@ -281,6 +286,16 @@ export function useDockDrag() {
 
           opcoes.aoMover?.(delta);
 
+          // Fora da janela do ATO20: o ponteiro está capturado, e o arrasto
+          // continua chegando com o cursor no outro monitor. Soltar lá solta a
+          // janela -- ver `onEnd`. Só no app: no navegador não há janela
+          // própria a abrir.
+          const saiu = isDesktop() && foraDaJanela(nativo);
+          if (saiu !== fora.current) {
+            fora.current = saiu;
+            marcarFora(saiu);
+          }
+
           // Direto no DOM, como o resto dos gestos: a etiqueta acompanha o
           // cursor a cada quadro, e pelo store isso seria um render por quadro.
           const etiqueta = document.querySelector<HTMLElement>(
@@ -292,9 +307,10 @@ export function useDockDrag() {
             etiqueta.style.top = `${nativo.clientY - (camada?.top ?? 0) + FANTASMA_OFFSET}px`;
           }
 
-          const achado = medida.current
-            ? alvoEm(medida.current, nativo.clientX, nativo.clientY)
-            : null;
+          const achado =
+            medida.current && !fora.current
+              ? alvoEm(medida.current, nativo.clientX, nativo.clientY)
+              : null;
 
           if (
             identidade(achado?.alvo ?? null) ===
@@ -311,6 +327,17 @@ export function useDockDrag() {
 
           if (!mexeu.current) return;
 
+          // Largada fora do ATO20: a janela vai para uma janela do sistema, com
+          // o canto um pouco acima e à esquerda da mão -- a mão cai no
+          // cabeçalho, como ao soltar uma aba na bancada.
+          if (fora.current && foraDaJanela(nativo)) {
+            void soltarJanela(opcoes.conteudo, {
+              x: nativo.screenX - SOLTA_RECUO.x,
+              y: nativo.screenY - SOLTA_RECUO.y,
+            });
+            return;
+          }
+
           if (alvo.current) {
             // Sai da pilha flutuante antes de entrar na bancada: a mesma chave
             // nos dois lugares desenharia a janela duas vezes.
@@ -323,6 +350,19 @@ export function useDockDrag() {
         },
       });
     },
-    [startDrag, mirar, pegar, limpar, atracar, fecharFlutuante, layout],
+    [startDrag, mirar, pegar, limpar, marcarFora, atracar, fecharFlutuante, layout],
   );
 }
+
+/** O ponteiro está fora da janela do ATO20? */
+function foraDaJanela(nativo: PointerEvent): boolean {
+  return (
+    nativo.clientX < 0 ||
+    nativo.clientY < 0 ||
+    nativo.clientX >= window.innerWidth ||
+    nativo.clientY >= window.innerHeight
+  );
+}
+
+/** Quanto o canto da janela solta fica acima e à esquerda da mão. */
+const SOLTA_RECUO = { x: 40, y: 14 };

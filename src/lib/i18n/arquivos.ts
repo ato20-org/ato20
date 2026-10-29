@@ -24,10 +24,10 @@ const pt = {
     importando: "Importando…",
     arquivoRemovido: "Arquivo removido",
     arquivoForaDoAcervo: "Arquivo que saiu do acervo",
-    arrasteImagens: "Arraste imagens para cá",
+    arrasteImagens: "Arraste imagens ou itens para cá",
     escolherImagens: "Escolher imagens do computador",
     tirarDaEvidencia: (nome: string) => `Tirar ${nome} da evidência`,
-    mostrarNaTv: (nome: string) => `Mostrar ${nome} na TV`,
+    mostrarNoEspectador: (nome: string) => `Mostrar ${nome} na janela do espectador`,
     repetindo: "Repetindo",
     tocaUmaVez: "Toca uma vez",
     tituloDaNota: "Título da nota",
@@ -69,7 +69,6 @@ const pt = {
     novaPastaDica: "Uma pasta. Arraste quadros e notas para dentro.",
     vazio: "Crie um quadro ou uma nota",
     lendoNotas: "Lendo as notas…",
-    colocarNoAr: "Colocar no ar",
     duplicar: "Duplicar",
     removerQuadro: "Remover o quadro",
     nomeDoQuadro: "Nome do quadro",
@@ -81,34 +80,79 @@ const pt = {
     apagarNota: "Apagar a nota",
     contarLinhas: (n: number) => (n === 1 ? "1 linha" : `${n} linhas`),
     contarPalavras: (n: number) => (n === 1 ? "1 palavra" : `${n} palavras`),
+    adicionarACena: "Adicionar à cena",
+    nomeDoArquivo: "Nome do arquivo",
+    apagarArquivo: "Apagar o arquivo",
+    apagarArquivoTitulo: (nome: string) => `Deseja apagar ${nome}?`,
+    apagarArquivoItem: "O arquivo, do acervo da campanha",
+    apagarPastaTitulo: (nome: string) => `Deseja apagar a pasta ${nome}?`,
+    apagarPastaQuadros: (n: number) =>
+      n === 1 ? "1 quadro, com o que há nele" : `${n} quadros, com o que há neles`,
+    apagarPastaNotas: (n: number) => (n === 1 ? "1 nota" : `${n} notas`),
+    apagarPastaArquivos: (n: number) =>
+      n === 1 ? "1 arquivo do acervo da campanha" : `${n} arquivos do acervo da campanha`,
+    apagarPastaSubpastas: (n: number) => (n === 1 ? "1 subpasta" : `${n} subpastas`),
+    apagarPastaVazia: "Só a pasta: ela está vazia",
+    apagarPastaEmUso: (n: number, destino: string) =>
+      n === 1
+        ? `1 arquivo em uso num mapa fica, e vai para ${destino}`
+        : `${n} arquivos em uso num mapa ficam, e vão para ${destino}`,
+    aRaiz: "a raiz",
+  },
+
+  /** Trazer de fora para a campanha: pasta, arquivos ou vault. Ver `lib/obsidian/importar`. */
+  importarDeFora: {
+    botao: "Importar",
+    dica: "Traz notas, imagens e arquivos de fora: uma pasta, arquivos soltos ou um vault do Obsidian.",
+    pasta: "Pasta do sistema",
+    arquivos: "Arquivos do sistema",
+    obsidian: "Vault do Obsidian",
+    escolhaPasta: "Escolha a pasta para importar",
+    escolhaArquivos: "Escolha os arquivos para importar",
+    escolhaVault: "Escolha a pasta do vault do Obsidian",
+    lendo: "Lendo…",
+    importando: (nome: string) => `Importando ${nome}…`,
+    tituloDaPasta: (nome: string) => `Importar ${nome}?`,
+    tituloDosArquivos: "Importar os arquivos?",
+    tituloDoArrasto: "Importar o que foi solto?",
+    ondeMisto: (pastas: string) =>
+      `Cada pasta entra numa pasta com o nome dela (${pastas}), e os arquivos soltos, na raiz. A origem não é alterada, e os links [[ ]] viram texto.`,
+    vemVault: (nome: string) => `Vault do Obsidian · ${nome}`,
+    vemPasta: (nome: string) => `Pasta · ${nome}`,
+    vemArquivo: (nome: string) => `Arquivo · ${nome}`,
+    vemPastas: (n: number) => (n === 1 ? "1 pasta" : `${n} pastas`),
+    vemArquivos: (n: number) => (n === 1 ? "1 arquivo" : `${n} arquivos`),
+    soltarParaImportar: "Solte para importar",
+    notas: (n: number) => (n === 1 ? "1 nota" : `${n} notas`),
+    anexos: (n: number) => (n === 1 ? "1 imagem ou arquivo" : `${n} imagens e arquivos`),
+    quadros: (n: number) => (n === 1 ? "1 board, que vira quadro" : `${n} boards, que viram quadros`),
+    ondeNaPasta: (nome: string) =>
+      `Tudo entra numa pasta ${nome} em Arquivos, com as subpastas dentro. A origem não é alterada, e os links [[ ]] viram texto.`,
+    ondeNaRaiz:
+      "Tudo entra na raiz de Arquivos. A origem não é alterada.",
+    naoEVault: "Essa pasta não tem .obsidian: não parece um vault, e entra como pasta comum.",
+    ignorados: (n: number) =>
+      n === 1
+        ? "1 arquivo fica de fora: não é nota, imagem, som, vídeo nem PDF."
+        : `${n} arquivos ficam de fora: não são nota, imagem, som, vídeo nem PDF.`,
+    importar: "Importar",
+    vazio: "Não há nota, board nem imagem para importar.",
+    pronto: (resumo: string) => `Importado: ${resumo}.`,
+    falhas: (n: number, primeiros: string) =>
+      n === 1 ? `1 arquivo não entrou: ${primeiros}` : `${n} arquivos não entraram: ${primeiros}`,
+    parado: "A cópia das imagens parou no meio; as notas entraram com o que já tinha chegado.",
+    falhou: "O import parou no meio.",
   },
 
   arvoreDePastas: {
     moverPara: "Mover para",
     raiz: "Raiz",
     desfazerPasta: "Desfazer pasta",
+    apagarPasta: "Apagar pasta",
     solteParaTirar: "Solte aqui para tirar da pasta",
   },
 
   assetLibrary: {
-    nomeDaSubpasta: "Nome da subpasta",
-    buscarPlaceholder: "Buscar arquivo ou pasta",
-    buscarRotulo: "Buscar na biblioteca",
-    importandoArquivos: "Importando arquivos",
-    importarArquivos: "Importar arquivos",
-    novaPastaComSelecao: (n: number) =>
-      n === 1 ? "Nova pasta com a selecionada" : `Nova pasta com as ${n} selecionadas`,
-    foraDePasta: "Fora de pasta",
-    vazio: "Importe mapas, tokens e retratos",
-    sonsEntraram: (n: number) =>
-      n === 1
-        ? "1 som entrou no acervo. Ele está no painel de sons."
-        : `${n} sons entraram no acervo. Eles estão no painel de sons.`,
-    tirarParaRaiz: "Tirar para a raiz",
-    moverParaPasta: (nome: string) => `Mover para ${nome}`,
-    apagarPasta: "Apagar pasta",
-    solteParaTirar: "Solte aqui para tirar da pasta.",
-    adicionarACena: (nome: string) => `Adicionar ${nome} à cena`,
     tirarDaEvidencia: "Tirar da evidência",
     transmitirParaMesa: "Transmitir para a mesa",
     naoAbriu: "Não deu para abrir o arquivo.",
@@ -134,7 +178,15 @@ const pt = {
     macros: "Macros",
     novaMacro: "Nova macro",
     jaNaLista: "já está na lista",
-    semTecla: "Adicione um som sem tecla",
+    qualquerTecla: "Um som, na tecla que você quiser",
+    darTecla: (nome: string) => `Dar uma tecla a ${nome}`,
+    trocarTecla: (nome: string, tecla: string) =>
+      `${nome} toca no ${tecla}. Clique para trocar`,
+    aperteATecla: "Aperte…",
+    dicaDaTecla: "Aperte a tecla. Esc cancela, Backspace tira",
+    teclaQueNaoServe: "Use uma letra, um número ou F1 a F12, com Ctrl, Alt ou Shift se quiser",
+    numpadEhDosPads: "O teclado numérico é dos pads",
+    teclaOcupada: (tecla: string, dono: string) => `${tecla} já é de: ${dono}`,
     acionar: (nome: string) => `Acionar ${nome}`,
     tirar: (nome: string) => `Tirar ${nome}`,
     tirarDasMacros: (nome: string) => `Tirar ${nome} das macros`,
@@ -439,7 +491,7 @@ const pt = {
     volume: "Volume da trilha, em todas as telas",
     silenciar: "Silenciar esta tela",
     ligarSom: "Ligar o som desta tela",
-    silenciaDica: "Silencia só esta tela. A TV e os celulares continuam ouvindo.",
+    silenciaDica: "Silencia só esta tela. A janela do espectador e os celulares continuam ouvindo.",
     mudaDica: "Esta tela está muda. A mesa continua ouvindo.",
     ativarSom: "Ativar som",
     tirarTrilha: "Tirar a trilha",
@@ -477,6 +529,7 @@ const pt = {
 
   fundoDaCena: {
     jaRecebendo: "Esta cena já está recebendo um fundo.",
+    jaRecebendoCeu: "Esta cena já está recebendo um céu.",
     nadaImportado: "Nada foi importado.",
   },
 
@@ -532,10 +585,10 @@ const en: typeof pt = {
     importando: "Importing…",
     arquivoRemovido: "Removed file",
     arquivoForaDoAcervo: "File no longer in the library",
-    arrasteImagens: "Drag images here",
+    arrasteImagens: "Drag images or items here",
     escolherImagens: "Choose images from your computer",
     tirarDaEvidencia: (nome) => `Take ${nome} off the spotlight`,
-    mostrarNaTv: (nome) => `Show ${nome} on the spectator window`,
+    mostrarNoEspectador: (nome) => `Show ${nome} on the spectator window`,
     repetindo: "Looping",
     tocaUmaVez: "Plays once",
     tituloDaNota: "Note title",
@@ -570,7 +623,6 @@ const en: typeof pt = {
     novaPastaDica: "A folder. Drag boards and notes into it.",
     vazio: "Create a board or a note",
     lendoNotas: "Reading the notes…",
-    colocarNoAr: "Put on air",
     duplicar: "Duplicate",
     removerQuadro: "Remove the board",
     nomeDoQuadro: "Board name",
@@ -583,34 +635,76 @@ const en: typeof pt = {
     apagarNota: "Delete the note",
     contarLinhas: (n) => (n === 1 ? "1 line" : `${n} lines`),
     contarPalavras: (n) => (n === 1 ? "1 word" : `${n} words`),
+    adicionarACena: "Add to the scene",
+    nomeDoArquivo: "File name",
+    apagarArquivo: "Delete the file",
+    apagarArquivoTitulo: (nome) => `Delete ${nome}?`,
+    apagarArquivoItem: "The file, from the campaign library",
+    apagarPastaTitulo: (nome) => `Delete the folder ${nome}?`,
+    apagarPastaQuadros: (n) => (n === 1 ? "1 board, with what is on it" : `${n} boards, with what is on them`),
+    apagarPastaNotas: (n) => (n === 1 ? "1 note" : `${n} notes`),
+    apagarPastaArquivos: (n) => (n === 1 ? "1 file from the campaign library" : `${n} files from the campaign library`),
+    apagarPastaSubpastas: (n) => (n === 1 ? "1 subfolder" : `${n} subfolders`),
+    apagarPastaVazia: "Just the folder: it is empty",
+    apagarPastaEmUso: (n, destino) =>
+      n === 1
+        ? `1 file in use on a map stays, and goes to ${destino}`
+        : `${n} files in use on a map stay, and go to ${destino}`,
+    aRaiz: "the root",
+  },
+
+  importarDeFora: {
+    botao: "Import",
+    dica: "Brings notes, images and files from outside: a folder, loose files or an Obsidian vault.",
+    pasta: "System folder",
+    arquivos: "System files",
+    obsidian: "Obsidian vault",
+    escolhaPasta: "Choose the folder to import",
+    escolhaArquivos: "Choose the files to import",
+    escolhaVault: "Choose the Obsidian vault folder",
+    lendo: "Reading…",
+    importando: (nome: string) => `Importing ${nome}…`,
+    tituloDaPasta: (nome: string) => `Import ${nome}?`,
+    tituloDosArquivos: "Import the files?",
+    tituloDoArrasto: "Import what was dropped?",
+    ondeMisto: (pastas: string) =>
+      `Each folder goes into a folder with its name (${pastas}), and loose files to the root. The source is not changed, and [[ ]] links become text.`,
+    vemVault: (nome: string) => `Obsidian vault · ${nome}`,
+    vemPasta: (nome: string) => `Folder · ${nome}`,
+    vemArquivo: (nome: string) => `File · ${nome}`,
+    vemPastas: (n: number) => (n === 1 ? "1 folder" : `${n} folders`),
+    vemArquivos: (n: number) => (n === 1 ? "1 file" : `${n} files`),
+    soltarParaImportar: "Drop to import",
+    notas: (n: number) => (n === 1 ? "1 note" : `${n} notes`),
+    anexos: (n: number) => (n === 1 ? "1 image or file" : `${n} images and files`),
+    quadros: (n: number) => (n === 1 ? "1 canvas, which becomes a board" : `${n} canvases, which become boards`),
+    ondeNaPasta: (nome: string) =>
+      `Everything goes into a ${nome} folder in Files, with its subfolders inside. The source is not changed, and [[ ]] links become text.`,
+    ondeNaRaiz:
+      "Everything goes to the root of Files. The source is not changed.",
+    naoEVault: "This folder has no .obsidian: it does not look like a vault, and comes in as a plain folder.",
+    ignorados: (n: number) =>
+      n === 1
+        ? "1 file is left out: it is not a note, image, sound, video or PDF."
+        : `${n} files are left out: they are not notes, images, sounds, videos or PDFs.`,
+    importar: "Import",
+    vazio: "There is no note, canvas or image to import.",
+    pronto: (resumo: string) => `Imported: ${resumo}.`,
+    falhas: (n: number, primeiros: string) =>
+      n === 1 ? `1 file did not come in: ${primeiros}` : `${n} files did not come in: ${primeiros}`,
+    parado: "The image copy stopped halfway; the notes came in with what had already arrived.",
+    falhou: "The import stopped halfway.",
   },
 
   arvoreDePastas: {
     moverPara: "Move to",
     raiz: "Root",
     desfazerPasta: "Dissolve folder",
+    apagarPasta: "Delete folder",
     solteParaTirar: "Drop here to take it out of the folder",
   },
 
   assetLibrary: {
-    nomeDaSubpasta: "Subfolder name",
-    buscarPlaceholder: "Search file or folder",
-    buscarRotulo: "Search the library",
-    importandoArquivos: "Importing files",
-    importarArquivos: "Import files",
-    novaPastaComSelecao: (n) =>
-      n === 1 ? "New folder with the selected file" : `New folder with the ${n} selected files`,
-    foraDePasta: "Not in a folder",
-    vazio: "Import maps, tokens and portraits",
-    sonsEntraram: (n) =>
-      n === 1
-        ? "1 sound went into the library. It is in the sounds panel."
-        : `${n} sounds went into the library. They are in the sounds panel.`,
-    tirarParaRaiz: "Move to the root",
-    moverParaPasta: (nome) => `Move to ${nome}`,
-    apagarPasta: "Delete folder",
-    solteParaTirar: "Drop here to take it out of the folder.",
-    adicionarACena: (nome) => `Add ${nome} to the scene`,
     tirarDaEvidencia: "Take off the spotlight",
     transmitirParaMesa: "Show to the table",
     naoAbriu: "Could not open the file.",
@@ -636,7 +730,14 @@ const en: typeof pt = {
     macros: "Macros",
     novaMacro: "New macro",
     jaNaLista: "already in the list",
-    semTecla: "Add a sound with no key",
+    qualquerTecla: "A sound, on any key you like",
+    darTecla: (nome) => `Give ${nome} a key`,
+    trocarTecla: (nome, tecla) => `${nome} plays on ${tecla}. Click to change`,
+    aperteATecla: "Press…",
+    dicaDaTecla: "Press the key. Esc cancels, Backspace removes",
+    teclaQueNaoServe: "Use a letter, a number or F1 to F12, with Ctrl, Alt or Shift if you like",
+    numpadEhDosPads: "The numeric keypad belongs to the pads",
+    teclaOcupada: (tecla, dono) => `${tecla} already does: ${dono}`,
     acionar: (nome) => `Trigger ${nome}`,
     tirar: (nome) => `Stop ${nome}`,
     tirarDasMacros: (nome) => `Remove ${nome} from the macros`,
@@ -972,6 +1073,7 @@ const en: typeof pt = {
 
   fundoDaCena: {
     jaRecebendo: "This scene is already getting a background.",
+    jaRecebendoCeu: "This scene is already getting a sky.",
     nadaImportado: "Nothing was imported.",
   },
 

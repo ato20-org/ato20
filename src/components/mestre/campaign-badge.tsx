@@ -4,6 +4,8 @@ import { useState } from "react";
 import type * as React from "react";
 import {
   ChevronDown,
+  FileDown,
+  FileUp,
   FolderSymlink,
   PackageOpen,
   SlidersHorizontal,
@@ -37,6 +39,7 @@ import {
 } from "@/components/ui/tooltip";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
 
 /**
@@ -131,6 +134,16 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
             <PackageOpen />
             {t.campanha.exportar}
           </DropdownMenuItem>
+          {/* Partes da campanha, num pacote que outra campanha importa. Ver
+              `vault/pacote.rs`. */}
+          <DropdownMenuItem onClick={() => usePacoteStore.getState().abrirExportar()}>
+            <FileUp />
+            {t.pacote.exportarItem}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void usePacoteStore.getState().escolherPacote()}>
+            <FileDown />
+            {t.pacote.importarItem}
+          </DropdownMenuItem>
 
           <DropdownMenuSeparator />
 
@@ -168,13 +181,24 @@ export function CampaignBadge({ children }: { children?: React.ReactNode }) {
       {children}
 
       {/* O código fica à mão, e não atrás de um clique, porque é ditado no
-          começo de toda sessão. São seis caracteres. */}
+          começo de toda sessão. São seis caracteres.
+          E o clique copia: quando não se dita, se cola no grupo da mesa, e
+          copiar à mão seis letras de `text-[10px]` é onde o O vira 0. */}
       <Tooltip>
         <TooltipTrigger
           render={
-            <code className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px] tracking-widest">
+            <button
+              type="button"
+              className="bg-muted text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring rounded px-1.5 py-0.5 font-mono text-[10px] tracking-widest transition-colors focus-visible:ring-2 focus-visible:outline-none"
+              onClick={() =>
+                void navigator.clipboard
+                  .writeText(campaign.codigo)
+                  .then(() => toast.success(t.campanha.codigoCopiado))
+                  .catch(() => {})
+              }
+            >
               {campaign.codigo}
-            </code>
+            </button>
           }
         />
         <TooltipContent>

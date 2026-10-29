@@ -9,6 +9,7 @@ import {
 import {
   BookImage,
   CopyPlus,
+  FileUp,
   FolderPlus,
   GripVertical,
   Image as ImageIcon,
@@ -33,6 +34,11 @@ import {
 } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { NovoMapaDialog } from "@/components/mestre/novo-mapa-dialog";
+import {
+  CamerasDaCena,
+  quantasCameras,
+  SetaDasCameras,
+} from "@/components/mestre/cameras-da-cena";
 import { ScenePreview } from "@/components/playground/scene-preview";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
@@ -71,6 +77,8 @@ import {
 } from "@/hooks/use-renomear-pelo-menu";
 import { t as textoDeArquivos } from "@/lib/i18n/arquivos";
 import { t } from "@/lib/i18n/cenas";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import {
   achatarArvore,
   caminhoDaPasta,
@@ -601,6 +609,11 @@ function SceneRow({
   // botão "Renomear" não fazer nada.
   const renomear = useRenomearPeloMenu(onRename);
 
+  // As câmeras da cena, abertas debaixo da linha. Por linha e sem lembrar:
+  // é consulta de passagem, e a lista inteira aberta ao voltar seria ruído.
+  const [camerasAbertas, setCamerasAbertas] = useState(false);
+  const comCameras = quantasCameras(scene) > 0;
+
   const fundoEmVoo = useFundoEmVoo((state) => state.cenas.includes(scene.id));
   const arrastarParaNota = useTokenDrag();
 
@@ -632,6 +645,12 @@ function SceneRow({
       <Item onClick={() => duplicateScene(scene.id)}>
         <CopyPlus />
         {t.sceneList.duplicar}
+      </Item>
+      {/* Esta lista é de mapas e fundos; o quadro mora em Arquivos e não
+          viaja em pacote. */}
+      <Item onClick={() => usePacoteStore.getState().abrirExportar({ cenas: [scene.id] })}>
+        <FileUp />
+        {textoDoMestre.pacote.exportarItem}
       </Item>
       <ItensDeMover
         kit={kit}
@@ -709,9 +728,10 @@ function SceneRow({
   };
 
   return (
-    // Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
-    // que deixa o dropdown dos tres pontos, la dentro, continuar
-    // disparando. Ver a nota em `asset-library`.
+    <>
+    {/* Os filhos FORA do `render`, como nas linhas de Arquivos: e a forma
+        que deixa o dropdown dos tres pontos, la dentro, continuar
+        disparando. Ver as linhas de `arquivos-list`. */}
     <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
       <ContextMenuTrigger
         render={
@@ -736,6 +756,17 @@ function SceneRow({
           >
             <GripVertical className="size-3.5" />
           </span>
+        ) : null}
+        {/* A seta das câmeras, antes da miniatura: só na cena que tem câmera.
+            Sem ela, um vão do mesmo tamanho -- as miniaturas da lista ficam
+            alinhadas umas com as outras. */}
+        {comCameras ? (
+          <SetaDasCameras
+            aberta={camerasAbertas}
+            onAlternar={() => setCamerasAbertas((aberta) => !aberta)}
+          />
+        ) : temCamera(scene) ? (
+          <span className="size-6 shrink-0" aria-hidden />
         ) : null}
         <button
           type="button"
@@ -882,5 +913,14 @@ function SceneRow({
         {itens(KIT_CONTEXTO)}
       </ContextMenuContent>
     </ContextMenu>
+
+    {comCameras && camerasAbertas ? (
+      <CamerasDaCena
+        scene={scene}
+        recuo={depth > 0 ? 4 + depth * RECUO_PX : 4}
+        onOpen={onOpen}
+      />
+    ) : null}
+    </>
   );
 }

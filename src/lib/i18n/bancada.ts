@@ -32,6 +32,8 @@ const pt = {
     refazer: "Refazer",
     desfazer: "Desfazer",
     acionarPad: "Acionar o pad: trilha e ambiente alternam, efeito dispara",
+    acionarMacro: (nome: string) => `Acionar ${nome}`,
+    macroSemArquivo: "Acionar uma macro cujo som saiu do acervo",
     cortarSons: "Cortar ambiente e efeitos. A trilha fica",
     subirVolume: (porcento: number) => `Subir o volume da mesa ${porcento}%`,
     descerVolume: (porcento: number) => `Descer o volume da mesa ${porcento}%`,
@@ -70,6 +72,7 @@ const pt = {
     subirCamada: "Subir uma camada",
     descerCamada: "Descer uma camada",
     largar: "Largar a ferramenta e a seleção, soltar a câmera",
+    tamanhoDoPincel: "Pincel menor e maior: o lápis e a borracha da névoa. Alt + roda também",
     espelharHorizontal: "Espelhar na horizontal",
     espelharVertical: "Espelhar na vertical",
     apagar: "Apagar o que está selecionado",
@@ -78,22 +81,28 @@ const pt = {
     ping: "Ping no mapa, onde o mouse está: segure, aponte e solte",
   },
 
-  /** As réguas de ferramentas e a bolsa do rodapé. */
+  /** A barra de ferramentas do topo e a régua do mapa, na borda direita. */
   mestreToolbar: {
     selecionar: "Selecionar",
     selecionarDica: "Clique escolhe. Arraste no vazio para marcar vários.",
     deslocar: "Deslocar",
     deslocarDica: "Arraste para percorrer o mapa. Segurar Espaço faz o mesmo.",
+    laser: "Laser",
+    laserDica:
+      "Segure e risque para apontar. O rastro some sozinho, e a mesa vê na cena no ar.",
     lapis: "Lápis",
     lapisDica: "Risca o mapa à mão livre. A mesa vê.",
     borracha: "Borracha",
-    borrachaDica: "Passe sobre um risco para apagá-lo inteiro.",
+    borrachaDica: "Passe sobre um risco para apagar o pedaço, ou o risco inteiro: o painel escolhe.",
     ponto: "Ponto",
     pontoDica: "Crava um ponto com nota e anexos. Só você vê.",
     postit: "Postit",
     postitDica: "Cola um papel com texto à vista. Só você vê.",
     luz: "Luz",
     luzDica: "Crava uma luz. Acende o escuro em volta dela.",
+    disparo: "Disparo",
+    disparoDica:
+      "Atira um efeito de um ponto a outro, em linha ou em cone: a bola de fogo, o sopro do dragão.",
     porta: "Porta",
     portaDica:
       "Arraste da dobradiça até a outra ponta. Depois, a ponta abre e fecha.",
@@ -106,15 +115,16 @@ const pt = {
     reguaDica: (metros: number) =>
       `Mede distância e área. Cada quadrado vale ${metros} m.`,
     reguaSemGrade: "Ligue a grade nas configurações do mapa, no canto de cima.",
-    ferramentasDoPalco: "Ferramentas do palco",
-    ferramentasDoPalcoDica: "Selecionar, deslocar, lápis e borracha.",
-    cliqueParaTrocar: (nome: string) => `${nome}. Clique para trocar.`,
-    largar: "Largar a ferramenta",
-    largarComTecla: "Largar a ferramenta (Esc)",
   },
 
   /** O menu do botão direito do palco. */
   stageContextMenu: {
+    iniciarIniciativa: (n: number) =>
+      n === 1 ? "Iniciar iniciativa" : `Iniciar iniciativa com ${n}`,
+    porNaIniciativa: (n: number) =>
+      n === 1 ? "Pôr na iniciativa" : `Pôr ${n} na iniciativa`,
+    tirarDaIniciativa: (n: number) =>
+      n === 1 ? "Tirar da iniciativa" : `Tirar ${n} da iniciativa`,
     esconderDeNovo: "Esconder de novo",
     revelarParaMesa: "Revelar para a mesa",
     travar: "Travar",
@@ -187,9 +197,9 @@ const pt = {
   /** As ações sobre a seleção, e as opções da lanterna do token. */
   itemActions: {
     travado: "Está travado. Destrave no cadeado para apagar.",
-    alcanceCurto: "Curto",
-    alcanceMedio: "Médio",
-    alcanceLongo: "Longo",
+    intensidadeFraca: "Fraca",
+    intensidadeMedia: "Média",
+    intensidadeForte: "Forte",
     aberturaEstreita: "Estreito",
     aberturaMedia: "Médio",
     aberturaLarga: "Largo",
@@ -218,6 +228,8 @@ const en: typeof pt = {
     refazer: "Redo",
     desfazer: "Undo",
     acionarPad: "Trigger the pad: music and ambience toggle, sound cues play",
+    acionarMacro: (nome) => `Trigger ${nome}`,
+    macroSemArquivo: "Trigger a macro whose sound left the library",
     cortarSons: "Cut ambience and sound cues. The music stays",
     subirVolume: (porcento) => `Raise the table volume ${porcento}%`,
     descerVolume: (porcento) => `Lower the table volume ${porcento}%`,
@@ -255,6 +267,7 @@ const en: typeof pt = {
     subirCamada: "Move up one layer",
     descerCamada: "Move down one layer",
     largar: "Drop the tool and the selection, release the camera",
+    tamanhoDoPincel: "Smaller and bigger brush: the pencil and the fog eraser. Alt + wheel too",
     espelharHorizontal: "Flip horizontally",
     espelharVertical: "Flip vertically",
     apagar: "Delete the selection",
@@ -268,16 +281,22 @@ const en: typeof pt = {
     selecionarDica: "Click to pick. Drag on empty space to select several.",
     deslocar: "Pan",
     deslocarDica: "Drag to move around the map. Holding Space does the same.",
+    laser: "Laser",
+    laserDica:
+      "Hold and drag to point. The trail fades on its own, and the table sees it in the scene on air.",
     lapis: "Pencil",
     lapisDica: "Draws freehand on the map. The table sees it.",
     borracha: "Eraser",
-    borrachaDica: "Drag over a stroke to erase all of it.",
+    borrachaDica: "Drag over a stroke to erase a piece of it, or the whole stroke: the panel chooses.",
     ponto: "Pin",
     pontoDica: "Drops a pin with a note and attachments. Only you see it.",
     postit: "Sticky note",
     postitDica: "Sticks a note with text in plain view. Only you see it.",
     luz: "Light",
     luzDica: "Drops a light. It lights up the dark around it.",
+    disparo: "Shot",
+    disparoDica:
+      "Fires an effect from one point to another, in a line or a cone: the fireball, the dragon's breath.",
     porta: "Door",
     portaDica:
       "Drag from the hinge to the other end. Then drag the end to open and close it.",
@@ -289,14 +308,13 @@ const en: typeof pt = {
     regua: "Ruler",
     reguaDica: (metros) => `Measures distance and area. Each square is ${metros} m.`,
     reguaSemGrade: "Turn on the grid in the map settings, in the top corner.",
-    ferramentasDoPalco: "Stage tools",
-    ferramentasDoPalcoDica: "Select, pan, pencil and eraser.",
-    cliqueParaTrocar: (nome) => `${nome}. Click to change.`,
-    largar: "Drop the tool",
-    largarComTecla: "Drop the tool (Esc)",
   },
 
   stageContextMenu: {
+    iniciarIniciativa: (n) => (n === 1 ? "Start initiative" : `Start initiative with ${n}`),
+    porNaIniciativa: (n) => (n === 1 ? "Add to initiative" : `Add ${n} to initiative`),
+    tirarDaIniciativa: (n) =>
+      n === 1 ? "Remove from initiative" : `Remove ${n} from initiative`,
     esconderDeNovo: "Hide again",
     revelarParaMesa: "Reveal to the table",
     travar: "Lock",
@@ -362,9 +380,9 @@ const en: typeof pt = {
 
   itemActions: {
     travado: "It's locked. Unlock the padlock to delete it.",
-    alcanceCurto: "Short",
-    alcanceMedio: "Medium",
-    alcanceLongo: "Long",
+    intensidadeFraca: "Dim",
+    intensidadeMedia: "Medium",
+    intensidadeForte: "Bright",
     aberturaEstreita: "Narrow",
     aberturaMedia: "Medium",
     aberturaLarga: "Wide",

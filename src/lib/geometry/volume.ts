@@ -33,7 +33,11 @@
 
 import {
   alturaDaParede,
+  caixaDaParede,
+  faixaDaLinha,
+  GROSSURA_DA_LINHA,
   pedraDasParedes,
+  pontoNaParede,
   poligonoOrientado,
   segmentosDaParede,
   segmentosQueProjetam,
@@ -426,30 +430,46 @@ export function facesDaParede(
    * pergunta por uma parede específica.
    */
   giroDaVista?: number,
+  /**
+   * Dada, a `linha` sobe como CAIXA desta grossura, e não como um plano de
+   * espessura zero no meio do traço.
+   *
+   * É o que o 2.5D quer: a laje dela é a faixa de `corpoDaParede`, e um plano
+   * no meio com uma tampa de 22 por cima saía em T -- a tampa sobrando dos dois
+   * lados, uma prateleira no alto do muro. Na porta, que é curta, a tampa
+   * sobrava mais do que a folha tinha de comprimento. Com a caixa, faces e laje
+   * são a mesma faixa. Ver `faixaDaLinha`.
+   *
+   * Ausente = o plano de sempre, com os dois lados à vista.
+   */
+  grossuraDaLinha?: number,
 ): FaceDaParede[] {
-  const segmentos = segmentosDaParede(parede);
-  if (segmentos.length === 0) return [];
+  const emCaixa =
+    parede.formato === "linha" &&
+    grossuraDaLinha !== undefined &&
+    grossuraDaLinha > 0;
+
+  // Cada contorno é fechado ou não, e é dele -- não da parede -- que sai o lado
+  // de fora. A linha em caixa vira um quadrilátero por segmento.
+  const contornos: { segmentos: Segmento[]; aberto: boolean }[] = emCaixa
+    ? faixaDaLinha(parede, grossuraDaLinha).map((cantos) => ({
+        segmentos: cantos.map((de, i) => {
+          const para = cantos[(i + 1) % cantos.length]!;
+          return { x1: de.x, y1: de.y, x2: para.x, y2: para.y };
+        }),
+        aberto: false,
+      }))
+    : [
+        {
+          segmentos: segmentosDaParede(parede),
+          aberto: parede.formato === "linha",
+        },
+      ];
 
   const angulo = (sol ? sol.angulo : LUZ_SEM_SOL) * GRAU;
   // Negado: `angulo` é para onde a sombra anda, e a luz vem de trás dela.
   const luzX = -Math.cos(angulo);
   const luzY = -Math.sin(angulo);
-
-  const aberta = parede.formato === "linha";
-
-  // Shoelace pelos inícios dos segmentos: eles vêm na ordem do contorno, então
-  // o sinal da área diz se a lista está no sentido horário ou anti-horário.
-  // Sem isto a normal externa aponta para dentro em metade dos laços, e a
-  // parede sai iluminada pelo lado errado.
-  let dobro = 0;
-  if (!aberta) {
-    for (let i = 0; i < segmentos.length; i += 1) {
-      const atual = segmentos[i]!;
-      const proximo = segmentos[(i + 1) % segmentos.length]!;
-      dobro += atual.x1 * proximo.y1 - proximo.x1 * atual.y1;
-    }
-  }
-  const sentido = dobro < 0 ? -1 : 1;
 
   /**
    * Para onde o observador está, como vetor.
@@ -461,39 +481,56 @@ export function facesDaParede(
   const olhoX = giroDaVista === undefined ? 0 : Math.sin(giroDaVista * GRAU);
   const olhoY = giroDaVista === undefined ? 0 : Math.cos(giroDaVista * GRAU);
 
-  /**
-   * Só a parede FECHADA e COBERTA esconde as próprias costas.
-   *
-   * A `linha` não tem dentro -- os dois lados dela são corredor. E o pátio tem
-   * o miolo à vista, então a face de dentro é parede que alguém vê de pé no
-   * quintal. É a mesma ressalva que `segmentosQueProjetam` faz, e pelo mesmo
-   * motivo.
-   */
-  const escondeCostas =
-    giroDaVista !== undefined && !aberta && !parede.semTeto;
+  return contornos.flatMap(({ segmentos, aberto }) => {
+    // Shoelace pelos inícios dos segmentos: eles vêm na ordem do contorno,
+    // então o sinal da área diz se a lista está no sentido horário ou
+    // anti-horário. Sem isto a normal externa aponta para dentro em metade dos
+    // laços, e a parede sai iluminada pelo lado errado.
+    let dobro = 0;
+    if (!aberto) {
+      for (let i = 0; i < segmentos.length; i += 1) {
+        const atual = segmentos[i]!;
+        const proximo = segmentos[(i + 1) % segmentos.length]!;
+        dobro += atual.x1 * proximo.y1 - proximo.x1 * atual.y1;
+      }
+    }
+    const sentido = dobro < 0 ? -1 : 1;
 
-  return segmentos.flatMap((segmento) => {
-    const dx = segmento.x2 - segmento.x1;
-    const dy = segmento.y2 - segmento.y1;
-    const comprimento = Math.hypot(dx, dy) || 1;
+    /**
+     * Só a parede FECHADA e COBERTA esconde as próprias costas.
+     *
+     * A `linha` plana não tem dentro -- os dois lados dela são corredor. E o
+     * pátio tem o miolo à vista, então a face de dentro é parede que alguém vê
+     * de pé no quintal. É a mesma ressalva que `segmentosQueProjetam` faz, e
+     * pelo mesmo motivo. A linha em CAIXA é maciça: o teto não vale para ela.
+     */
+    const escondeCostas =
+      giroDaVista !== undefined && !aberto && (emCaixa || !parede.semTeto);
 
-    const nx = (dy / comprimento) * sentido;
-    const ny = (-dx / comprimento) * sentido;
+    return segmentos.flatMap((segmento) => {
+      const dx = segmento.x2 - segmento.x1;
+      const dy = segmento.y2 - segmento.y1;
+      const comprimento = Math.hypot(dx, dy) || 1;
 
-    // De costas para quem olha: a massa da própria parede está na frente dela.
-    if (escondeCostas && nx * olhoX + ny * olhoY <= 0) return [];
+      const nx = (dy / comprimento) * sentido;
+      const ny = (-dx / comprimento) * sentido;
 
-    const lambert = nx * luzX + ny * luzY;
-    // Sem lado de fora, o que se sabe é o quanto a face está DE TRAVÉS para a
-    // luz, e isso é o módulo.
-    const luz = aberta ? Math.abs(lambert) : Math.max(0, lambert);
+      // De costas para quem olha: a massa da própria parede está na frente
+      // dela.
+      if (escondeCostas && nx * olhoX + ny * olhoY <= 0) return [];
 
-    return [
-      {
-        ...segmento,
-        brilho: arredondar(PISO_DA_FACE + (1 - PISO_DA_FACE) * luz),
-      },
-    ];
+      const lambert = nx * luzX + ny * luzY;
+      // Sem lado de fora, o que se sabe é o quanto a face está DE TRAVÉS para
+      // a luz, e isso é o módulo.
+      const luz = aberto ? Math.abs(lambert) : Math.max(0, lambert);
+
+      return [
+        {
+          ...segmento,
+          brilho: arredondar(PISO_DA_FACE + (1 - PISO_DA_FACE) * luz),
+        },
+      ];
+    });
   });
 }
 
@@ -557,6 +594,37 @@ export function amostrasDaParede(parede: Parede): Vec[] {
         x: segmento.x1 + dx * t + recuoX,
         y: segmento.y1 + dy * t + recuoY,
       });
+    }
+  }
+
+  return pontos;
+}
+
+/** Quantos pontos a grade da área tem no lado maior. Ver `amostrasDaArea`. */
+const GRADE_DA_AREA = 24;
+
+/**
+ * Pontos espalhados pela ÁREA inteira da parede, para as sugestões de cor.
+ *
+ * O contrário de `amostrasDaParede`, de propósito: ali se quer a pedra, e o
+ * miolo de um pátio é chão; aqui se quer TUDO o que aparece sob a parede -- o
+ * telhado, o reboco, o beiral, o quintal --, porque é dali que o mestre escolhe
+ * a cor da face. Uma grade sobre a caixa, com só os pontos que caem no corpo
+ * (`pontoNaParede`): a elipse e o laço ficam com o formato deles, e a `linha`
+ * com a faixa.
+ */
+export function amostrasDaArea(parede: Parede): Vec[] {
+  const caixa = caixaDaParede(parede);
+  if (!caixa) return [];
+
+  const lado = Math.max(caixa.width, caixa.height);
+  const passo = Math.max(1, lado / GRADE_DA_AREA);
+  const pontos: Vec[] = [];
+
+  for (let y = caixa.y + passo / 2; y < caixa.y + caixa.height; y += passo) {
+    for (let x = caixa.x + passo / 2; x < caixa.x + caixa.width; x += passo) {
+      const ponto = { x, y };
+      if (pontoNaParede(parede, ponto)) pontos.push(ponto);
     }
   }
 
@@ -636,6 +704,53 @@ export function caixaDaFace(
 }
 
 /**
+ * A caixa que o TOPO de uma parede ocupa na tela, para saber se a laje dela
+ * está pintada por cima de uma peça.
+ *
+ * Todos os cantos da pegada, erguidos pela altura: o topo é a parede inteira
+ * vista de cima, e não um lado só, como a face. A `linha` pela faixa dela,
+ * que é o que a laje tampa. Sem perspectiva, pela razão de `CaixaNaTela`.
+ *
+ * `profundidade` é a de quem pede: a laje entra na lista pelo GRUPO (ver
+ * `ChaoInclinado`), e o que se pergunta é se ela foi pintada depois da peça.
+ */
+export function caixaDoTopo(
+  parede: Parede,
+  altura: number,
+  giro: number,
+  inclinacao: number,
+  profundidade: number,
+): CaixaNaTela | null {
+  const pontos =
+    parede.formato === "linha"
+      ? faixaDaLinha(parede, GROSSURA_DA_LINHA).flat()
+      : segmentosDaParede(parede).map((segmento) => ({
+          x: segmento.x1,
+          y: segmento.y1,
+        }));
+  if (pontos.length === 0) return null;
+
+  const t = inclinacao * GRAU;
+  const cosT = Math.cos(t);
+  const sobe = altura * Math.sin(t);
+
+  let x1 = Infinity;
+  let x2 = -Infinity;
+  let y1 = Infinity;
+  let y2 = -Infinity;
+  for (const { x, y } of pontos) {
+    const lado = lateralNaVista(x, y, giro);
+    const fundo = profundidadeNaVista(x, y, giro) * cosT - sobe;
+    x1 = Math.min(x1, lado);
+    x2 = Math.max(x2, lado);
+    y1 = Math.min(y1, fundo);
+    y2 = Math.max(y2, fundo);
+  }
+
+  return { x1, x2, y1, y2, profundidade };
+}
+
+/**
  * A caixa que uma peça ocupa na tela.
  *
  * A peça encara quem olha: o `transform` dela desfaz o giro e a inclinação, e o
@@ -656,11 +771,13 @@ export function caixaDaPeca(
   altura: number,
   giro: number,
   inclinacao: number,
+  /** O pé erguido do chão, em cima de uma parede. Ver `apoioDoPe`. */
+  sobe = 0,
 ): CaixaNaTela {
   const t = inclinacao * GRAU;
   const x = lateralNaVista(centroX, pe, giro);
   const profundidade = profundidadeNaVista(centroX, pe, giro);
-  const chao = profundidade * Math.cos(t);
+  const chao = profundidade * Math.cos(t) - sobe * Math.sin(t);
 
   return {
     x1: x - lado / 2,
@@ -669,6 +786,42 @@ export function caixaDaPeca(
     y2: chao,
     profundidade,
   };
+}
+
+/** Onde um pé pisa, quando não é o chão: o teto de uma parede. */
+export type Apoio = { paredeId: string; altura: number };
+
+/**
+ * Em que a peça em pé pisa: o teto da parede COBERTA sob o pé, ou `null` se é
+ * o chão.
+ *
+ * Existe porque a parede de esguelha é maciça, e uma peça posta dentro dela
+ * ficava enterrada no volume -- a laje por cima da cabeça, as faces em volta.
+ * Coberta, o que há ali é o telhado, e é nele que a figura fica: em cima da
+ * casa, na ameia, na mureta.
+ *
+ * O pátio (`semTeto`) não conta: o miolo dele é chão, e a peça dentro do
+ * quintal está no quintal. A `linha` conta, pela faixa dela -- é a caixa que
+ * sobe de pé, ver `facesDaParede`. Com várias, a mais ALTA: quem está sob a
+ * torre está na torre.
+ *
+ * Só paredes, e não portas: a folha fechada é uma tábua, e a peça no batente
+ * está passando pela porta, não em cima dela.
+ */
+export function apoioDoPe(
+  paredes: ReadonlyArray<Parede> | undefined,
+  pe: Vec,
+): Apoio | null {
+  let apoio: Apoio | null = null;
+
+  for (const parede of paredes ?? []) {
+    if (parede.semTeto && parede.formato !== "linha") continue;
+    if (!pontoNaParede(parede, pe)) continue;
+    const altura = alturaDaParede(parede);
+    if (!apoio || altura > apoio.altura) apoio = { paredeId: parede.id, altura };
+  }
+
+  return apoio;
 }
 
 /**

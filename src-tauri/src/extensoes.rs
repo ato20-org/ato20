@@ -61,7 +61,39 @@ use crate::error::{AppError, AppResult};
 /// API 6 recusaria o mapa como JSON ilegivel, que manda o autor procurar o
 /// erro no arquivo; e ignoraria os `rotulos`, mostrando o valor cru de cada
 /// opcao sem aviso. Pedindo 7, ele ouve "atualize o ATO20".
-pub const API_VERSAO: u32 = 7;
+///
+/// A 8 acrescentou aos `pontos` a `proporcao` do ponto e o `ate`. Um ATO20 de
+/// API 7 ignoraria os dois calado: a bala estreita sairia esticada num
+/// quadrado, e o pente de trinta, em trinta pontos de um pixel.
+///
+/// A 9 acrescentou os atributos: o alvo `secao:atributos` de substituto, e o
+/// campo `atributos` no personagem que `personagens.listar` entrega. Um ATO20
+/// de API 8 recusaria o substituto por "alvo desconhecido", que manda o autor
+/// procurar o erro na grafia; pedindo 9, ele ouve "atualize o ATO20".
+///
+/// A 10 acrescentou as `fichasPdf`: o plugin ensina a ler o formulario de uma
+/// ficha, e o aplicativo cria o personagem a partir dela. Um ATO20 de API 9
+/// ignoraria a chave calado, e o plugin instalado so para isso nao faria nada;
+/// pedindo 10, ele ouve "atualize o ATO20".
+///
+/// A 11 acrescentou os `estilosDeAtributos` -- a imagem com o lugar de cada
+/// sigla, o ritual do Ordem -- e o `estiloDosAtributos` do sistema. Um ATO20
+/// de API 10 ignoraria os dois calado, e a ficha seguiria nos cartoes sem
+/// dizer por que; pedindo 11, ele ouve "atualize o ATO20".
+///
+/// A 12 acrescentou o `bestiario` -- as fichas prontas que o plugin traz para
+/// o Compendio, num arquivo ao lado do manifesto. Um ATO20 de API 11 ignoraria
+/// a chave calado, e o plugin instalado so para isso nao mostraria nada;
+/// pedindo 12, ele ouve "atualize o ATO20".
+///
+/// A 13 acrescentou os `itens` -- as armas, protecoes e o resto que o plugin
+/// traz pronto para o Compendio, num arquivo ao lado do manifesto, como o
+/// bestiario. Um ATO20 de API 12 ignoraria a chave calado, e o plugin
+/// instalado so para isso nao mostraria nada; pedindo 13, ele ouve "atualize o
+/// ATO20". Na mesma versao, antes de sair, entraram as `abas` -- uma aba nova
+/// no Compendio, com verbetes de consulta que se dao a um personagem -- e as
+/// `aparencias` da ficha do bestiario.
+pub const API_VERSAO: u32 = 13;
 
 /// Quantas contribuicoes de um MESMO tipo uma extensao pode declarar.
 ///
@@ -221,6 +253,14 @@ pub struct Manifesto {
     pub repositorio: Option<String>,
     #[serde(default)]
     pub descricao: Option<TextoDePlugin>,
+    /// O icone, relativo a pasta: o que a lista de Instalados mostra ao lado do
+    /// nome. Raster, como as imagens de medidor (`IMAGENS_DE_MEDIDOR`): no Mestre
+    /// de desenvolvimento ele vem pelo daemon, que nao serve `.svg`.
+    ///
+    /// Sem subir a API: um ATO20 anterior ignora o campo e desenha a inicial,
+    /// que e o que ele ja desenha para todo plugin.
+    #[serde(default)]
+    pub icone: Option<String>,
     pub api_versao: u32,
     /// O CSS, relativo a pasta da extensao.
     #[serde(default)]
@@ -241,6 +281,18 @@ pub struct Manifesto {
 }
 
 impl Manifesto {
+    /// As imagens que o daemon serve na rede: as das contribuicoes e o icone.
+    /// O icone vai junto porque o Mestre de desenvolvimento o pede ao daemon,
+    /// como pede as outras -- ver `urlDaImagemDoEstilo`, em
+    /// `src/lib/extensoes/medidor-em-camadas.ts`.
+    pub fn imagens_servidas(&self) -> Vec<(crate::error::Texto, &str)> {
+        let mut imagens = self.contribui.imagens_servidas();
+        if let Some(icone) = &self.icone {
+            imagens.push((crate::texto!("o icone", "the icon"), icone.as_str()));
+        }
+        imagens
+    }
+
     /// Todo texto que o plugin mostra, com o caminho dele no manifesto.
     ///
     /// Uma lista so, e nao uma checagem em cada validacao: campo de texto novo
@@ -291,6 +343,9 @@ impl Manifesto {
         for x in &c.estilos_de_medidor {
             textos.push((caminho("estilosDeMedidor", &x.id, "titulo"), &x.titulo));
         }
+        for x in &c.estilos_de_atributos {
+            textos.push((caminho("estilosDeAtributos", &x.id, "titulo"), &x.titulo));
+        }
         for x in &c.paginas {
             textos.push((caminho("paginas", &x.id, "titulo"), &x.titulo));
         }
@@ -299,6 +354,27 @@ impl Manifesto {
             if let Some(dica) = &x.dica {
                 textos.push((caminho("efeitos", &x.id, "dica"), dica));
             }
+        }
+        for x in &c.fichas_pdf {
+            textos.push((caminho("fichasPdf", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.sistemas {
+            textos.push((caminho("sistemas", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.bestiario {
+            textos.push((caminho("bestiario", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.itens {
+            textos.push((caminho("itens", &x.id, "titulo"), &x.titulo));
+        }
+        for x in &c.abas {
+            textos.push((caminho("abas", &x.id, "titulo"), &x.titulo));
+            for colecao in &x.colecoes {
+                textos.push((caminho("abas", &format!("{}/{}", x.id, colecao.id), "titulo"), &colecao.titulo));
+            }
+        }
+        for x in &c.auras {
+            textos.push((caminho("auras", &x.id, "titulo"), &x.titulo));
         }
         for x in &c.configuracoes {
             textos.push((caminho("configuracoes", &x.chave, "titulo"), &x.titulo));
@@ -384,12 +460,142 @@ pub struct Contribuicoes {
     /// Estilos de medidor desenhados em SVG. Ver `EstiloDeMedidor`.
     #[serde(default)]
     pub estilos_de_medidor: Vec<EstiloDeMedidor>,
+    /// Jeitos de desenhar a secao de atributos. Ver `EstiloDeAtributos`.
+    #[serde(default)]
+    pub estilos_de_atributos: Vec<EstiloDeAtributos>,
     /// Paginas que o daemon serve na rede. Ver `Pagina`.
     #[serde(default)]
     pub paginas: Vec<Pagina>,
     /// Efeitos de condicao. Ver `Efeito`.
     #[serde(default)]
     pub efeitos: Vec<Efeito>,
+    /// Fichas em PDF que o plugin sabe ler. Ver `FichaPdf`.
+    #[serde(default)]
+    pub fichas_pdf: Vec<FichaPdf>,
+    /// Sistemas de jogo que o mestre aplica numa campanha. Ver `Sistema`.
+    #[serde(default)]
+    pub sistemas: Vec<Sistema>,
+    /// Fichas prontas para o Compendio. Ver `ColecaoDoBestiario`.
+    #[serde(default)]
+    pub bestiario: Vec<ColecaoDoBestiario>,
+    /// Itens prontos para o Compendio. Ver `ColecaoDeItens`.
+    #[serde(default)]
+    pub itens: Vec<ColecaoDeItens>,
+    /// Abas novas no Compendio, com verbetes de consulta. Ver `AbaDoCompendio`.
+    #[serde(default)]
+    pub abas: Vec<AbaDoCompendio>,
+    /// A cor, o emblema e a luz com que o plugin marca uma coisa. Ver `Aura`.
+    #[serde(default)]
+    pub auras: Vec<Aura>,
+}
+
+/// Uma colecao de fichas prontas: o bestiario de um sistema, ou parte dele.
+///
+/// O manifesto so DECLARA a colecao -- id, titulo e onde estao as fichas --, e
+/// as fichas moram num arquivo a parte, por duas razoes. O teto de
+/// `MAX_CONTRIBUICOES` conta linhas de menu, e quinhentas ameacas nao sao
+/// quinhentas linhas. E o manifesto e lido em toda listagem e em cada pedido
+/// do daemon: o bestiario inteiro iria junto sem ninguem ter aberto o
+/// Compendio. Ver `bestiario`.
+///
+/// DECLARATIVO, como o sistema: o nucleo mostra as fichas e as copia para a
+/// campanha, e a regra do jogo continua sendo do plugin que as escreveu.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColecaoDoBestiario {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// O arquivo das fichas, relativo a pasta: `bestiario/ameacas.json`.
+    pub arquivo: String,
+    /// O sistema do MESMO plugin a que estas fichas servem. So etiqueta, para
+    /// o Compendio dizer de onde elas sao; trazer nao aplica o sistema.
+    #[serde(default)]
+    pub sistema: Option<String>,
+    /// A aura do MESMO plugin que pinta a pasta da colecao e emoldura o card
+    /// de cada ficha. A ficha pode trazer a dela, por cima desta. Ver `Aura`.
+    #[serde(default)]
+    pub aura: Option<String>,
+}
+
+/// Uma colecao de itens prontos: as armas de um sistema, as protecoes.
+///
+/// A MESMA declaracao do bestiario -- id, titulo, o arquivo, o sistema e a
+/// aura --, e pela mesma razao de o arquivo ser a parte. O que muda e o que o
+/// arquivo traz: itens, e nao fichas. Ver `itens_do_plugin`.
+pub type ColecaoDeItens = ColecaoDoBestiario;
+
+/// Uma aba nova no Compendio: os rituais de um sistema, os talentos, as magias.
+///
+/// O manifesto declara a aba, o grupo da ficha que recebe o verbete dado a um
+/// personagem e as colecoes; os verbetes moram no `arquivo` de cada colecao,
+/// pela razao do bestiario. O verbete nao vira molde: e texto de consulta, e
+/// o que se faz com ele e dar a um personagem. Ver `abas_do_plugin`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AbaDoCompendio {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// O grupo da ficha onde o verbete dado entra -- "Rituais", em lista. Ele
+    /// entra no molde da campanha na primeira vez. Ver `abas_do_plugin::dar`.
+    pub grupo: GrupoDoSistema,
+    pub colecoes: Vec<ColecaoDeVerbetes>,
+}
+
+/// Uma colecao de verbetes: a mesma declaracao do bestiario e dos itens.
+pub type ColecaoDeVerbetes = ColecaoDoBestiario;
+
+/// Os efeitos de luz de uma aura. Lista fechada, como os alvos de menu, e por
+/// uma razao a mais: cada um e uma animacao do NUCLEO, escrita para mexer so em
+/// opacidade e posicao -- o que a placa de video faz sem redesenhar a janela.
+/// Um efeito livre do plugin seria um `filter: blur` animado na borda de cada
+/// card, e o Compendio travaria no notebook do mestre.
+///
+/// - `fixa`: a luz parada.
+/// - `pulso`: a luz que respira devagar.
+/// - `fluxo`: a luz que corre pelas bordas, rapida e irregular.
+/// - `cintilar`: piscadas eletricas, cada cor no seu ritmo.
+pub const EFEITOS_DE_LUZ: &[&str] = &["fixa", "pulso", "fluxo", "cintilar"];
+
+/// Quantas cores uma luz mistura. O `cintilar` do Ordem usa tres (ciano, roxo
+/// e branco); mais que quatro vira so branco.
+pub const MAX_CORES_DA_LUZ: usize = 4;
+
+/// Uma aura: a cor, o emblema e a luz com que o plugin marca uma coisa.
+///
+/// Declarada uma vez e apontada por id, como o estilo de medidor, porque e a
+/// MESMA marca em lugares diferentes. No bestiario, a colecao a aponta, e ela
+/// pinta a pasta da colecao com a `cor` e o `emblema` e emoldura o card de
+/// cada ficha, com a `luz` no card sob a mao. Na campanha,
+/// a ficha trazida leva a aura junto (`{plugin}/{id}`), e o mestre pode dar a
+/// aura de um plugin a qualquer personagem ou item -- a borda dourada do item
+/// lendario.
+///
+/// DECLARATIVA, como o efeito de condicao: a animacao e do nucleo (ver
+/// `EFEITOS_DE_LUZ`), e o plugin so escolhe qual e com que cores.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Aura {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// A cor da pasta e da borda do card, em hex.
+    pub cor: String,
+    /// Uma imagem da pasta do plugin, desenhada na frente da pasta. Raster,
+    /// como as do estilo de medidor, e no mesmo teto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emblema: Option<String>,
+    /// A luz da borda do card sob a mao. Sem ela, a aura so pinta. So no card,
+    /// e nao na janela aberta na pasta: as bordas do Compendio acesas em volta
+    /// dos cards de borda colorida eram informacao demais.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub luz: Option<Luz>,
+}
+
+/// A luz de uma aura: um efeito de `EFEITOS_DE_LUZ` e as cores dele.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Luz {
+    pub efeito: String,
+    pub cores: Vec<String>,
 }
 
 /// Um efeito de condicao: o que a figura faz quando uma condicao aponta para
@@ -434,7 +640,140 @@ pub struct Efeito {
     /// O chao do efeito na area: a textura deitada. Ver `BaseDoEfeito`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<BaseDoEfeito>,
+    /// Como o efeito DISPARA: em linha ou em cone. Ver `DisparoDoEfeito`.
+    /// Antes deste campo, o bloco do plugin era descartado calado, e o tiro
+    /// dele saia sempre em linha.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disparo: Option<DisparoDoEfeito>,
+    /// O efeito que cobre a CENA inteira: a chuva, a neve, a neblina. Ver
+    /// `AmbienteDoEfeito`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambiente: Option<AmbienteDoEfeito>,
 }
+
+/// Como o efeito sai quando e DISPARADO de um ponto a outro: a forma, e os
+/// numeros dela em casas da grade. Sem imagem propria -- o tiro desenha com
+/// as camadas do efeito (o foco vira o projetil, o chao faz o cone). Espelho
+/// de `DisparoDoEfeito` em `types/efeito.ts`; os limites sao os de
+/// `LIMITES_DO_DISPARO`, que o TS prende ao desenhar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisparoDoEfeito {
+    /// `linha` ou `cone`. Ver `FORMAS_DO_DISPARO`.
+    pub forma: String,
+    /// A abertura do cone, em graus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abertura: Option<f64>,
+    /// Em casas por segundo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub velocidade: Option<f64>,
+    /// Ate onde vai, em casas, quando sai de um token para onde ele olha.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alcance: Option<f64>,
+    /// O lado do projetil da linha, em casas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tamanho: Option<f64>,
+    /// O raio do estouro no fim da linha, em casas. Zero = sem estouro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impacto: Option<f64>,
+    /// O que voa na linha. Ausente = o elemento da area. Ver `ProjetilDoDisparo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projetil: Option<ProjetilDoDisparo>,
+    /// A faixa da cor do tiro atras do projetil. Ausente = sim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rastro: Option<bool>,
+    /// O brilho em volta do projetil. Ausente = sim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brilho: Option<bool>,
+}
+
+/// A imagem que voa num disparo em linha: os campos de imagem de sempre, e o
+/// giro que a deita no voo. Ver `ProjetilDoDisparo` em `types/efeito.ts`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjetilDoDisparo {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    /// Em graus, no sentido horario. Ver `GIROS_DO_PROJETIL`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub giro: Option<f64>,
+}
+
+/// As formas de um disparo. A mesma lista que o TS desenha.
+pub const FORMAS_DO_DISPARO: &[&str] = &["linha", "cone"];
+
+/// Os giros do projetil: como esta, o topo na frente, o topo atras, de ponta
+/// cabeca. Outro angulo deitaria a imagem torta no voo.
+pub const GIROS_DO_PROJETIL: &[f64] = &[0.0, 90.0, -90.0, 180.0];
+
+/// O AMBIENTE: o clima que cobre a cena inteira, desenhado na lente da tela --
+/// camadas de textura emendavel que deslizam em laco, um veu de cor parada e o
+/// clarao do relampago. Espelho de `AmbienteDoEfeito` em `types/efeito.ts`; os
+/// limites sao os de `LIMITES_DO_AMBIENTE`, que o TS prende ao desenhar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AmbienteDoEfeito {
+    /// A cor do ambiente: a das camadas que pedem `cores: "condicao"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    /// De tras para a frente, ate `MAX_CAMADAS_DO_AMBIENTE`.
+    #[serde(default)]
+    pub camadas: Vec<CamadaDoAmbiente>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub veu: Option<VeuDoAmbiente>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relampago: Option<RelampagoDoAmbiente>,
+}
+
+/// Uma camada do ambiente: a textura e como ela desliza, em alturas da tela.
+/// Os campos de imagem de sempre, menos os quadros: a camada anda deslizando.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CamadaDoAmbiente {
+    #[serde(flatten)]
+    pub imagem: ImagemAnimada,
+    /// O lado do ladrilho, em alturas da tela.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escala: Option<f64>,
+    /// Para onde vai, em graus, no sentido horario a partir da direita.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub direcao: Option<f64>,
+    /// Em alturas da tela por segundo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub velocidade: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacidade: Option<f64>,
+    /// O balanco de lado a lado, em vezes o ladrilho.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub balanco: Option<f64>,
+}
+
+/// O veu: uma cor parada sobre a tela inteira.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VeuDoAmbiente {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    pub opacidade: f64,
+}
+
+/// O relampago: o clarao de tempos em tempos.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelampagoDoAmbiente {
+    /// Os segundos entre um clarao e outro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intervalo: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forca: Option<f64>,
+}
+
+/// Quantas camadas um ambiente tem, no maximo. Cada uma e uma superficie do
+/// tamanho da tela para o compositor; quatro ja sao a chuva fina, a grossa, a
+/// neblina e a cinza.
+pub const MAX_CAMADAS_DO_AMBIENTE: usize = 4;
 
 /// Uma grade de quadros: quantos por linha, quantos ao todo, e a velocidade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -557,6 +896,12 @@ impl Efeito {
         if let Some(base) = &self.base {
             imagens.extend(base.imagem.imagens());
         }
+        if let Some(projetil) = self.disparo.as_ref().and_then(|disparo| disparo.projetil.as_ref()) {
+            imagens.extend(projetil.imagem.imagens());
+        }
+        for camada in self.ambiente.iter().flat_map(|ambiente| &ambiente.camadas) {
+            imagens.extend(camada.imagem.imagens());
+        }
 
         imagens
     }
@@ -570,6 +915,13 @@ impl Efeito {
             || self.particulas.is_some()
             || self.area.as_ref().is_some_and(|area| area.foco.is_some())
             || self.base.is_some()
+            || self
+                .disparo
+                .as_ref()
+                .is_some_and(|disparo| disparo.projetil.is_some())
+            || self.ambiente.as_ref().is_some_and(|ambiente| {
+                !ambiente.camadas.is_empty() || ambiente.veu.is_some() || ambiente.relampago.is_some()
+            })
     }
 }
 
@@ -681,13 +1033,25 @@ pub const PREFIXO_DA_CAMPANHA: &str = "campanha";
 
 impl Contribuicoes {
     /// As imagens que o daemon serve na rede por causa do que foi declarado --
-    /// dos estilos de medidor e dos efeitos --, cada uma com quem a pediu, para
+    /// dos estilos de medidor e de atributos e dos efeitos --, cada uma com quem a pediu, para
     /// o erro dizer de quem e o arquivo que falta. Ver `serve::serve_plugin`.
     pub fn imagens_servidas(&self) -> Vec<(crate::error::Texto, &str)> {
         let estilos = self.estilos_de_medidor.iter().flat_map(|estilo| {
             estilo.imagens().into_iter().map(move |imagem| {
                 (
                     crate::texto!("o estilo {:?}", "the meter style {:?}", estilo.id),
+                    imagem,
+                )
+            })
+        });
+        let atributos = self.estilos_de_atributos.iter().flat_map(|estilo| {
+            estilo.imagens().into_iter().map(move |imagem| {
+                (
+                    crate::texto!(
+                        "o estilo de atributos {:?}",
+                        "the attribute style {:?}",
+                        estilo.id
+                    ),
                     imagem,
                 )
             })
@@ -701,7 +1065,7 @@ impl Contribuicoes {
             })
         });
 
-        estilos.chain(efeitos).collect()
+        estilos.chain(atributos).chain(efeitos).collect()
     }
 }
 
@@ -775,7 +1139,7 @@ impl EstiloDeMedidor {
                 imagens.extend(vazio.as_deref());
                 imagens.extend(imagem.as_deref());
             }
-            Conteudo::Pontos { cheio, vazio } => {
+            Conteudo::Pontos { cheio, vazio, .. } => {
                 imagens.extend(cheio.as_deref());
                 imagens.extend(vazio.as_deref());
             }
@@ -920,6 +1284,15 @@ pub enum Conteudo {
         cheio: Option<String>,
         #[serde(default)]
         vazio: Option<String>,
+        /// A largura de cada ponto em fracao da altura dele. Ausente e 1, o
+        /// quadrado; a bala de pe e estreita, e no quadrado ela estica.
+        #[serde(default)]
+        proporcao: Option<f64>,
+        /// Com o MAXIMO acima disto, a fileira vira um ponto e o numero
+        /// (`×11`). Pelo maximo e nao pelo valor: o medidor nao troca de forma
+        /// no meio do combate. Ausente, a fileira encolhe sem teto.
+        #[serde(default)]
+        ate: Option<u32>,
     },
     /// Do vazio ao cheio. O primeiro so aparece no zero.
     Sequencia { quadros: Vec<String> },
@@ -951,9 +1324,88 @@ pub const IMAGENS_DE_MEDIDOR: &[&str] = &["png", "webp", "gif", "jpg", "jpeg", "
 /// animacao curta de 512px, que e mais do que a coluna do retrato mostra.
 pub const IMAGEM_DE_MEDIDOR_MAX: u64 = 2 * 1024 * 1024;
 
+/// Os limites da `proporcao` de um ponto. Abaixo de 0,1 a bala vira um risco;
+/// acima de 4 o ponto e uma barra, e para isso existe o modo `barra`.
+pub const PROPORCAO_DO_PONTO_MIN: f64 = 0.1;
+pub const PROPORCAO_DO_PONTO_MAX: f64 = 4.0;
+
 /// Quantos quadros uma `sequencia` pode ter. Cada quadro e um arquivo que a
 /// mesa baixa; dezesseis ja distinguem cada faixa de vida que alguem le.
 pub const QUADROS_MAX: usize = 16;
+
+/// Um jeito de desenhar a secao de atributos: uma imagem, e o lugar de cada
+/// sigla nela -- o ritual do Ordem, com AGI, FOR, INT, PRE e VIG nos cinco
+/// circulos.
+///
+/// DECLARATIVO, como o medidor em camadas, e pela mesma razao: o celular
+/// desenha igual ao Mestre sem uma linha do plugin rodar fora dele. A imagem
+/// ja traz o que nao muda (o desenho, o nome de cada atributo); a ficha so
+/// escreve o NUMERO no lugar da sigla. Sigla da ficha sem lugar aqui fica na
+/// grade de cartoes embaixo, e lugar sem sigla na ficha fica vazio.
+///
+/// Quem escolhe o estilo e o sistema aplicado (`Sistema::estilo_dos_atributos`),
+/// que o grava na campanha (`ato20.ficha.estiloDosAtributos`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EstiloDeAtributos {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// Raster, relativa a pasta. Ver `IMAGENS_DE_MEDIDOR`.
+    pub imagem: String,
+    /// A altura da imagem em fracao da largura: 1 e o quadrado. Declarada
+    /// para a secao reservar o lugar antes de a imagem chegar, sem pular.
+    pub proporcao: f64,
+    pub lugares: Vec<LugarDoAtributo>,
+    /// A cor do numero. Ausente e branco com contorno quase preto.
+    #[serde(default)]
+    pub texto: Option<CorDoNumero>,
+}
+
+impl EstiloDeAtributos {
+    /// O que o daemon serve na rede por causa dele. Ver `imagens_servidas`.
+    pub fn imagens(&self) -> Vec<&str> {
+        vec![self.imagem.as_str()]
+    }
+}
+
+/// Onde o numero de uma sigla entra na imagem.
+///
+/// `x` e `y` sao o CENTRO do numero, em fracao da largura e da altura da
+/// imagem; `tamanho` e o corpo do numero (a fonte) em fracao da LARGURA, para o numero
+/// nao mudar de corpo numa imagem mais alta. Fracao, e nao pixel, pela razao
+/// do encaixe do medidor: a imagem escala com a coluna da ficha e com a tela
+/// do celular, e o autor nao conhece nenhuma das duas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LugarDoAtributo {
+    pub sigla: String,
+    pub x: f64,
+    pub y: f64,
+    pub tamanho: f64,
+}
+
+/// As cores do numero. Hex e so hex, como as do `Texto` do medidor: vao
+/// parar num `style`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CorDoNumero {
+    #[serde(default)]
+    pub cor: Option<String>,
+    #[serde(default)]
+    pub contorno: Option<String>,
+}
+
+/// Os limites da `proporcao` da imagem dos atributos. Abaixo de 0,25 e uma
+/// faixa em que o numero nao cabe; acima de 3, uma torre que empurra a ficha
+/// inteira para baixo.
+pub const PROPORCAO_DOS_ATRIBUTOS_MIN: f64 = 0.25;
+pub const PROPORCAO_DOS_ATRIBUTOS_MAX: f64 = 3.0;
+
+/// Os limites do `tamanho` do numero, em fracao da largura da imagem. Abaixo
+/// de 0,02 nao se le nem na coluna larga; acima de 0,4 um numero toma a
+/// imagem.
+pub const TAMANHO_DO_NUMERO_MIN: f64 = 0.02;
+pub const TAMANHO_DO_NUMERO_MAX: f64 = 0.4;
 
 /// Um item que a extensao poe num menu do aplicativo.
 ///
@@ -1021,6 +1473,7 @@ pub struct Substituto {
 
 pub const SECOES_DE_FABRICA: &[&str] = &[
     "campos",
+    "atributos",
     "aparencias",
     "medidores",
     "condicoes",
@@ -1039,6 +1492,7 @@ pub const JANELAS_DE_FABRICA: &[&str] = &[
     "chat",
     "cenas",
     "quadros",
+    "galeria",
     "retratos",
     "imagens",
     "sons",
@@ -1171,6 +1625,262 @@ pub struct Camada {
     pub titulo: TextoDePlugin,
 }
 
+/// Uma ficha em PDF que o plugin sabe ler: o formulario de um modelo
+/// conhecido, campo a campo, para o que o personagem guarda.
+///
+/// DECLARATIVA, como o estilo de medidor e o efeito. O que muda de uma ficha
+/// para outra e o NOME dos campos, e isso e dado: codigo aqui pediria a API de
+/// plugin inteira para dizer que `untitled13` e a AGI. E e o que deixa o
+/// aplicativo sem tabela de ficha de editora nenhuma -- quem conhece a ficha
+/// do Ordem e o plugin do Ordem.
+///
+/// So formulario (AcroForm). Ficha chapada nao tem campo, e ler texto pela
+/// posicao na pagina seria adivinhar.
+///
+/// Nao conta como contribuicao que pede `principal`: quem le o PDF e o
+/// aplicativo, com o que esta aqui. O espelho em TypeScript e
+/// `FichaPdfDeclarada`, em `manifesto.ts`; a leitura, em `lib/fichas-pdf/`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FichaPdf {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    /// Os campos que o PDF tem de ter, TODOS, para ser esta ficha. Nome de
+    /// campo e o que distingue um modelo do outro: a ficha do Tormenta tem
+    /// `ModFor`, e a do Ordem nao.
+    pub reconhecer: Vec<String>,
+    /// O campo do nome do personagem. Vazio no PDF = ficha em branco.
+    pub nome: String,
+    #[serde(default)]
+    pub atributos: Vec<AtributoDaFicha>,
+    #[serde(default)]
+    pub medidores: Vec<MedidorDaFicha>,
+    #[serde(default)]
+    pub detalhes: Vec<DetalheDaFicha>,
+    #[serde(default)]
+    pub listas: Vec<ListaDaFicha>,
+}
+
+/// De onde sai um valor: o nome de um campo; uma lista de caixas, das quais
+/// vale QUANTAS estao marcadas -- as bolinhas do Vampiro, `FOR1` a `FOR5`, que
+/// nenhum campo soma --; ou campos para JUNTAR -- o historico escrito em cinco
+/// linhas, um campo por linha, que so faz sentido inteiro.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LeituraDeCampo {
+    Campo(String),
+    Caixas { caixas: Vec<String> },
+    Juntar { juntar: Vec<String> },
+}
+
+impl LeituraDeCampo {
+    fn campos(&self) -> Vec<&String> {
+        match self {
+            Self::Campo(campo) => vec![campo],
+            Self::Caixas { caixas: lista } | Self::Juntar { juntar: lista } => {
+                lista.iter().collect()
+            }
+        }
+    }
+}
+
+/// Um atributo da ficha. Casa com o da campanha pela sigla.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AtributoDaFicha {
+    pub sigla: String,
+    pub campo: LeituraDeCampo,
+}
+
+/// Um medidor da ficha. Casa com o da campanha pelo nome; sem par, nasce com
+/// a `cor` -- e com a primeira da paleta, sem ela.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MedidorDaFicha {
+    pub nome: String,
+    /// Ausente = cheio, o `maximo`.
+    #[serde(default)]
+    pub atual: Option<LeituraDeCampo>,
+    pub maximo: LeituraDeCampo,
+    #[serde(default)]
+    pub cor: Option<String>,
+}
+
+/// Um detalhe da ficha: a classe, a origem, o historico. Casa com o do molde
+/// da campanha pelo grupo e pelo rotulo.
+///
+/// `campo` e o valor curto, e `descricao` o texto longo que abre embaixo --
+/// e por ela que entra o historico, porque o valor corta em `MAX_TEXTO`. Pelo
+/// menos um dos dois.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetalheDaFicha {
+    pub grupo: String,
+    pub rotulo: String,
+    #[serde(default)]
+    pub campo: Option<LeituraDeCampo>,
+    #[serde(default)]
+    pub descricao: Option<LeituraDeCampo>,
+    /// `texto` (o de sempre) ou `numero`. Ver `TIPOS_DE_DETALHE_DA_FICHA`.
+    #[serde(default)]
+    pub tipo: Option<String>,
+}
+
+/// As linhas de uma tabela da ficha -- Habilidades & Rituais, Poderes, Ataques
+/// --, cada uma virando um detalhe no `grupo`.
+///
+/// O que separa isto de `detalhes` e o ROTULO: la ele e do plugin ("Classe"),
+/// aqui ele e o que o jogador escreveu no campo `nome` ("Golpe Pesado"). Linha
+/// com o nome vazio e linha que o jogador nao usou, e fica de fora.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListaDaFicha {
+    pub grupo: String,
+    pub itens: Vec<ItemDaLista>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemDaLista {
+    /// O campo de onde sai o rotulo do detalhe.
+    pub nome: String,
+    #[serde(default)]
+    pub campo: Option<LeituraDeCampo>,
+    #[serde(default)]
+    pub descricao: Option<LeituraDeCampo>,
+}
+
+/// Os tipos que um detalhe lido de PDF pode ter. Escolha fica de fora: as
+/// opcoes viriam do molde, e o PDF nao sabe quais sao.
+pub const TIPOS_DE_DETALHE_DA_FICHA: &[&str] = &["texto", "numero"];
+
+/// Quantos campos o `reconhecer` lista. Tres ou quatro bastam para separar
+/// dois modelos; trinta e dois ja e a ficha inteira.
+pub const MAX_CAMPOS_PARA_RECONHECER: usize = 32;
+
+/// O teto do nome de um campo de formulario. O PDF nao tem limite, mas um nome
+/// que nao cabe numa linha de log nao e de ficha nenhuma.
+pub const MAX_NOME_DE_CAMPO: usize = 200;
+
+/// Um sistema de jogo: o que uma campanha dele ganha de fabrica -- os
+/// atributos, os medidores, o molde dos detalhes e o cardapio de condicoes.
+///
+/// O mestre APLICA o sistema numa campanha, na criacao ou na configuracao, e
+/// ele nunca entra sozinho: plugin e ligado na maquina inteira, e a campanha
+/// de D&D da mesma maquina nao pode acordar com a AGI do Ordem. Aplicar JUNTA
+/// ao que a campanha ja tem, pulando o que tem o mesmo nome -- o molde e do
+/// mestre desde que foi criado, como o medidor e do personagem. Ver
+/// `vault::sistema`.
+///
+/// Os textos aqui (sigla, rotulo, opcao, nome de condicao) sao DADO que vai
+/// para a campanha, e por isso `String`, e nao `TextoDePlugin`: traduzir a
+/// opcao "Combatente" faria a ficha em ingles gravar outra coisa.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sistema {
+    pub id: String,
+    pub titulo: TextoDePlugin,
+    #[serde(default)]
+    pub atributos: Vec<AtributoDoSistema>,
+    #[serde(default)]
+    pub medidores: Vec<MedidorDoSistema>,
+    #[serde(default)]
+    pub detalhes: DetalhesDoSistema,
+    #[serde(default)]
+    pub condicoes: Vec<CondicaoDoSistema>,
+    /// O jeito de desenhar os atributos, `{extensao}/{estilo}` -- pode ser de
+    /// OUTRO plugin, como o estilo do medidor. Aplicar o sistema poe a
+    /// campanha nesse desenho: campanha de Ordem e ritual, sem seletor. Quem
+    /// grava e a tela, no registro de configuracoes. Ver `EstiloDeAtributos`.
+    #[serde(default)]
+    pub estilo_dos_atributos: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AtributoDoSistema {
+    pub sigla: String,
+    /// O valor de partida: o 1 do Ordem, o 10 do D&D.
+    pub valor: i64,
+    #[serde(default)]
+    pub descricao: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MedidorDoSistema {
+    pub nome: String,
+    pub cor: String,
+    #[serde(default)]
+    pub estilo: crate::vault::characters::Estilo,
+    pub maximo: i64,
+    #[serde(default)]
+    pub escondido: bool,
+    /// Um estilo de plugin, `{extensao}/{estilo}` -- pode ser de OUTRO plugin,
+    /// como as barras do Segredo na Floresta. Sem ele instalado, a barra sai
+    /// no `estilo`, que e a reserva de sempre.
+    #[serde(default)]
+    pub estilo_extensao: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetalhesDoSistema {
+    #[serde(default)]
+    pub grupos: Vec<GrupoDoSistema>,
+    #[serde(default)]
+    pub modelos: Vec<ModeloDoSistema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GrupoDoSistema {
+    pub nome: String,
+    #[serde(default)]
+    pub exibicao: crate::vault::detalhes::Exibicao,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModeloDoSistema {
+    /// O nome de um grupo declarado ao lado.
+    pub grupo: String,
+    pub rotulo: String,
+    #[serde(default)]
+    pub tipo: crate::vault::detalhes::Tipo,
+    #[serde(default)]
+    pub valor: Option<serde_json::Value>,
+    #[serde(default)]
+    pub opcoes: Vec<String>,
+    #[serde(default)]
+    pub descricao: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CondicaoDoSistema {
+    pub nome: String,
+    pub cor: String,
+    /// Nome da lista de icones da tela. Ausente ou desconhecido, o de sempre.
+    #[serde(default)]
+    pub icone: Option<String>,
+    /// Um efeito de fabrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+    #[serde(default)]
+    pub efeito: Option<String>,
+}
+
+impl Sistema {
+    /// Traz alguma coisa? Sistema vazio seria um botao "Aplicar" que nao faz
+    /// nada.
+    fn traz_algo(&self) -> bool {
+        !self.atributos.is_empty()
+            || !self.medidores.is_empty()
+            || !self.detalhes.grupos.is_empty()
+            || !self.condicoes.is_empty()
+            || self.estilo_dos_atributos.is_some()
+    }
+}
+
 /// Uma fonte de retrato ao vivo: como montar a URL de um servico, e em que
 /// tamanho a pagina dele foi desenhada.
 ///
@@ -1274,6 +1984,18 @@ pub fn ler_manifesto(pasta: &Path) -> AppResult<Manifesto> {
         }
     }
 
+    if let Some(icone) = &manifesto.icone {
+        let extensao = icone.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+        let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+        if !caminho_relativo_seguro(icone) || !e_imagem {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "o icone aponta para {icone:?}; tem de ser uma imagem dentro da pasta ({})",
+                "the icon points to {icone:?}; it must be an image inside the folder ({})",
+                IMAGENS_DE_MEDIDOR.join(", ")
+            )));
+        }
+    }
+
     for fonte in &manifesto.retratos {
         validar_fonte(fonte)?;
     }
@@ -1360,12 +2082,40 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
             c.estilos_de_medidor.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
         (
+            "estilosDeAtributos",
+            c.estilos_de_atributos.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
             "paginas",
             c.paginas.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
         (
             "efeitos",
             c.efeitos.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "fichasPdf",
+            c.fichas_pdf.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "sistemas",
+            c.sistemas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "bestiario",
+            c.bestiario.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "itens",
+            c.itens.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "abas",
+            c.abas.iter().map(|x| (&x.id, &x.titulo)).collect(),
+        ),
+        (
+            "auras",
+            c.auras.iter().map(|x| (&x.id, &x.titulo)).collect(),
         ),
     ];
 
@@ -1418,6 +2168,25 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
     validar_configuracoes(manifesto)?;
     validar_encaixes(manifesto)?;
 
+    for ficha in &c.fichas_pdf {
+        validar_ficha_pdf(ficha)?;
+    }
+    for sistema in &c.sistemas {
+        validar_sistema(sistema)?;
+    }
+    for aura in &c.auras {
+        validar_aura(aura)?;
+    }
+    for colecao in &c.bestiario {
+        validar_colecao("bestiario", colecao, &c.sistemas, &c.auras)?;
+    }
+    for colecao in &c.itens {
+        validar_colecao("itens", colecao, &c.sistemas, &c.auras)?;
+    }
+    for aba in &c.abas {
+        validar_aba(aba, &c.sistemas, &c.auras)?;
+    }
+
     // Icone de ferramenta e caminho dentro da pasta, e vale a mesma guarda do
     // `tema` e do `principal`.
     for ferramenta in &c.ferramentas {
@@ -1429,6 +2198,640 @@ fn validar_contribuicoes(manifesto: &Manifesto) -> AppResult<()> {
                     ferramenta.id
                 )));
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// A ficha em PDF faz sentido?
+///
+/// Recusa o que a gravacao cortaria calada -- a sigla de sete letras, o
+/// medidor de vinte e cinco --, porque o autor so descobriria importando uma
+/// ficha preenchida, e o que veria seria `AGILID` no cartao. E recusa os
+/// repetidos: duas linhas para a mesma sigla gravariam as duas no mesmo
+/// atributo, e valeria a ultima sem ninguem saber qual era.
+fn validar_ficha_pdf(ficha: &FichaPdf) -> AppResult<()> {
+    use crate::vault::{characters, detalhes};
+
+    let id = &ficha.id;
+    let invalida = |texto: crate::error::Texto| Err(AppError::ExtensaoInvalida(texto));
+
+    if ficha.reconhecer.is_empty() || ficha.reconhecer.len() > MAX_CAMPOS_PARA_RECONHECER {
+        return invalida(crate::texto!(
+            "a ficha {id:?} precisa de 1 a {MAX_CAMPOS_PARA_RECONHECER} campos em `reconhecer`",
+            "the sheet {id:?} needs 1 to {MAX_CAMPOS_PARA_RECONHECER} fields in `reconhecer`"
+        ));
+    }
+    if ficha.atributos.len() > characters::MAX_ATRIBUTOS {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {} atributos; o personagem guarda {}",
+            "the sheet {id:?} reads {} attributes; a character holds {}",
+            ficha.atributos.len(),
+            characters::MAX_ATRIBUTOS
+        ));
+    }
+    if ficha.medidores.len() > characters::MAX_MEDIDORES {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {} medidores; o personagem guarda {}",
+            "the sheet {id:?} reads {} meters; a character holds {}",
+            ficha.medidores.len(),
+            characters::MAX_MEDIDORES
+        ));
+    }
+    // As linhas das listas tambem viram detalhe, e contam no mesmo teto.
+    let quantos = ficha.detalhes.len()
+        + ficha
+            .listas
+            .iter()
+            .map(|lista| lista.itens.len())
+            .sum::<usize>();
+    if quantos > detalhes::MAX_DETALHES {
+        return invalida(crate::texto!(
+            "a ficha {id:?} le {quantos} detalhes, contando as listas; o personagem guarda {}",
+            "the sheet {id:?} reads {quantos} details, lists included; a character holds {}",
+            detalhes::MAX_DETALHES
+        ));
+    }
+
+    // Todo nome de campo que a ficha cita, de todas as listas, numa so: a
+    // regra e a mesma, e a mensagem diz qual.
+    let mut campos: Vec<&String> = ficha.reconhecer.iter().collect();
+    campos.push(&ficha.nome);
+    for atributo in &ficha.atributos {
+        campos.extend(atributo.campo.campos());
+    }
+    for medidor in &ficha.medidores {
+        campos.extend(medidor.maximo.campos());
+        campos.extend(medidor.atual.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for detalhe in &ficha.detalhes {
+        campos.extend(detalhe.campo.iter().flat_map(LeituraDeCampo::campos));
+        campos.extend(detalhe.descricao.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for item in ficha.listas.iter().flat_map(|lista| &lista.itens) {
+        campos.push(&item.nome);
+        campos.extend(item.campo.iter().flat_map(LeituraDeCampo::campos));
+        campos.extend(item.descricao.iter().flat_map(LeituraDeCampo::campos));
+    }
+    for campo in campos {
+        if campo.trim().is_empty() || campo.chars().count() > MAX_NOME_DE_CAMPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} cita o campo {campo:?}, que precisa ter de 1 a {MAX_NOME_DE_CAMPO} letras",
+                "the sheet {id:?} names the field {campo:?}, which must have 1 to {MAX_NOME_DE_CAMPO} characters"
+            ));
+        }
+    }
+
+    let leituras = ficha
+        .atributos
+        .iter()
+        .map(|atributo| &atributo.campo)
+        .chain(
+            ficha
+                .medidores
+                .iter()
+                .flat_map(|m| std::iter::once(&m.maximo).chain(&m.atual)),
+        )
+        .chain(
+            ficha
+                .detalhes
+                .iter()
+                .flat_map(|detalhe| detalhe.campo.iter().chain(&detalhe.descricao)),
+        )
+        .chain(
+            ficha
+                .listas
+                .iter()
+                .flat_map(|lista| &lista.itens)
+                .flat_map(|item| item.campo.iter().chain(&item.descricao)),
+        );
+    for leitura in leituras {
+        if let LeituraDeCampo::Caixas { caixas: lista } | LeituraDeCampo::Juntar { juntar: lista } =
+            leitura
+        {
+            if lista.is_empty() || lista.len() > MAX_CONTRIBUICOES {
+                return invalida(crate::texto!(
+                    "a ficha {id:?} junta ou conta de 1 a {MAX_CONTRIBUICOES} campos por valor, e uma lista tem {}",
+                    "the sheet {id:?} joins or counts 1 to {MAX_CONTRIBUICOES} fields per value, and one list has {}",
+                    lista.len()
+                ));
+            }
+        }
+    }
+
+    // A chave de comparacao e a da gravacao: sem espaco nas pontas e sem caixa.
+    let chave = |texto: &str| texto.trim().to_lowercase();
+
+    let mut siglas: Vec<String> = Vec::new();
+    for atributo in &ficha.atributos {
+        let sigla = atributo.sigla.trim();
+        if sigla.is_empty() || sigla.chars().count() > characters::MAX_SIGLA {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem a sigla {sigla:?}; ela precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the abbreviation {sigla:?}; it must have 1 to {} characters",
+                characters::MAX_SIGLA
+            ));
+        }
+        if siglas.contains(&chave(sigla)) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le a sigla {sigla:?} duas vezes",
+                "the sheet {id:?} reads the abbreviation {sigla:?} twice"
+            ));
+        }
+        siglas.push(chave(sigla));
+    }
+
+    let mut nomes: Vec<String> = Vec::new();
+    for medidor in &ficha.medidores {
+        let nome = medidor.nome.trim();
+        if nome.is_empty() || nome.chars().count() > characters::MAX_NOME_MEDIDOR {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o medidor {nome:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the meter {nome:?}; the name must have 1 to {} characters",
+                characters::MAX_NOME_MEDIDOR
+            ));
+        }
+        if nomes.contains(&chave(nome)) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le o medidor {nome:?} duas vezes",
+                "the sheet {id:?} reads the meter {nome:?} twice"
+            ));
+        }
+        if let Some(cor) = &medidor.cor {
+            if !cor_hex_valida(cor) {
+                return invalida(crate::texto!(
+                    "a cor {cor:?} do medidor {nome:?} na ficha {id:?} nao e hex, como \"#ef4444\"",
+                    "the color {cor:?} of the meter {nome:?} in the sheet {id:?} is not hex, like \"#ef4444\""
+                ));
+            }
+        }
+        nomes.push(chave(nome));
+    }
+
+    let mut vistos: Vec<(String, String)> = Vec::new();
+    for detalhe in &ficha.detalhes {
+        let grupo = detalhe.grupo.trim();
+        let rotulo = detalhe.rotulo.trim();
+        if grupo.is_empty() || grupo.chars().count() > detalhes::MAX_NOME_DO_GRUPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o grupo {grupo:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the group {grupo:?}; the name must have 1 to {} characters",
+                detalhes::MAX_NOME_DO_GRUPO
+            ));
+        }
+        if rotulo.is_empty() || rotulo.chars().count() > detalhes::MAX_ROTULO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem o detalhe {rotulo:?}; o rotulo precisa ter de 1 a {} letras",
+                "the sheet {id:?} has the detail {rotulo:?}; the label must have 1 to {} characters",
+                detalhes::MAX_ROTULO
+            ));
+        }
+        if detalhe.campo.is_none() && detalhe.descricao.is_none() {
+            return invalida(crate::texto!(
+                "o detalhe {rotulo:?} da ficha {id:?} nao le nada; ponha `campo` ou `descricao`",
+                "the detail {rotulo:?} in the sheet {id:?} reads nothing; set `campo` or `descricao`"
+            ));
+        }
+        if let Some(tipo) = &detalhe.tipo {
+            if !TIPOS_DE_DETALHE_DA_FICHA.contains(&tipo.as_str()) {
+                return invalida(crate::texto!(
+                    "o detalhe {rotulo:?} da ficha {id:?} tem o tipo {tipo:?}; os tipos sao {}",
+                    "the detail {rotulo:?} in the sheet {id:?} has the type {tipo:?}; the types are {}",
+                    TIPOS_DE_DETALHE_DA_FICHA.join(", ")
+                ));
+            }
+        }
+        let par = (chave(grupo), chave(rotulo));
+        if vistos.contains(&par) {
+            return invalida(crate::texto!(
+                "a ficha {id:?} le o detalhe {rotulo:?} do grupo {grupo:?} duas vezes",
+                "the sheet {id:?} reads the detail {rotulo:?} of the group {grupo:?} twice"
+            ));
+        }
+        vistos.push(par);
+    }
+
+    for lista in &ficha.listas {
+        let grupo = lista.grupo.trim();
+        if grupo.is_empty() || grupo.chars().count() > detalhes::MAX_NOME_DO_GRUPO {
+            return invalida(crate::texto!(
+                "a ficha {id:?} tem a lista do grupo {grupo:?}; o nome precisa ter de 1 a {} letras",
+                "the sheet {id:?} has a list for the group {grupo:?}; the name must have 1 to {} characters",
+                detalhes::MAX_NOME_DO_GRUPO
+            ));
+        }
+        if lista.itens.is_empty() {
+            return invalida(crate::texto!(
+                "a lista do grupo {grupo:?} na ficha {id:?} nao tem itens",
+                "the list for the group {grupo:?} in the sheet {id:?} has no items"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// O sistema faz sentido?
+///
+/// Os mesmos tetos que a campanha tem, e pela mesma razao da ficha em PDF: o
+/// que a gravacao cortaria calada vira erro na instalacao, onde o autor ve. Os
+/// repetidos tambem, porque aplicar pula pelo NOME -- a segunda "AGI" nunca
+/// entraria, e o autor nao saberia por que.
+fn validar_sistema(sistema: &Sistema) -> AppResult<()> {
+    use crate::vault::{characters, condicoes, detalhes, modelos};
+
+    let id = &sistema.id;
+    let invalido = |texto: crate::error::Texto| Err(AppError::ExtensaoInvalida(texto));
+    let chave = |texto: &str| texto.trim().to_lowercase();
+    let tamanho = |texto: &str| texto.trim().chars().count();
+
+    if !sistema.traz_algo() {
+        return invalido(crate::texto!(
+            "o sistema {id:?} nao traz atributo, medidor, detalhe nem condicao",
+            "the system {id:?} brings no attribute, meter, detail or condition"
+        ));
+    }
+
+    let teto = |nome: &str, quantos: usize, maximo: usize| -> AppResult<()> {
+        if quantos > maximo {
+            return invalido(crate::texto!(
+                "o sistema {id:?} traz {quantos} {nome}; a campanha guarda {maximo}",
+                "the system {id:?} brings {quantos} {nome}; a campaign holds {maximo}"
+            ));
+        }
+        Ok(())
+    };
+    teto(
+        "atributos",
+        sistema.atributos.len(),
+        characters::MAX_ATRIBUTOS,
+    )?;
+    teto("medidores", sistema.medidores.len(), modelos::MAX_MODELOS)?;
+    teto(
+        "grupos",
+        sistema.detalhes.grupos.len(),
+        detalhes::MAX_GRUPOS,
+    )?;
+    teto(
+        "detalhes",
+        sistema.detalhes.modelos.len(),
+        detalhes::MAX_DETALHES,
+    )?;
+    teto("condicoes", sistema.condicoes.len(), condicoes::MAX_MODELOS)?;
+
+    // Nome vazio, longo ou repetido: a mesma conta para as quatro listas.
+    let nomes = |lista: &str, nomes: Vec<&str>, maximo: usize| -> AppResult<()> {
+        let mut vistos: Vec<String> = Vec::new();
+        for nome in nomes {
+            if tamanho(nome) == 0 || tamanho(nome) > maximo {
+                return invalido(crate::texto!(
+                    "o sistema {id:?} tem {nome:?} em `{lista}`; o nome precisa ter de 1 a {maximo} letras",
+                    "the system {id:?} has {nome:?} in `{lista}`; the name must have 1 to {maximo} characters"
+                ));
+            }
+            if vistos.contains(&chave(nome)) {
+                return invalido(crate::texto!(
+                    "o sistema {id:?} traz {nome:?} duas vezes em `{lista}`",
+                    "the system {id:?} brings {nome:?} twice in `{lista}`"
+                ));
+            }
+            vistos.push(chave(nome));
+        }
+        Ok(())
+    };
+    nomes(
+        "atributos",
+        sistema.atributos.iter().map(|a| a.sigla.as_str()).collect(),
+        characters::MAX_SIGLA,
+    )?;
+    nomes(
+        "medidores",
+        sistema.medidores.iter().map(|m| m.nome.as_str()).collect(),
+        characters::MAX_NOME_MEDIDOR,
+    )?;
+    nomes(
+        "detalhes.grupos",
+        sistema
+            .detalhes
+            .grupos
+            .iter()
+            .map(|g| g.nome.as_str())
+            .collect(),
+        detalhes::MAX_NOME_DO_GRUPO,
+    )?;
+    nomes(
+        "condicoes",
+        sistema.condicoes.iter().map(|c| c.nome.as_str()).collect(),
+        characters::MAX_NOME_CONDICAO,
+    )?;
+
+    for atributo in &sistema.atributos {
+        if atributo.valor.abs() > characters::MAX_VALOR_ATRIBUTO {
+            return invalido(crate::texto!(
+                "o atributo {:?} do sistema {id:?} comeca em {}; o valor vai ate {}",
+                "the attribute {:?} in the system {id:?} starts at {}; the value goes up to {}",
+                atributo.sigla,
+                atributo.valor,
+                characters::MAX_VALOR_ATRIBUTO
+            ));
+        }
+        if atributo
+            .descricao
+            .as_deref()
+            .is_some_and(|descricao| descricao.chars().count() > characters::MAX_DESCRICAO_ATRIBUTO)
+        {
+            return invalido(crate::texto!(
+                "a descricao do atributo {:?} do sistema {id:?} passa de {} letras",
+                "the description of the attribute {:?} in the system {id:?} is longer than {} characters",
+                atributo.sigla,
+                characters::MAX_DESCRICAO_ATRIBUTO
+            ));
+        }
+    }
+
+    for medidor in &sistema.medidores {
+        let nome = &medidor.nome;
+        if !cor_hex_valida(&medidor.cor) {
+            return invalido(crate::texto!(
+                "a cor {:?} do medidor {nome:?} no sistema {id:?} nao e hex, como \"#ef4444\"",
+                "the color {:?} of the meter {nome:?} in the system {id:?} is not hex, like \"#ef4444\"",
+                medidor.cor
+            ));
+        }
+        if !(1..=modelos::MAX_VALOR).contains(&medidor.maximo) {
+            return invalido(crate::texto!(
+                "o medidor {nome:?} do sistema {id:?} tem maximo {}; vai de 1 a {}",
+                "the meter {nome:?} in the system {id:?} has a maximum of {}; it goes from 1 to {}",
+                medidor.maximo,
+                modelos::MAX_VALOR
+            ));
+        }
+        if let Some(estilo) = &medidor.estilo_extensao {
+            if !characters::estilo_extensao_valido(estilo) {
+                return invalido(crate::texto!(
+                    "o medidor {nome:?} do sistema {id:?} pede o estilo {estilo:?}; escreva `plugin/estilo`",
+                    "the meter {nome:?} in the system {id:?} asks for the style {estilo:?}; write `plugin/style`"
+                ));
+            }
+        }
+    }
+
+    if let Some(estilo) = &sistema.estilo_dos_atributos {
+        if !characters::estilo_extensao_valido(estilo) {
+            return invalido(crate::texto!(
+                "o sistema {id:?} pede o estilo de atributos {estilo:?}; escreva `plugin/estilo`",
+                "the system {id:?} asks for the attribute style {estilo:?}; write `plugin/style`"
+            ));
+        }
+    }
+
+    let grupos: Vec<String> = sistema
+        .detalhes
+        .grupos
+        .iter()
+        .map(|g| chave(&g.nome))
+        .collect();
+    let mut vistos: Vec<(String, String)> = Vec::new();
+    for modelo in &sistema.detalhes.modelos {
+        let rotulo = modelo.rotulo.trim();
+        let grupo = modelo.grupo.trim();
+        if !grupos.contains(&chave(grupo)) {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} fica no grupo {grupo:?}, que o sistema nao declara",
+                "the detail {rotulo:?} in the system {id:?} sits in the group {grupo:?}, which the system does not declare"
+            ));
+        }
+        if rotulo.is_empty() || rotulo.chars().count() > detalhes::MAX_ROTULO {
+            return invalido(crate::texto!(
+                "o sistema {id:?} tem o detalhe {rotulo:?}; o rotulo precisa ter de 1 a {} letras",
+                "the system {id:?} has the detail {rotulo:?}; the label must have 1 to {} characters",
+                detalhes::MAX_ROTULO
+            ));
+        }
+        let escolha = modelo.tipo == detalhes::Tipo::Escolha;
+        if escolha && (modelo.opcoes.is_empty() || modelo.opcoes.len() > detalhes::MAX_OPCOES) {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} e escolha, e precisa de 1 a {} opcoes",
+                "the detail {rotulo:?} in the system {id:?} is a choice, and needs 1 to {} options",
+                detalhes::MAX_OPCOES
+            ));
+        }
+        if !escolha && !modelo.opcoes.is_empty() {
+            return invalido(crate::texto!(
+                "o detalhe {rotulo:?} do sistema {id:?} tem opcoes, mas nao e escolha",
+                "the detail {rotulo:?} in the system {id:?} has options, but is not a choice"
+            ));
+        }
+        if modelo
+            .descricao
+            .as_deref()
+            .is_some_and(|descricao| descricao.chars().count() > detalhes::MAX_DESCRICAO)
+        {
+            return invalido(crate::texto!(
+                "a descricao do detalhe {rotulo:?} do sistema {id:?} passa de {} letras",
+                "the description of the detail {rotulo:?} in the system {id:?} is longer than {} characters",
+                detalhes::MAX_DESCRICAO
+            ));
+        }
+        let par = (chave(grupo), chave(rotulo));
+        if vistos.contains(&par) {
+            return invalido(crate::texto!(
+                "o sistema {id:?} traz o detalhe {rotulo:?} do grupo {grupo:?} duas vezes",
+                "the system {id:?} brings the detail {rotulo:?} of the group {grupo:?} twice"
+            ));
+        }
+        vistos.push(par);
+    }
+
+    for condicao in &sistema.condicoes {
+        let nome = &condicao.nome;
+        if !cor_hex_valida(&condicao.cor) {
+            return invalido(crate::texto!(
+                "a cor {:?} da condicao {nome:?} no sistema {id:?} nao e hex, como \"#ef4444\"",
+                "the color {:?} of the condition {nome:?} in the system {id:?} is not hex, like \"#ef4444\"",
+                condicao.cor
+            ));
+        }
+        if condicao
+            .icone
+            .as_deref()
+            .is_some_and(|icone| icone.chars().count() > characters::MAX_ICONE)
+        {
+            return invalido(crate::texto!(
+                "o icone da condicao {nome:?} do sistema {id:?} passa de {} letras",
+                "the icon of the condition {nome:?} in the system {id:?} is longer than {} characters",
+                characters::MAX_ICONE
+            ));
+        }
+        if let Some(efeito) = &condicao.efeito {
+            if !characters::efeito_valido(efeito) {
+                return invalido(crate::texto!(
+                    "a condicao {nome:?} do sistema {id:?} aponta para o efeito {efeito:?}, que nao tem forma de id",
+                    "the condition {nome:?} in the system {id:?} points to the effect {efeito:?}, which is not shaped like an id"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// A colecao -- do bestiario, ou de itens -- aponta para um lugar que faz
+/// sentido? `grupo` e a chave do manifesto, para o erro dizer onde procurar.
+///
+/// So a DECLARACAO: o arquivo e lido e conferido na importacao
+/// (`bestiario::validar_pasta`, `itens_do_plugin::validar_pasta`), e nao aqui.
+/// Esta funcao roda em toda listagem, e abrir quinhentas fichas para listar
+/// plugins custaria o que o arquivo a parte existe para poupar.
+fn validar_colecao(
+    grupo: &str,
+    colecao: &ColecaoDoBestiario,
+    sistemas: &[Sistema],
+    auras: &[Aura],
+) -> AppResult<()> {
+    let id = &colecao.id;
+    let arquivo = &colecao.arquivo;
+
+    if !caminho_relativo_seguro(arquivo) || !arquivo.to_ascii_lowercase().ends_with(".json") {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a colecao {id:?} de `{grupo}` aponta para {arquivo:?}; tem de ser um .json dentro da pasta",
+            "the collection {id:?} in `{grupo}` points to {arquivo:?}; it must be a .json inside the folder"
+        )));
+    }
+
+    // O sistema e do MESMO plugin, como o grupo do detalhe e do mesmo sistema:
+    // uma etiqueta que aponta para o que nao existe diria ao mestre que estas
+    // fichas sao de um sistema que ele nao acha em lugar nenhum.
+    if let Some(sistema) = &colecao.sistema {
+        if !sistemas.iter().any(|s| &s.id == sistema) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a colecao {id:?} de `{grupo}` e do sistema {sistema:?}, que o plugin nao declara",
+                "the collection {id:?} in `{grupo}` belongs to the system {sistema:?}, which the plugin does not declare"
+            )));
+        }
+    }
+
+    // A aura tambem e do MESMO plugin: a pasta apontaria para uma cor que
+    // ninguem declarou, e sairia cinza sem o autor saber por que.
+    if let Some(aura) = &colecao.aura {
+        if !auras.iter().any(|a| &a.id == aura) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a colecao {id:?} de `{grupo}` aponta a aura {aura:?}, que o plugin nao declara em `auras`",
+                "the collection {id:?} in `{grupo}` points to the aura {aura:?}, which the plugin does not declare in `auras`"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// A aba faz sentido? O grupo da ficha com um nome que caiba no molde, e as
+/// colecoes pela regra das do bestiario. Os verbetes sao conferidos na
+/// importacao, pela pasta. Ver `abas_do_plugin::validar_pasta`.
+fn validar_aba(aba: &AbaDoCompendio, sistemas: &[Sistema], auras: &[Aura]) -> AppResult<()> {
+    let id = &aba.id;
+    let letras = aba.grupo.nome.trim().chars().count();
+
+    // Sem grupo, o verbete dado nao teria onde morar na ficha.
+    if letras == 0 || letras > crate::vault::detalhes::MAX_NOME_DO_GRUPO {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a aba {id:?} poe os verbetes no grupo {:?}; o nome precisa ter de 1 a {} letras",
+            "the tab {id:?} puts its entries in the group {:?}; the name must have 1 to {} characters",
+            aba.grupo.nome,
+            crate::vault::detalhes::MAX_NOME_DO_GRUPO
+        )));
+    }
+
+    // Aba sem colecao seria uma aba vazia na barra do Compendio.
+    if aba.colecoes.is_empty() || aba.colecoes.len() > MAX_CONTRIBUICOES {
+        return Err(AppError::ExtensaoInvalida(crate::texto!(
+            "a aba {id:?} traz {} colecoes; vai de 1 a {MAX_CONTRIBUICOES}",
+            "the tab {id:?} brings {} collections; it goes from 1 to {MAX_CONTRIBUICOES}",
+            aba.colecoes.len()
+        )));
+    }
+
+    let mut vistas: Vec<&str> = Vec::new();
+    for colecao in &aba.colecoes {
+        let colecao_id = &colecao.id;
+        if !id_valido(colecao_id) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a aba {id:?} tem a colecao {colecao_id:?}; o id e so minusculas, digitos e hifen",
+                "the tab {id:?} has the collection {colecao_id:?}; the id is only lowercase letters, digits and hyphens"
+            )));
+        }
+        if colecao.titulo.vazio() {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a colecao {colecao_id:?} da aba {id:?} esta sem titulo",
+                "the collection {colecao_id:?} in the tab {id:?} has no `titulo`"
+            )));
+        }
+        if vistas.contains(&colecao_id.as_str()) {
+            return Err(AppError::ExtensaoInvalida(crate::texto!(
+                "a aba {id:?} tem a colecao {colecao_id:?} duas vezes",
+                "the tab {id:?} has the collection {colecao_id:?} twice"
+            )));
+        }
+        vistas.push(colecao_id);
+        validar_colecao("abas", colecao, sistemas, auras)?;
+    }
+
+    Ok(())
+}
+
+/// A aura faz sentido? A forma da imagem e as cores aqui; a imagem existir e
+/// caber no teto, na importacao (`validar_imagens_declaradas`).
+fn validar_aura(aura: &Aura) -> AppResult<()> {
+    let id = &aura.id;
+    let invalida = |motivo: crate::error::Texto| {
+        Err(AppError::ExtensaoInvalida(crate::error::Texto {
+            pt: format!("a aura {id:?} {}", motivo.pt),
+            en: format!("the aura {id:?} {}", motivo.en),
+        }))
+    };
+
+    if !cor_hex_valida(&aura.cor) {
+        return invalida(crate::texto!(
+            "tem a cor {:?}; use hex, como #b3121f",
+            "has the color {:?}; use hex, like #b3121f",
+            aura.cor
+        ));
+    }
+
+    if let Some(emblema) = &aura.emblema {
+        let extensao = emblema.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+        let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+        if !caminho_relativo_seguro(emblema) || !e_imagem {
+            return invalida(crate::texto!(
+                "aponta o emblema {emblema:?}; tem de ser uma imagem da pasta ({})",
+                "points to the emblem {emblema:?}; it must be an image inside the folder ({})",
+                IMAGENS_DE_MEDIDOR.join(", ")
+            ));
+        }
+    }
+
+    if let Some(luz) = &aura.luz {
+        if !EFEITOS_DE_LUZ.contains(&luz.efeito.as_str()) {
+            return invalida(crate::texto!(
+                "pede a luz {:?}; os efeitos sao {}",
+                "asks for the light {:?}; the effects are {}",
+                luz.efeito,
+                EFEITOS_DE_LUZ.join(", ")
+            ));
+        }
+        if luz.cores.is_empty() || luz.cores.len() > MAX_CORES_DA_LUZ {
+            return invalida(crate::texto!(
+                "tem {} cores na luz; vai de 1 a {MAX_CORES_DA_LUZ}",
+                "has {} colors in its light; it goes from 1 to {MAX_CORES_DA_LUZ}",
+                luz.cores.len()
+            ));
+        }
+        if let Some(cor) = luz.cores.iter().find(|cor| !cor_hex_valida(cor)) {
+            return invalida(crate::texto!(
+                "tem a cor {cor:?} na luz; use hex, como #dc2626",
+                "has the color {cor:?} in its light; use hex, like #dc2626"
+            ));
         }
     }
 
@@ -1477,6 +2880,9 @@ fn validar_encaixes(manifesto: &Manifesto) -> AppResult<()> {
 
     for estilo in &c.estilos_de_medidor {
         validar_estilo(estilo)?;
+    }
+    for estilo in &c.estilos_de_atributos {
+        validar_estilo_de_atributos(estilo)?;
     }
 
     if !c.efeitos.is_empty() && manifesto.id == PREFIXO_DA_CAMPANHA {
@@ -1620,6 +3026,124 @@ fn validar_area(
     Ok(())
 }
 
+/// O bloco `disparo`, com uma forma conhecida e numeros que fazem sentido.
+/// Os limites sao os de `LIMITES_DO_DISPARO`, no TS.
+fn validar_disparo(disparo: &DisparoDoEfeito) -> Result<(), crate::error::Texto> {
+    if !FORMAS_DO_DISPARO.contains(&disparo.forma.as_str()) {
+        return Err(crate::texto!(
+            "pede o disparo {:?}; as formas sao {}",
+            "asks for the shot {:?}; the shapes are {}",
+            disparo.forma,
+            FORMAS_DO_DISPARO.join(", ")
+        ));
+    }
+
+    for (campo, valor, min, max) in [
+        ("abertura", disparo.abertura, 10.0, 160.0),
+        ("velocidade", disparo.velocidade, 3.0, 60.0),
+        ("alcance", disparo.alcance, 1.0, 30.0),
+        ("tamanho", disparo.tamanho, 0.3, 3.0),
+        ("impacto", disparo.impacto, 0.0, 4.0),
+    ] {
+        if valor.is_some_and(|v| !v.is_finite() || !(min..=max).contains(&v)) {
+            return Err(crate::texto!(
+                "tem `disparo.{campo}` fora de {min} a {max}",
+                "has `disparo.{campo}` out of range ({min} to {max})"
+            ));
+        }
+    }
+
+    if let Some(projetil) = &disparo.projetil {
+        imagem_animada_valida(&projetil.imagem, "disparo.projetil")?;
+        if projetil.giro.is_some_and(|giro| !GIROS_DO_PROJETIL.contains(&giro)) {
+            return Err(crate::texto!(
+                "tem `disparo.projetil.giro` que nao e 0, 90, -90 ou 180",
+                "has `disparo.projetil.giro` that is not 0, 90, -90 or 180"
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// O bloco `ambiente`, com as camadas, o veu e o relampago nos limites de
+/// `LIMITES_DO_AMBIENTE`, no TS. A direcao e qualquer angulo: o TS a leva ao
+/// eixo mais perto.
+fn validar_ambiente(ambiente: &AmbienteDoEfeito) -> Result<(), crate::error::Texto> {
+    let entre = |valor: Option<f64>, min: f64, max: f64| {
+        valor.map_or(true, |v| v.is_finite() && (min..=max).contains(&v))
+    };
+    let fora = |campo: &str, min: f64, max: f64| {
+        Err(crate::texto!(
+            "tem `ambiente.{campo}` fora de {min} a {max}",
+            "has `ambiente.{campo}` out of range ({min} to {max})"
+        ))
+    };
+
+    if ambiente.camadas.len() > MAX_CAMADAS_DO_AMBIENTE {
+        return Err(crate::texto!(
+            "tem mais de {MAX_CAMADAS_DO_AMBIENTE} camadas no `ambiente`",
+            "has more than {MAX_CAMADAS_DO_AMBIENTE} layers in `ambiente`"
+        ));
+    }
+
+    for (campo, cor) in [
+        ("cor", ambiente.cor.as_deref()),
+        ("veu.cor", ambiente.veu.as_ref().and_then(|veu| veu.cor.as_deref())),
+        ("relampago.cor", ambiente.relampago.as_ref().and_then(|r| r.cor.as_deref())),
+    ] {
+        if cor.is_some_and(|cor| !cor_hex_valida(cor)) {
+            return Err(crate::texto!(
+                "tem `ambiente.{campo}` que nao e uma cor #rrggbb",
+                "has `ambiente.{campo}` that is not a #rrggbb color"
+            ));
+        }
+    }
+
+    for camada in &ambiente.camadas {
+        imagem_animada_valida(&camada.imagem, "ambiente.camadas")?;
+        if camada.imagem.quadros.is_some() {
+            return Err(crate::texto!(
+                "tem `quadros` numa camada do `ambiente`: a camada desliza, e nao toca quadros",
+                "has `quadros` in an `ambiente` layer: the layer slides, it doesn't play frames"
+            ));
+        }
+        if camada.direcao.is_some_and(|v| !v.is_finite()) {
+            return Err(crate::texto!(
+                "tem `ambiente.camadas.direcao` que nao e numero",
+                "has `ambiente.camadas.direcao` that is not a number"
+            ));
+        }
+        for (campo, valor, min, max) in [
+            ("camadas.escala", camada.escala, 0.1, 2.0),
+            ("camadas.velocidade", camada.velocidade, 0.0, 3.0),
+            ("camadas.opacidade", camada.opacidade, 0.0, 1.0),
+            ("camadas.balanco", camada.balanco, 0.0, 0.5),
+        ] {
+            if !entre(valor, min, max) {
+                return fora(campo, min, max);
+            }
+        }
+    }
+
+    if let Some(veu) = &ambiente.veu {
+        if !entre(Some(veu.opacidade), 0.0, 0.8) {
+            return fora("veu.opacidade", 0.0, 0.8);
+        }
+    }
+
+    if let Some(relampago) = &ambiente.relampago {
+        if !entre(relampago.intervalo, 3.0, 60.0) {
+            return fora("relampago.intervalo", 3.0, 60.0);
+        }
+        if !entre(relampago.forca, 0.0, 1.0) {
+            return fora("relampago.forca", 0.0, 1.0);
+        }
+    }
+
+    Ok(())
+}
+
 /// Um efeito desenha alguma coisa, com numeros que fazem sentido?
 ///
 /// Efeito que nao mexe em nada seria uma opcao no seletor que, escolhida, nao
@@ -1647,8 +3171,8 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 
     if !efeito.faz_algo() {
         return invalido(crate::texto!(
-            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` ou `base`",
-            "draws nothing: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco` or `base`"
+            "nao desenha nada: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco`, `base` ou `ambiente`",
+            "draws nothing: declare `figura`, `externo`, `interno`, `luz`, `particulas`, `area.foco`, `base` or `ambiente`"
         ));
     }
 
@@ -1663,6 +3187,18 @@ fn validar_efeito(efeito: &Efeito) -> AppResult<()> {
 
     if let Err(motivo) = validar_area(efeito.area.as_ref(), efeito.base.as_ref()) {
         return invalido(motivo);
+    }
+
+    if let Some(disparo) = &efeito.disparo {
+        if let Err(motivo) = validar_disparo(disparo) {
+            return invalido(motivo);
+        }
+    }
+
+    if let Some(ambiente) = &efeito.ambiente {
+        if let Err(motivo) = validar_ambiente(ambiente) {
+            return invalido(motivo);
+        }
     }
 
     let fracao = |valor: Option<f64>| valor.map_or(true, |v| v.is_finite() && (0.0..=1.0).contains(&v));
@@ -1877,6 +3413,21 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
                 }
             }
 
+            if let Conteudo::Pontos {
+                proporcao: Some(proporcao),
+                ..
+            } = camadas.conteudo
+            {
+                if !proporcao.is_finite()
+                    || !(PROPORCAO_DO_PONTO_MIN..=PROPORCAO_DO_PONTO_MAX).contains(&proporcao)
+                {
+                    return invalido(crate::texto!(
+                        "tem pontos de proporcao {proporcao}; vai de {PROPORCAO_DO_PONTO_MIN} a {PROPORCAO_DO_PONTO_MAX}",
+                        "has points of proportion {proporcao}; the range is {PROPORCAO_DO_PONTO_MIN} to {PROPORCAO_DO_PONTO_MAX}"
+                    ));
+                }
+            }
+
             for imagem in estilo.imagens() {
                 let extensao = imagem.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
                 let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
@@ -1906,6 +3457,104 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
     Ok(())
 }
 
+/// Um estilo de atributos desenha alguma coisa, e so com o que e da pasta?
+///
+/// So a FORMA, como `validar_estilo`: a imagem existir e caber no teto e da
+/// importacao (`validar_imagens_declaradas`). E recusa o que a ficha nao
+/// saberia onde por -- a sigla de sete letras, que a ficha corta, e a mesma
+/// sigla duas vezes, que poria o mesmo numero em dois circulos.
+fn validar_estilo_de_atributos(estilo: &EstiloDeAtributos) -> AppResult<()> {
+    use crate::vault::characters;
+
+    let invalido = |motivo: crate::error::Texto| {
+        Err(AppError::ExtensaoInvalida(crate::error::Texto {
+            pt: format!("o estilo de atributos {:?} {}", estilo.id, motivo.pt),
+            en: format!("the attribute style {:?} {}", estilo.id, motivo.en),
+        }))
+    };
+
+    let imagem = &estilo.imagem;
+    let extensao = imagem.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
+    let e_imagem = extensao.is_some_and(|e| IMAGENS_DE_MEDIDOR.contains(&e.as_str()));
+    if !caminho_relativo_seguro(imagem) || !e_imagem {
+        return invalido(crate::texto!(
+            "aponta para {imagem:?}; tem de ser uma imagem dentro da pasta ({})",
+            "points to {imagem:?}; it must be an image inside the folder ({})",
+            IMAGENS_DE_MEDIDOR.join(", ")
+        ));
+    }
+
+    let proporcao = estilo.proporcao;
+    if !proporcao.is_finite()
+        || !(PROPORCAO_DOS_ATRIBUTOS_MIN..=PROPORCAO_DOS_ATRIBUTOS_MAX).contains(&proporcao)
+    {
+        return invalido(crate::texto!(
+            "tem proporcao {proporcao}; vai de {PROPORCAO_DOS_ATRIBUTOS_MIN} a {PROPORCAO_DOS_ATRIBUTOS_MAX}",
+            "has `proporcao` {proporcao}; the range is {PROPORCAO_DOS_ATRIBUTOS_MIN} to {PROPORCAO_DOS_ATRIBUTOS_MAX}"
+        ));
+    }
+
+    if estilo.lugares.is_empty() || estilo.lugares.len() > characters::MAX_ATRIBUTOS {
+        return invalido(crate::texto!(
+            "precisa de 1 a {} lugares",
+            "needs 1 to {} `lugares`",
+            characters::MAX_ATRIBUTOS
+        ));
+    }
+
+    let mut vistas: Vec<String> = Vec::new();
+    for lugar in &estilo.lugares {
+        let sigla = lugar.sigla.trim();
+        let letras = sigla.chars().count();
+        if letras == 0 || letras > characters::MAX_SIGLA {
+            return invalido(crate::texto!(
+                "tem a sigla {sigla:?}; ela precisa ter de 1 a {} letras",
+                "has the abbreviation {sigla:?}; it must have 1 to {} characters",
+                characters::MAX_SIGLA
+            ));
+        }
+        // Sem diferenca de caixa, como a ficha casa a sigla com o lugar.
+        let chave = sigla.to_lowercase();
+        if vistas.contains(&chave) {
+            return invalido(crate::texto!(
+                "tem a sigla {sigla:?} duas vezes",
+                "has the abbreviation {sigla:?} twice"
+            ));
+        }
+        vistas.push(chave);
+
+        let dentro = |n: f64| n.is_finite() && (0.0..=1.0).contains(&n);
+        if !dentro(lugar.x) || !dentro(lugar.y) {
+            return invalido(crate::texto!(
+                "poe {sigla:?} fora da imagem; x e y sao fracoes de 0 a 1",
+                "puts {sigla:?} outside the image; x and y are fractions from 0 to 1"
+            ));
+        }
+        if !lugar.tamanho.is_finite()
+            || !(TAMANHO_DO_NUMERO_MIN..=TAMANHO_DO_NUMERO_MAX).contains(&lugar.tamanho)
+        {
+            return invalido(crate::texto!(
+                "da a {sigla:?} o tamanho {}; vai de {TAMANHO_DO_NUMERO_MIN} a {TAMANHO_DO_NUMERO_MAX}",
+                "gives {sigla:?} the size {}; the range is {TAMANHO_DO_NUMERO_MIN} to {TAMANHO_DO_NUMERO_MAX}",
+                lugar.tamanho
+            ));
+        }
+    }
+
+    if let Some(texto) = &estilo.texto {
+        for cor in texto.cor.iter().chain(texto.contorno.iter()) {
+            if !cor_hex_valida(cor) {
+                return invalido(crate::texto!(
+                    "pede a cor {cor:?} no texto; use hex, como #fff ou #1a0d0dcc",
+                    "uses the color {cor:?} in `texto`; use hex, like #fff or #1a0d0dcc"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// As imagens dos estilos e dos efeitos existem e cabem no teto?
 ///
 /// Na IMPORTACAO, e nao em `ler_manifesto`: e o momento em que o autor ainda
@@ -1913,7 +3562,15 @@ fn validar_estilo(estilo: &EstiloDeMedidor) -> AppResult<()> {
 /// uma imagem que some e so um medidor sem moldura, ou um fogo que nao
 /// aparece -- o daemon responde 404 e a TV desenha o resto.
 fn validar_imagens_declaradas(pasta: &Path, manifesto: &Manifesto) -> AppResult<()> {
-    for (dono, imagem) in manifesto.contribui.imagens_servidas() {
+    // Os emblemas das auras entram na mesma conferencia, mas nao em
+    // `imagens_servidas`: sao da tela do mestre, e o daemon nao os publica.
+    let emblemas = manifesto.contribui.auras.iter().filter_map(|aura| {
+        aura.emblema
+            .as_deref()
+            .map(|emblema| (crate::texto!("a aura {:?}", "the aura {:?}", aura.id), emblema))
+    });
+
+    for (dono, imagem) in manifesto.imagens_servidas().into_iter().chain(emblemas) {
         // `symlink_metadata`: a copia pula link simbolico, e uma imagem que
         // fosse link passaria aqui e faltaria na pasta instalada.
         let tamanho = std::fs::symlink_metadata(pasta.join(imagem))
@@ -2264,6 +3921,9 @@ pub fn listar(dir: &Path) -> AppResult<Vec<Manifesto>> {
 pub fn importar(dir: &Path, origem: &Path) -> AppResult<Manifesto> {
     let manifesto = ler_manifesto(origem)?;
     validar_imagens_declaradas(origem, &manifesto)?;
+    crate::bestiario::validar_pasta(origem, &manifesto)?;
+    crate::itens_do_plugin::validar_pasta(origem, &manifesto)?;
+    crate::abas_do_plugin::validar_pasta(origem, &manifesto)?;
 
     let destino = dir.join(&manifesto.id);
 
@@ -2991,6 +4651,142 @@ mod tests {
     }
 
     #[test]
+    fn efeito_com_disparo_entra_e_chega_ao_ts_inteiro() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"sopro","titulo":"Sopro",
+                     "base":{"imagem":"fx/chao.webp"},
+                     "disparo":{"forma":"cone","abertura":90,"velocidade":20,"alcance":4}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let json = serde_json::to_value(&m.contribui.efeitos[0]).unwrap();
+        assert_eq!(json["disparo"]["forma"], "cone");
+        assert_eq!(json["disparo"]["abertura"], 90.0);
+        assert_eq!(json["disparo"]["alcance"], 4.0);
+        // O que o plugin nao disse nao vai: o TS poe os padroes.
+        assert!(json["disparo"].get("impacto").is_none());
+    }
+
+    #[test]
+    fn projetil_do_disparo_entra_e_e_servido() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"flecha","titulo":"Flecha",
+                     "disparo":{"forma":"linha","impacto":0,"rastro":false,
+                                "projetil":{"imagem":"fx/flecha.webp","giro":90,
+                                            "quadros":{"colunas":2,"total":2,"fps":8}}}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        // Só o projetil desenha: é o bastante para o efeito entrar.
+        assert_eq!(efeito.imagens(), vec!["fx/flecha.webp"]);
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["disparo"]["projetil"]["imagem"], "fx/flecha.webp");
+        assert_eq!(json["disparo"]["projetil"]["giro"], 90.0);
+        assert_eq!(json["disparo"]["rastro"], false);
+    }
+
+    #[test]
+    fn efeito_de_ambiente_entra_e_chega_ao_ts_inteiro() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos(
+                "ordem",
+                r##"[{"id":"nevoa-de-sangue","titulo":"Névoa de sangue",
+                     "ambiente":{"cor":"#7f1d1d",
+                                 "camadas":[{"imagem":"fx/nevoa.webp","cores":"condicao",
+                                             "mipmaps":{"512":"fx/nevoa-512.webp"},
+                                             "escala":1.2,"direcao":0,"velocidade":0.04}],
+                                 "veu":{"opacidade":0.2},
+                                 "relampago":{"intervalo":20}}}]"##,
+            ),
+        )
+        .unwrap();
+
+        let efeito = &m.contribui.efeitos[0];
+        assert_eq!(efeito.imagens(), vec!["fx/nevoa.webp", "fx/nevoa-512.webp"]);
+        let json = serde_json::to_value(efeito).unwrap();
+        assert_eq!(json["ambiente"]["cor"], "#7f1d1d");
+        assert_eq!(json["ambiente"]["camadas"][0]["imagem"], "fx/nevoa.webp");
+        assert_eq!(json["ambiente"]["camadas"][0]["cores"], "condicao");
+        assert_eq!(json["ambiente"]["camadas"][0]["escala"], 1.2);
+        assert_eq!(json["ambiente"]["veu"]["opacidade"], 0.2);
+        assert_eq!(json["ambiente"]["relampago"]["intervalo"], 20.0);
+        // O que o plugin nao disse nao vai: o TS poe os padroes.
+        assert!(json["ambiente"]["camadas"][0].get("balanco").is_none());
+    }
+
+    #[test]
+    fn so_o_veu_ja_e_um_ambiente() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_efeitos("ordem", r##"[{"id":"breu","titulo":"Breu","ambiente":{"veu":{"cor":"#000000","opacidade":0.5}}}]"##),
+        )
+        .unwrap();
+        assert!(m.contribui.efeitos[0].imagens().is_empty());
+    }
+
+    #[test]
+    fn ambiente_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for ambiente in [
+            r#"{"camadas":[]}"#,
+            r#"{"cor":"azul","veu":{"opacidade":0.2}}"#,
+            r#"{"veu":{"opacidade":0.95}}"#,
+            r##"{"veu":{"cor":"#12","opacidade":0.2}}"##,
+            r#"{"relampago":{"intervalo":1}}"#,
+            r#"{"relampago":{"forca":2}}"#,
+            r#"{"camadas":[{"imagem":"c.png","escala":5}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","velocidade":-1}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","opacidade":1.5}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","balanco":0.9}]}"#,
+            r#"{"camadas":[{"imagem":"c.png","quadros":{"colunas":2,"total":2,"fps":8}}]}"#,
+            r#"{"camadas":[{"imagem":"../fora.png"}]}"#,
+            r#"{"camadas":[{"imagem":"c.svg"}]}"#,
+            r#"{"camadas":[{"imagem":"a.png"},{"imagem":"b.png"},{"imagem":"c.png"},{"imagem":"d.png"},{"imagem":"e.png"}]}"#,
+        ] {
+            let corpo = format!(r#"[{{"id":"x","titulo":"X","ambiente":{ambiente}}}]"#);
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{ambiente}");
+        }
+    }
+
+    #[test]
+    fn disparo_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for disparo in [
+            r#"{"forma":"espiral"}"#,
+            r#"{"abertura":60}"#,
+            r#"{"forma":"cone","abertura":300}"#,
+            r#"{"forma":"linha","velocidade":0}"#,
+            r#"{"forma":"linha","alcance":99}"#,
+            r#"{"forma":"linha","tamanho":0.1}"#,
+            r#"{"forma":"linha","impacto":-1}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"p.png","giro":45}}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"../fora.png"}}"#,
+            r#"{"forma":"linha","projetil":{"imagem":"p.svg"}}"#,
+        ] {
+            let corpo = format!(
+                r#"[{{"id":"x","titulo":"X","base":{{"imagem":"c.png"}},"disparo":{disparo}}}]"#
+            );
+            assert!(ler(base.path(), &com_efeitos("ordem", &corpo)).is_err(), "{disparo}");
+        }
+    }
+
+    #[test]
     fn externo_e_interno_tortos_sao_recusados() {
         let base = tempfile::tempdir().unwrap();
 
@@ -3235,6 +5031,61 @@ mod tests {
     }
 
     #[test]
+    fn pontos_em_camadas_aceitam_ponto_estreito_e_teto() {
+        let base = tempfile::tempdir().unwrap();
+        let pontos = |extra: &str| {
+            com_estilos(&format!(
+                r#"[{{"id":"municao","titulo":"Municao","altura":0.18,
+                     "camadas":{{"conteudo":{{"modo":"pontos","cheio":"b.png"{extra}}}}}}}]"#
+            ))
+        };
+
+        let m = ler(base.path(), &pontos(r#","proporcao":0.44,"ate":12"#)).unwrap();
+        assert_eq!(
+            m.contribui.estilos_de_medidor[0]
+                .camadas
+                .as_ref()
+                .unwrap()
+                .conteudo,
+            Conteudo::Pontos {
+                cheio: Some("b.png".into()),
+                vazio: None,
+                proporcao: Some(0.44),
+                ate: Some(12),
+            }
+        );
+
+        // Os dois sao opcionais, e o zero do `ate` e "sempre o numero".
+        assert!(ler(base.path(), &pontos("")).is_ok());
+        assert!(ler(base.path(), &pontos(r#","ate":0"#)).is_ok());
+
+        for extra in [
+            r#","proporcao":0"#,
+            r#","proporcao":5"#,
+            r#","proporcao":-1"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &pontos(extra)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{extra} devia ser recusado"
+            );
+        }
+
+        // Teto negativo ou quebrado e erro de forma, e o serde ja diz qual.
+        for extra in [r#","ate":-1"#, r#","ate":2.5"#] {
+            assert!(
+                matches!(
+                    ler(base.path(), &pontos(extra)).unwrap_err(),
+                    AppError::Malformed { .. }
+                ),
+                "{extra} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
     fn importar_recusa_imagem_de_medidor_que_falta_ou_pesa() {
         let base = tempfile::tempdir().unwrap();
         let dir = base.path().join("extensoes");
@@ -3264,6 +5115,152 @@ mod tests {
         escrever(&pasta.join("m"), "vida.png", "png");
         importar(&dir, &pasta).unwrap();
         assert!(dir.join("ordem/m/vida.png").is_file());
+    }
+
+    fn com_estilos_de_atributos(estilos: &str) -> String {
+        format!(
+            r#"{{"id":"ordem","nome":"Ordem","versao":"1.0.0","apiVersao":11,"contribui":{{"estilosDeAtributos":{estilos}}}}}"#
+        )
+    }
+
+    /// O ritual, com um pedaco trocado por quem quer quebrar.
+    fn ritual(troca: &str) -> String {
+        let base = r##"{"id":"ritual","titulo":"Ritual","imagem":"atributos/ritual.png","proporcao":1,
+            "lugares":[{"sigla":"AGI","x":0.48,"y":0.17,"tamanho":0.08},
+                       {"sigla":"FOR","x":0.2,"y":0.4,"tamanho":0.08}],
+            "texto":{"cor":"#fff","contorno":"#000000"}}"##;
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        if let Some((chave, valor)) = troca.split_once('=') {
+            json[chave] = serde_json::from_str(valor).unwrap();
+        }
+        com_estilos_de_atributos(&format!("[{json}]"))
+    }
+
+    #[test]
+    fn estilo_de_atributos_entra_inteiro_e_dispensa_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &ritual("")).unwrap();
+
+        let estilo = &m.contribui.estilos_de_atributos[0];
+        assert_eq!(estilo.lugares[1].sigla, "FOR");
+        assert_eq!(estilo.texto.as_ref().unwrap().cor.as_deref(), Some("#fff"));
+        assert_eq!(estilo.imagens(), ["atributos/ritual.png"]);
+        // A imagem vai para a rede como a do medidor: o celular desenha o
+        // ritual buscando-a no daemon.
+        assert!(m
+            .contribui
+            .imagens_servidas()
+            .iter()
+            .any(|(_, imagem)| *imagem == "atributos/ritual.png"));
+
+        // Sem texto, o numero sai branco.
+        let sem_texto = ler(base.path(), &ritual(r#"texto=null"#)).unwrap();
+        assert!(sem_texto.contribui.estilos_de_atributos[0].texto.is_none());
+    }
+
+    #[test]
+    fn estilo_de_atributos_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+        let lugar = |sigla: &str, x: f64, tamanho: f64| {
+            format!(r#"lugares=[{{"sigla":"{sigla}","x":{x},"y":0.5,"tamanho":{tamanho}}}]"#)
+        };
+        let muitos = format!(
+            "lugares=[{}]",
+            (0..=crate::vault::characters::MAX_ATRIBUTOS)
+                .map(|i| format!(r#"{{"sigla":"A{i}","x":0.5,"y":0.5,"tamanho":0.1}}"#))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+
+        for troca in [
+            // SVG nao: ele vai para a rede, e la roda script.
+            r#"imagem="ritual.svg""#.to_string(),
+            r#"imagem="../fora.png""#.to_string(),
+            r#"proporcao=0"#.to_string(),
+            r#"proporcao=5"#.to_string(),
+            r#"lugares=[]"#.to_string(),
+            muitos,
+            lugar("AGILIDADE", 0.5, 0.1),
+            lugar("", 0.5, 0.1),
+            lugar("AGI", 1.2, 0.1),
+            lugar("AGI", 0.5, 0.5),
+            r#"lugares=[{"sigla":"AGI","x":0.5,"y":0.5,"tamanho":0.1},{"sigla":"agi","x":0.2,"y":0.5,"tamanho":0.1}]"#.to_string(),
+            r#"texto={"cor":"red"}"#.to_string(),
+            r##"texto={"contorno":"#ffffff; background:url(x)"}"##.to_string(),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &ritual(&troca)).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn importar_cobra_a_imagem_do_estilo_de_atributos() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-ordem");
+        escrever(&pasta, MANIFESTO, &ritual(""));
+
+        let erro = importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("atributos/ritual.png"), "{erro}");
+
+        escrever(&pasta.join("atributos"), "ritual.png", "png");
+        importar(&dir, &pasta).unwrap();
+        assert!(dir.join("ordem/atributos/ritual.png").is_file());
+    }
+
+    fn com_icone(icone: &str) -> String {
+        format!(
+            r#"{{"id":"obs","nome":"OBS","versao":"1.0.0","apiVersao":1,"tema":"tema.css","icone":{icone:?}}}"#
+        )
+    }
+
+    #[test]
+    fn icone_entra_e_vai_para_a_rede() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_icone("img/icone.png")).unwrap();
+
+        assert_eq!(m.icone.as_deref(), Some("img/icone.png"));
+        // O Mestre de desenvolvimento pede o icone ao daemon.
+        assert!(m.imagens_servidas().iter().any(|(_, imagem)| *imagem == "img/icone.png"));
+
+        // Sem o campo, nada muda: o manifesto de antes continua valendo.
+        let sem = ler(base.path(), &manifesto_de("obs")).unwrap();
+        assert!(sem.icone.is_none());
+    }
+
+    #[test]
+    fn icone_recusa_caminho_que_sai_e_o_que_nao_e_imagem() {
+        let base = tempfile::tempdir().unwrap();
+
+        for icone in ["../icone.png", "/icone.png", "icone.svg", "icone.html", "icone"] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_icone(icone)),
+                    Err(AppError::ExtensaoInvalida(_))
+                ),
+                "{icone} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn importar_cobra_o_icone() {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("extensoes");
+        let pasta = base.path().join("origem-obs");
+        escrever(&pasta, MANIFESTO, &com_icone("icone.png"));
+
+        let erro = importar(&dir, &pasta).unwrap_err();
+        assert!(erro.to_string().contains("icone.png"), "{erro}");
+
+        escrever(&pasta, "icone.png", "png");
+        importar(&dir, &pasta).unwrap();
+        assert!(dir.join("obs/icone.png").is_file());
     }
 
     #[cfg(unix)]
@@ -3850,5 +5847,396 @@ mod tests {
 
         let ids: Vec<String> = listar(&dir).unwrap().into_iter().map(|m| m.id).collect();
         assert_eq!(ids, vec!["alfa", "beta", "zeta"]);
+    }
+
+    /// Um plugin so de ficha: sem `principal`, sem tema, so o manifesto.
+    fn com_fichas(fichas: &str) -> String {
+        format!(
+            r#"{{"id":"ficha-t20","nome":"Ficha T20","versao":"1.0.0","apiVersao":10,"contribui":{{"fichasPdf":{fichas}}}}}"#
+        )
+    }
+
+    /// A ficha inteira, com um pedaco trocado por quem quer quebrar.
+    fn ficha(troca: &str) -> String {
+        let base = r##"{"id":"jogo-do-ano","titulo":"Tormenta20","reconhecer":["ModFor","PMs Totais"],"nome":"NOME DO PERSONAGEM",
+            "atributos":[{"sigla":"FOR","campo":"For"},{"sigla":"POD","campo":{"caixas":["POD1","POD2"]}}],
+            "medidores":[{"nome":"PV","atual":"PVs Atuais","maximo":"PVs Totais","cor":"#ef4444"}],
+            "detalhes":[{"grupo":"Identidade","rotulo":"Classe","campo":"CLASSE"},
+                        {"grupo":"Identidade","rotulo":"Historico","descricao":"HISTORICO"},
+                        {"grupo":"Identidade","rotulo":"Nivel","campo":"Lv","tipo":"numero"}]}"##;
+        if troca.is_empty() {
+            return format!("[{base}]");
+        }
+        let (chave, valor) = troca.split_once('=').unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        json[chave] = serde_json::from_str(valor).unwrap();
+        format!("[{json}]")
+    }
+
+    #[test]
+    fn plugin_so_de_ficha_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_fichas(&ficha(""))).unwrap();
+
+        let lida = &m.contribui.fichas_pdf[0];
+        assert_eq!(lida.titulo, "Tormenta20");
+        assert_eq!(lida.reconhecer, vec!["ModFor", "PMs Totais"]);
+        assert_eq!(lida.atributos[0].campo, LeituraDeCampo::Campo("For".into()));
+        assert_eq!(
+            lida.atributos[1].campo,
+            LeituraDeCampo::Caixas {
+                caixas: vec!["POD1".into(), "POD2".into()]
+            }
+        );
+        assert_eq!(lida.detalhes[1].campo, None);
+        assert_eq!(
+            lida.detalhes[1].descricao,
+            Some(LeituraDeCampo::Campo("HISTORICO".into()))
+        );
+    }
+
+    #[test]
+    fn ficha_volta_ao_front_no_formato_em_que_veio() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_fichas(&ficha(""))).unwrap();
+        let json = serde_json::to_value(&m.contribui.fichas_pdf[0]).unwrap();
+
+        assert_eq!(json["atributos"][0]["campo"], "For");
+        assert_eq!(json["atributos"][1]["campo"]["caixas"][1], "POD2");
+    }
+
+    #[test]
+    fn ficha_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let longo = "x".repeat(MAX_NOME_DE_CAMPO + 1);
+
+        for troca in [
+            r#"reconhecer=[]"#.to_string(),
+            r#"nome="  ""#.to_string(),
+            format!(r#"nome="{longo}""#),
+            r#"atributos=[{"sigla":"AGILIDADE","campo":"Agi"}]"#.to_string(),
+            r#"atributos=[{"sigla":"FOR","campo":"For"},{"sigla":"for","campo":"For2"}]"#.to_string(),
+            r#"atributos=[{"sigla":"FOR","campo":{"caixas":[]}}]"#.to_string(),
+            r#"medidores=[{"nome":"PV","maximo":"PVs","cor":"vermelho"}]"#.to_string(),
+            r#"medidores=[{"nome":"PV","maximo":"A"},{"nome":"pv","maximo":"B"}]"#.to_string(),
+            r#"medidores=[{"nome":"Pontos de Vida Temporarios","maximo":"A"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"Identidade","rotulo":"Classe"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"Identidade","rotulo":"Classe","campo":"C","tipo":"escolha"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"","rotulo":"Classe","campo":"C"}]"#.to_string(),
+            r#"detalhes=[{"grupo":"I","rotulo":"Classe","campo":"C"},{"grupo":"i","rotulo":"classe","campo":"D"}]"#.to_string(),
+            r#"id="Jogo do Ano""#.to_string(),
+            r#"titulo="""#.to_string(),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_fichas(&ficha(&troca))).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    #[test]
+    fn ficha_le_listas_e_junta_linhas() {
+        let base = tempfile::tempdir().unwrap();
+        let listas = r#"listas=[{"grupo":"Habilidades","itens":[
+            {"nome":"h1","campo":{"juntar":["custo1","pagina1"]},"descricao":{"juntar":["desc1a","desc1b"]}},
+            {"nome":"h2"}]}]"#;
+        let m = ler(base.path(), &com_fichas(&ficha(listas))).unwrap();
+
+        let lista = &m.contribui.fichas_pdf[0].listas[0];
+        assert_eq!(lista.itens.len(), 2);
+        assert_eq!(
+            lista.itens[0].campo,
+            Some(LeituraDeCampo::Juntar {
+                juntar: vec!["custo1".into(), "pagina1".into()]
+            })
+        );
+    }
+
+    #[test]
+    fn lista_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let muitas: Vec<String> = (0..=detalhes_max())
+            .map(|i| format!(r#"{{"nome":"n{i}"}}"#))
+            .collect();
+
+        for troca in [
+            r#"listas=[{"grupo":"","itens":[{"nome":"a"}]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[{"nome":""}]}]"#.to_string(),
+            r#"listas=[{"grupo":"Poderes","itens":[{"nome":"a","campo":{"juntar":[]}}]}]"#
+                .to_string(),
+            format!(
+                r#"listas=[{{"grupo":"Poderes","itens":[{}]}}]"#,
+                muitas.join(",")
+            ),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_fichas(&ficha(&troca))).unwrap_err(),
+                    AppError::ExtensaoInvalida(_)
+                ),
+                "{troca} devia ser recusado"
+            );
+        }
+    }
+
+    fn detalhes_max() -> usize {
+        crate::vault::detalhes::MAX_DETALHES
+    }
+
+    /// Um plugin so de sistema, com um pedaco trocado por quem quer quebrar.
+    fn com_sistema(troca: &str) -> String {
+        let base = r##"{"id":"ordem","titulo":"Ordem Paranormal",
+            "atributos":[{"sigla":"AGI","valor":1,"descricao":"Agilidade"}],
+            "medidores":[{"nome":"PV","cor":"#ef4444","estilo":"barra","maximo":20}],
+            "detalhes":{"grupos":[{"nome":"Identidade"},{"nome":"Habilidades","exibicao":"lista"}],
+                        "modelos":[{"grupo":"Identidade","rotulo":"Classe","tipo":"escolha","opcoes":["Combatente"]},
+                                   {"grupo":"Identidade","rotulo":"NEX","tipo":"numero","valor":5}]},
+            "condicoes":[{"nome":"Morrendo","cor":"#ef4444","icone":"caveira","efeito":"sangrando"}]}"##;
+        let mut json: serde_json::Value = serde_json::from_str(base).unwrap();
+        if let Some((chave, valor)) = troca.split_once('=') {
+            json[chave] = serde_json::from_str(valor).unwrap();
+        }
+        format!(
+            r#"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":10,"contribui":{{"sistemas":[{json}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_sistema_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(base.path(), &com_sistema("")).unwrap();
+
+        let sistema = &m.contribui.sistemas[0];
+        assert_eq!(sistema.titulo, "Ordem Paranormal");
+        assert_eq!(
+            sistema.detalhes.grupos[1].exibicao,
+            crate::vault::detalhes::Exibicao::Lista
+        );
+        assert_eq!(
+            sistema.detalhes.modelos[0].tipo,
+            crate::vault::detalhes::Tipo::Escolha
+        );
+        assert_eq!(sistema.condicoes[0].efeito.as_deref(), Some("sangrando"));
+    }
+
+    #[test]
+    fn sistema_torto_e_recusado() {
+        let base = tempfile::tempdir().unwrap();
+
+        for troca in [
+            r##"atributos=[]"##.to_string() + "",
+            r##"atributos=[{"sigla":"AGILIDADE","valor":1}]"##.to_string(),
+            r##"atributos=[{"sigla":"AGI","valor":1},{"sigla":"agi","valor":2}]"##.to_string(),
+            r##"atributos=[{"sigla":"AGI","valor":5000}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"vermelho","maximo":20}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":0}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":5,"estiloExtensao":"sem barra"}]"##.to_string(),
+            r##"medidores=[{"nome":"PV","cor":"#fff","maximo":5,"estilo":"circulo"}]"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"B","rotulo":"X"}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"A","rotulo":"X","tipo":"escolha"}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"}],"modelos":[{"grupo":"A","rotulo":"X","opcoes":["a"]}]}"##.to_string(),
+            r##"detalhes={"grupos":[{"nome":"A"},{"nome":"a"}]}"##.to_string(),
+            r##"condicoes=[{"nome":"Morrendo","cor":"#fff","efeito":"../fora"}]"##.to_string(),
+            r##"estiloDosAtributos="ritual""##.to_string(),
+        ] {
+            let json = com_sistema(&troca);
+            // A primeira tira so os atributos: o resto ainda traz algo, e o
+            // sistema entra. Ela esta aqui para provar que lista vazia nao e
+            // erro por si.
+            if troca.starts_with("atributos=[]") {
+                assert!(ler(base.path(), &json).is_ok());
+                continue;
+            }
+            assert!(
+                matches!(ler(base.path(), &json), Err(AppError::ExtensaoInvalida(_)) | Err(AppError::Malformed { .. })),
+                "{troca} devia ser recusado"
+            );
+        }
+
+        // So o estilo dos atributos ja e trazer algo: o sistema que veste a
+        // ficha de outro plugin.
+        let so_estilo = r#"{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":11,
+            "contribui":{"sistemas":[{"id":"ritual","titulo":"Ritual","estiloDosAtributos":"ordem-paranormal/ritual"}]}}"#;
+        assert_eq!(
+            ler(base.path(), so_estilo).unwrap().contribui.sistemas[0]
+                .estilo_dos_atributos
+                .as_deref(),
+            Some("ordem-paranormal/ritual")
+        );
+
+        let vazio = r#"{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":10,
+            "contribui":{"sistemas":[{"id":"nada","titulo":"Nada"}]}}"#;
+        assert!(matches!(
+            ler(base.path(), vazio).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    /// Um plugin so de bestiario, com a colecao trocada por quem quer quebrar.
+    fn com_bestiario(colecao: &str) -> String {
+        format!(
+            r#"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":12,
+            "contribui":{{"sistemas":[{{"id":"ordem","titulo":"Ordem","atributos":[{{"sigla":"AGI","valor":1}}]}}],
+                         "bestiario":[{colecao}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_bestiario_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_bestiario(
+                r#"{"id":"ameacas","titulo":"Ameaças","arquivo":"bestiario/ameacas.json","sistema":"ordem"}"#,
+            ),
+        )
+        .unwrap();
+
+        let colecao = &m.contribui.bestiario[0];
+        assert_eq!(colecao.titulo, "Ameaças");
+        assert_eq!(colecao.arquivo, "bestiario/ameacas.json");
+        assert_eq!(colecao.sistema.as_deref(), Some("ordem"));
+    }
+
+    #[test]
+    fn colecao_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for colecao in [
+            r#"{"id":"ameacas","titulo":"A","arquivo":"../ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"bestiario/ameacas.txt"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"/ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"A","arquivo":"ameacas.json","sistema":"dnd"}"#,
+            r#"{"id":"Ameacas","titulo":"A","arquivo":"ameacas.json"}"#,
+            r#"{"id":"ameacas","titulo":"","arquivo":"ameacas.json"}"#,
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_bestiario(colecao)),
+                    Err(AppError::ExtensaoInvalida(_))
+                ),
+                "{colecao} devia ser recusado"
+            );
+        }
+    }
+
+    /// Um plugin so de itens, com a colecao trocada por quem quer quebrar.
+    fn com_itens(colecao: &str) -> String {
+        format!(
+            r##"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":13,
+            "contribui":{{"auras":[{{"id":"arsenal","titulo":"Arsenal","cor":"#64748b"}}],
+                         "itens":[{colecao}]}}}}"##
+        )
+    }
+
+    #[test]
+    fn plugin_so_de_itens_entra_sem_principal() {
+        let base = tempfile::tempdir().unwrap();
+        let m = ler(
+            base.path(),
+            &com_itens(r#"{"id":"armas","titulo":"Armas","arquivo":"itens/armas.json","aura":"arsenal"}"#),
+        )
+        .unwrap();
+
+        let colecao = &m.contribui.itens[0];
+        assert_eq!(colecao.titulo, "Armas");
+        assert_eq!(colecao.arquivo, "itens/armas.json");
+        assert_eq!(colecao.aura.as_deref(), Some("arsenal"));
+        assert!(m.contribui.bestiario.is_empty());
+    }
+
+    #[test]
+    fn colecao_de_itens_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+
+        for colecao in [
+            r#"{"id":"armas","titulo":"A","arquivo":"../armas.json"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"itens/armas.txt"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"armas.json","sistema":"ordem"}"#,
+            r#"{"id":"armas","titulo":"A","arquivo":"armas.json","aura":"sangue"}"#,
+            r#"{"id":"Armas","titulo":"A","arquivo":"armas.json"}"#,
+            r#"{"id":"armas","titulo":"","arquivo":"armas.json"}"#,
+        ] {
+            let erro = ler(base.path(), &com_itens(colecao)).unwrap_err();
+            assert!(matches!(erro, AppError::ExtensaoInvalida(_)), "{colecao} devia ser recusado");
+        }
+
+        // O erro diz em que chave do manifesto a colecao esta.
+        let erro = ler(base.path(), &com_itens(r#"{"id":"armas","titulo":"A","arquivo":"armas.txt"}"#))
+            .unwrap_err();
+        assert!(erro.to_string().contains("`itens`"), "{erro}");
+    }
+
+    #[test]
+    fn ficha_conta_no_teto_de_contribuicoes() {
+        let base = tempfile::tempdir().unwrap();
+        let uma =
+            |i: usize| format!(r#"{{"id":"f{i}","titulo":"F","reconhecer":["A"],"nome":"N"}}"#);
+        let muitas: Vec<String> = (0..=MAX_CONTRIBUICOES).map(uma).collect();
+
+        assert!(matches!(
+            ler(base.path(), &com_fichas(&format!("[{}]", muitas.join(",")))).unwrap_err(),
+            AppError::ExtensaoInvalida(_)
+        ));
+    }
+
+    /// Um plugin com uma aura e uma colecao que aponta `aura_da_colecao`.
+    fn com_aura(aura: &str, aura_da_colecao: &str) -> String {
+        format!(
+            r#"{{"id":"ordem-paranormal","nome":"Ordem","versao":"1.0.0","apiVersao":12,
+            "contribui":{{"auras":[{aura}],
+                         "bestiario":[{{"id":"sangue","titulo":"Sangue","arquivo":"bestiario/sangue.json","aura":{aura_da_colecao}}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn a_aura_entra_e_a_colecao_a_aponta() {
+        let base = tempfile::tempdir().unwrap();
+        let aura = r##"{"id":"sangue","titulo":{"pt-BR":"Sangue","en":"Blood"},"cor":"#b3121f",
+            "emblema":"bestiario/elementos/sangue.webp","luz":{"efeito":"fluxo","cores":["#dc2626"]}}"##;
+        let m = ler(base.path(), &com_aura(aura, r#""sangue""#)).unwrap();
+
+        let aura = &m.contribui.auras[0];
+        assert_eq!(aura.cor, "#b3121f");
+        assert_eq!(aura.emblema.as_deref(), Some("bestiario/elementos/sangue.webp"));
+        assert_eq!(aura.luz.as_ref().map(|luz| luz.efeito.as_str()), Some("fluxo"));
+        assert_eq!(m.contribui.bestiario[0].aura.as_deref(), Some("sangue"));
+
+        // A aura so pinta: sem emblema e sem luz tambem serve.
+        let so_cor = r##"{"id":"sangue","titulo":"Sangue","cor":"#b3121f"}"##;
+        ler(base.path(), &com_aura(so_cor, r#""sangue""#)).unwrap();
+    }
+
+    #[test]
+    fn aura_torta_e_recusada() {
+        let base = tempfile::tempdir().unwrap();
+        let comeco = r##""id":"sangue","titulo":"Sangue","cor":"#b3121f""##;
+        let cinco = r##"["#fff","#fff","#fff","#fff","#fff"]"##;
+
+        for (aura, da_colecao) in [
+            (r##"{"id":"sangue","titulo":"Sangue","cor":"vermelho"}"##.to_string(), r#""sangue""#),
+            (r##"{"id":"Sangue","titulo":"Sangue","cor":"#b3121f"}"##.to_string(), "null"),
+            (r##"{"id":"sangue","titulo":"","cor":"#b3121f"}"##.to_string(), "null"),
+            (format!(r#"{{{comeco},"emblema":"../fora.webp"}}"#), r#""sangue""#),
+            (format!(r#"{{{comeco},"emblema":"bestiario/sangue.svg"}}"#), r#""sangue""#),
+            (format!(r##"{{{comeco},"luz":{{"efeito":"explodir","cores":["#fff"]}}}}"##), r#""sangue""#),
+            (format!(r#"{{{comeco},"luz":{{"efeito":"fixa","cores":[]}}}}"#), r#""sangue""#),
+            (format!(r#"{{{comeco},"luz":{{"efeito":"fixa","cores":{cinco}}}}}"#), r#""sangue""#),
+            (format!(r#"{{{comeco},"luz":{{"efeito":"fixa","cores":["ouro"]}}}}"#), r#""sangue""#),
+            // A colecao aponta uma aura que o plugin nao declara.
+            (format!("{{{comeco}}}"), r#""morte""#),
+        ] {
+            assert!(
+                matches!(
+                    ler(base.path(), &com_aura(&aura, da_colecao)),
+                    Err(AppError::ExtensaoInvalida(_))
+                ),
+                "{aura} com {da_colecao} devia ser recusado"
+            );
+        }
     }
 }

@@ -25,6 +25,7 @@ GET   /sala/pings              os pings que os jogadores marcaram no mapa, em SS
 POST  /sala/publicar           o Mestre anuncia; token + loopback
 GET   /debug/palco             o que as telas mediram de si; loopback
 POST  /debug/palco
+POST  /mcp                     o MCP: uma IA desta maquina mexendo na campanha; token do MCP + loopback
 GET   /saude
 ```
 
@@ -41,6 +42,83 @@ O IP da rede sai de um truque sem dependência: abrir um socket UDP e "conectar"
 endereço roteável não envia pacote nenhum, e faz o sistema escolher a interface de saída
 pela própria tabela de rotas. É essa que se quer — a interface por onde os celulares da
 casa chegam — e não a primeira da lista, que costuma ser docker ou uma VPN.
+
+## A mesa pela internet
+
+Escutar em `0.0.0.0` já põe o daemon em qualquer VPN que a máquina tenha ligada. A mesa
+pela internet é isso, e nada mais: o mestre e os jogadores entram na mesma rede virtual
+(Tailscale, ZeroTier, Hamachi, Radmin), e para o daemon eles são o celular da sala. Não há
+servidor do ATO20 no meio, nem túnel aberto pelo aplicativo.
+
+O que o aplicativo faz é **saber o endereço**. Pelo IPC, e não por rota: `enderecos_da_mesa`
+repete o truque do UDP com um alvo por rede, e a faixa do IP que volta diz de quem é a
+interface:
+
+```
+rede        alvo                 aceito se o IP estiver em
+local       1.1.1.1, 192.168.0.1 nenhuma das faixas abaixo
+tailscale   100.100.100.100      100.64.0.0/10
+hamachi     25.0.0.1             25.0.0.0/8
+radmin      26.0.0.1             26.0.0.0/8
+zerotier    (nenhum)             pelo nome da placa: zt* (Linux), feth* (macOS),
+                                 "ZeroTier One [...]" (Windows)
+```
+
+Sem a VPN, a rota até o alvo dela cai no gateway da casa, o IP volta como rede local, e a
+sondagem fica sem resposta. É calculado a cada pergunta, e não na abertura como o `lanUrl`:
+a VPN se liga com o aplicativo aberto.
+
+O ZeroTier não tem faixa: cada rede dele escolhe a sua, quase sempre uma privada como a do
+Wi-Fi. Ele vem da lista de placas (crate `if-addrs`), pelo nome que dá à placa em cada
+sistema. A sonda da rede local descarta o IP dele, porque uma rede ZeroTier em
+`192.168.0.0/24` responderia pelo alvo privado. O que nem a faixa nem o nome reconhecem vai
+pelo endereço que o mestre digita no convite, como um nome do MagicDNS ou do DuckDNS.
+
+**Sem rota nenhuma**, a rede local também vem da lista. A LAN party sem gateway (IP fixo, ou
+um roteador que não anuncia saída) não tem por onde a sonda sair, e os celulares estão nela
+do mesmo jeito. Vale a primeira placa com IP privado que não seja o ZeroTier, um túnel ponto
+a ponto (a VPN do trabalho) ou uma placa de máquina virtual ou contêiner (`docker0`,
+`virbr0`, `vEthernet (WSL)`...). A lista é o último recurso, e não o primeiro, porque é nela
+que essas placas aparecem antes do Wi-Fi.
+
+A escolha fica no `configuracoes.json` da **máquina** (`rede.convite`,
+`rede.enderecoProprio`), e não da campanha: o endereço da tailnet é deste computador.
+
+**O código continua sendo o mesmo código.** Numa VPN só entra quem o mestre convidou, e o
+risco é o do Wi-Fi de casa. Uma porta aberta para a internet é outra conversa, e foi ela que
+pediu o limite de tentativas (ver "O código da mesa"). `/asset/{id}` segue sem código: o id é
+um UUID v4, 122 bits que ninguém adivinha.
+
+### O Funnel
+
+Com o Tailscale logado, o convite ganha a rede **Internet**: um botão roda
+`tailscale funnel --bg --yes <porta>`, e o QR passa a ser `https://<máquina>.<tailnet>.ts.net`.
+O jogador abre no navegador, de qualquer lugar, sem instalar nada. O aplicativo só fala com a
+CLI que o mestre instalou (`src-tauri/src/tailscale.rs`): não guarda conta nem credencial.
+
+- **Só a 443, e só livre ou nossa.** Um Funnel que o mestre usa para outra coisa não é
+  tomado, e fechar é `--https=443 off`, não `funnel reset`, que apagaria a configuração dele.
+- **Fecha sozinho** na saída do aplicativo e na abertura seguinte a um travamento: o `--bg`
+  sobrevive ao processo e até a reiniciar a máquina.
+- **A máquina removida da tailnet** continua com a interface e o IP, e a sondagem por rota a
+  acha. É a CLI (`Self.Online`) que a tira do convite.
+- **Sem botão de testar.** Da máquina do mestre, o nome `.ts.net` resolve para o IP da
+  tailnet, e o teste não passaria pela internet. O teste é o celular no 4G.
+
+**O túnel chega pelo loopback.** O Funnel, o cloudflared e o ngrok entregam a requisição de
+fora a partir de 127.0.0.1, e o loopback era a prova de que quem pedia era o Mestre. Duas
+travas fecham isso:
+
+- `desta_maquina` = loopback **e** nenhum cabeçalho de proxy (`X-Forwarded-For`,
+  `Forwarded`, `X-Real-IP`, `CF-Connecting-IP`). Substituiu o `is_loopback` em toda rota.
+- Os fluxos que só a janela do Mestre lê (`/sala/rolagens`, `/sala/movimentos`,
+  `/sala/acoes`, `/sala/pings` e o `GET /sala/mensagens`, que leva os sussurros) pedem o
+  **token** também, por `?token=` porque `EventSource` não manda cabeçalho. Um túnel TCP cru
+  (`ssh -R`, bore) não põe cabeçalho nenhum e passaria pela primeira trava; o token não sai
+  desta máquina.
+
+O `GET /debug/palco` fica só com `desta_maquina`, porque o `ler-palco.py` o lê sem token, e o
+`POST` continua aberto de propósito: a TV e o celular também mandam medida.
 
 ## Uma origem só
 
@@ -114,10 +192,17 @@ entrega o status da resposta ao JavaScript, então um 403 chegaria como `onerror
 indistinguível de queda de rede — e ele reconectaria em loop contra um código que nunca vai
 passar.
 
-**O código não é senha forte, e vale dizer o que ele é.** Seis caracteres, ditados em voz
-alta no começo da sessão, sem limite de tentativas. Ele impede que um aparelho do mesmo
-Wi-Fi caia na cena por acaso ao varrer portas. Contra alguém determinado na tua rede, não
-defende.
+**O código não é senha forte, e vale dizer o que ele é.** Seis caracteres de um alfabeto de
+31, perto de 900 milhões de combinações, ditados em voz alta no começo da sessão. Ele impede
+que um aparelho do mesmo Wi-Fi caia na cena por acaso ao varrer portas.
+
+**Dez erros a cada dez minutos por cliente**, e depois `429` em tudo até a janela vencer,
+mesmo com o código certo. Sem isso, na internet, um script varreria o espaço em dias; com
+isso, são séculos por endereço. É uma camada no roteador inteiro (`limitar_codigo`), e não
+uma checagem por rota: `code_matches` marca a recusa e a camada conta, então rota nova com
+código nasce limitada. Atrás de um túnel local o cliente é o `X-Forwarded-For`, aceito só
+vindo do loopback. Esta máquina sem proxy nunca é barrada: a janela e a TV do mestre não
+podem ser trancadas fora da própria mesa por uma enxurrada vinda de fora.
 
 **O daemon serve arquivo, e não recebe.** Ele é a razão de o endereço de um arquivo ser
 **um só** para as três telas — antes eram dois caminhos, blob URL do IndexedDB no Mestre e
@@ -189,3 +274,6 @@ um cabeçalho que o HTML não sabe mandar.
 O livro é a exceção, e a diferença é de público, não de risco de escrita: o material da
 cena é o que a mesa tem de ver, e um manual de regras é do mestre. Quem pede é o leitor do
 Mestre, que manda o token pelo `httpHeaders` do pdf.js.
+
+O `POST /mcp` tem portão e token próprios, e o token dele é da máquina, e não da abertura: quem
+o usa é um cliente de IA que o guarda na configuração dele. Ver [A IA na campanha](mcp.md).

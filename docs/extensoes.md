@@ -1,5 +1,8 @@
 # Extensões
 
+Este documento é MIT ([LICENSE-MIT](../LICENSE-MIT)), e não segue a licença do resto do
+ATO20: os exemplos daqui podem ir para dentro de qualquer plugin.
+
 Uma extensão é uma **pasta com `manifest.json` dentro**. Instalar é copiá-la
 para a máquina, por Configurações → Plugins. É o mesmo formato que se publica
 no GitHub: quem clona o repositório já tem exatamente o que o diálogo pede.
@@ -83,8 +86,33 @@ pode ser listada e carregada tarde; uma que só descobre isso rodando obriga o
 app a rodar todas para saber o que existe.
 
 **`apiVersao` diz o que o plugin pede, e o aplicativo recusa só o que pede
-mais do que ele tem.** A 7 é a atual: ela deixou todo texto do manifesto vir
-por idioma e deu `api.idioma` ao código (ver
+mais do que ele tem.** A 13 é a atual: ela acrescentou os `itens`, as armas,
+proteções e o resto que o plugin traz pronto para o Compêndio (ver
+[Itens do plugin](#itens-do-plugin-armas-e-equipamento-prontos-no-compêndio)),
+as `abas`, uma aba nova no Compêndio com verbetes que se dão a um personagem
+(ver [Abas do plugin](#abas-do-plugin-rituais-e-outros-verbetes-no-compêndio)),
+e as `aparencias` da ficha do bestiário, que um ATO20 anterior ignoraria
+calado. A 12 acrescentou o `bestiario`, as
+fichas prontas que o plugin traz para o Compêndio (ver
+[Bestiário do plugin](#bestiário-do-plugin-fichas-prontas-no-compêndio)), e as
+`auras`, a cor, o emblema e a luz com que o plugin marca pastas, cards,
+personagens e itens (ver [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin)),
+que um ATO20 anterior ignoraria calado. A 11 acrescentou os
+`estilosDeAtributos` e o `estiloDosAtributos` do sistema (ver
+[Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual)),
+que um ATO20 anterior ignoraria calado, com a ficha nos cartões sem dizer por
+quê. A 10 acrescentou as `fichasPdf` (ver
+[Ficha em PDF](#ficha-em-pdf-o-plugin-ensina-a-ler)) e os `sistemas` (ver
+[Sistema de jogo](#sistema-de-jogo-o-padrão-da-campanha)), que um ATO20
+anterior ignoraria calado, e o plugin instalado só para isso não faria nada. A 9
+acrescentou os atributos da ficha,
+o substituto `secao:atributos` e o campo `atributos` no personagem de
+`personagens.listar` (a sigla, o número e a descrição opcional: FOR 4). Um ATO20 anterior recusaria o
+substituto como alvo desconhecido. A 8 acrescentou aos `pontos` em camadas
+a `proporcao` e o `ate` (ver [Em camadas de imagem](#em-camadas-de-imagem)),
+que um ATO20 anterior ignoraria calado (a bala estreita sairia esticada num
+quadrado). A 7 deixou todo texto do manifesto vir por idioma e deu
+`api.idioma` ao código (ver
 [Texto em mais de um idioma](#texto-em-mais-de-um-idioma)); um ATO20 anterior
 recusaria o mapa como JSON ilegível. A 6 acrescentou os `efeitos` de condição
 (ver [Efeito de condição](#efeito-de-condição-na-tv-e-no-celular)); um ATO20
@@ -173,11 +201,20 @@ instalado.
 
 `api.janelas.abrir` e `fechar` alcançam as janelas do plugin e as de fábrica —
 a ficha de um personagem, a lista, a configuração da campanha. Onde a janela já
-estiver, atracada ou flutuando, abrir a traz à vista em vez de duplicar. O
+estiver, atracada, flutuando ou solta numa janela do sistema, abrir a traz à
+vista em vez de duplicar. O
 painel do plugin aceita um **`parametro`**: é o que faz o mesmo painel abrir
 como "Edgar" e como "Mira", em duas janelas, cada uma lembrando a própria
 posição. O corpo o recebe como prop. E um plugin só abre e fecha as janelas
 **dele**: o id da extensão entra na chave pelo aplicativo, não pelo plugin.
+
+O painel de um plugin também pode ir para uma **janela solta**, no segundo
+monitor (ver [Janelas soltas](telas.md#janelas-soltas)). Lá o corpo é desenhado
+num outro documento pelo mesmo JavaScript, e o `document` e o `window` globais
+continuam sendo os do Mestre: ouvir o ponteiro, procurar sob ele ou abrir um
+portal pede o documento do próprio nó (`no.ownerDocument`, e o `defaultView`
+dele), e `no instanceof HTMLElement` dá falso para um nó de lá. Os componentes
+de `api.ui` já resolvem isso sozinhos.
 
 ## Configurações, como no VSCode
 
@@ -226,9 +263,15 @@ abertura desta versão, copiada para o arquivo e apagada.
 ataque que já dá o dano, aba de habilidades que rola e aplica. Nada disso
 existe de fábrica, e é de propósito — o que existe é o alcance.
 
-`api.personagens.listar()` devolve o personagem **inteiro**, medidores e
-condições incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
+`api.personagens.listar()` devolve o personagem **inteiro**, medidores,
+condições e atributos incluídos, escondidos também: quem lê é o Mestre, e é ele quem decide
 o que a mesa vê. `assinar` avisa a cada releitura do elenco.
+
+O atributo que é um **dado** (a AGI d8 de um sistema de dados como atributo)
+traz `rolagem`, a expressão dele (`"1d8"`, `"1d12+1"`), ao lado do `valor`. O
+`valor` continua sendo número, e é o que o mestre escreveu antes de trocar
+pelo dado: o plugin que só conhece número segue lendo um. Quem sabe de dado lê
+a `rolagem`, com o mesmo leitor das rolagens da ficha.
 
 **Medidor se ajusta em lote.** `ajustarMedidor(personagemId, medidorId,
 patch)` chamado dez vezes no mesmo laço vira **uma** gravação e **uma**
@@ -303,6 +346,12 @@ O chat e as rolagens são janelas diferentes no Mestre, e as duas são de fábri
 `janela:chat`/`janela:rolagens` servem de alvo de substituto. A de Rolagens é a do dado — é
 lá que um plugin de regras de rolagem se encaixa.
 
+A Galeria — toda imagem da campanha, inclusive o fundo de cena, o retrato e o anexo de
+personagem, que Arquivos não lista — também é de fábrica: `janelas.abrir({ tela: "galeria" })`
+a traz à vista, `janela:galeria` serve de alvo de substituto, e o botão direito de uma imagem
+do acervo nela recebe os itens de `linha.imagem`, com o mesmo contexto (`{ assetId }`). O
+anexo de personagem não recebe: ele não tem `assetId`.
+
 ## Encaixes: menus, seções, substitutos e ferramentas
 
 O pedido era que um plugin pudesse criar opções novas nos elementos e
@@ -323,9 +372,9 @@ nada muda. O retrato tem um menu de fábrica no quadro da janela Retratos, e os
 itens de `palco.retrato` entram nele. Postit e cartão passaram a aceitar o botão
 direito, que antes caía no vazio.
 
-**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra depois
-das condições e antes dos arquivos, com a moldura das de fábrica: fecha,
-lembra que fechou. O corpo recebe `personagemId`.
+**Seção na ficha** — `secoes: [{ id, titulo, alvo: "ficha" }]`. Entra na aba
+Ficha, depois das de fábrica e na largura toda da janela, com a moldura das de
+fábrica: fecha, lembra que fechou. O corpo recebe `personagemId`.
 
 **Substituto** — `substitutos: [{ alvo }]`, com `secao:medidores` (o miolo de
 uma seção da ficha) ou `janela:personagem` (a janela inteira). É o que deixa
@@ -335,6 +384,9 @@ que estourou. Dois plugins no mesmo alvo: vale o **primeiro por ordem de
 nome** — previsível e sem configuração; quem quiser o outro desliga o primeiro.
 O ponto único da janela é `JanelaCorpo`, flutuante e atracada; o da seção é
 `SecaoFicha`. Sem plugin, nenhum dos dois ganha um nó a mais na árvore.
+`secao:campos` e `secao:nota` continuam valendo, mas deixaram de ser seções: o
+primeiro é o miolo do popover das miniaturas do cabeçalho, e o segundo o do
+botão de quem joga com o personagem.
 
 **Ferramenta** — o `icone` do manifesto passa a ser um nome da lista de
 `icones.ts` (antes era ignorado); `opcoes` é um componente que aparece como
@@ -417,7 +469,19 @@ onde o conteúdo entra:
     tinta mais rala à direita da barra).
   - `pontos`: um ponto por unidade, numa linha que encolhe para caber. `cheio`
     e `vazio` são imagens; sem `vazio`, o vazio é o `cheio` apagado; sem
-    nenhuma, bolinhas na cor do medidor.
+    nenhuma, bolinhas na cor do medidor. `proporcao` é a largura do ponto em
+    fração da altura dele, de 0,1 a 4 (ausente é 1, o quadrado): a bala de pé
+    é estreita, desenhada numa tela da mesma proporção, e cabe o dobro antes de
+    encolher. `ate` é o teto: com o **máximo** acima dele, a fileira vira um
+    ponto e o número (`×11`), na cor e no contorno do `texto` se houver. Pelo
+    máximo e não pelo valor, para o pente de trinta não trocar de forma no
+    décimo tiro; `0` é sempre o número. Quem usa um dos dois pede
+    `apiVersao` 8.
+
+    ```json
+    "conteudo": { "modo": "pontos", "cheio": "balas/bala.png", "vazio": "balas/estojo.png",
+                  "proporcao": 0.44, "ate": 12 }
+    ```
   - `sequencia`: `quadros`, de 2 a 16, do vazio ao cheio. O primeiro só
     aparece no zero; os outros dividem o resto em faixas iguais. É o coração
     que racha conforme a vida cai.
@@ -699,6 +763,684 @@ toda imagem raster e dentro da pasta -- as dos mipmaps e da rampa de cor
 também. O total de quadros da base deve dividir o dos elementos: é o laço do
 fogo que dita o da folha.
 
+## Efeito disparado
+
+O terceiro jeito de um efeito aparecer, ao lado da figura e do chão: ele SAI
+de um ponto e vai até outro -- a bola de fogo, o raio de gelo, o sopro do
+dragão. É uma ESPÉCIE à parte: o efeito que declara `disparo` é um disparo, só
+ele dispara, e ele não aparece entre os efeitos em área nem no seletor da
+condição, mesmo levando `area` e `base` (são o cone e o estouro dele). Tem
+lista própria (a aba Disparo dentro de Efeitos, no Compêndio) e janela própria
+de edição.
+
+Desenha com as camadas de sempre, cada uma com outro papel:
+
+- **`disparo.projetil`** -- o que VOA na linha: os campos de imagem da base
+  (`imagem`, `quadros`, `mipmaps`, `cores`) e o `giro`. Desenhada como veio, a
+  imagem voa para a direita dela; `giro` `90` põe o topo na frente (o estilhaço
+  que fura), `-90` o põe para trás (a chama que vira cauda), `180` a vira. Sem
+  projétil, voa o elemento da área (`area.foco`, ou o `externo`), com o topo
+  para trás.
+- **`particulas`** -- na linha, o rastro: saem do projétil para trás, num leque
+  fechado. No cone, o que sobe do leque.
+- **`base`** e **`area.foco`** -- o chão e os elementos do cone, e os do estouro
+  no fim da linha, assados pelo mesmo motor da área. A cor do tiro é `area.cor`.
+
+```json
+{ "id": "flecha-de-fogo", "titulo": "Flecha de fogo",
+  "area": { "cor": "#f59e0b" },
+  "disparo": { "forma": "linha", "velocidade": 24, "tamanho": 0.8, "impacto": 0,
+               "rastro": false,
+               "projetil": { "imagem": "fx/flecha.webp", "giro": 0 } } }
+```
+
+- **`forma`** -- `linha`: o projétil voa de A até B (e estoura lá, com
+  `impacto`). `cone`: o leque se abre de A até a distância de B, na direção
+  dele. O editor mostra três: reto (`linha` com `impacto` `0`), com estouro e
+  em cone.
+- **`abertura`** -- só o cone, em graus, de `10` a `160` (padrão `60`).
+- **`velocidade`** -- em casas por segundo, de `3` a `60` (padrão `15`). O voo
+  fica entre 0,12 e 2,5 segundos, longe ou perto.
+- **`alcance`** -- em casas, de `1` a `30` (padrão `6`): até onde vai quando sai
+  de um token para onde ele olha, que é o tiro sem ponto B.
+- **`tamanho`** -- o lado do projétil, em casas, de `0.3` a `3` (padrão `1`).
+- **`impacto`** -- o raio do estouro no fim da linha, em casas, de `0` a `4`
+  (padrão `1`). Zero é a flecha que só chega.
+- **`rastro`** e **`brilho`** -- a faixa da cor do tiro atrás do projétil e o
+  brilho redondo em volta dele. Ausentes, ligados; `false` desliga. O brilho
+  fica, mesmo desligado, no projétil sem imagem: senão o tiro não teria corpo.
+
+O ATO20 traz cinco prontos -- Bola de fogo (com estouro), Raio de gelo (reto),
+Jato d'água (com estouro), Sopro de fogo e Nuvem venenosa (em cone) --, packs
+de fábrica que usam a arte dos efeitos de condição: um pack aponta para a
+imagem de outro com `../chamas/chama-128.webp`. A cópia para a campanha guarda
+`fabrica:chamas/chama-128.webp`, o nome da pasta dona.
+
+O mestre dispara de três lugares: o **Disparo** na régua do mapa, logo abaixo
+da Luz (escolhe o efeito, e dois cliques no mapa -- de onde, para onde --, ou
+segurar no A e soltar no B; clicar num personagem sai dele e mirar outro cai
+nele; Shift trava o ângulo de quinze em quinze graus); o **botão direito** de
+qualquer token, em "Disparar", que atira para onde ele olha -- o facho da
+lanterna, ou o padrão dele -- até o `alcance`, a seleção inteira de uma vez; e
+o **card** do disparo no Compêndio, que põe a mira na mão como o botão da
+régua.
+
+O tiro é EVENTO, como o ping: nasce no Mestre, viaja no quadro já resolvido
+(`LiveState.disparados`, com os pontos, a forma e os tempos em unidades de cena
+e milissegundos) e some quando acaba -- nada entra na cena. A TV só precisa do
+efeito para as imagens, e é por isso que o molde do Compêndio vai ao jogo como
+cópia na hora do tiro -- uma por molde, refeita no mesmo lugar quando ele muda,
+e fora de qualquer lista: o disparo se edita no Compêndio. Desenha por cima do
+escuro, que o tiro brilha, e embaixo
+da névoa, que esconde o que a mesa não viu. Os dois pontos ficam dentro do
+plano, o cone e o estouro se prendem a ele, e o rastro encolhe na borda: a
+regra do palco (ver a skill `debug-do-palco`). A folha do cone e a do estouro
+saem com quadro de até 256 pixels (a da área, 512), e são soltas quando o tiro
+acaba: cada tiro assa a sua.
+
+O Rust confere na importação a forma (`linha` ou `cone`), cada número nos
+limites acima, o `giro` (`0`, `90`, `-90` ou `180`) e a imagem do projétil como
+as outras (raster, dentro da pasta, a grade cheia). O bloco sozinho não desenha
+nada: o disparo precisa de uma camada de imagem -- o projétil basta.
+
+## Efeito de ambiente
+
+O quarto jeito de um efeito aparecer: ele cobre a CENA inteira -- a chuva, a
+neve, a neblina, a cinza que cai, as brasas que sobem. É uma ESPÉCIE à parte: o
+efeito que declara `ambiente` é um ambiente, e não aparece entre os de área, os
+disparos nem no seletor da condição. Tem lista própria (a aba Ambiente dentro de
+Efeitos, no Compêndio) e janela própria de edição.
+
+Desenha NA LENTE: por cima da tela, e não no chão do mapa. A chuva cai de cima
+para baixo no 2D e no 2.5D, não amplia com o zoom e não anda com a câmera -- é o
+vidro por onde a mesa olha. Por isso passa por cima do escuro e da névoa: não
+chove só onde a mesa já viu. Fica embaixo dos retratos, das tarjas e da
+cortina do corte, que são HUD.
+
+```json
+{ "id": "chuva-de-sangue", "titulo": "Chuva de sangue",
+  "ambiente": {
+    "cor": "#991b1b",
+    "camadas": [
+      { "imagem": "fx/chuva-fina.webp", "cores": "condicao",
+        "escala": 0.3, "direcao": 95, "velocidade": 1.5, "opacidade": 0.6 },
+      { "imagem": "fx/chuva-grossa.webp", "cores": "condicao",
+        "escala": 0.7, "direcao": 95, "velocidade": 2.4 } ],
+    "veu": { "cor": "#1c0505", "opacidade": 0.25 },
+    "relampago": { "intervalo": 15, "forca": 0.5 } } }
+```
+
+- **`cor`** -- a cor do ambiente: a das camadas com `cores: "condicao"` (o
+  "condição" aqui é o ambiente, que não tem condição), e a do véu sem cor
+  própria. Padrão, um cinza azulado.
+- **`camadas`** -- de TRÁS para a frente, de uma a quatro. Cada uma é uma textura
+  que EMENDA nas quatro bordas e desliza em laço: anda um ladrilho e volta ao
+  começo, e a emenda esconde a volta. Os campos de imagem da base -- `imagem`,
+  `mipmaps` (pelo lado do ladrilho), `cores` -- menos os `quadros`: a camada anda
+  deslizando, e uma grade de quadros pediria repintar a tela inteira a cada
+  degrau. A arte em tons de cinza ganha a cor pela rampa, como o fogo. As
+  medidas são em ALTURAS DA TELA, e não em casas: o ambiente não está no mapa, e
+  a mesma chuva lê igual na TV e no celular.
+  - **`escala`** -- o lado do ladrilho, de `0.1` a `2` alturas (padrão `0.5`).
+  - **`direcao`** -- para onde vai, em graus, no sentido horário a partir da
+    direita: `90` desce, `270` sobe, `0` vai para a direita (padrão `90`). Fora
+    dos eixos, a textura inclina junto, como a chuva com vento: o eixo é o mais
+    perto, e o resto vira inclinação, até 45 graus.
+  - **`velocidade`** -- em alturas da tela por segundo, de `0` a `3` (padrão
+    `1`). Zero é parada.
+  - **`opacidade`** -- de `0` a `1` (padrão `1`).
+  - **`balanco`** -- o quanto ela balança de um lado para o outro enquanto anda,
+    em vezes o ladrilho, de `0` a `0.5` (padrão `0`): o floco que dança.
+- **`veu`** -- uma cor parada sobre a tela inteira: o cinza da tempestade, o
+  branco da nevasca. `opacidade` de `0` a `0.8`; `cor` ausente é a do ambiente.
+- **`relampago`** -- a tela clareia de repente, duas vezes, e apaga. `intervalo`
+  em segundos entre os clarões, de `3` a `60` (padrão `12`); `forca` de `0` a
+  `1` (padrão `0.6`); `cor` ausente é um branco azulado. Dois relógios, o segundo
+  mais fraco e num ritmo que não bate com o primeiro, e os dois saem da hora do
+  sistema: a TV e o celular clareiam juntos. Quem pediu menos movimento no
+  sistema não vê o clarão, e o Mestre também não.
+
+A CENA escolhe o ambiente e o ajusta (`Scene.ambiente`): o id do efeito, a
+`intensidade` (de `0.1` a `1`) e o `vento` (de `-1`, para a esquerda, a `1`).
+A intensidade tira as camadas da FRENTE primeiro -- a garoa é a camada fina da
+chuva -- e esmaece o resto, o véu e o clarão. O vento inclina o que cai, até 25
+graus, e empurra o que anda de lado, até virá-lo. O mestre escolhe nas
+configurações do mapa, ou pelo card no Compêndio ("Pôr nesta cena").
+
+A cena aponta para o efeito sem cópia: o de fábrica e o de plugin pelo id, e o
+da campanha pelo molde do Compêndio, que vai à mesa junto com os efeitos em
+jogo. Mexer no molde muda a chuva da TV enquanto o controle anda.
+
+O ATO20 traz seis prontos -- Chuva, Tempestade (chuva inclinada, céu fechado e
+relâmpago), Neve, Neblina, Cinzas e Brasas --, packs de fábrica em
+`src/efeitos/`. A Tempestade usa a arte da Chuva por `../chuva/chuva-longe-512.webp`.
+
+O custo foi medido na webview do aplicativo, com cem tokens mudando dez vezes
+por segundo e a TV a 1920x1080: sem ambiente, de 2 a 3,5% dos quadros perdidos
+(o ruído entre rodadas é de uns dois pontos); a Neve e as Brasas, quase o
+mesmo; a Chuva, de 4 a 6,5%; a Neblina e a Tempestade, as mais caras, até 8,5%.
+Cada camada é UMA superfície do tamanho da tela para o compositor, e é isso que
+pesa -- por isso o teto de quatro, e o véu, que como elemento próprio custava
+mais que as duas camadas da chuva, é pintado como fundo de uma delas. O clarão
+só existe para o compositor enquanto clareia.
+
+O Mestre vê o ambiente na metade e sem o clarão -- a tela de quem monta a cena
+piscando pesava o dobro da chuva --, e ele some enquanto o mestre arrasta alguma
+coisa: arrastando a moldura com sessenta tokens, a chuva levava o palco de 56 a
+50 quadros por segundo.
+
+O Rust confere na importação as camadas (até quatro, imagem raster dentro da
+pasta, sem `quadros`, cada número nos limites acima), o véu, o relâmpago e as
+cores em `#rrggbb`. O bloco desenha com uma camada, um véu ou um relâmpago -- o
+véu sozinho já é um ambiente, o breu de uma cena sem luz nenhuma.
+
+## Ficha em PDF: o plugin ensina a ler
+
+Na lista de Personagens, **Importar ficha em PDF** cria o personagem a partir de
+uma ficha editável preenchida: nome, atributos, medidores, detalhes, e o PDF
+anexado como a ficha dele. O aplicativo lê o formulário, mas não conhece
+ficha nenhuma: quem diz que `untitled13` é a AGI do Ordem é o plugin. Um
+plugin de ficha é só o manifesto, sem `principal`, e pede a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "fichasPdf": [{
+    "id": "jogo-do-ano",
+    "titulo": "Tormenta20 (Jogo do Ano)",
+    "reconhecer": ["NOME DO PERSONAGEM", "ModFor", "PMs Totais"],
+    "nome": "NOME DO PERSONAGEM",
+    "atributos": [{ "sigla": "FOR", "campo": "For" }],
+    "medidores": [{ "nome": "PV", "atual": "PVs Atuais", "maximo": "PVs Totais", "cor": "#ef4444" }],
+    "detalhes": [
+      { "grupo": "Identidade", "rotulo": "Classe", "campo": "CLASSE" },
+      { "grupo": "Identidade", "rotulo": "Nível", "campo": "Lv", "tipo": "numero" },
+      { "grupo": "Descrição", "rotulo": "Histórico", "descricao": { "juntar": ["Hist1", "Hist2"] } }
+    ],
+    "listas": [{
+      "grupo": "Habilidades",
+      "itens": [
+        { "nome": "Hab1", "campo": "Custo1", "descricao": "Desc1" },
+        { "nome": "Hab2", "campo": "Custo2", "descricao": "Desc2" }
+      ]
+    }]
+  }]
+}
+```
+
+- **`reconhecer`** são campos que o PDF tem de ter, TODOS, para ser esta
+  ficha. Escolha os que só ela tem: dois ou três bastam. Quando mais de uma
+  ficha reconhece o PDF, vence a que lista mais campos, e o mestre pode trocar
+  na prévia.
+- **O campo é o nome do campo do formulário**, como o PDF o guarda. Ele não
+  aparece na tela; para descobrir, abra a ficha num editor de formulário de
+  PDF, que mostra o nome de cada campo, ou leia as anotações com o pdf.js. Ficha que
+  usa nomes genéricos (`Campo de Texto15`, `untitled2`) também serve: o nome é
+  fixo naquele arquivo, e a tabela se monta uma vez, olhando a posição.
+- **Um valor sai de um campo, de caixas, ou de campos para juntar**:
+  `{ "caixas": ["FOR1", "FOR2", "FOR3"] }` vale quantas estão marcadas, que é
+  como fichas de bolinha guardam o atributo; `{ "juntar": [...] }` é o texto
+  escrito em várias linhas, um campo por linha. No valor, os pedaços ficam
+  numa linha só, separados por ` · ` (`+5 · 2d12`); na descrição, um por
+  linha. Juntado como número, vale o primeiro campo que tiver um.
+- **`listas` são as tabelas da ficha** (Habilidades & Rituais, Poderes,
+  Ataques): cada linha vira um detalhe do `grupo`, e o rótulo é o que o
+  jogador escreveu no campo `nome` ("Golpe Pesado"). Linha com o nome vazio
+  é linha que ele não usou, e fica de fora sem aviso.
+- **Número é o que começa com número**: `10`, `+2`, `-1`, `12/15` (o 12).
+  `1d8` não é número, de propósito.
+- **Casa com o que a campanha já tem.** O personagem nasce com os atributos,
+  medidores e detalhes de fábrica da campanha, e a ficha preenche em cima: a
+  mesma sigla, o mesmo nome de medidor, o mesmo grupo e rótulo de detalhe.
+  Só o que não tem par é criado. O PV da campanha continua com a cor e o
+  estilo que o mestre escolheu.
+- **`descricao` é o texto longo** do detalhe (o histórico, a habilidade). O
+  valor de texto é curto (80 letras); o que passar disso vai para a
+  descrição sozinho.
+- **Campo vazio não grava**, e a prévia diz o que veio em branco. Ficha com
+  o nome vazio é avisada como "em branco".
+
+O aplicativo recusa na instalação o que a gravação cortaria calada: sigla
+com mais de 6 letras, nome de medidor com mais de 24, mais atributos (12),
+medidores (6) ou detalhes (200, contando as linhas das listas) do que o
+personagem guarda, e a mesma sigla,
+medidor ou detalhe lidos duas vezes.
+
+Só ficha **editável** (com formulário). A impressa, a digitalizada e a
+chapada continuam entrando como anexo: ler texto pela posição na página
+seria adivinhar. E o plugin não leva o PDF da editora junto: a ficha é de
+quem a publicou, e o README do plugin aponta onde baixá-la.
+
+## Sistema de jogo: o padrão da campanha
+
+Um plugin de sistema traz o padrão de um jogo: os atributos, os medidores, o
+molde dos detalhes da ficha e o cardápio de condições. O mestre o **aplica**
+numa campanha, ao criá-la ("Sistema de jogo", na tela de nova campanha) ou
+depois, em Configuração da campanha, Sistema. Também é só o manifesto, e pede
+a **API 10**:
+
+```json
+"apiVersao": 10,
+"contribui": {
+  "sistemas": [{
+    "id": "ordem",
+    "titulo": "Ordem Paranormal",
+    "atributos": [{ "sigla": "AGI", "valor": 1, "descricao": "Agilidade" }],
+    "medidores": [{ "nome": "PV", "cor": "#ef4444", "estilo": "barra", "maximo": 20 }],
+    "detalhes": {
+      "grupos": [{ "nome": "Identidade" }, { "nome": "Habilidades e rituais", "exibicao": "lista" }],
+      "modelos": [
+        { "grupo": "Identidade", "rotulo": "Classe", "tipo": "escolha",
+          "opcoes": ["Combatente", "Especialista", "Ocultista"] },
+        { "grupo": "Identidade", "rotulo": "NEX", "tipo": "numero", "valor": 5 }
+      ]
+    },
+    "condicoes": [{ "nome": "Sangrando", "cor": "#ef4444", "icone": "sangue", "efeito": "sangrando" }]
+  }]
+}
+```
+
+- **Aplicar junta, nunca substitui.** O que a campanha já tem com o mesmo
+  nome (a sigla, o medidor, o grupo e rótulo do detalhe, a condição) fica como
+  o mestre deixou, e o que passa do teto da campanha fica de fora e é avisado.
+  Aplicar duas vezes não duplica nada.
+- **Nunca entra sozinho.** Plugin é ligado na máquina inteira, e a campanha de
+  D&D da mesma máquina não pode acordar com a AGI do Ordem. E a campanha não
+  guarda de onde o padrão veio: desinstalar o plugin não mexe nela.
+- **Os personagens que já existem** recebem o que faltava se o mestre marcar
+  a opção ao aplicar, pelo mesmo "Aplicar em todos" de cada lista.
+- **Os textos são dado**, e não `TextoDePlugin`: a sigla, o rótulo, a opção e
+  o nome da condição vão para a campanha como estão.
+- **`estiloExtensao`** no medidor pode apontar para o estilo de OUTRO plugin
+  (`ordem-segredo-na-floresta/pv`); sem ele instalado, a barra sai no `estilo`.
+- **`icone`** da condição é um nome da lista de ícones da tela, e **`efeito`**
+  é um efeito de fábrica (`sangrando`) ou de plugin (`{plugin}/{efeito}`).
+- **`estiloDosAtributos`** (API 11) é o desenho dos atributos,
+  `{plugin}/{estilo}`, do próprio plugin ou de outro. Aplicar o sistema põe a
+  campanha nesse desenho: ver
+  [Atributos desenhados pelo plugin](#atributos-desenhados-pelo-plugin-o-ritual).
+- Os tetos são os da campanha: 12 atributos, 6 medidores, 16 grupos, 200
+  detalhes e 16 condições. Detalhe de `escolha` precisa de opções, e o grupo
+  de cada detalhe tem de estar declarado ao lado.
+
+Um plugin com sistema **e** ficha em PDF fecha o ciclo: use na ficha os mesmos
+grupos e rótulos do sistema, e o personagem importado cai certinho no molde.
+
+## Bestiário do plugin: fichas prontas no Compêndio
+
+O plugin traz fichas prontas -- as ameaças de um sistema, os NPCs de uma
+aventura -- e elas aparecem no Bestiário do Compêndio da campanha, depois dos
+moldes do mestre: cada coleção é uma pasta, numa seção com o nome do plugin, e
+um clique entra nela. A pasta é do plugin, e não do mestre: não se renomeia nem
+se move, e some com ele. Na busca, as pastas dão lugar às fichas que bateram,
+uma seção por coleção. Também é só o
+manifesto, e pede a **API 12**. O manifesto declara a coleção; as fichas moram
+num arquivo ao lado dele:
+
+```json
+"apiVersao": 12,
+"contribui": {
+  "bestiario": [{
+    "id": "ameacas",
+    "titulo": { "pt-BR": "Ameaças", "en": "Threats" },
+    "arquivo": "bestiario/ameacas.json",
+    "sistema": "ordem"
+  }]
+}
+```
+
+```json
+{
+  "grupos": [
+    { "nome": "Combate" },
+    { "nome": "Ataques", "exibicao": "lista" }
+  ],
+  "moldes": [{
+    "id": "zumbi-de-sangue",
+    "nome": "Zumbi de Sangue",
+    "tags": ["Sangue", "VD 40"],
+    "fonte": "Livro de Regras",
+    "miniatura": "bestiario/zumbi-de-sangue.webp",
+    "atributos": [{ "sigla": "AGI", "valor": 1 }, { "sigla": "FOR", "valor": 3 }],
+    "medidores": [{ "nome": "PV", "maximo": 45 }],
+    "detalhes": [
+      { "grupo": "Combate", "rotulo": "Defesa", "tipo": "numero", "valor": 19 },
+      { "grupo": "Ataques", "rotulo": "Mordida", "valor": "2d6+5 corte",
+        "rolagem": "2d20+10", "descricao": "Padrão. Agredir." }
+    ]
+  }]
+}
+```
+
+- **Só de leitura, e sempre copiado.** Clicar no card do plugin abre a ficha
+  inteira só para ler, sem trazer nada: folhear as ameaças não enche o
+  Compêndio da campanha de cópias. O card e a ficha têm "Pôr em jogo" e
+  "Trazer para a campanha". Trazer copia a ficha para o Compêndio da
+  campanha, onde ela se edita como qualquer molde; pôr em jogo -- pelo botão
+  ou arrastando o card para o mapa -- sai desse molde, trazido na hora se
+  ainda não estava. O quarto goblin não traz a ficha de novo: o molde trazido
+  guarda de onde veio (`doPlugin`), e trazer a mesma ficha outra vez devolve
+  o mesmo molde. Atualizar o plugin não mexe no que a campanha já trouxe.
+- **A ameaça nasce limpa.** Ela não ganha os medidores, atributos e detalhes
+  de fábrica da campanha -- a NEX e a Patente de um agente. Ganha o que a
+  ficha diz.
+- **O medidor veste a campanha.** O PV da ficha sai com a cor e o estilo do
+  modelo de PV que a campanha já tem; só o teto é da ficha. `cor` e `estilo`
+  valem quando a campanha não tem modelo com esse nome.
+- **Os grupos ficam no arquivo**, e não em cada ficha. Trazer junta ao molde
+  da campanha só os grupos que a ficha usa -- sem os detalhes de fábrica
+  deles --, e o detalhe guarda o nome do grupo como a campanha o escreve. Use
+  os grupos do seu `sistema` e a ameaça cai na ficha de sempre.
+- **`rolagem`** é a expressão do detalhe, lida pelo mesmo leitor que rola na
+  mesa. Se o detalhe ganha o d20 quem diz é o molde da campanha
+  (`rolavel`), pelo rótulo.
+- **Rolagem no meio do texto:** no `valor` de texto e na `descricao`, uma
+  expressão entre chaves vira o botão de rolar, na ficha do Mestre e na
+  prévia do bestiário: `"Dano: {2d10+50} Sangue"`. O clique joga na mesa e
+  anuncia no fio com o nome da ficha e o rótulo do detalhe. A chave que não é
+  expressão continua texto, e no celular as chaves somem, sem botão (quem
+  rola lá é o daemon, e ele só lê a `rolagem`).
+- **Régua no meio do texto:** no mesmo lugar, um número com `m` entre chaves
+  vira o botão de medir: `"Deslocamento: {9m}"` põe no mapa a régua reta de
+  nove metros, e `"Explosão: {6°}"` o círculo de seis metros de raio (o `º`
+  vale como o `°`). A régua nasce no token de quem é a ficha, ou no centro do
+  que o mestre está olhando quando ele não está na cena, como a ficha do
+  bestiário, com a medida travada: a ponta gira e o tamanho fica, até o
+  cadeado do gizmo soltar. É uma régua como as da barra: a mesa vê, e o Ctrl+Z
+  tira. Aceita
+  vírgula (`{1,5m}`) e vai até 300 m. No celular aparece só a medida, sem botão.
+- **Ficar com o maior, ou o menor:** `>` ou `<` logo depois de um termo de
+  dados ficam só com o maior ou o menor dele. `6d20>+45` são seis d20, o
+  maior deles e mais 45, o teste do Ordem. `2d20<` é a desvantagem. Os outros
+  dados caem mesmo assim, apagados, e ficam fora da soma na mesa, no saquinho,
+  no histórico e no fio. Vale na `rolagem` e entre chaves.
+- **A sigla do atributo entre chaves:** dentro das chaves, a sigla de um
+  atributo da ficha vale o número dele na hora de rolar. `{1d20+FOR}` soma a
+  FOR, e `{AGId20>+5}` rola tantos d20 quanto a AGI e fica o maior, o teste
+  do Ordem. A regra é escrita uma vez e cada ameaça rola com os atributos
+  dela. A sigla não diferencia maiúscula, e a que a ficha não tem deixa as
+  chaves como texto. Quantidade zero ou negativa não rola: o que o sistema
+  faz com atributo zero fica com o plugin. O atributo que é um dado entra
+  como o dado: com AGI d8, `{AGI+1}` rola 1d8+1. Só entre chaves: na
+  `rolagem` a sigla ainda não vale, porque quem rola o detalhe pelo celular
+  é o daemon.
+- **A menção com `@` entre chaves:** `@` na frente lê a sigla de um atributo
+  (`{1d20+@FOR}`, o mesmo que `{1d20+FOR}`) ou o rótulo de um detalhe da
+  mesma ficha que guarde número: `{1d20+@Luta}` soma a Luta, `{@Ataquesd6}`
+  rola tantos d6 quanto os Ataques. Detalhe só com `@`, e só o de número (ou
+  o texto com um número inteiro escrito, como "3"): `{1d20+@Classe}` com a
+  Classe "Combatente" deixa as chaves como texto. O rótulo vale com espaço
+  (`@Bônus de Ataque`), sem diferenciar maiúscula; com a sigla e o rótulo
+  iguais, vale o atributo.
+- **`retrato` e `miniatura`** são um arquivo da pasta do plugin ou uma URL
+  `https` com o nome de um site. O arquivo vai ao acervo da campanha ao
+  trazer; a URL é baixada nessa hora, pela máquina do mestre, e a ficha entra
+  sem a imagem que não veio, com o aviso. O card só desenha imagem da pasta:
+  ele não vai à rede antes de alguém pedir. Uma imagem que falta serve à
+  outra -- sem miniatura o card não arrastaria. Até 2 MB, nos formatos do
+  estilo de medidor; a baixada passa pelo mesmo teto, com o tipo conferido
+  pelos bytes.
+- **`aparencias`** são as outras caras da mesma ficha, depois da Padrão:
+  `"aparencias": [{ "nome": "SB", "miniatura": "bestiario/carnical-sb.webp" }]`.
+  Cada uma tem um `nome` e um `retrato` ou uma `miniatura`, na forma de cima, e
+  vira uma aparência do personagem, que o mestre troca no menu dele, sem outra
+  ficha. O que a aparência não diz vem da ficha: a que só traz a miniatura muda
+  a peça no mapa e continua com o mesmo rosto. Até 8 por ficha, com nomes que
+  não se repetem nem repetem a Padrão. Pede a **API 13**: numa versão mais
+  velha o campo é ignorado, e a ficha entra só com a Padrão.
+- **`fonte`** aparece no card: o livro, o suplemento, a coleção de quem fez a
+  ficha. É onde o crédito fica à vista.
+- **`sistema`** é só etiqueta: o id de um sistema do mesmo plugin. Trazer
+  não aplica o sistema.
+- **`aura`**, na coleção, é o id de uma aura do mesmo plugin: ela pinta a
+  pasta e emoldura o card de cada ficha. A ficha
+  pode trazer a dela (`"aura"` no molde), por cima da da coleção, e a ficha
+  trazida leva a aura junto para a campanha. Ver
+  [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin).
+- **Conferido na instalação, inteiro.** O arquivo, cada ficha e cada imagem
+  da pasta: o que a gravação cortaria calada vira erro na hora de instalar.
+  Os tetos são os da campanha (12 atributos, 6 medidores, 16 grupos, 200
+  detalhes, 16 tags), mais 500 fichas e 4 MB por arquivo, 60 letras no nome e
+  120 na fonte. Detalhe de texto guarda até 80 letras; o resto vai na
+  `descricao`, até 2.000. O arquivo que quebra depois de instalado aparece na
+  seção com o motivo, e as outras coleções seguem.
+- **Plugin desligado, coleção fora.** Ligar e desligar mostra e esconde a
+  seção na hora.
+
+## Itens do plugin: armas e equipamento prontos no Compêndio
+
+O plugin traz itens prontos -- as armas de um sistema, as proteções, a munição,
+o que cura -- e eles aparecem na aba Itens do Compêndio da campanha, depois dos
+moldes de item do mestre, pelo mesmo arranjo do bestiário: cada coleção é uma
+pasta, numa seção com o nome do plugin, e na busca as pastas dão lugar aos
+itens que bateram. Pede a **API 13**. O manifesto declara a coleção, com os
+mesmos campos da do bestiário; os itens moram num arquivo ao lado dele:
+
+```json
+"apiVersao": 13,
+"contribui": {
+  "itens": [{
+    "id": "armas",
+    "titulo": { "pt-BR": "Armas", "en": "Weapons" },
+    "arquivo": "itens/armas.json",
+    "sistema": "ordem",
+    "aura": "arsenal"
+  }]
+}
+```
+
+```json
+{
+  "itens": [{
+    "id": "pistola",
+    "nome": "Pistola",
+    "tags": ["Arma de fogo", "Arma simples"],
+    "fonte": "Livro de Regras",
+    "atributos": [
+      { "nome": "Dano", "valor": "1d12 balístico" },
+      { "nome": "Crítico", "valor": "18" },
+      { "nome": "Alcance", "valor": "Curto" }
+    ],
+    "medidores": [{ "nome": "Munição", "maximo": 2 }]
+  }]
+}
+```
+
+- **O item é o da campanha.** `atributos` são os pares de nome e valor da
+  janela do item, na ordem dela, e o card mostra os dois primeiros: ponha
+  ali o que decide entre duas armas sem abrir a janela. `medidores` são os
+  do item, com nome e teto -- o valor é de cada mochila, e nasce cheio. A
+  `descricao` é texto livre, e `imagem` vale como o retrato da ficha do
+  bestiário: um arquivo da pasta ou uma URL `https`.
+- **Só de leitura, e sempre copiado.** Clicar no card abre o item inteiro só
+  para ler. "Pôr em jogo" -- pelo botão, ou arrastando o card com imagem para
+  o mapa, que já põe a peça -- põe o item no catálogo de Itens da campanha;
+  "Trazer para a campanha" o deixa como molde no Compêndio, onde ele se
+  edita. Os dois saem do molde trazido, que guarda de onde veio (`doPlugin`):
+  a segunda pistola não traz o item de novo, e atualizar o plugin não mexe no
+  que a campanha já trouxe. A cópia no catálogo não leva a marca.
+- **`aura`**, na coleção ou no item, pinta a pasta e emoldura o card, e o
+  item trazido a leva para a campanha. Ver
+  [Auras](#auras-a-cor-o-emblema-e-a-luz-do-plugin).
+- **Conferido na instalação, inteiro**, como o bestiário. Os tetos são os do
+  item da campanha: 120 letras no nome, 4.000 na descrição, 24 atributos (o
+  nome até 40 letras e o valor até 120; o resto vai na `descricao`), 6
+  medidores, 16 tags, mais 500 itens e 4 MB por arquivo e 120 letras na
+  fonte. A coleção que quebra depois de instalada aparece com o motivo, e as
+  outras seguem; plugin desligado, coleção fora.
+
+## Abas do plugin: rituais e outros verbetes no Compêndio
+
+O plugin acrescenta uma aba própria ao Compêndio da campanha -- os rituais de um
+sistema, os talentos, as magias --, depois das quatro de sempre. Cada coleção da
+aba é uma pasta, com a aura dela, e na busca as pastas dão lugar aos verbetes
+que bateram; as tags da fileira são as dos verbetes da aba. Pede a **API 13**.
+O manifesto declara a aba, o grupo da ficha que recebe o verbete e as coleções,
+com os mesmos campos das do bestiário; os verbetes moram num arquivo por
+coleção:
+
+```json
+"contribui": {
+  "abas": [{
+    "id": "rituais",
+    "titulo": { "pt-BR": "Rituais", "en": "Rituals" },
+    "grupo": { "nome": "Rituais", "exibicao": "lista" },
+    "colecoes": [
+      { "id": "sangue", "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+        "arquivo": "rituais/sangue.json", "aura": "sangue" }
+    ]
+  }]
+}
+```
+
+```json
+{
+  "verbetes": [{
+    "id": "descarnar",
+    "nome": "Descarnar",
+    "tags": ["Sangue", "Desconjuração"],
+    "fonte": "Ordem Paranormal Wiki",
+    "imagem": "bestiario/elementos/sangue.webp",
+    "resumo": "Sangue",
+    "campos": [
+      { "rotulo": "Conjuração", "valor": "Derramar sangue humano sob o símbolo" }
+    ],
+    "descricao": "A pele do alvo é dilacerada: {1d10} de dano de Sangue."
+  }]
+}
+```
+
+- **Ler e dar.** O verbete não vira molde nem item: é texto de consulta. O
+  clique no card abre o verbete inteiro, com os `campos` em linhas e a
+  `descricao` embaixo; as rolagens e as réguas entre chaves funcionam como na
+  ficha. "Dar a…", no menu do card e na janela, lista os personagens em jogo,
+  e o verbete entra na ficha do escolhido como **detalhe** do `grupo` da aba:
+  o `nome` é o rótulo, o `resumo` é o valor, e a descrição é a `descricao`
+  com os campos embaixo, um por linha. Dar de novo não duplica.
+- **O grupo entra no molde da campanha** na primeira vez, com a `exibicao` da
+  aba -- `lista` desenha como os Ataques. A campanha que já tem um grupo com
+  esse nome fica com o dela. Sem lugar no molde (são 16 grupos), o detalhe
+  entra mesmo assim, no fim da ficha, com o aviso.
+- **Sem vínculo.** O detalhe é da campanha: o plugin atualizado depois não
+  mexe nele, e o mestre o edita como qualquer detalhe.
+- **`imagem`** é um arquivo da pasta do plugin, como o retrato do bestiário;
+  o card não vai à rede. Sem imagem, o card mostra um livro.
+- **Conferido na instalação, inteiro.** A aba precisa de grupo (até 24 letras)
+  e de 1 a 32 coleções; o arquivo, de 1 a 500 verbetes. O `nome` vai até 40
+  letras e o `resumo` até 80, os tetos do rótulo e do valor do detalhe; a
+  `descricao` até 2.000; até 12 `campos`, com rótulo de até 40 letras e valor
+  de até 300; e as 16 tags. A coleção que quebra depois de instalada aparece
+  na pasta com o motivo, e as outras seguem.
+- **Plugin desligado, aba fora.** Ligar e desligar mostra e esconde a aba na
+  hora. Ela só existe no Compêndio da campanha: o do ATO20 guarda o que a
+  campanha guardou, e o verbete não se guarda -- se dá.
+
+## Auras: a cor, o emblema e a luz do plugin
+
+Uma aura é a marca com que o plugin pinta uma coisa: a pasta de uma coleção do
+bestiário, o card de cada ficha, e o personagem ou o item da campanha que a
+recebe. O Ordem dá uma a cada elemento -- a pasta de Sangue vermelha, com a
+cruz na frente, e o card da ameaça com a luz vermelha correndo pela borda --;
+um plugin de D&D daria a "Lendário" dourada a um item.
+Declarada uma vez e apontada por id, como o estilo de medidor. Pede a
+**API 12**:
+
+```json
+"auras": [{
+  "id": "sangue",
+  "titulo": { "pt-BR": "Sangue", "en": "Blood" },
+  "cor": "#b3121f",
+  "emblema": "bestiario/elementos/sangue.webp",
+  "luz": { "efeito": "fluxo", "cores": ["#dc2626"] }
+}],
+"bestiario": [{ "id": "sangue", "titulo": "Sangue", "arquivo": "bestiario/sangue.json", "aura": "sangue" }]
+```
+
+- **`cor`** pinta a pasta e a borda do card, em hex.
+- **`emblema`** é uma imagem da pasta do plugin, desenhada na frente da pasta.
+  Raster, até 2 MB, nos formatos do estilo de medidor, conferida na
+  instalação. Escolha a tinta do emblema pelo contraste com a `cor`: branca na
+  pasta escura, escura na clara. Fica na tela do mestre: o daemon não a
+  publica na rede.
+- **`luz`** é a da borda do card sob a mão. A janela aberta na pasta não
+  acende: em volta de uma grade de cards de borda colorida, seria informação
+  demais. O efeito é do NÚCLEO, de uma lista fechada, e o plugin escolhe qual
+  e com que cores (de 1 a 4):
+  - `fixa`: o brilho parado.
+  - `pulso`: o brilho que respira devagar.
+  - `fluxo`: o brilho latejando, com a luz correndo pelas quatro bordas.
+  - `cintilar`: um brilho por cor, cada um piscando no seu ritmo.
+
+  Fechada por causa da máquina do mestre: cada efeito é camada pintada uma vez,
+  com só a opacidade ou a posição animada -- o que a placa de vídeo faz sem
+  redesenhar a janela. Quem pediu menos movimento no sistema recebe a luz
+  parada. O card só anima sob a mão; os outros ficam com a borda e um brilho
+  parado.
+- **Na campanha**, a aura é `{plugin}/{id}`. A ficha trazida do bestiário leva
+  a dela, e a cópia em jogo também. O mestre dá, troca ou tira a aura de um
+  molde, de um item ou de um personagem em jogo pelo menu "Aura", que lista as
+  dos plugins ligados. No Compêndio ela é a borda do card, e na lista de
+  Personagens, o anel do rosto. Com o plugin desligado ela some da tela e fica
+  gravada, e volta com ele.
+
+## Atributos desenhados pelo plugin: o ritual
+
+A seção de atributos pode sair de uma imagem do plugin, com o número de cada
+sigla no lugar dela: o ritual do Ordem, com AGI, FOR, INT, PRE e VIG nos cinco
+círculos. Declarativo, como o medidor em camadas, e pela mesma razão: o
+celular desenha igual ao Mestre sem uma linha do plugin rodar fora dele. Pede
+a **API 11**:
+
+```json
+"estilosDeAtributos": [{
+  "id": "ritual",
+  "titulo": "Ritual",
+  "imagem": "atributos/ritual.png",
+  "proporcao": 1,
+  "lugares": [
+    { "sigla": "AGI", "x": 0.501, "y": 0.164, "tamanho": 0.085 },
+    { "sigla": "FOR", "x": 0.194, "y": 0.382, "tamanho": 0.085 }
+  ],
+  "texto": { "cor": "#ffffff", "contorno": "#000000" }
+}]
+```
+
+- **A imagem traz o que não muda**: o desenho e o nome de cada atributo. A
+  ficha escreve só o número. Raster (png, webp, gif, jpg, avif), até 2 MB,
+  servida pelo daemon arquivo por arquivo, como as camadas do medidor.
+- **`proporcao`** é a altura da imagem em fração da largura, de 0,25 a 3: a
+  ficha reserva o lugar antes de a imagem chegar e não pula. Uma imagem que
+  não bate com ela estica junto com os lugares, e o número segue no círculo.
+- **Cada lugar** é o CENTRO do número, `x` e `y` em fração da imagem, e o
+  `tamanho` é o corpo do número em fração da LARGURA, de 0,02 a 0,4. Fração e
+  não pixel: a imagem escala com a coluna da ficha e com a tela do celular.
+  Até 12 lugares, sigla de até 6 letras, sem repetir.
+- **A sigla casa sem diferença de caixa.** Atributo da ficha sem lugar na
+  imagem (o SOR de uma mesa) fica num cartão logo abaixo; lugar sem atributo
+  fica vazio.
+- **`texto`** tem a cor e o contorno do número, só em hex. Ausente, branco com
+  contorno quase preto. A fonte é a do aplicativo.
+
+No Mestre, o número é um campo: clique e escreva, as setas sobem e descem. O
+botão direito no círculo troca a sigla, escreve a descrição ou apaga, e o
+hover mostra a descrição. No celular é só leitura, como o resto da ficha.
+
+**Quem escolhe é o sistema**, e não um seletor: campanha de Ordem é ritual.
+Aplicar um sistema que declara `estiloDosAtributos` põe a campanha nesse
+desenho; sistema sem desenho não mexe nele. A escolha fica no registro de
+configurações, em `ato20.ficha.estiloDosAtributos` (`""` são os cartões),
+oculta da lista de Ajustes, e viaja no zip. Com o plugin desligado ou a imagem
+fora da pasta, a ficha volta aos cartões, e a escolha espera no arquivo pela
+volta dele.
+
+No Mestre de desenvolvimento (`next dev`, a janela em `http://localhost:3000`)
+a imagem vem pelo daemon, como no celular: o WebKitGTK não pede `<img>` do
+protocolo `ato20-ext` a partir de página http. No release a janela é
+`tauri://`, e o protocolo serve.
+
+A escolha e os estilos viajam ao celular pelo `/sala/declarativo`, junto com
+os estilos de medidor.
+
 ## A seção do plugin no celular, e o botão que chega ao Mestre
 
 A metade **pública** do que um plugin guarda no personagem pode virar uma
@@ -795,7 +1537,8 @@ escondidos, e o nome só com a peça "nome" ligada. `dePersonagem` entrega o de
 quem não está no ar também. O formato é o do kit de retratos: o plugin passa
 adiante sem mexer. `api.mesa.enderecos()` e `api.mesa.linkDaPagina("camera", { rede,
 busca })` — o link pronto, com o código, pelo endereço desta máquina ou pelo da
-rede.
+rede. O "da rede" é o do convite: a rede que o mestre marcou lá (a local, uma VPN
+ligada, ou o endereço que ele digitou), e não sempre o IP do Wi-Fi.
 
 **4. O kit de dados.** A física da queda e os sólidos são código do aplicativo,
 e nenhum plugin deveria copiá-los. A página embute `/kit/dados` num `<iframe>`
@@ -845,7 +1588,8 @@ retratos (o grupo no ar e o card de cada personagem de jogador).
 O ATO20 fala português e inglês, e da **API 7** em diante o plugin também pode
 falar. Todo texto que o manifesto declara para alguém ler (o `nome` e a
 `descricao` do plugin, o `titulo` de painel, comando, ferramenta, camada,
-item de menu, seção, página, estilo de medidor, efeito e configuração, a
+item de menu, seção, página, estilo de medidor, efeito, ficha em PDF,
+sistema e configuração, a
 `descricao` da configuração, o
 `subtitulo`, o `grupo`, a `dica`, o `rotulo` e o `campo` das fontes de
 retrato) aceita uma string, como sempre, **ou um mapa por idioma**:
@@ -920,12 +1664,53 @@ dentro da webview desta janela — que é também a razão de o código do plugi
 alcançar só o Mestre. A exceção decidida são as `paginas`: só as de quem as
 declara, e em sandbox. Ver "Páginas na rede".
 
+## Instalar pelo catálogo
+
+A aba Catálogo de Configurações → Plugins lista o `plugins.json` do site, e cada
+card tem **Instalar**. O Rust baixa o zip da branch principal do repositório
+(`codeload.github.com/{dono}/{repo}/zip/HEAD`, o mesmo do "Code → Download ZIP"),
+extrai numa pasta temporária e passa pelo mesmo `extensoes::importar` do botão
+Importar: a validação é a mesma. Ver `src-tauri/src/catalogo.rs`.
+
+- Só `https://github.com/{dono}/{repo}`. O endereço do zip é montado no Rust; a
+  tela nunca passa uma URL para baixar.
+- O manifesto pode estar na raiz do zip ou dentro da pasta única que o GitHub
+  põe em volta (`repo-HEAD/`).
+- O `id` do manifesto tem de ser o do card. Importar sobrescreve pelo id, e um
+  repositório que trouxesse o id de outro plugin apagaria o plugin errado.
+- Tetos: 50 MB de zip, 200 MB descompactado, 5 mil arquivos. Zip-slip e link
+  simbólico ficam de fora, como no import de campanha.
+- Plugin que executa código pede confirmação antes: quando o catálogo diz, ou
+  quando o `manifest.json` do repositório tem `principal`.
+
+Depois de instalado, o card lê o `manifest.json` do repositório
+(`raw.githubusercontent.com`) e mostra **Atualizar** quando a `versao` de lá
+passa da instalada. Atualizar é instalar de novo por cima, e o módulo velho é
+descarregado antes. Para o seu plugin oferecer atualização, suba a `versao` do
+manifesto a cada mudança na branch principal.
+
+Clicar no card abre a janela do plugin, como a página de uma extensão no VS
+Code: o ícone, a versão e Instalar em cima, e o `README.md` do repositório
+embaixo. A página do plugin no site (`/plugins/{id}`) mostra o mesmo README. É
+ali que o plugin se apresenta, então ponha imagens da tela e o passo a passo.
+
+- Com a tela em inglês, `README.en.md` vem antes do `README.md`.
+- Imagem e link relativos (`docs/tela.png`, `/docs/tela.png`) resolvem contra o
+  repositório, como no GitHub.
+- HTML cru (`<img width>`, `<p align>`) não é desenhado: o README vem da rede e
+  é mostrado dentro da janela do Mestre. Use a imagem do Markdown,
+  `![tela](docs/tela.png)`.
+- O ícone e a capa do card não vêm do repositório: são os do `plugins.json` do
+  site, em `public/plugins/{id}/`.
+
 ## Confiança
 
-Não há loja, não há revisão e não há sandbox. Quem instala um plugin de código
-está executando o código de quem o escreveu, com o alcance da janela. A tela
-avisa o que é tema e o que é funcionalidade, e mostra autor e repositório — o
-resto é a mesma confiança que se dá a uma extensão de editor.
+Não há loja, não há revisão e não há sandbox. O catálogo é uma lista, não um
+aval. Quem instala um plugin de código está executando o código de quem o
+escreveu, com o alcance da janela. A tela avisa o que é tema e o que é
+funcionalidade, mostra autor e repositório e, no catálogo, pede confirmação
+antes de instalar código; o resto é a mesma confiança que se dá a uma extensão
+de editor.
 
 As guardas que existem são contra plugin **malformado**, não contra plugin
 malicioso: travessia de caminho, link simbólico plantado na pasta, molde de URL

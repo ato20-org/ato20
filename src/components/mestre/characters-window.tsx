@@ -9,6 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import {
+  BookMarked,
+  FileInput,
+  FileUp,
   FolderPlus,
   MoreVertical,
   Pencil,
@@ -63,6 +66,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { KIT_CONTEXTO, KIT_TRES_PONTOS, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
+import { useImportarFichaPdf } from "@/components/mestre/importar-ficha-pdf";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Tooltip,
@@ -80,9 +84,11 @@ import {
 import { useCampoDeNome } from "@/hooks/use-campo-de-nome";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import { OQueVaiJunto } from "@/components/mestre/character-window";
-import { centeredBox, fitInitialSize } from "@/lib/geometry/transform";
+import { centeredBox } from "@/lib/geometry/transform";
 import { comum } from "@/lib/i18n/comum";
+import { t as textoDoMestre } from "@/lib/i18n/mestre";
 import { t } from "@/lib/i18n/personagens";
+import { usePacoteStore } from "@/lib/store/use-pacote-store";
 import { useTokenDrag } from "@/hooks/use-token-drag";
 import {
   achatarArvore,
@@ -93,7 +99,10 @@ import {
 import { normaliza } from "@/lib/search";
 import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
+import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
+import { entregarItem } from "@/lib/mestre/entregar-item";
+import { tamanhoDoToken } from "@/lib/mestre/tamanho-na-cena";
 import { useWindowStore } from "@/lib/store/use-window-store";
 import {
   createCharacter,
@@ -101,6 +110,7 @@ import {
   removeCharacter,
   renameCharacter,
 } from "@/lib/vault/characters";
+import { guardarNoCompendio } from "@/lib/vault/compendio";
 import type { Personagem } from "@/types/character";
 import type { AssetMeta, Pasta } from "@/types/scene";
 
@@ -116,40 +126,10 @@ type LugarDaLinha = {
   caminho?: string;
 };
 import { cn } from "@/lib/utils";
+import { useAura } from "@/lib/extensoes/auras";
+import { ItensDeAura } from "@/components/mestre/itens-de-aura";
+import { definirAura } from "@/lib/vault/compendio";
 import { SubmenuDeAparencias } from "@/components/mestre/aparencias-personagem";
-
-/**
- * Tamanho de um token cuja imagem nao declara dimensao.
- *
- * Menor que o do acervo (480x270, medida de mapa): token e figura de pessoa
- * sobre a grade, e nascer do tamanho de um mapa faria o mestre encolher toda
- * vez.
- *
- * Em pe, e nao quadrado. Era quadrado, e o resultado era uma pessoa esticada
- * na largura -- e o gizmo do item trava a proporcao, entao redimensionar depois
- * mantinha o erro: o token nascia quadrado e continuava quadrado para sempre. A
- * unica saida era apagar e por de novo.
- *
- * Continua sendo chute, porque sem a medida do arquivo nao ha o que preservar.
- * Chute de figura em pe erra menos que chute de quadrado, e e usado so quando o
- * acervo nao sabe a dimensao -- ver `PorNoMapa`, que exige o registro do
- * acervo justamente para nao precisar chutar.
- */
-const TAMANHO_PADRAO = { x: 140, y: 187 };
-
-/**
- * Com que tamanho o token entra no mapa, em unidades de cena.
- *
- * Uma funcao e nao duas contas porque os dois gestos que poem o token -- o
- * botao, que poe no centro, e o arrasto, que poe onde a mao soltou -- tem de
- * concordar: o arrasto ainda multiplica isto pelo que a roda pediu, e uma base
- * diferente faria a roda parada dar um token de outro tamanho que o botao.
- */
-function tamanhoDoToken(miniatura: AssetMeta | undefined) {
-  return miniatura?.naturalWidth && miniatura.naturalHeight
-    ? fitInitialSize(miniatura.naturalWidth, miniatura.naturalHeight)
-    : TAMANHO_PADRAO;
-}
 
 /**
  * A lista de personagens da campanha.
@@ -328,6 +308,34 @@ export function CharactersBody() {
   );
 
   /**
+   * Soltar um ITEM na linha de um personagem o entrega a ele, com a ficha
+   * aberta ou não. A lista é onde o mestre já olha para achar quem é quem, e
+   * abrir a ficha só para ter onde largar a espada seria um passo a mais. Ver
+   * `entregarItem`.
+   */
+  useEffect(
+    () =>
+      useTokenDragStore.getState().registrarAlvo("linha-personagem", (solto, destino) => {
+        if (solto.fonte.tipo !== "item" || destino.tipo !== "personagem") return;
+
+        const para = useCharactersStore
+          .getState()
+          .personagens?.find((personagem) => personagem.id === destino.personagemId);
+        if (!para) return;
+
+        void entregarItem(solto.fonte.itemId, para, solto.fonte.personagemId);
+      }),
+    [],
+  );
+
+  /** Quem está debaixo do item arrastado, para a linha dele acender. */
+  const recebendoItem = useTokenDragStore((state) =>
+    state.arrasto?.destino?.tipo === "personagem"
+      ? state.arrasto.destino.personagemId
+      : null,
+  );
+
+  /**
    * Onde o personagem arrastado cai, como `secao:pastaId` -- `secao:` é a raiz
    * dela --, para a borda acender só ali.
    */
@@ -402,6 +410,18 @@ export function CharactersBody() {
   function abrirCriacao() {
     setNomeNovo("");
     setCriando(true);
+  }
+
+  // A ficha em PDF é o outro jeito de nascer: com nome, números e o PDF
+  // anexado. Termina no mesmo lugar do Criar, com a ficha aberta.
+  const importarFicha = useImportarFichaPdf((id) => {
+    recarregar();
+    abrir({ tipo: "personagem", personagemId: id });
+  });
+
+  function importarEmVezDeDigitar() {
+    setCriando(false);
+    importarFicha.iniciar();
   }
 
   /**
@@ -526,6 +546,18 @@ export function CharactersBody() {
           onChanged={recarregar}
         />
 
+        {/* A aura de plugin: o anel do rosto aqui, a borda do card no
+            Compêndio. Some sem plugin que declare aura. */}
+        <ItensDeAura
+          kit={kit}
+          atual={personagem.aura}
+          onEscolher={(escolhida) =>
+            void definirAura("personagem", personagem.id, escolhida).then(recarregar, (cause) =>
+              toast.error(cause instanceof Error ? cause.message : String(cause)),
+            )
+          }
+        />
+
         {/* As pastas da seção dele. É também o caminho de quem não tem
             miniatura, e por isso não arrasta. */}
         <ItensDeMover
@@ -563,6 +595,33 @@ export function CharactersBody() {
             )}
           </SubContent>
         </Sub>
+
+        {/* Uma CÓPIA vira molde: o que está em jogo continua como está. É o
+            caminho do NPC que o mestre montou na hora e quer de novo. */}
+        <Item
+          onClick={() =>
+            void guardarNoCompendio(personagem.id).then(
+              (molde) => {
+                recarregar();
+                toast.success(textoDoMestre.compendio.guardadoNoCompendio(molde.nome));
+              },
+              (cause: unknown) =>
+                toast.error(
+                  cause instanceof Error ? cause.message : textoDoMestre.compendio.falhou,
+                ),
+            )
+          }
+        >
+          <BookMarked />
+          {textoDoMestre.compendio.guardarNoCompendio}
+        </Item>
+
+        <Item
+          onClick={() => usePacoteStore.getState().abrirExportar({ personagens: [personagem.id] })}
+        >
+          <FileUp />
+          {textoDoMestre.pacote.exportarItem}
+        </Item>
 
         <Separator />
 
@@ -619,7 +678,11 @@ export function CharactersBody() {
                 // com ou sem ela entra numa pasta e vira menção na nota.
                 "cursor-grab select-none active:cursor-grabbing",
                 noAr === personagem.id && "opacity-40",
+                // Um item está pairando aqui, e soltar o entrega a ele.
+                recebendoItem === personagem.id && "ring-primary bg-primary/10 ring-1",
               )}
+              // A linha é ALVO do item arrastado. Ver `entregarItem`.
+              data-personagem-alvo={personagem.id}
               style={
                 lugar.depth > 0
                   ? { paddingLeft: lugar.depth * RECUO_PX }
@@ -869,6 +932,10 @@ export function CharactersBody() {
             <Plus />
             {t.lista.criarPersonagem}
           </ContextMenuItem>
+          <ContextMenuItem onClick={importarFicha.iniciar}>
+            <FileInput />
+            {t.importarFicha.acao}
+          </ContextMenuItem>
           {/* As duas, porque o vazio não é de seção nenhuma: a pasta tem de
               saber de qual é para nascer no lugar certo. */}
           <ContextMenuItem onClick={() => criarPasta("npcs")}>
@@ -913,6 +980,20 @@ export function CharactersBody() {
           />
 
           <DialogFooter>
+            {/* A outra porta, no lugar onde se decide criar: quem tem a ficha
+                pronta não precisa digitar o nome que ela ja traz. A esquerda,
+                longe do Criar, porque nao e a acao principal do dialogo. */}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" className="sm:mr-auto" onClick={importarEmVezDeDigitar}>
+                    <FileInput />
+                    {t.importarFicha.acao}
+                  </Button>
+                }
+              />
+              <TooltipContent className="max-w-64">{t.importarFicha.acaoDica}</TooltipContent>
+            </Tooltip>
             <Button variant="ghost" onClick={() => setCriando(false)}>
               {comum.cancelar}
             </Button>
@@ -924,6 +1005,8 @@ export function CharactersBody() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {importarFicha.dialogo}
 
       {/* Pergunta antes, como a lixeira da ficha pergunta -- e pelo mesmo
           motivo: apagar cena ou imagem tem desfazer, isto nao tem. O menu de
@@ -1114,12 +1197,29 @@ function SecaoDaLista({
  * lista tem PNJ sem imagem às dezenas, e um boneco repetido em vinte linhas
  * viraria ruído do mesmo jeito que o rótulo "sem dono" virava.
  */
-function Rosto({ personagem }: { personagem: Personagem }) {
+export function Rosto({
+  personagem,
+  className,
+}: {
+  personagem: Personagem;
+  /** Outro tamanho, para quem usa o rosto fora da lista. */
+  className?: string;
+}) {
   const rosto = personagem.retrato ?? personagem.miniatura;
   const animada = useAnimada(rosto);
+  // A aura de plugin vira o ANEL do rosto: a borda na cor dela, e um brilho
+  // parado por dentro. Sem a luz animada: a lista tem trinta rostos.
+  const aura = useAura(personagem.aura);
 
   return (
-    <span className="bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border">
+    <span
+      className={cn(
+        "bg-muted/60 relative size-7 shrink-0 overflow-hidden rounded border",
+        aura && "border-2",
+        className,
+      )}
+      style={aura ? { borderColor: aura.cor, boxShadow: `0 0 6px -1px ${aura.cor}` } : undefined}
+    >
       {/* Sem selo: num quadrado de 28px ele cobriria o rosto. O hover na
           linha continua animando. */}
       <MiniaturaDoAcervo assetId={rosto} animada={animada} selo={false} />

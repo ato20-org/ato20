@@ -14,14 +14,17 @@ import { esquecerAcervo } from "@/lib/store/use-assets-store";
 import { esquecerMarcadores } from "@/lib/store/use-marcadores-store";
 import { carregarPersonagens, esquecerPersonagens } from "@/lib/store/use-characters-store";
 import { esquecerCondicoes } from "@/lib/store/use-condicoes-store";
+import { esquecerCondicoesDoCompendio } from "@/lib/store/use-condicoes-do-compendio-store";
+import { esquecerItens } from "@/lib/store/use-itens-store";
+import { esquecerMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
 import {
   esquecerEfeitosDaCampanha,
   useEfeitosDaCampanhaStore,
 } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import { t } from "@/lib/i18n/mestre";
+import { fecharTodasAsSoltas } from "@/lib/janelas-soltas";
 import { listAssets } from "@/lib/vault/assets";
-import { listFolders } from "@/lib/vault/folders";
 import type { CampaignInfo } from "@/lib/vault/campaign";
 
 /**
@@ -83,7 +86,12 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // módulo e sobrevivem à troca, então só recarregar a janela consertava.
       esquecerAcervo();
       esquecerPersonagens();
+      // O catálogo de itens, pela mesma razão do elenco: o ponto desta mesa que
+      // citasse um id igual mostraria a espada da outra.
+      esquecerItens();
       esquecerCondicoes();
+      esquecerCondicoesDoCompendio();
+      esquecerMoldeDeDetalhes();
       // Os efeitos que a outra campanha criou: a condição desta que apontasse
       // para um id igual desenharia o fogo da outra mesa.
       esquecerEfeitosDaCampanha();
@@ -93,6 +101,9 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
       // As configurações da campanha anterior também: sem isto, o zoom que a
       // outra mesa pedia continuaria valendo nesta até o arquivo dela chegar.
       useConfiguracoesStore.getState().esquecer("campanha");
+      // As janelas soltas mostravam a campanha anterior: a ficha de lá, o
+      // Compêndio de lá. Ver `janelas-soltas`.
+      fecharTodasAsSoltas();
 
       try {
         await hydrateBoard(campaign.path);
@@ -134,7 +145,6 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
           carregarPersonagens(),
           listAssets("image"),
           listAssets("audio"),
-          listFolders(),
         ]);
         if (!ativo) return;
 
@@ -159,6 +169,8 @@ export function CampaignBoot({ campaign }: { campaign: CampaignInfo }) {
 
     return () => {
       ativo = false;
+      // Fechou a campanha: as soltas vão junto, pela razão de cima.
+      fecharTodasAsSoltas();
     };
   }, [campaign.path, hydrateBoard, hydratePortraits, hydrateTrack]);
 

@@ -1,0 +1,44 @@
+{
+  "id": "tempestade",
+  "titulo": "Tempestade",
+  "dica": "Chuva pesada e inclinada, o céu fechado, e o relâmpago que clareia a mesa de tempos em tempos.",
+  "ambiente": {
+    "cor": "#b4c4d8",
+    "camadas": [
+      {
+        "imagem": "../chuva/chuva-longe-512.webp",
+        "mipmaps": {
+          "256": "../chuva/chuva-longe-256.webp",
+          "512": "../chuva/chuva-longe-512.webp",
+          "1024": "../chuva/chuva-longe-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.3,
+        "direcao": 103,
+        "velocidade": 2.0,
+        "opacidade": 0.7
+      },
+      {
+        "imagem": "../chuva/chuva-perto-512.webp",
+        "mipmaps": {
+          "256": "../chuva/chuva-perto-256.webp",
+          "512": "../chuva/chuva-perto-512.webp",
+          "1024": "../chuva/chuva-perto-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.6,
+        "direcao": 103,
+        "velocidade": 2.9,
+        "opacidade": 0.85
+      }
+    ],
+    "veu": {
+      "cor": "#0f172a",
+      "opacidade": 0.3
+    },
+    "relampago": {
+      "intervalo": 9,
+      "forca": 0.65
+    }
+  }
+}

@@ -13,11 +13,13 @@ import { normaliza } from "@/lib/search";
  */
 export const TOPICOS_DA_CAMPANHA = [
   {
-    // Primeiro: é o "Geral" desta janela, o jeito da mesa inteira.
-    chave: "quadro",
-    titulo: t.topicos.quadro.titulo,
-    descricao: t.topicos.quadro.descricao,
-    palavras: t.topicos.quadro.palavras,
+    // Primeiro porque arma os outros: aplicar um sistema enche medidores,
+    // atributos, detalhes e condições de uma vez. Quem procura "ordem" ou
+    // "regras" acha aqui.
+    chave: "sistema",
+    titulo: t.topicos.sistema.titulo,
+    descricao: t.topicos.sistema.descricao,
+    palavras: t.topicos.sistema.palavras,
   },
   {
     chave: "medidores",
@@ -26,12 +28,34 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: t.topicos.medidores.palavras,
   },
   {
+    chave: "atributos",
+    titulo: t.topicos.atributos.titulo,
+    descricao: t.topicos.atributos.descricao,
+    palavras: t.topicos.atributos.palavras,
+  },
+  {
+    // Identidade, Perícias, Poderes: quem procura "classe" ou "pericia" acha
+    // aqui, e também pelos nomes dos grupos e detalhes que o mestre criou.
+    chave: "detalhes",
+    titulo: t.topicos.detalhes.titulo,
+    descricao: t.topicos.detalhes.descricao,
+    palavras: t.topicos.detalhes.palavras,
+  },
+  {
     chave: "efeitos",
     titulo: t.topicos.efeitos.titulo,
     descricao: t.topicos.efeitos.descricao,
     // Duas abas: as condições, com o efeito de cada uma pela engrenagem, e os
     // efeitos em área. Quem procura o fogo, a fagulha ou a área acha aqui.
     palavras: t.topicos.efeitos.palavras,
+  },
+  {
+    // A imagem da TV: brilho, contraste e cor da janela do espectador. Quem
+    // procura "projetor" ou "sepia" acha aqui -- ver as palavras.
+    chave: "espectador",
+    titulo: t.topicos.espectador.titulo,
+    descricao: t.topicos.espectador.descricao,
+    palavras: t.topicos.espectador.palavras,
   },
   {
     // "Ajustes", o nome da mesma lista nas Configurações gerais. Hoje só

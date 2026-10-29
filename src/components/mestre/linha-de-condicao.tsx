@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { Eye, EyeOff, LayoutGrid, Settings2, Trash2 } from "lucide-react";
+import { BookMarked, Eye, EyeOff, LayoutGrid, Settings2, Trash2 } from "lucide-react";
 
 import { NomeDoMedidor } from "@/components/mestre/linha-de-medidor";
 import {
@@ -20,7 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { definicaoDoEfeito, EFEITOS_DE_FABRICA } from "@/lib/efeitos";
+import { definicaoDoEfeito, EFEITOS_PARA_A_FIGURA } from "@/lib/efeitos";
 import { t } from "@/lib/i18n/personagens";
 import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
 import { CorLivre } from "@/components/mestre/seletor-de-cor";
@@ -55,6 +55,7 @@ export function LinhaDeCondicao({
   onEditar,
   onApagar,
   onConfigurar,
+  guardar,
   dicaDoOlho,
 }: {
   condicao: Condicao;
@@ -69,6 +70,11 @@ export function LinhaDeCondicao({
    * escolha de efeito. Na ficha, ausente -- a condição avulsa escolhe.
    */
   onConfigurar?: () => void;
+  /**
+   * Presente = o livro que tira a condição do menu e a guarda no Compêndio.
+   * Só no cardápio: a condição da ficha é do personagem, e não do menu.
+   */
+  guardar?: { rotulo: string; onGuardar: () => void };
   dicaDoOlho: Dica;
 }) {
   const deFora = useDeclarativoStore((state) => state.efeitos);
@@ -152,6 +158,26 @@ export function LinhaDeCondicao({
             <p className="text-muted-foreground max-w-48">{dicaDoOlho.texto}</p>
           </TooltipContent>
         </Tooltip>
+
+        {guardar ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={guardar.rotulo}
+                  disabled={ocupado}
+                  className={cn("text-muted-foreground", SO_SOB_O_CURSOR)}
+                  onClick={guardar.onGuardar}
+                >
+                  <BookMarked />
+                </Button>
+              }
+            />
+            <TooltipContent>{guardar.rotulo}</TooltipContent>
+          </Tooltip>
+        ) : null}
 
         <Button
           variant="ghost"
@@ -289,7 +315,7 @@ export function AparenciaDaCondicao({
               >
                 {t.linhaDeCondicao.nenhum}
               </Button>
-              {EFEITOS_DE_FABRICA.map((opcao) => (
+              {EFEITOS_PARA_A_FIGURA.map((opcao) => (
                 <OpcaoDeEfeito
                   key={opcao.id}
                   titulo={opcao.titulo}

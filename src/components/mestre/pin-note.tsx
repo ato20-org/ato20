@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { tamanhoNaCena } from "@/components/mestre/asset-library";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
+import { ItemAnexado } from "@/components/mestre/item-anexado";
 import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ import {
   importarCaminhosNoAcervo,
 } from "@/lib/mestre/importar-arquivos";
 import { t } from "@/lib/i18n/arquivos";
+import { t as textoDosItens } from "@/lib/i18n/itens";
 import { removePin } from "@/lib/mestre/item-actions";
 import { cn } from "@/lib/utils";
 import { invalidarAcervo } from "@/lib/store/use-assets-store";
@@ -83,6 +85,7 @@ export function PinNote({
 }) {
   const updatePin = useSceneStore((state) => state.updatePin);
   const attachToPin = useSceneStore((state) => state.attachToPin);
+  const prenderItensNoPonto = useSceneStore((state) => state.prenderItensNoPonto);
 
   // O acervo entra pelos nomes e pelo selo de animada. O arquivo recém-importado
   // aparece sozinho: `absorverImportacao` acorda o store que esta lista lê.
@@ -140,25 +143,34 @@ export function PinNote({
   }
 
   /**
-   * Este cartão como destino do gesto que traz imagem do acervo.
+   * Este cartão como destino do gesto que traz imagem do acervo, ou item da
+   * campanha.
    *
    * Uma chave por ponto, como o inventário é uma por ficha: há mais de uma
    * nota aberta ao mesmo tempo, e cada uma anexa no próprio ponto.
+   *
+   * O item fica PRESO ao ponto, e não sai de onde veio: o baú do porão continua
+   * no catálogo, e continua com quem o tinha. Ver `MapPin.itens`.
    */
   useEffect(
     () =>
       useTokenDragStore
         .getState()
         .registrarAlvo(`ponto:${pin.id}`, (solto) => {
+          if (solto.fonte.tipo === "item") {
+            prenderItensNoPonto(sceneId, pin.id, [solto.fonte.itemId]);
+            return;
+          }
+
           if (solto.fonte.tipo !== "acervo") return;
 
           attachToPin(sceneId, pin.id, [solto.fonte.assetId]);
         }),
-    [attachToPin, sceneId, pin.id],
+    [attachToPin, prenderItensNoPonto, sceneId, pin.id],
   );
 
-  // Uma imagem do acervo está pairando sobre ESTE cartão: o `useTokenDrag` já
-  // decidiu que é ele quem recebe.
+  // Uma imagem do acervo, ou um item, está pairando sobre ESTE cartão: o
+  // `useTokenDrag` já decidiu que é ele quem recebe.
   const recebendoDoAcervo = useTokenDragStore((state) => {
     const destino = state.arrasto?.destino;
 
@@ -339,6 +351,7 @@ export function PinNote({
             sceneId={sceneId}
             pinId={pin.id}
             ids={pin.attachments}
+            itens={pin.itens ?? []}
             assets={assets}
             recebendo={recebendo}
             importando={importando}
@@ -379,6 +392,7 @@ function AnexosDoPonto({
   sceneId,
   pinId,
   ids,
+  itens,
   assets,
   recebendo,
   importando,
@@ -387,6 +401,8 @@ function AnexosDoPonto({
   sceneId: string;
   pinId: string;
   ids: string[];
+  /** Os itens da campanha presos aqui. Ver `MapPin.itens`. */
+  itens: string[];
   assets: AssetMeta[];
   /** Uma imagem do acervo, ou um arquivo do sistema, está sobre o cartão. */
   recebendo: boolean;
@@ -403,7 +419,9 @@ function AnexosDoPonto({
       state.arrasto.fonte.pinId === pinId,
   );
 
-  if (ids.length === 0) {
+  const soltarItem = useSceneStore((state) => state.soltarItemDoPonto);
+
+  if (ids.length === 0 && itens.length === 0) {
     // A zona de soltar desenhada do handout vazio, deitada: aqui ela divide o
     // cartão com a nota, que é o principal. E sem a seta pulando: o handout é
     // aberto de propósito e fechado em seguida, e este cartão fica aberto a
@@ -448,6 +466,18 @@ function AnexosDoPonto({
           pinId={pinId}
           assetId={assetId}
           asset={assets.find((asset) => asset.id === assetId)}
+        />
+      ))}
+
+      {/* Depois das imagens, e na mesma grade: o ponto tem UMA lista de
+          coisas, e separar em duas grades dividiria um cartão pequeno em dois
+          cartões menores. O nome embaixo é o que distingue o item. */}
+      {itens.map((itemId) => (
+        <ItemAnexado
+          key={itemId}
+          itemId={itemId}
+          rotuloTirar={textoDosItens.anexado.tirarDoPonto}
+          onTirar={() => soltarItem(sceneId, pinId, itemId)}
         />
       ))}
 
@@ -573,7 +603,7 @@ function Anexo({
             size="icon-xs"
             className={cn(!noAr && REVELAR)}
             aria-label={
-              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNoEspectador(nome)
             }
             aria-pressed={noAr}
             // Apertar o botão não levanta a célula: sem isto, o tremor da mão

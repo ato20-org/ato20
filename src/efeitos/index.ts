@@ -38,19 +38,37 @@ function jsonDoModulo(modulo: JsonDoPack | { default: JsonDoPack }): JsonDoPack 
   return "default" in modulo && modulo.default ? modulo.default : (modulo as JsonDoPack);
 }
 
+/** O que o import de uma imagem devolve: o endereço, ou o módulo que o traz. */
+type ModuloDeImagem = string | { src: string } | { default: string | { src: string } };
+
 /**
- * As imagens, uma busca por formato: as que o pack de plugin aceita. Cada
- * import devolve o endereço -- uma string no Vite, um objeto com `src` no
- * Next; os dois servem.
+ * As imagens, uma busca por formato: as que o pack de plugin aceita. O
+ * endereço é uma string no Vite e um objeto com `src` no Next; os dois
+ * servem. Ver `enderecoDoModulo`.
+ *
+ * Como MÓDULO inteiro, e não com `import: "default"`, pela razão dos JSONs e
+ * por mais uma: no build de produção o Turbopack do Next 16.4 encurta o nome
+ * das exportações, e o `default` de cada imagem virou outra letra lá dentro.
+ * O `import: "default"` do glob continuou lendo `default`, recebia
+ * `undefined`, e o build parava no export da `/espectador`. Com o módulo
+ * inteiro nas mãos do código, o Turbopack não sabe que nomes serão lidos e
+ * mantém os de verdade.
  */
 const IMAGENS = {
-  ...import.meta.glob("./*/*.webp", { eager: true, import: "default" }),
-  ...import.meta.glob("./*/*.png", { eager: true, import: "default" }),
-  ...import.meta.glob("./*/*.jpg", { eager: true, import: "default" }),
-  ...import.meta.glob("./*/*.jpeg", { eager: true, import: "default" }),
-  ...import.meta.glob("./*/*.gif", { eager: true, import: "default" }),
-  ...import.meta.glob("./*/*.avif", { eager: true, import: "default" }),
-} as Record<string, string | { src: string }>;
+  ...import.meta.glob("./*/*.webp", { eager: true }),
+  ...import.meta.glob("./*/*.png", { eager: true }),
+  ...import.meta.glob("./*/*.jpg", { eager: true }),
+  ...import.meta.glob("./*/*.jpeg", { eager: true }),
+  ...import.meta.glob("./*/*.gif", { eager: true }),
+  ...import.meta.glob("./*/*.avif", { eager: true }),
+} as Record<string, ModuloDeImagem>;
+
+/** O endereço de uma imagem, pelo módulo inteiro ou já pelo `default`. */
+function enderecoDoModulo(modulo: ModuloDeImagem): string {
+  if (typeof modulo === "string") return modulo;
+  if ("default" in modulo && modulo.default) return enderecoDoModulo(modulo.default);
+  return (modulo as { src: string }).src;
+}
 
 /** `./chamas/fogo.webp` -> `["chamas", "fogo.webp"]`. */
 function partes(caminho: string): [string, string] {
@@ -58,15 +76,27 @@ function partes(caminho: string): [string, string] {
   return [pasta, arquivo];
 }
 
+/**
+ * As imagens de todas as pastas, pelo nome que um pack usa para a de OUTRO:
+ * `../chamas/chama-128.webp`. É o que deixa a "Bola de fogo" usar a chama de
+ * "Em chamas" sem uma segunda cópia do arquivo no bundle.
+ */
+const DE_OUTRA_PASTA: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(IMAGENS).map(([imagem, endereco]) => {
+    const [pasta, arquivo] = partes(imagem);
+    return [`../${pasta}/${arquivo}`, enderecoDoModulo(endereco)];
+  }),
+);
+
 export const PACKS_DE_FABRICA: ReadonlyArray<PackDeFabrica> = Object.entries(JSONS).map(
   ([caminho, modulo]) => {
     const [pasta] = partes(caminho);
     const definicao = jsonDoModulo(modulo);
-    const arquivos: Record<string, string> = {};
+    const arquivos: Record<string, string> = { ...DE_OUTRA_PASTA };
 
     for (const [imagem, endereco] of Object.entries(IMAGENS)) {
       const [dela, arquivo] = partes(imagem);
-      if (dela === pasta) arquivos[arquivo] = typeof endereco === "string" ? endereco : endereco.src;
+      if (dela === pasta) arquivos[arquivo] = enderecoDoModulo(endereco);
     }
 
     return { pasta, definicao, arquivos };

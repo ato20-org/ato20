@@ -3,6 +3,8 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
+import { useContainerDosPortais } from "@/components/ui/container-dos-portais";
+import { janelaDe } from "@/lib/dom";
 import { t } from "@/lib/i18n/palco";
 import { cn } from "@/lib/utils";
 import type { Sugestao } from "@/lib/mencoes/sugestao";
@@ -57,6 +59,7 @@ export function ListaDeSugestoes({
   indice,
   ancora,
   onEscolher,
+  recipiente,
 }: {
   /**
    * O que a lista está oferecendo, numa linha: "Personagens da campanha",
@@ -85,7 +88,15 @@ export function ListaDeSugestoes({
    */
   ancora: RefObject<HTMLElement | null>;
   onEscolher: (nome: string) => void;
+  /**
+   * Onde a lista entra, quando não pode ser o `body`: dentro de um diálogo, a
+   * lista solta no `body` é "fora" dele -- o diálogo modal não a deixa ser
+   * tocada, e o toque nela o fecharia.
+   */
+  recipiente?: HTMLElement | null;
 }) {
+  // Numa janela solta, a lista abre lá, e não no Mestre. Ver `useContainerDosPortais`.
+  const container = useContainerDosPortais();
   const caixa = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -115,14 +126,16 @@ export function ListaDeSugestoes({
     // Abre para baixo por padrão, e para cima quando não cabe: um postit no pé
     // da tela é o caso comum — o mestre anota onde o mapa está —, e a lista
     // fora da janela seria uma lista que não existe.
+    // A janela do campo: numa janela solta, é o tamanho DELA que prende a lista.
+    const janela = janelaDe(elemento);
     const abaixo = rect.bottom + FOLGA_PX;
-    const cabeAbaixo = abaixo + altura < window.innerHeight;
+    const cabeAbaixo = abaixo + altura < janela.innerHeight;
 
     // Presa à janela também na horizontal: papel na borda direita jogaria a
     // lista para fora da tela.
     const left = Math.min(
       Math.max(rect.left, FOLGA_PX),
-      window.innerWidth - LARGURA_PX - FOLGA_PX,
+      janela.innerWidth - LARGURA_PX - FOLGA_PX,
     );
 
     elemento.style.left = `${left}px`;
@@ -182,6 +195,6 @@ export function ListaDeSugestoes({
         {t.sugestoes.rodape}
       </p>
     </div>,
-    document.body,
+    recipiente ?? container ?? document.body,
   );
 }

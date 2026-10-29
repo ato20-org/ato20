@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useMemo, useState } from "react";
 import {
   HelpCircle,
+  Keyboard,
   Loader2,
   type LucideIcon,
   MoreVertical,
@@ -34,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
 import {
   Popover,
   PopoverContent,
@@ -61,7 +63,14 @@ import {
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { countAssetUsage } from "@/lib/mestre/asset-usage";
+import { donoDaTecla } from "@/lib/mestre/atalhos";
 import { CORES_DO_SOM } from "@/lib/mestre/cores-do-som";
+import {
+  doNumpad,
+  rotuloDaTecla,
+  soModificador,
+  teclaDoEvento,
+} from "@/lib/mestre/tecla-de-som";
 import { t } from "@/lib/i18n/arquivos";
 import { normaliza } from "@/lib/search";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -70,6 +79,7 @@ import { cn } from "@/lib/utils";
 import {
   type AssetMeta,
   GANHO_PADRAO,
+  type Macro,
   type Pad,
   type TipoDeSom,
 } from "@/types/scene";
@@ -396,7 +406,8 @@ export function AudioLibrary() {
           </div>
 
           {/* Abaixo da grade, e com o mesmo papel: um som guardado à mão, para
-              acionar de um gesto. O que muda é a tecla — aqui não há.
+              acionar de um gesto. O que muda é a tecla — aqui é o mestre quem
+              escolhe, ou não escolhe nenhuma. Ver `TeclaDaMacro`.
 
               Existe por duas razões que são a mesma: teclado de portátil não
               tem numpad, e nove é pouco. Quem joga num notebook não alcança pad
@@ -427,14 +438,14 @@ export function AudioLibrary() {
             {macros.length === 0 ? (
               // O que a macro E ja esta no comentario acima, para quem mexe no
               // codigo. Aqui embaixo do titulo "Macros" e de um `+`, o que
-              // falta dizer e so o que a separa dos pads de cima -- a tecla --,
-              // e isso cabe em quatro palavras.
+              // falta dizer e so o que a separa dos pads de cima -- a tecla, que
+              // aqui e qualquer uma --, e isso cabe numa linha.
               //
               // Mais apagado que o resto: e uma linha que so quem parou para
               // olhar a secao vai ler, e no peso normal ela disputava atencao
               // com a grade de pads logo acima, que e o que a aba veio mostrar.
               <p className="text-muted-foreground/60 text-xs select-none">
-                {t.audioLibrary.semTecla}
+                {t.audioLibrary.qualquerTecla}
               </p>
             ) : (
               <ul className="space-y-1">
@@ -454,7 +465,7 @@ export function AudioLibrary() {
                         : false;
 
                   return (
-                    <li key={macro.id} className="group flex items-center gap-1">
+                    <li key={macro.id} className="group relative flex items-center gap-1">
                       {/* A linha inteira é o botão: o alvo é a largura do
                           painel, e não um ícone de doze pixels. É a diferença
                           entre acertar de relance e mirar. */}
@@ -477,6 +488,8 @@ export function AudioLibrary() {
                         />
                         <span className="min-w-0 flex-1 truncate">{nome}</span>
                       </button>
+
+                      <TeclaDaMacro macro={macro} nome={nome} />
 
                       {/* Só no hover, como a cruzinha do pad: uma coluna de X
                           sempre à vista viraria a lista num formulário. */}
@@ -835,6 +848,146 @@ function SeletorDeSom({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * A tecla de uma macro: o selo que a mostra, e o gesto que a grava.
+ *
+ * Clicar põe o selo a ouvir, e a próxima tecla vira a da macro. Gravar pela
+ * tecla de verdade, e não por um campo onde se digita "Alt+1": o mestre não
+ * precisa saber como a combinação se escreve, e o que fica gravado é o que o
+ * teclado dele de fato manda.
+ *
+ * O conflito se resolve AQUI, na hora: a tecla que já é de um atalho do app ou
+ * de outra macro é recusada com o nome do dono, e o selo continua ouvindo para
+ * a próxima tentativa. Aceitar e deixar a tabela decidir depois daria uma
+ * macro que nunca toca, sem nada dizendo por quê. Ver `donoDaTecla`.
+ *
+ * Nada do que se aperta ouvindo chega ao resto do Mestre: gravar o `F` não pode
+ * enquadrar a seleção, nem o Esc que cancela pode soltar a ferramenta.
+ */
+function TeclaDaMacro({ macro, nome }: { macro: Macro; nome: string }) {
+  const definirTecla = useTrackStore((state) => state.definirTeclaDaMacro);
+  const [ouvindo, setOuvindo] = useState(false);
+  const [recusa, setRecusa] = useState<string | null>(null);
+
+  function parar() {
+    setOuvindo(false);
+    setRecusa(null);
+  }
+
+  function aoApertar(evento: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (!ouvindo) return;
+
+    // Tab segue andando pelo foco, como em qualquer lugar: prender o foco num
+    // selo seria uma armadilha para quem navega pelo teclado.
+    if (evento.key === "Tab") {
+      parar();
+      return;
+    }
+
+    // `stopPropagation` e não só `preventDefault`: o listener dos atalhos mora
+    // no `window`, e o evento chega lá subindo. Ver `useMestreShortcuts`.
+    evento.preventDefault();
+    evento.stopPropagation();
+
+    if (evento.key === "Escape") {
+      parar();
+      return;
+    }
+
+    if (evento.key === "Backspace" || evento.key === "Delete") {
+      definirTecla(macro.id, null);
+      parar();
+      return;
+    }
+
+    const nativo = evento.nativeEvent;
+    // O Alt chega um instante antes do 1 de "Alt+1": é espera, não recusa.
+    if (soModificador(nativo)) return;
+
+    const tecla = teclaDoEvento(nativo);
+    if (!tecla) {
+      setRecusa(
+        doNumpad(nativo)
+          ? t.audioLibrary.numpadEhDosPads
+          : t.audioLibrary.teclaQueNaoServe,
+      );
+      return;
+    }
+
+    const dono = donoDaTecla(nativo, macro.id);
+    if (dono) {
+      setRecusa(t.audioLibrary.teclaOcupada(rotuloDaTecla(tecla), dono));
+      return;
+    }
+
+    definirTecla(macro.id, tecla);
+    parar();
+  }
+
+  const rotulo = macro.tecla ? rotuloDaTecla(macro.tecla) : null;
+  const descricao = ouvindo
+    ? t.audioLibrary.dicaDaTecla
+    : rotulo
+      ? t.audioLibrary.trocarTecla(nome, rotulo)
+      : t.audioLibrary.darTecla(nome);
+
+  return (
+    <>
+      <button
+        type="button"
+        title={descricao}
+        aria-label={descricao}
+        aria-pressed={ouvindo}
+        className={cn(
+          "flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md px-1",
+          ouvindo
+            ? "ring-primary animate-pulse ring-1"
+            : "hover:bg-accent/50",
+          // Sem tecla, quase apagado: está ali para ser achado por quem
+          // procura, e não para disputar com o nome do som. Uma coluna de
+          // ícones acesos viraria a lista num formulário.
+          !ouvindo && !rotulo && "text-muted-foreground/40 group-hover:text-muted-foreground",
+        )}
+        onClick={(evento) => {
+          if (ouvindo) {
+            parar();
+            return;
+          }
+          // Foco à mão: o WebKit não foca botão no clique em toda plataforma,
+          // e sem foco a tecla seguinte iria para o `body` -- e dispararia o
+          // atalho que o mestre queria só gravar.
+          evento.currentTarget.focus();
+          setOuvindo(true);
+        }}
+        onKeyDown={aoApertar}
+        onBlur={parar}
+      >
+        {ouvindo ? (
+          <span className="text-muted-foreground text-[10px]">
+            {t.audioLibrary.aperteATecla}
+          </span>
+        ) : rotulo ? (
+          <Kbd className="text-[10px]">{rotulo}</Kbd>
+        ) : (
+          <Keyboard className="size-3" />
+        )}
+      </button>
+
+      {/* Embaixo da linha e por cima da seguinte, e não empurrando a lista:
+          a recusa dura até a próxima tecla, e a lista pulando a cada tentativa
+          tiraria do lugar o selo que o mestre está olhando. */}
+      {ouvindo && recusa ? (
+        <p
+          role="alert"
+          className="bg-popover text-destructive absolute top-full right-0 z-10 mt-1 max-w-56 rounded-md border px-2 py-1 text-xs shadow-md"
+        >
+          {recusa}
+        </p>
+      ) : null}
+    </>
   );
 }
 

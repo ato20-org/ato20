@@ -1,0 +1,59 @@
+{
+  "id": "sopro-de-fogo",
+  "titulo": "Sopro de fogo",
+  "dica": "Um leque de chamas que se abre de quem sopra: o hálito do dragão.",
+  "disparo": {
+    "forma": "cone",
+    "abertura": 60,
+    "velocidade": 12,
+    "alcance": 4
+  },
+  "area": {
+    "cor": "#f59e0b",
+    "divisoes": 2,
+    "escala": 1.7,
+    "foco": {
+      "imagem": "../chamas/chama-128.webp",
+      "mipmaps": {
+        "64": "../chamas/chama-64.webp",
+        "128": "../chamas/chama-128.webp"
+      },
+      "quadros": {
+        "colunas": 4,
+        "total": 16,
+        "fps": 14
+      },
+      "cores": "condicao"
+    },
+    "densidade": 4
+  },
+  "base": {
+    "imagem": "../chamas/chao-de-fogo-128.webp",
+    "mipmaps": {
+      "64": "../chamas/chao-de-fogo-64.webp",
+      "128": "../chamas/chao-de-fogo-128.webp"
+    },
+    "quadros": {
+      "colunas": 4,
+      "total": 16,
+      "fps": 14
+    },
+    "cores": "condicao",
+    "escala": 2,
+    "escurece": 0.5
+  },
+  "particulas": {
+    "quantidade": 10,
+    "tamanho": 0.045,
+    "variacao": 0.6,
+    "direcao": 270,
+    "abertura": 50,
+    "velocidade": 0.9,
+    "vida": 1.4,
+    "emissor": {
+      "largura": 0.8,
+      "altura": 0.35,
+      "ancora": "base"
+    }
+  }
+}

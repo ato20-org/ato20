@@ -228,6 +228,15 @@
     animation: scene-fade-in 200ms ease-out both;
   }
 
+  /* O detalhe que a busca mandou mostrar, achado na ficha: um anel que pisca
+     duas vezes para o olho pousar nele depois do salto. Aplicada à mão quando
+     o foco chega -- ver o efeito de `useFocoNoDetalhe` em `DetalhesDoJogador`.
+     Quem pediu menos movimento recebe só o salto, sem o anel. */
+  .detalhe-em-destaque {
+    animation: detalhe-em-destaque 0.85s ease-in-out 2;
+    border-radius: 0.375rem;
+  }
+
   /* Os efeitos de condição na figura. Ver `FiguraComEfeitos`.
 
      Os três animam só `opacity` e `transform`, que o compositor anima fora da
@@ -267,6 +276,21 @@
     animation: efeito-piscar 2s ease-in-out infinite;
   }
 
+  /* O item largado na mesa de esguelha balança no ar. O período espelha
+     `PERIODO_DO_FLUTUAR`, em `chao-inclinado.tsx`. O lampejo não mora aqui:
+     ver `LampejoDoItem`.
+
+     Em DEGRAUS, quatro por trecho dos quadros abaixo: ~10 posições por
+     segundo, e não 60. O `top` anima fora do compositor (ver o invólucro em
+     `PecaEmPe`), e cada posição é estilo, layout e pintura. Medido no caminho
+     da TV com a câmera parada (no `next dev`), vinte itens em movimento
+     contínuo custavam mais que o dobro de CPU que em degraus; e o vão é de
+     poucos pixels, então o degrau fica abaixo do pixel que a pintura
+     arredonda. */
+  .item-flutuando {
+    animation: item-flutuar 3.2s steps(4) infinite;
+  }
+
   /* A chama de pé do 2.5D: uma faixa de quadros andando pela posição do
      fundo, em degraus. Repinta um elemento pequeno a cada degrau, em vez de
      compor duas camadas por chama a cada quadro da câmera. Ver `faixaDaFolha`. */
@@ -295,6 +319,39 @@
     animation: ping-onda 1.1s ease-out 2 both;
   }
 
+  /* O efeito DISPARADO. Ver `DisparoLayer`.
+
+     O projétil anda no eixo do envelope girado, de A até a distância de B, e
+     apaga ao chegar -- de uma vez quando estoura, devagar quando só chega. O
+     rastro cresce atrás dele no mesmo tempo, a partir de A. O estouro espera o
+     que falta do voo (`--disparo-espera`, contado na montagem) e cresce
+     apagando. O cone abre da ponta até a borda no tempo do voo,
+     fica um instante e apaga. Os tempos vêm inline, do tiro.
+
+     Quem pediu menos movimento vê o fim: o projétil parado no alvo, o estouro
+     e o cone abertos, sem animar -- até o Mestre tirar o tiro do quadro. */
+  .disparo-voo {
+    animation:
+      disparo-voo var(--disparo-voo) linear both,
+      disparo-apaga var(--disparo-chega) ease-in var(--disparo-voo) forwards;
+  }
+
+  .disparo-rastro {
+    animation:
+      disparo-rastro var(--disparo-voo) linear both,
+      disparo-apaga 300ms ease-in var(--disparo-voo) forwards;
+  }
+
+  .disparo-impacto {
+    animation: disparo-impacto var(--disparo-impacto, 800ms) ease-out var(--disparo-espera, 0ms) both;
+  }
+
+  .disparo-cone {
+    animation:
+      disparo-cone var(--disparo-voo) cubic-bezier(0.2, 0.7, 0.3, 1) both,
+      disparo-apaga var(--disparo-some) ease-in var(--disparo-apaga) forwards;
+  }
+
   /* A roda de escolha, ao abrir sob o dedo. */
   .roda-de-ping {
     animation: ping-entra 160ms ease-out both;
@@ -317,6 +374,32 @@
    */
   .plano-de-controles :is(button, a, input, textarea, select, label) {
     pointer-events: auto;
+  }
+
+  /* O AMBIENTE na lente: cada camada desliza UM ladrilho em laço, e a
+     textura emenda, então a volta não se vê. Só `transform` -- o compositor
+     move a camada sem repintar a tela. O balanço vai na propriedade
+     `translate`, que se compõe com o `transform` em vez de trocá-lo: são duas
+     animações no MESMO elemento, e um envelope a mais seria outra camada do
+     tamanho da tela. Ver `planoDaCamada`. */
+  .ambiente-camada-y {
+    animation: ambiente-desliza-y var(--ambiente-duracao) linear infinite;
+  }
+
+  .ambiente-camada-x {
+    animation: ambiente-desliza-x var(--ambiente-duracao) linear infinite;
+  }
+
+  .ambiente-camada-y.ambiente-balanca {
+    animation:
+      ambiente-desliza-y var(--ambiente-duracao) linear infinite,
+      ambiente-balanca-x var(--ambiente-periodo) ease-in-out infinite alternate;
+  }
+
+  .ambiente-camada-x.ambiente-balanca {
+    animation:
+      ambiente-desliza-x var(--ambiente-duracao) linear infinite,
+      ambiente-balanca-y var(--ambiente-periodo) ease-in-out infinite alternate;
   }
 
   .rolagem-limpa {
@@ -359,6 +442,18 @@
   }
 }
 
+/* O anel do detalhe em destaque, do nada ao anel e de volta: dois ciclos
+   deixam duas piscadas. Ver `.detalhe-em-destaque`. */
+@keyframes detalhe-em-destaque {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  45% {
+    box-shadow: 0 0 0 2px var(--color-ring);
+  }
+}
+
 /* A base dos efeitos de condição, PARADA, fora do `@media`: quem pediu menos
    movimento continua vendo o halo e o invisível -- só sem respirar. O tremor
    não tem base, porque tremor parado é figura normal, e a leitura dele fica
@@ -397,9 +492,49 @@
     .efeito-flutuar,
     .efeito-piscar,
     .efeito-grade,
-    .efeito-faixa
+    .efeito-faixa,
+    .item-flutuando
   ) {
   animation-play-state: paused;
+}
+
+/* O item no ar, PARADO, fora do `@media`: quem pediu menos movimento continua
+   vendo o vão entre ele e a sombra, só sem o balanço. O balanço anda entre
+   duas alturas acima desta base, e nunca pousa.
+
+   Pelo `top`, e não por `transform`: ver o invólucro em `PecaEmPe`. Em
+   porcentagem da caixa da peça, que de esguelha muda de tamanho com a
+   câmera. */
+.item-flutuando {
+  top: -6%;
+}
+
+/* Um cosseno em oito pontos, entre -3% e -9%: devagar nas pontas, depressa no
+   meio, como o que flutua. */
+@keyframes item-flutuar {
+  0%,
+  100% {
+    top: -3%;
+  }
+
+  12.5%,
+  87.5% {
+    top: -3.88%;
+  }
+
+  25%,
+  75% {
+    top: -6%;
+  }
+
+  37.5%,
+  62.5% {
+    top: -8.12%;
+  }
+
+  50% {
+    top: -9%;
+  }
 }
 
 @keyframes efeito-faixa {
@@ -522,6 +657,77 @@
   }
 }
 
+/* O tiro parado, sem o movimento: o projétil já no alvo, o rastro apagado.
+   Ver `.disparo-voo`. */
+.disparo-voo {
+  transform: translateX(var(--disparo-dx, 0));
+}
+
+.disparo-rastro {
+  opacity: 0;
+  transform-origin: 0 50%;
+}
+
+@keyframes disparo-voo {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(var(--disparo-dx, 0));
+  }
+}
+
+@keyframes disparo-rastro {
+  from {
+    opacity: 1;
+    transform: scaleX(0);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes disparo-apaga {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes disparo-impacto {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+
+  18% {
+    opacity: 1;
+  }
+
+  65% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes disparo-cone {
+  from {
+    opacity: 0.5;
+    transform: scale(0.06);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Em porcentagem da própria caixa, que é a do token: o tremor de um dragão e o
    de um rato saem proporcionais, e não o mesmo número de unidades. */
 @keyframes efeito-tremendo {
@@ -558,4 +764,305 @@
 ::highlight(busca-na-nota-atual) {
   background-color: rgb(249 115 22 / 0.75);
   color: black;
+}
+
+/* Fora do `@media`, pela razão do `scene-fade-in`. A camada PARADA -- quem
+   pediu menos movimento, ou a de velocidade zero -- fica com a inclinação que
+   o `AmbienteNaLente` põe inline, e a animação a atravessa. */
+@keyframes ambiente-desliza-y {
+  from {
+    transform: skewX(var(--ambiente-inclinacao, 0deg)) translateY(0);
+  }
+
+  to {
+    transform: skewX(var(--ambiente-inclinacao, 0deg)) translateY(var(--ambiente-passo, 0));
+  }
+}
+
+@keyframes ambiente-desliza-x {
+  from {
+    transform: skewY(var(--ambiente-inclinacao, 0deg)) translateX(0);
+  }
+
+  to {
+    transform: skewY(var(--ambiente-inclinacao, 0deg)) translateX(var(--ambiente-passo, 0));
+  }
+}
+
+@keyframes ambiente-balanca-x {
+  from {
+    translate: calc(-1 * var(--ambiente-balanco, 0px)) 0;
+  }
+
+  to {
+    translate: var(--ambiente-balanco, 0px) 0;
+  }
+}
+
+@keyframes ambiente-balanca-y {
+  from {
+    translate: 0 calc(-1 * var(--ambiente-balanco, 0px));
+  }
+
+  to {
+    translate: 0 var(--ambiente-balanco, 0px);
+  }
+}
+
+/* A LUZ de uma aura de plugin (`extensoes::Aura`): a borda do card sob a mão.
+   Ver `LuzDaAura`.
+
+   Cada camada é um brilho de borda PINTADO UMA VEZ (`box-shadow` inset, ou o
+   gradiente do cometa), e o que anima é só a opacidade ou a posição dela --
+   o que o compositor faz sem redesenhar a janela. Nada de `filter` nem de
+   `box-shadow` animado: no WebKitGTK um desfoque animado na borda de uma
+   janela inteira custa um quadro por quadro.
+
+   A cor vem inline (`--luz-cor`), e o alcance do brilho também
+   (`--luz-alcance`): curto no card, e um pouco maior na luz sob a mão. */
+.luz-camada {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 var(--luz-alcance, 32px) calc(var(--luz-alcance, 32px) / -8) var(--luz-cor),
+    inset 0 0 0 1px color-mix(in srgb, var(--luz-cor) 70%, transparent);
+}
+
+/* O cometa do `fluxo`: uma mancha de luz colada numa borda, que corre por
+   ela. A faixa corta o que passa do lado de fora; o cometa só se move. */
+.luz-faixa {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.luz-faixa[data-borda="cima"] {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="baixo"] {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="esquerda"] {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--luz-alcance, 32px);
+}
+
+.luz-faixa[data-borda="direita"] {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--luz-alcance, 32px);
+}
+
+.luz-cometa {
+  position: absolute;
+}
+
+[data-borda="cima"] > .luz-cometa,
+[data-borda="baixo"] > .luz-cometa {
+  top: 0;
+  bottom: 0;
+  width: 45%;
+}
+
+[data-borda="esquerda"] > .luz-cometa,
+[data-borda="direita"] > .luz-cometa {
+  left: 0;
+  right: 0;
+  height: 45%;
+}
+
+[data-borda="cima"] > .luz-cometa {
+  background: radial-gradient(ellipse 50% 100% at 50% 0%, var(--luz-cor), transparent);
+}
+
+[data-borda="baixo"] > .luz-cometa {
+  background: radial-gradient(ellipse 50% 100% at 50% 100%, var(--luz-cor), transparent);
+}
+
+[data-borda="esquerda"] > .luz-cometa {
+  background: radial-gradient(ellipse 100% 50% at 0% 50%, var(--luz-cor), transparent);
+}
+
+[data-borda="direita"] > .luz-cometa {
+  background: radial-gradient(ellipse 100% 50% at 100% 50%, var(--luz-cor), transparent);
+}
+
+/* Parados, os cometas não aparecem: sem movimento, eles seriam manchas
+   soltas na borda. A luz de baixo continua. */
+.luz-cometa {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .luz-pulso {
+    animation: luz-pulso 6s ease-in-out infinite;
+  }
+
+  /* O fluxo de Sangue é violento: a luz de baixo lateja em surtos, e os
+     cometas correm acelerando, cada borda no seu ritmo. */
+  .luz-latejo {
+    animation: luz-latejo 1.9s ease-in infinite;
+  }
+
+  .luz-cometa {
+    opacity: 1;
+    animation-duration: var(--luz-duracao, 1.4s);
+    animation-delay: var(--luz-atraso, 0s);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+    animation-iteration-count: infinite;
+  }
+
+  [data-borda="cima"] > .luz-cometa {
+    animation-name: luz-corre-direita;
+  }
+
+  [data-borda="baixo"] > .luz-cometa {
+    animation-name: luz-corre-esquerda;
+  }
+
+  [data-borda="direita"] > .luz-cometa {
+    animation-name: luz-corre-baixo;
+  }
+
+  [data-borda="esquerda"] > .luz-cometa {
+    animation-name: luz-corre-cima;
+  }
+
+  /* O cintilar de Energia: cada cor pisca no seu ritmo, aos saltos. */
+  .luz-cintilar {
+    animation: luz-cintilar var(--luz-duracao, 2.3s) step-end var(--luz-atraso, 0s) infinite;
+  }
+}
+
+@keyframes luz-pulso {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes luz-latejo {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  30% {
+    opacity: 0.55;
+  }
+
+  42% {
+    opacity: 0.95;
+  }
+
+  70% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes luz-corre-direita {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(223%);
+  }
+}
+
+@keyframes luz-corre-esquerda {
+  from {
+    transform: translateX(223%);
+  }
+
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes luz-corre-baixo {
+  from {
+    transform: translateY(-100%);
+  }
+
+  to {
+    transform: translateY(223%);
+  }
+}
+
+@keyframes luz-corre-cima {
+  from {
+    transform: translateY(223%);
+  }
+
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes luz-cintilar {
+  0% {
+    opacity: 0.15;
+  }
+
+  4% {
+    opacity: 1;
+  }
+
+  7% {
+    opacity: 0.2;
+  }
+
+  10% {
+    opacity: 0.85;
+  }
+
+  13% {
+    opacity: 0.1;
+  }
+
+  41% {
+    opacity: 0.9;
+  }
+
+  44% {
+    opacity: 0.25;
+  }
+
+  63% {
+    opacity: 0.7;
+  }
+
+  65% {
+    opacity: 0.1;
+  }
+
+  88% {
+    opacity: 1;
+  }
+
+  91% {
+    opacity: 0.3;
+  }
 }

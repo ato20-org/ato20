@@ -5,6 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { FonteRetrato } from "@/lib/extensoes/fontes";
 import { resolverOpcional, resolverTexto } from "@/lib/extensoes/texto";
 import { call } from "@/lib/vault/bridge";
+import type { EstiloMedidor } from "@/types/character";
+import type { ExibicaoDeGrupo, TipoDeDetalhe } from "@/types/detalhe";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
 export {
@@ -36,7 +38,7 @@ export {
  * número existe aqui para a tela poder dizer o que ela fala quando mostra o
  * erro de incompatibilidade.
  */
-export const API_VERSAO = 7;
+export const API_VERSAO = 13;
 
 /**
  * O que uma extensão diz de si.
@@ -55,6 +57,12 @@ export type Manifesto = {
   autor: string | null;
   repositorio: string | null;
   descricao: string | null;
+  /**
+   * O ícone, relativo à pasta da extensão: raster, quadrado. O que a lista de
+   * Instalados mostra ao lado do nome. Ausente em lista lida por um Rust
+   * anterior a ele.
+   */
+  icone?: string | null;
   apiVersao: number;
   /** O CSS, relativo à pasta da extensão. */
   tema: string | null;
@@ -93,10 +101,167 @@ export type Contribuicoes = {
   secoes?: SecaoDeclarada[];
   substitutos?: SubstitutoDeclarado[];
   estilosDeMedidor?: EstiloDeMedidorDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 11. */
+  estilosDeAtributos?: EstiloDeAtributosDeclarado[];
   paginas?: PaginaDeclarada[];
   /** Ausente em lista lida por um Rust anterior à API 6. */
   efeitos?: EfeitoDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 10. */
+  fichasPdf?: FichaPdfDeclarada[];
+  sistemas?: SistemaDeclarado[];
+  /** Ausente em lista lida por um Rust anterior à API 12. */
+  bestiario?: ColecaoDoBestiarioDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 12. */
+  auras?: AuraDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 13. */
+  itens?: ColecaoDeItensDeclarada[];
+  /** Ausente em lista lida por um Rust anterior à API 13. */
+  abas?: AbaDoCompendioDeclarada[];
 };
+
+/**
+ * Uma coleção de fichas prontas para o Compêndio. O manifesto só a declara: as
+ * fichas moram no `arquivo`, e quem as lê é o Rust (`bestiario.rs`). Espelho de
+ * `extensoes::ColecaoDoBestiario`.
+ */
+export type ColecaoDoBestiarioDeclarada = {
+  id: string;
+  titulo: string;
+  arquivo: string;
+  /** O sistema do mesmo plugin a que as fichas servem. Só etiqueta. */
+  sistema?: string | null;
+  /** A aura do mesmo plugin que pinta a pasta da coleção. Ver `AuraDeclarada`. */
+  aura?: string | null;
+};
+
+/**
+ * Uma coleção de itens prontos para o Compêndio: as armas, as proteções. A
+ * mesma declaração do bestiário; o `arquivo` traz itens, e não fichas, e quem
+ * o lê é o Rust (`itens_do_plugin.rs`). Espelho de `extensoes::ColecaoDeItens`.
+ */
+export type ColecaoDeItensDeclarada = ColecaoDoBestiarioDeclarada;
+
+/**
+ * Uma aba nova no Compêndio: os rituais de um sistema, os talentos, as magias.
+ * O manifesto declara a aba, o grupo da ficha que recebe o verbete dado a um
+ * personagem e as coleções; os verbetes moram no `arquivo` de cada coleção, e
+ * quem os lê é o Rust (`abas_do_plugin.rs`). Espelho de
+ * `extensoes::AbaDoCompendio`.
+ */
+export type AbaDoCompendioDeclarada = {
+  id: string;
+  titulo: string;
+  /** Onde o verbete entra na ficha: "Rituais", em lista. */
+  grupo: { nome: string; exibicao?: "linhas" | "lista" };
+  colecoes: ColecaoDeVerbetesDeclarada[];
+};
+
+/** Uma coleção de verbetes: a mesma declaração do bestiário e dos itens. */
+export type ColecaoDeVerbetesDeclarada = ColecaoDoBestiarioDeclarada;
+
+/** Os efeitos de luz que o núcleo sabe desenhar. Espelho de `extensoes::EFEITOS_DE_LUZ`. */
+export type EfeitoDeLuz = "fixa" | "pulso" | "fluxo" | "cintilar";
+
+/** A luz de uma aura. Ver `LuzDaAura`. */
+export type LuzDeclarada = { efeito: EfeitoDeLuz; cores: string[] };
+
+/**
+ * Uma aura: a cor, o emblema e a luz com que o plugin marca uma coisa -- a
+ * pasta de uma coleção do bestiário, a borda do card de uma ficha, e o
+ * personagem ou item da campanha que a recebe
+ * (`{plugin}/{id}`). Espelho de `extensoes::Aura`.
+ */
+export type AuraDeclarada = {
+  id: string;
+  titulo: string;
+  cor: string;
+  /** Uma imagem da pasta do plugin, na frente da pasta. */
+  emblema?: string | null;
+  luz?: LuzDeclarada | null;
+};
+
+/**
+ * Um sistema de jogo: o padrão que uma campanha dele ganha -- atributos,
+ * medidores, o molde dos detalhes e o cardápio de condições. O mestre o
+ * APLICA numa campanha, e aplicar junta ao que ela já tem. Espelho de
+ * `extensoes::Sistema`; o Rust devolve os ausentes já preenchidos.
+ */
+export type SistemaDeclarado = {
+  id: string;
+  titulo: string;
+  atributos: Array<{ sigla: string; valor: number; descricao?: string | null }>;
+  medidores: Array<{
+    nome: string;
+    cor: string;
+    estilo: EstiloMedidor;
+    maximo: number;
+    escondido: boolean;
+    estiloExtensao?: string | null;
+  }>;
+  detalhes: {
+    grupos: Array<{ nome: string; exibicao: ExibicaoDeGrupo }>;
+    modelos: Array<{
+      grupo: string;
+      rotulo: string;
+      tipo: TipoDeDetalhe;
+      valor?: string | number | null;
+      opcoes: string[];
+      descricao?: string | null;
+    }>;
+  };
+  condicoes: Array<{ nome: string; cor: string; icone?: string | null; efeito?: string | null }>;
+  /**
+   * `{plugin}/{estilo}` dos atributos: aplicar o sistema põe a campanha nesse
+   * desenho. Ausente antes da API 11.
+   */
+  estiloDosAtributos?: string | null;
+};
+
+/**
+ * Uma ficha em PDF que o plugin sabe ler: o formulário de um modelo conhecido,
+ * campo a campo. Espelho de `extensoes::FichaPdf`, que é quem valida. Quem lê o
+ * PDF e traduz é `lib/fichas-pdf/`.
+ */
+export type FichaPdfDeclarada = {
+  id: string;
+  titulo: string;
+  /** Os campos que o PDF tem de ter, TODOS, para ser esta ficha. */
+  reconhecer: string[];
+  /** O campo do nome do personagem. */
+  nome: string;
+  atributos?: Array<{ sigla: string; campo: LeituraDeCampo }>;
+  medidores?: Array<{
+    nome: string;
+    /** Ausente = cheio. */
+    atual?: LeituraDeCampo | null;
+    maximo: LeituraDeCampo;
+    cor?: string | null;
+  }>;
+  detalhes?: Array<{
+    grupo: string;
+    rotulo: string;
+    /** O valor curto. */
+    campo?: LeituraDeCampo | null;
+    /** O texto longo, que abre embaixo do detalhe. */
+    descricao?: LeituraDeCampo | null;
+    tipo?: "texto" | "numero" | null;
+  }>;
+  /**
+   * As linhas de uma tabela da ficha (Habilidades, Poderes, Ataques): cada uma
+   * vira um detalhe do `grupo`, com o rótulo tirado do campo `nome`. Linha com
+   * o nome vazio fica de fora.
+   */
+  listas?: Array<{
+    grupo: string;
+    itens: Array<{ nome: string; campo?: LeituraDeCampo | null; descricao?: LeituraDeCampo | null }>;
+  }>;
+};
+
+/**
+ * Um campo; caixas, das quais vale quantas estão marcadas; ou campos para
+ * juntar -- o histórico escrito em cinco linhas, um campo por linha.
+ */
+export type LeituraDeCampo = string | { caixas: string[] } | { juntar: string[] };
 
 /**
  * Um efeito de condição, como o plugin escreve: o `id` é o dele, sem o prefixo.
@@ -134,6 +299,28 @@ export type EstiloDeMedidorDeclarado = {
   camadas?: CamadasDoMedidor | null;
   rotulo?: RotuloDoMedidor | null;
 };
+
+/**
+ * Um jeito de desenhar a seção de atributos: a imagem, e onde o número de
+ * cada sigla entra nela -- o ritual do Ordem. Espelho de
+ * `extensoes::EstiloDeAtributos`, que é quem valida. Ver `AtributosEmImagem`.
+ */
+export type EstiloDeAtributosDeclarado = {
+  id: string;
+  titulo: string;
+  /** Raster, relativa à pasta do plugin. */
+  imagem: string;
+  /** A altura da imagem em fração da largura. 1 é o quadrado. */
+  proporcao: number;
+  lugares: LugarDoAtributo[];
+  texto?: { cor?: string | null; contorno?: string | null } | null;
+};
+
+/**
+ * Onde o número de uma sigla entra: `x` e `y` são o CENTRO, em fração da
+ * imagem; `tamanho` é o corpo do número (a fonte) em fração da LARGURA.
+ */
+export type LugarDoAtributo = { sigla: string; x: number; y: number; tamanho: number };
 
 /**
  * O que a linha acima da forma mostra. Espelho de `ROTULOS`.
@@ -187,7 +374,15 @@ export type ConteudoDoMedidor =
       /** O trecho vazio, desenhado inteiro embaixo do cheio. */
       vazio?: string | null;
     }
-  | { modo: "pontos"; cheio?: string | null; vazio?: string | null }
+  | {
+      modo: "pontos";
+      cheio?: string | null;
+      vazio?: string | null;
+      /** A largura do ponto em fração da altura dele. Ausente é 1, o quadrado. */
+      proporcao?: number | null;
+      /** Com o máximo acima disto, um ponto e o número (`×11`). Ausente, sem teto. */
+      ate?: number | null;
+    }
   /** Do vazio ao cheio. O primeiro só aparece no zero. */
   | { modo: "sequencia"; quadros: string[] };
 
@@ -403,11 +598,18 @@ export function noIdiomaDaTela(extensao: Extensao): Extensao {
       itensDeMenu: c.itensDeMenu?.map(titulo),
       secoes: c.secoes?.map(titulo),
       estilosDeMedidor: c.estilosDeMedidor?.map(titulo),
+      estilosDeAtributos: c.estilosDeAtributos?.map(titulo),
       paginas: c.paginas?.map(titulo),
       efeitos: c.efeitos?.map((efeito) => ({
         ...titulo(efeito),
         dica: efeito.dica === undefined ? undefined : resolverTexto(efeito.dica),
       })),
+      fichasPdf: c.fichasPdf?.map(titulo),
+      sistemas: c.sistemas?.map(titulo),
+      bestiario: c.bestiario?.map(titulo),
+      auras: c.auras?.map(titulo),
+      itens: c.itens?.map(titulo),
+      abas: c.abas?.map((aba) => ({ ...titulo(aba), colecoes: aba.colecoes.map(titulo) })),
     },
   };
 }
@@ -441,6 +643,17 @@ export async function importarExtensao(
   if (typeof escolhida !== "string") return null;
 
   return noIdiomaDaTela(await call<Extensao>("extensao_importar", { caminho: escolhida }));
+}
+
+/**
+ * Baixa do GitHub o plugin que o catálogo aponta e o importa, como o
+ * `importarExtensao`. O Rust monta o endereço do zip a partir do repositório e
+ * recusa o zip cujo manifesto tem outro id. Ver `catalogo.rs`.
+ */
+export async function instalarDoCatalogo(repositorio: string, id: string): Promise<Extensao> {
+  return noIdiomaDaTela(
+    await call<Extensao>("extensao_instalar_do_catalogo", { repositorio, id }),
+  );
 }
 
 /** Desinstala: a pasta sai do disco e a linha sai do banco. */

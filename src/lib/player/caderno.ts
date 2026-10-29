@@ -5,7 +5,8 @@ import { authorized, fail } from "@/lib/player/session";
 import type { Nota } from "@/types/caderno";
 
 /**
- * O caderno do jogador, do lado do celular dele.
+ * O caderno do jogador, do lado do celular dele. Um por personagem: a lista e
+ * a nota nova pedem de qual.
  *
  * Todas as rotas ficam atrás do token, e o jogador nunca informa o próprio id:
  * ele vem da credencial. Não há id a trocar para alcançar o caderno de outro —
@@ -38,8 +39,14 @@ export type PersonagemDaMesa = {
   dono: string;
 };
 
-export async function listNotas(codigo: string): Promise<Nota[]> {
-  const response = await fetch("/eu/notas", { headers: authorized(codigo) });
+export async function listNotas(
+  codigo: string,
+  personagemId: string,
+): Promise<Nota[]> {
+  const response = await fetch(
+    `/eu/notas?personagem=${encodeURIComponent(personagemId)}`,
+    { headers: authorized(codigo) },
+  );
 
   if (!response.ok) throw await fail(response, t.erros.abrirCaderno);
 
@@ -55,12 +62,13 @@ export async function listNotas(codigo: string): Promise<Nota[]> {
  */
 export async function criarNota(
   codigo: string,
+  personagemId: string,
   base: PatchNota = {},
 ): Promise<Nota> {
   const response = await fetch("/eu/notas", {
     method: "POST",
     headers: { ...authorized(codigo), "content-type": "application/json" },
-    body: JSON.stringify(base),
+    body: JSON.stringify({ ...base, personagemId }),
   });
 
   if (!response.ok) throw await fail(response, t.erros.abrirNota);
@@ -71,11 +79,9 @@ export async function criarNota(
 /**
  * Grava o que mudou numa nota, e só o que mudou.
  *
- * `PATCH` e não `PUT` porque as três coisas mudam em ritmos diferentes: o texto
- * sai a cada 800ms de digitação, o título quando o jogador o escreve, as
- * etiquetas quando ele as marca. Mandar o objeto inteiro faria a gravação do
- * texto levar junto uma cópia velha das etiquetas e desfazer o que acabou de
- * ser marcado.
+ * `PATCH` e não `PUT`: o botão Salvar manda título, texto e etiquetas juntos,
+ * mas o campo ausente continua sendo "não mexe neste", e quem um dia gravar
+ * só um deles não apaga os outros.
  */
 export async function mudarNota(
   codigo: string,

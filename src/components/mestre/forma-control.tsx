@@ -1,236 +1,202 @@
 "use client";
 
-import { Minus, Signature, Square, SquareRoundCorner } from "lucide-react";
-
-import { Chave } from "@/components/mestre/chave-de-estilo";
-import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   CORES_LAPIS,
   ESPESSURAS_LAPIS,
   useToolStore,
 } from "@/lib/store/use-tool-store";
-import {
-  definirPadraoDoQuadro,
-  usePadraoDoQuadro,
-} from "@/lib/configuracoes/quadro";
 import { t } from "@/lib/i18n/ferramentas";
 import { cn } from "@/lib/utils";
 
 /**
- * A cor, o fundo, os cantos e a espessura da próxima forma.
+ * A cor, o fundo e a espessura da próxima forma. Canto e traço não são
+ * escolha: toda forma nasce à mão, com canto redondo -- ver `rabiscoDaForma`.
  *
- * Irmã do `PencilControl`, e pelas mesmas razões: só aparece com a ferramenta
- * na mão, e o gatilho mostra a cor escolhida em vez de um ícone genérico —
- * antes de desenhar, a cor é a única informação que importa.
+ * Conteúdo, e não um popover: mora no painel de Elementos, no canto de baixo
+ * à esquerda, aberto enquanto a forma está na mão -- ver `PainelDeElementos`.
+ * Antes era um popover na régua, atrás de uma bolinha de cor, e cada ajuste
+ * pedia abrir e fechar.
  *
  * O fundo tem "sem fundo" como primeira opção e como padrão: a forma existe
  * para CERCAR, e uma caixa cheia taparia o que ela aponta.
  */
-export function FormaControl({
-  lado = "top",
-}: {
-  /**
-   * De que lado o painel abre. `top` é o do rodapé, onde o controle nasceu;
-   * `right` é o da régua do quadro, encostada na borda esquerda -- para cima,
-   * dali, o painel subiria por cima das próprias ferramentas.
-   */
-  lado?: "top" | "right";
-} = {}) {
-  const tool = useToolStore((state) => state.tool);
+export function AjustesDaForma() {
   const cor = useToolStore((state) => state.corForma);
   const espessura = useToolStore((state) => state.espessuraForma);
   const fundo = useToolStore((state) => state.fundoForma);
-  const tipo = useToolStore((state) => state.tipoDeForma);
-  // Canto e traço não são da sessão, como a cor: são o padrão da CAMPANHA, e
-  // mexer aqui é mexer nele. Ver `padraoDoQuadro`.
-  const { arredondado, aMao } = usePadraoDoQuadro();
   const setForma = useToolStore((state) => state.setForma);
 
-  if (tool !== "forma") return null;
+  return (
+    <ControlesDaForma
+      cor={cor}
+      fundo={fundo}
+      espessura={espessura}
+      onMudar={(mudanca) =>
+        setForma({
+          ...(mudanca.cor !== undefined ? { corForma: mudanca.cor } : {}),
+          ...(mudanca.fundo !== undefined ? { fundoForma: mudanca.fundo } : {}),
+          ...(mudanca.espessura !== undefined ? { espessuraForma: mudanca.espessura } : {}),
+        })
+      }
+    />
+  );
+}
+
+/**
+ * O que uma mudança nos controles da forma pede. `null` volta ao padrão: a cor
+ * do tema, ou o vazado. Ausente não mexe.
+ */
+export type MudancaNaForma = { cor?: string | null; fundo?: string | null; espessura?: number };
+
+/**
+ * Os controles da forma, por prop: os mesmos para a PRÓXIMA forma (ver
+ * `AjustesDaForma`) e para as que estão selecionadas no mapa -- ver
+ * `PainelDeElementos`. Um desenho só, e duas origens para o valor.
+ */
+export function ControlesDaForma({
+  cor,
+  fundo,
+  espessura,
+  onMudar,
+}: {
+  cor?: string;
+  fundo?: string;
+  espessura: number;
+  onMudar: (mudanca: MudancaNaForma) => void;
+}) {
+  const setForma = (forma: { corForma?: string | null; fundoForma?: string | null; espessuraForma?: number }) =>
+    onMudar({
+      ...(forma.corForma !== undefined ? { cor: forma.corForma } : {}),
+      ...(forma.fundoForma !== undefined ? { fundo: forma.fundoForma } : {}),
+      ...(forma.espessuraForma !== undefined ? { espessura: forma.espessuraForma } : {}),
+    });
 
   return (
-    <Popover>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <PopoverTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t.forma.corDaForma}
-                >
-                  {/* Sem cor escolhida, o gatilho mostra a do tema -- que é a
-                      que a forma vai ter. Ver `Forma`. */}
-                  <span
-                    className="border-foreground size-4 rounded-full border-2"
-                    style={{
-                      ...(cor ? { borderColor: cor } : {}),
-                      background: fundo ?? "transparent",
-                    }}
-                  />
-                </Button>
-              }
-            />
-          }
-        />
-        <TooltipContent>
-          <p>{t.forma.corEspessuraFundo}</p>
-        </TooltipContent>
-      </Tooltip>
+    <>
+      <div className="space-y-1.5">
+        <span className="text-muted-foreground text-[10px]">
+          {t.forma.traco}
+        </span>
 
-      <PopoverContent align="start" className="w-56 space-y-3 p-3" side={lado}>
-        <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">
-            {t.forma.traco}
-          </span>
-
-          <div className="flex items-center gap-1.5">
-            {/* O padrão na frente, como na paleta do gizmo: é a cor do tema, e
-                sem este botão escolher uma cor seria caminho sem volta. */}
+        <div className="flex items-center gap-1.5">
+          {/* O padrão na frente, como na paleta do gizmo: é a cor do tema, e
+              sem este botão escolher uma cor seria caminho sem volta. */}
+          <button
+            type="button"
+            aria-label={t.forma.tracoPadrao}
+            aria-pressed={cor === undefined}
+            className={cn(
+              "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
+              cor === undefined
+                ? "border-foreground scale-110"
+                : "border-white/20 hover:scale-105",
+            )}
+            onClick={() => setForma({ corForma: null })}
+          >
+            {t.forma.padraoLetra}
+          </button>
+          {CORES_LAPIS.map((opcao) => (
             <button
+              key={opcao}
               type="button"
-              aria-label={t.forma.tracoPadrao}
-              aria-pressed={cor === undefined}
+              aria-label={t.forma.tracoCor(opcao)}
+              aria-pressed={opcao === cor}
               className={cn(
-                "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
-                cor === undefined
+                "size-6 rounded-full border transition-transform",
+                opcao === cor
                   ? "border-foreground scale-110"
                   : "border-white/20 hover:scale-105",
               )}
-              onClick={() => setForma({ corForma: null })}
-            >
-              {t.forma.padraoLetra}
-            </button>
-            {CORES_LAPIS.map((opcao) => (
-              <button
-                key={opcao}
-                type="button"
-                aria-label={t.forma.tracoCor(opcao)}
-                aria-pressed={opcao === cor}
-                className={cn(
-                  "size-6 rounded-full border transition-transform",
-                  opcao === cor
-                    ? "border-foreground scale-110"
-                    : "border-white/20 hover:scale-105",
-                )}
-                style={{ background: opcao }}
-                onClick={() => setForma({ corForma: opcao })}
-              />
-            ))}
-          </div>
+              style={{ background: opcao }}
+              onClick={() => setForma({ corForma: opcao })}
+            />
+          ))}
         </div>
+      </div>
 
-        <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px]">
-            {t.forma.fundo}
-          </span>
+      <div className="space-y-1.5">
+        <span className="text-muted-foreground text-[10px]">
+          {t.forma.fundo}
+        </span>
 
-          <div className="flex items-center gap-1.5">
-            {/* O vazado primeiro: é o padrão, e é o que se escolhe de volta. */}
+        <div className="flex items-center gap-1.5">
+          {/* O vazado primeiro: é o padrão, e é o que se escolhe de volta. */}
+          <button
+            type="button"
+            aria-label={t.forma.semFundo}
+            aria-pressed={fundo === undefined}
+            className={cn(
+              "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
+              fundo === undefined
+                ? "border-foreground scale-110"
+                : "border-white/20 hover:scale-105",
+            )}
+            onClick={() => setForma({ fundoForma: null })}
+          >
+            ∅
+          </button>
+          {CORES_LAPIS.map((opcao) => (
             <button
+              key={opcao}
               type="button"
-              aria-label={t.forma.semFundo}
-              aria-pressed={fundo === undefined}
+              aria-label={t.forma.fundoCor(opcao)}
+              aria-pressed={opcao === fundo}
               className={cn(
-                "grid size-6 place-items-center rounded-full border text-[10px] transition-transform",
-                fundo === undefined
+                "size-6 rounded-full border transition-transform",
+                opcao === fundo
                   ? "border-foreground scale-110"
                   : "border-white/20 hover:scale-105",
               )}
-              onClick={() => setForma({ fundoForma: null })}
-            >
-              ∅
-            </button>
-            {CORES_LAPIS.map((opcao) => (
-              <button
-                key={opcao}
-                type="button"
-                aria-label={t.forma.fundoCor(opcao)}
-                aria-pressed={opcao === fundo}
-                className={cn(
-                  "size-6 rounded-full border transition-transform",
-                  opcao === fundo
-                    ? "border-foreground scale-110"
-                    : "border-white/20 hover:scale-105",
-                )}
-                // Translúcido: fundo chapado sobre o quadro esconderia o que
-                // está atrás, e o que se quer é destacar a região.
-                style={{ background: opcao, opacity: 0.35 }}
-                onClick={() => setForma({ fundoForma: opcao })}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Só onde há canto: elipse e linha não têm, e a escolha ficaria ali
-            sem efeito nenhum. */}
-        {tipo === "retangulo" || tipo === "poligono" ? (
-          <Chave
-            titulo={t.forma.cantos}
-            ligada={arredondado}
-            desligada={{ rotulo: t.forma.cantosRetos, Icone: Square }}
-            ligadaComo={{
-              rotulo: t.forma.cantosArredondados,
-              Icone: SquareRoundCorner,
-            }}
-            onMudar={(valor) => definirPadraoDoQuadro({ arredondado: valor })}
-          />
-        ) : null}
-
-        <Chave
-          titulo={t.forma.estilo}
-          ligada={aMao}
-          desligada={{ rotulo: t.forma.tracoLimpo, Icone: Minus }}
-          ligadaComo={{ rotulo: t.forma.tracoAMao, Icone: Signature }}
-          onMudar={(valor) => definirPadraoDoQuadro({ aMao: valor })}
-        />
-
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-[10px]">
-              {t.forma.espessura}
-            </span>
-            <span
-              className="bg-foreground rounded-full"
-              style={{
-                width: espessura,
-                height: espessura,
-                maxWidth: 24,
-                maxHeight: 24,
-                ...(cor ? { background: cor } : {}),
-              }}
+              // Translúcido: fundo chapado sobre o quadro esconderia o que
+              // está atrás, e o que se quer é destacar a região.
+              style={{ background: opcao, opacity: 0.35 }}
+              onClick={() => setForma({ fundoForma: opcao })}
             />
-          </div>
+          ))}
+        </div>
+      </div>
 
-          <Slider
-            value={[
-              ESPESSURAS_LAPIS.indexOf(
-                espessura as (typeof ESPESSURAS_LAPIS)[number],
-              ),
-            ]}
-            min={0}
-            max={ESPESSURAS_LAPIS.length - 1}
-            step={1}
-            aria-label={t.forma.espessura}
-            onValueChange={(valor) => {
-              const indice = Array.isArray(valor) ? valor[0] : valor;
-              setForma({ espessuraForma: ESPESSURAS_LAPIS[indice ?? 1] });
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground text-[10px]">
+            {t.forma.espessura}
+          </span>
+          <span
+            className="bg-foreground rounded-full"
+            style={{
+              width: espessura,
+              height: espessura,
+              maxWidth: 24,
+              maxHeight: 24,
+              ...(cor ? { background: cor } : {}),
             }}
           />
         </div>
-      </PopoverContent>
-    </Popover>
+
+        <Slider
+          // A mais perto da lista: a forma do mapa pode ter uma espessura que o
+          // lápis não oferece -- a colada de outra campanha, a escalada.
+          value={[indiceDaEspessura(espessura)]}
+          min={0}
+          max={ESPESSURAS_LAPIS.length - 1}
+          step={1}
+          aria-label={t.forma.espessura}
+          onValueChange={(valor) => {
+            const indice = Array.isArray(valor) ? valor[0] : valor;
+            setForma({ espessuraForma: ESPESSURAS_LAPIS[indice ?? 1] });
+          }}
+        />
+      </div>
+    </>
   );
+}
+
+/** O degrau do lápis mais perto da espessura. */
+function indiceDaEspessura(espessura: number): number {
+  let melhor = 0;
+  ESPESSURAS_LAPIS.forEach((opcao, indice) => {
+    if (Math.abs(opcao - espessura) < Math.abs((ESPESSURAS_LAPIS[melhor] ?? 0) - espessura)) melhor = indice;
+  });
+  return melhor;
 }

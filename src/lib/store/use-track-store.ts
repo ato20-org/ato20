@@ -153,7 +153,12 @@ type TrackStore = SessionAudio & {
    */
   adicionarMacro: (assetId: string) => void;
   removerMacro: (id: string) => void;
-  /** O mesmo que a tecla faz, sem tecla. Ver `acionarPad`. */
+  /**
+   * Põe a tecla na macro, ou a tira com `null`. Recusa a que já é de outra
+   * macro -- quem grava já mostra de quem ela é; isto é a guarda.
+   */
+  definirTeclaDaMacro: (id: string, tecla: string | null) => void;
+  /** O que a tecla do pad faz, pelo clique ou pela tecla da macro. Ver `acionarPad`. */
   acionarMacro: (id: string) => void;
 
   /**
@@ -173,6 +178,8 @@ type TrackStore = SessionAudio & {
   copiarCena: (deId: string, paraId: string) => void;
   /** Cena apagada não deixa memória órfã no mapa. */
   esquecerCena: (cenaId: string) => void;
+  /** Cena importada de um pacote chega com os ambientes que tinha lá. */
+  adotarAmbientes: (cenaId: string, ambientes: Ambiente[]) => void;
 
   // --- geral ----------------------------------------------------------------
 
@@ -424,6 +431,29 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     });
   },
 
+  definirTeclaDaMacro(id, tecla) {
+    const { macros } = get();
+
+    // Uma tecla, um som: a regra do pad, do outro lado. Duas macros na mesma
+    // tecla seriam uma que toca e outra que nunca toca -- a tabela de atalhos
+    // só executa a primeira que casa.
+    if (tecla !== null && macros.some((macro) => macro.id !== id && macro.tecla === tecla)) {
+      return;
+    }
+
+    gravar(set, get, {
+      macros: macros.map((macro) =>
+        macro.id !== id
+          ? macro
+          : // Sem tecla volta a ser a macro de antes, sem o campo: o
+            // `trilha.json` não ganha um `"tecla": null` por som da lista.
+            tecla === null
+            ? { id: macro.id, assetId: macro.assetId }
+            : { ...macro, tecla },
+      ),
+    });
+  },
+
   acionarMacro(id) {
     const macro = get().macros.find((atual) => atual.id === id);
     if (macro) acionar(get(), macro.assetId, GANHO_PADRAO);
@@ -467,6 +497,19 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
         // Ids novos: os do original ficariam repetidos entre as duas cenas, e
         // apagar um pela lista apagaria o da outra junto.
         [paraId]: lembrado.map((ambiente) => ({ ...ambiente, id: novoId() })),
+      },
+    });
+  },
+
+  adotarAmbientes(cenaId, ambientes) {
+    if (ambientes.length === 0) return;
+
+    gravar(set, get, {
+      ambientesPorCena: {
+        ...get().ambientesPorCena,
+        // Ids novos pelo mesmo motivo do `copiarCena`: importar duas vezes o
+        // mesmo mapa não pode deixar canais repetidos entre as cópias.
+        [cenaId]: ambientes.map((ambiente) => ({ ...ambiente, id: novoId() })),
       },
     });
   },

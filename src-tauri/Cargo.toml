@@ -1,9 +1,9 @@
 [package]
 name = "ato20"
-version = "1.2.0"
+version = "1.11.0"
 description = "Ferramenta para organizar e exibir cenas de RPG de mesa"
 authors = ["valb-mig"]
-license = "MIT"
+license-file = "../LICENSE"
 repository = "https://github.com/ato20-org/ato20"
 edition = "2021"
 rust-version = "1.77.2"
@@ -38,6 +38,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+# O mapa Universal VTT traz a imagem em base64 dentro do JSON. Ver `uvtt.rs`.
+base64 = "0.22"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
@@ -133,6 +135,13 @@ getrandom = "0.3"
 # lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
 # ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
 zip = { version = "4", default-features = false, features = ["deflate"] }
+# Baixa o zip de um plugin do catalogo (ver `catalogo.rs`). Com as mesmas
+# features que o `tauri-plugin-updater` ja liga, e nao as padrao: assim nao
+# entra crate novo no lock, e a versao da loja, que compila sem o atualizador,
+# continua tendo um cliente HTTP so para isto. Sem provedor de criptografia
+# embutido: `catalogo::cliente` instala o `ring`, como o atualizador faz.
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Guarda-se o HASH do token, nunca ele. Um `.ato20/estado.db` que vaza -- num
 # zip, num backup, num Dropbox -- nao pode entregar as credenciais da mesa.
@@ -141,6 +150,10 @@ sha2 = "0.10"
 # tela de espectador, e servi-la na mesma janela do Mestre tiraria o mestre da
 # mesa dele.
 tauri-plugin-opener = "2.5.5"
+# As placas de rede, para o que a tabela de rotas nao responde: o ZeroTier,
+# que nao tem faixa propria e so se reconhece pelo nome da placa, e a rede
+# local sem gateway nenhum. Ver `serve::placas`.
+if-addrs = "0.15"
 
 # O aplicativo se atualiza sozinho, e por isso o pacote sai ASSINADO.
 #
@@ -156,12 +169,23 @@ tauri-plugin-updater = { version = "2", optional = true }
 # fechar na mao.
 tauri-plugin-process = { version = "2", optional = true }
 
+# O "Abrir com" da Galeria: os programas que o sistema registra para o tipo do
+# arquivo, e abrir num deles. E a mesma lista do gerenciador de arquivos. Ja
+# vinha no lock pelo GTK do Tauri -- a versao e a dele, para nao entrar uma
+# segunda copia. Ver `galeria::programas`.
+[target.'cfg(target_os = "linux")'.dependencies]
+gio = "0.18"
+# O `window.open` das janelas soltas fora do gesto do usuario: o ajuste mora
+# na WebKitGTK, e a versao e a que o wry ja traz. Ver `janelas`.
+webkit2gtk = "2.0"
+
 [dev-dependencies]
 # Cada teste do vault precisa de uma campanha propria num diretorio que se
 # apague sozinho: testes que compartilham pasta passam isolados e falham juntos.
 tempfile = "3"
-# `#[tokio::test]` para exercitar o router sem abrir porta.
-tokio = { version = "1", features = ["rt", "macros"] }
+# `#[tokio::test]` para exercitar o router sem abrir porta. `test-util` pelo
+# relogio pausado: o batimento do `/sala/live` se confere sem dormir 5 s.
+tokio = { version = "1", features = ["rt", "macros", "test-util"] }
 
 # As DEPENDENCIAS otimizadas mesmo em `tauri dev`; o codigo do aplicativo
 # continua em debug, com os simbolos e a compilacao rapida de sempre.

@@ -1,8 +1,8 @@
 /**
  * O canto arredondado das formas do quadro: retângulo e polígono.
  *
- * Um estado só -- reto ou arredondado --, e o RAIO sai do tamanho da forma, e
- * não de um número que o mestre escolhe. É a regra do Excalidraw: um raio fixo
+ * Sempre arredondado, sem canto vivo para escolher, e o RAIO sai do tamanho da
+ * forma, e não de um número que o mestre escolhe. É a regra do Excalidraw: um raio fixo
  * transformaria um quadradinho de 40 unidades numa pílula e mal se veria num
  * retângulo de 800; um raio que o mestre calibra forma a forma é um controle a
  * mais para um gesto que é de marcar, não de desenhar.

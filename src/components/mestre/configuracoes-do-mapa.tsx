@@ -1,12 +1,24 @@
 "use client";
 
-import { Frame, Moon, RotateCcw, Settings2, Sun, Tags } from "lucide-react";
+import {
+  CloudRain,
+  Frame,
+  Moon,
+  RotateCcw,
+  Settings2,
+  Sun,
+  Tags,
+  Tv,
+} from "lucide-react";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { CeuDoSol } from "@/components/mestre/ceu-do-sol";
+import { Opcao } from "@/components/mestre/painel-do-pincel";
 import { GridControl } from "@/components/mestre/grid-control";
 import { ARCO_IRIS } from "@/components/mestre/menu-da-luz";
+import { ReguasDaImagem } from "@/components/mestre/reguas-da-imagem";
 import { SeletorDeCor } from "@/components/mestre/seletor-de-cor";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -15,6 +27,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -22,10 +43,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAssetUrl } from "@/hooks/use-asset-url";
+import { ambientesProntos } from "@/lib/ambiente";
 import { corDoVazioDe } from "@/lib/cor";
+import { especieDoEfeito } from "@/lib/efeitos";
 import { TRAVA_EM_GRAUS } from "@/lib/geometry/ceu";
 import { corDoEscuroDe, limitarEscuridao } from "@/lib/geometry/luz";
 import { t } from "@/lib/i18n/ferramentas";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
+import {
+  escolherCeuDaCena,
+  tirarCeuDaCena,
+  useFundoEmVoo,
+} from "@/lib/mestre/scene-background";
+import { useDeclarativoStore } from "@/lib/store/use-declarativo-store";
+import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { cn } from "@/lib/utils";
 import {
@@ -59,6 +91,7 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
   const setCorDoEscuro = useSceneStore((state) => state.setCorDoEscuro);
   const setCorDoVazio = useSceneStore((state) => state.setCorDoVazio);
   const setInfoDosTokens = useSceneStore((state) => state.setInfoDosTokens);
+  const setImagem = useSceneStore((state) => state.setImagem);
 
   const sol = scene.sol;
   const ligado = Boolean(sol);
@@ -198,6 +231,10 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
           </>
         ) : null}
 
+        {/* O clima, vizinho do escuro: os dois são o tempo que faz na cena. */}
+        <span className="bg-border block h-px w-full" />
+        <AmbienteDoMapa scene={scene} />
+
         {/* O avesso da escuridão: ela pinta o tom de DENTRO onde a luz não
             chega, esta pinta o que está FORA do mapa. Vizinhas porque as duas
             são cor da cena, e não ferramenta. */}
@@ -205,6 +242,15 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         <ForaDoMapa
           cor={corDoVazioDe(scene.corDoVazio)}
           onCor={(cor) => setCorDoVazio(scene.id, cor)}
+        />
+        <CeuDoMapa scene={scene} />
+
+        {/* Ainda cor da cena, mas só na TV: o mapa que o mestre vê aqui não
+            muda, e a prévia é a Janela Mesa, pelo botão das réguas. */}
+        <span className="bg-border block h-px w-full" />
+        <ImagemDoMapa
+          valor={scene.imagem}
+          onChange={(imagem) => setImagem(scene.id, imagem)}
         />
 
         {/* O traço entre os dois: sol e grade valem os dois para a cena
@@ -243,6 +289,133 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         </section>
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** O valor do seletor para "nenhum ambiente": o `Select` não aceita vazio. */
+const TEMPO_BOM = "-";
+
+/**
+ * O AMBIENTE da cena: qual clima cobre a tela da mesa, com que força e com
+ * que vento. Ver `AmbienteDaCena`.
+ *
+ * O seletor junta o que a campanha guardou no Compêndio e os prontos -- os de
+ * fábrica e os dos plugins --, que a cena aponta direto, sem cópia: escolher a
+ * Chuva é chover, e recolorir é que pede trazê-la ao Compêndio. O id que o
+ * catálogo não conhece mais (o molde apagado) aparece como tempo bom, que é o
+ * que a mesa vê.
+ */
+function AmbienteDoMapa({ scene }: { scene: Scene }) {
+  const setAmbiente = useSceneStore((state) => state.setAmbiente);
+  const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
+  const deFora = useDeclarativoStore((state) => state.efeitos);
+  const texto = t.configuracoesDoMapa;
+
+  const daCampanha = useMemo(
+    () => (moldes ?? []).filter((molde) => especieDoEfeito(molde) === "ambiente"),
+    [moldes],
+  );
+  const prontos = useMemo(() => ambientesProntos(deFora), [deFora]);
+  const itens = useMemo(
+    () => ({
+      [TEMPO_BOM]: texto.tempoBom,
+      ...Object.fromEntries([...daCampanha, ...prontos].map((efeito) => [efeito.id, efeito.titulo])),
+    }),
+    [daCampanha, prontos, texto.tempoBom],
+  );
+
+  const ambiente = scene.ambiente;
+  const escolhido = ambiente && Object.hasOwn(itens, ambiente.efeito) ? ambiente.efeito : TEMPO_BOM;
+  const intensidade = ambiente?.intensidade ?? 1;
+  const vento = ambiente?.vento ?? 0;
+  const ventoEmPorcento = Math.round(Math.abs(vento) * 100);
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="flex items-center gap-2 text-xs font-normal">
+          <CloudRain className="text-muted-foreground size-3.5" />
+          {texto.ambiente}
+        </Label>
+        <Select<string>
+          items={itens}
+          value={escolhido}
+          onValueChange={(novo) => {
+            if (!novo || novo === escolhido) return;
+            setAmbiente(scene.id, novo === TEMPO_BOM ? undefined : { ...ambiente, efeito: novo });
+          }}
+        >
+          <SelectTrigger size="sm" className="h-7 max-w-36 text-xs" aria-label={texto.ambiente}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TEMPO_BOM} className="text-xs">
+              {texto.tempoBom}
+            </SelectItem>
+            {daCampanha.length > 0 ? (
+              <SelectGroup>
+                <SelectLabel className="text-[10px]">{texto.doCompendio}</SelectLabel>
+                {daCampanha.map((efeito) => (
+                  <SelectItem key={efeito.id} value={efeito.id} className="text-xs">
+                    {efeito.titulo}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ) : null}
+            <SelectGroup>
+              <SelectLabel className="text-[10px]">{texto.prontos}</SelectLabel>
+              {prontos.map((efeito) => (
+                <SelectItem key={efeito.id} value={efeito.id} className="text-xs">
+                  {efeito.titulo}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ambiente && escolhido !== TEMPO_BOM ? (
+        <>
+          <Campo rotulo={texto.intensidade} valor={`${Math.round(intensidade * 100)}%`}>
+            <Slider
+              aria-label={texto.intensidade}
+              value={[Math.round(intensidade * 100)]}
+              min={10}
+              max={100}
+              step={5}
+              onValueChange={(value) =>
+                setAmbiente(scene.id, { ...ambiente, intensidade: primeiro(value) / 100 })
+              }
+            />
+          </Campo>
+          {/* No meio é sem vento: para um lado ou para o outro, até inclinar
+              a chuva e empurrar a neblina. */}
+          <Campo
+            rotulo={texto.vento}
+            valor={
+              vento === 0
+                ? texto.semVento
+                : vento < 0
+                  ? texto.ventoParaEsquerda(ventoEmPorcento)
+                  : texto.ventoParaDireita(ventoEmPorcento)
+            }
+          >
+            <Slider
+              aria-label={texto.vento}
+              value={[Math.round(vento * 100)]}
+              min={-100}
+              max={100}
+              step={10}
+              onValueChange={(value) =>
+                setAmbiente(scene.id, { ...ambiente, vento: primeiro(value) / 100 })
+              }
+            />
+          </Campo>
+        </>
+      ) : null}
+
+      <p className="text-muted-foreground text-[10px] leading-snug">{texto.ambienteAjuda}</p>
+    </section>
   );
 }
 
@@ -343,6 +516,121 @@ function ForaDoMapa({
 
       <p className="text-muted-foreground text-[10px] leading-snug">
         {t.configuracoesDoMapa.foraDoMapaAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O ajuste de imagem DESTE mapa na janela do espectador: a masmorra mais
+ * clara, o flashback sem cor. Ver `Scene.imagem`.
+ *
+ * Por cima do ajuste da campanha, que é a calibração da TV: os dois valem, e
+ * multiplicam -- ver `compor`. Só no mapa, como o resto deste painel.
+ */
+function ImagemDoMapa({
+  valor,
+  onChange,
+}: {
+  valor: AjusteDeImagem | undefined;
+  onChange: (imagem: AjusteDeImagem | undefined) => void;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Tv className="text-muted-foreground size-3.5" />
+        {t.configuracoesDoMapa.imagem}
+      </div>
+
+      <ReguasDaImagem valor={valor} onChange={onChange} />
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.imagemAjuda}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * O céu do 2.5D: a cor de fora do mapa, ou uma imagem. Ver `Scene.ceuAssetId`.
+ *
+ * Embaixo da cor de fora, e não no lugar dela: a cor continua valendo no 2D e
+ * por trás da imagem enquanto ela carrega. A escolha é o que fica atrás do chão
+ * DEITADO -- e é por isso que se chama céu, e não fundo.
+ *
+ * "Imagem" sem céu ainda abre o seletor de arquivo na hora: escolher o modo e
+ * depois procurar o botão de escolher seria um clique a mais para nada. Voltar
+ * para "Cor" tira o céu e leva o arquivo junto, como tirar o mapa.
+ */
+function CeuDoMapa({ scene }: { scene: Scene }) {
+  const comImagem = Boolean(scene.ceuAssetId);
+  const miniatura = useAssetUrl(scene.ceuAssetId, "mini");
+  const recebendo = useFundoEmVoo((state) =>
+    state.cenas.includes(`ceu:${scene.id}`),
+  );
+
+  function escolher() {
+    void escolherCeuDaCena(scene.id).catch((causa: unknown) =>
+      toast.error(
+        causa instanceof Error ? causa.message : t.configuracoesDoMapa.falhaNoCeu,
+      ),
+    );
+  }
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs">{t.configuracoesDoMapa.ceu}</span>
+        <div
+          role="radiogroup"
+          aria-label={t.configuracoesDoMapa.ceu}
+          className="bg-muted flex w-36 rounded-md p-0.5"
+        >
+          <Opcao
+            marcada={!comImagem}
+            onClick={() => {
+              if (comImagem) void tirarCeuDaCena(scene.id);
+            }}
+          >
+            {t.configuracoesDoMapa.cor}
+          </Opcao>
+          <Opcao
+            marcada={comImagem}
+            onClick={() => {
+              if (!comImagem && !recebendo) escolher();
+            }}
+          >
+            {t.configuracoesDoMapa.ceuImagem}
+          </Opcao>
+        </div>
+      </div>
+
+      {comImagem ? (
+        <div className="flex items-center gap-2">
+          {miniatura ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={miniatura}
+              alt=""
+              draggable={false}
+              className="h-8 w-16 rounded-sm border border-white/15 object-cover"
+            />
+          ) : (
+            <span className="bg-muted h-8 w-16 rounded-sm" />
+          )}
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={recebendo}
+            onClick={escolher}
+          >
+            {t.configuracoesDoMapa.trocarCeu}
+          </Button>
+        </div>
+      ) : null}
+
+      <p className="text-muted-foreground text-[10px] leading-snug">
+        {t.configuracoesDoMapa.ceuAjuda}
       </p>
     </section>
   );

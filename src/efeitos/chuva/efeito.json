@@ -1,0 +1,40 @@
+{
+  "id": "chuva",
+  "titulo": "Chuva",
+  "dica": "Chuva caindo sobre a cena, em duas camadas: a fina lá atrás e a grossa na frente.",
+  "ambiente": {
+    "cor": "#a9c1db",
+    "camadas": [
+      {
+        "imagem": "chuva-longe-512.webp",
+        "mipmaps": {
+          "256": "chuva-longe-256.webp",
+          "512": "chuva-longe-512.webp",
+          "1024": "chuva-longe-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.32,
+        "direcao": 95,
+        "velocidade": 1.5,
+        "opacidade": 0.55
+      },
+      {
+        "imagem": "chuva-perto-512.webp",
+        "mipmaps": {
+          "256": "chuva-perto-256.webp",
+          "512": "chuva-perto-512.webp",
+          "1024": "chuva-perto-1024.webp"
+        },
+        "cores": "condicao",
+        "escala": 0.7,
+        "direcao": 95,
+        "velocidade": 2.4,
+        "opacidade": 0.7
+      }
+    ],
+    "veu": {
+      "cor": "#1e293b",
+      "opacidade": 0.12
+    }
+  }
+}

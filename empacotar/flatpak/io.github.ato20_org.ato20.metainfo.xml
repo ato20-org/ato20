@@ -15,7 +15,7 @@
   <summary>Tabletop RPG scenes on your TV</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>LicenseRef-proprietary=https://polyformproject.org/licenses/perimeter/1.0.0</project_license>
 
   <developer id="io.github.ato20_org">
     <name>Ivalber Souza</name>
@@ -100,6 +100,631 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.11.0" date="2026-10-26">
+      <description>
+        <p>
+          ATO20 1.11 adds the History window with the campaign timeline,
+          ready-made monsters, items and rituals from plugins, rolls that read
+          the sheet, the ruler from a sheet's text and the eye that shows what a
+          token sees.
+        </p>
+        <ul>
+          <li>
+            The History window: everything that happened in the campaign,
+            session by session. With the time, it keeps the scene that went On
+            air, fights and rounds, health and conditions that changed, items
+            given, taken or placed on the map, fired effects and what the table
+            saw, with the chat and rolls in between. Older sessions stay closed
+            showing only the milestones, which you write at the bottom of the
+            window and edit in place. It has search and filters by type and by
+            character, and only you see it. Fog, doors, items on the map and
+            effects only count in the scene that is On air.
+          </li>
+          <li>
+            Plugins bring ready-made monsters, items and rituals to the
+            Compendium. A game system plugin, like the Ordem Paranormal one, can
+            bring ready-made sheets to the Bestiary, ready-made items (weapons,
+            ammo, protection, healing) and tabs of its own, like Rituals. Each
+            collection shows up as a folder with the plugin's color and emblem.
+            Plugin sheets and items open read-only: Bring to the campaign copies
+            them into the Compendium, and dropping the card on the map puts it
+            in play. An entry from a plugin tab, like a ritual, goes into a
+            character's sheet with Give to. A bestiary sheet can come with more
+            than one appearance, switched in the Appearances submenu.
+          </li>
+          <li>
+            Rolls in braces read the sheet: {1d20+STR}, {AGId20&gt;+5},
+            {1d20+@Fight}. An attribute's abbreviation from the sheet counts as
+            its number when rolling, added in or as the number of dice, and with
+            @ the roll also reads a number detail, like Fight. The Dice bag and
+            the chat show what each one was worth on that roll. An attribute can
+            also be a die, like an AGI d8: the drawing rolls, and the text is
+            edited right in the circle, formulas included, like d4+20-@NEX.
+          </li>
+          <li>
+            On the phone, a roll written in a detail's text becomes a roll
+            button. "Punch {1d4}" shows the d4 in place of the braces, and a tap
+            rolls it. In the phone's search, results that roll get a roll
+            button, and tapping the rest takes you to the detail on the sheet.
+          </li>
+          <li>
+            {9m} and {3°} in a sheet's text place the ruler on the map. Just as
+            {1d20} rolls, {9m} creates a 9-meter straight ruler and {3°} a
+            circle with a 3-meter radius, starting from the token of the sheet's
+            owner. A selected ruler gets shape, lock and delete buttons: locked,
+            the tip turns without changing the size. Shape and color are in the
+            panel at the bottom corner.
+          </li>
+          <li>
+            The eye on a token shows what it sees. An eye on the token's gizmo
+            covers whatever walls and doors hide from it, with the map's
+            darkness as the table sees it. Only you see this, and it lasts while
+            the token is selected.
+          </li>
+          <li>
+            Each sound in Macros can get a key. In the sound panel, under Pads,
+            Macros, click the line's badge and press the combination: letters,
+            numbers and F1 to F12, with Ctrl, Alt and Shift. A key already taken
+            by a shortcut is refused with the owner's name, and the new one
+            shows up in Settings, Keyboard.
+          </li>
+          <li>
+            In 2.5D, an item dropped on the table floats and glints. A campaign
+            item standing on the map bobs in the air and glints every few
+            seconds, so the party finds what can be picked up. On your screen
+            only the selected one animates, and anyone who asked the system for
+            reduced motion sees the item still in the air.
+          </li>
+          <li>
+            Files: delete a folder with everything in it. Delete folder, next to
+            Dissolve folder, deletes its boards, notes and files, subfolders
+            included, after telling you what goes with it. A file used by a map
+            that stays isn't deleted: it moves up to the parent folder.
+          </li>
+          <li>
+            The Rolls and Chat windows no longer open on their own. Before, a
+            player's roll or message opened the window over the map. The Rolls
+            tray counter and the Chat unread dot still let you know.
+          </li>
+          <li>
+            Fixed: the spectator window and phones no longer freeze when the
+            connection drops. They notice the drop and reconnect on their own,
+            with a notice over the last scene meanwhile. If you reopen ATO20
+            without a campaign, the notice says the table is closed, and the
+            screen comes back on its own when the campaign opens.
+          </li>
+          <li>
+            Fixed: in the spectator window, a turning token no longer spins all
+            the way around, and its shadow moves with it.
+          </li>
+          <li>
+            Fixed: on the 3D dice, no face turns transparent anymore, and the
+            number stays inside the die. The dice also got brighter, and the
+            number on the d4 and the coin no longer fades on the brightest face.
+          </li>
+          <li>
+            Fixed: a sheet brought from a plugin goes onto the map without
+            reopening ATO20.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.10.0" date="2026-10-19">
+      <description>
+        <p>
+          ATO20 1.10 adds weather over the whole scene, GM windows that detach
+          to a second monitor, and an AI on this computer that can work on the
+          open campaign through MCP.
+        </p>
+        <ul>
+          <li>
+            Weather on the table: rain, storm, snow, fog, ash and embers.
+            Weather covers the whole scene, over the spectator window, and
+            doesn't move or zoom with the camera. Map settings pick the weather,
+            its intensity and the wind. In the Compendium, the Weather tab under
+            Effects brings the six ready-made ones and creates new ones, with
+            falling layers, a veil and lightning, and each card has Put in this
+            scene. Changing a weather in the Compendium changes the rain in the
+            spectator window right away. You see it at half strength and without
+            lightning, and it hides while you drag something.
+          </li>
+          <li>
+            GM windows can leave ATO20 for a second monitor. The sheet, the
+            Compendium, the chat, Rolls, the Table: drag a window's header, or a
+            docked tab, outside ATO20 and drop it, or use the arrow in the
+            header. It becomes a system window that works just like inside, and
+            whatever opens from it opens detached too. The return arrow brings
+            it back, and the next one opens in the same place and size.
+            Shortcuts, like undo, still only work in the main window.
+          </li>
+          <li>
+            An AI on this computer can work on the open campaign. In Settings,
+            AI, Let an AI work on your campaigns turns MCP on: a program like
+            Claude Code or Cursor can create notes, scenes, characters and
+            items, place tokens on the map, give items, and read and write in
+            the table chat, and what it does shows up right away. It deletes
+            nothing, puts no scene On air and rolls no dice. It starts off, only
+            programs with the token get in, and only from this computer. The
+            screen shows the Claude Code command ready to copy.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.9.0" date="2026-10-16">
+      <description>
+        <p>
+          ATO20 1.9 adds initiative with turn order and rounds, the Compendium
+          of ready-made monsters, items, conditions and effects, fired effects,
+          Universal VTT maps from Dungeondraft and Dungeon Alchemist, the
+          Gallery, and an Elements panel that edits what's selected.
+        </p>
+        <ul>
+          <li>
+            Initiative: the turn order, whose turn it is and what happened in
+            each round. The Initiative window shows everyone with a token on the
+            table's map. Start initiative puts them all in order, players first,
+            and you rearrange the order by dragging: there are no initiative
+            numbers, the order is the one you set. Right-clicking the map lets
+            the selected tokens start initiative, join it or leave it. On
+            someone's turn, only their token moves from the phone, their
+            portrait gets a yellow frame and the TURN badge, and the player's
+            phone shows Your turn. The Rounds tab keeps what happened in each
+            round: the rolls, the meters and the conditions. For now the order
+            isn't saved, and closing ATO20 ends the combat.
+          </li>
+          <li>
+            The Compendium: monsters, NPCs, items, conditions and effects ready
+            to use. The Compendium window keeps what the campaign has prepared
+            and hasn't brought into play yet, as cards with images and tags: the
+            Bestiary, Items, Conditions and Effects. Dropping a card on the map,
+            or Put in play, creates the sheet or the item, and Save to the
+            Compendium, in the Characters and Items menus, goes the other way.
+            Every tab has folders that open like in a file manager, and you move
+            a card by dragging it onto a folder. The ATO20 Compendium is a
+            separate window, with what applies to every campaign on this
+            computer.
+          </li>
+          <li>
+            Fire effects: the fireball, the ray, the dragon's breath. The Shot
+            button, right below Light, fires an effect from one point to
+            another: two clicks on the map, or press and drag. Clicking a
+            character fires from it, and Shift locks the angle. Right-click a
+            token and choose Fire to shoot where it's facing. A shot goes
+            straight, bursts on the target or spreads in a cone, and it shows in
+            the spectator window and on the players' phones. Shots are created
+            and edited in the Compendium, under Effects, Shot, and five come
+            ready: Fireball, Ray of frost, Water jet, Fire breath and Poison
+            cloud.
+          </li>
+          <li>
+            Maps from Dungeondraft and Dungeon Alchemist, with walls, doors and
+            lights. New map gets a Universal VTT option that opens .dd2vtt and
+            .uvtt files. The map comes in with its image, the grid at the right
+            size, the walls, the closed doors and the lights, plus darkness when
+            the lighting isn't already painted into the image.
+          </li>
+          <li>
+            The Gallery, with every image in the campaign. The Gallery window
+            gathers the images in the library and the ones that belong to
+            something, like a scene's backdrop, a portrait or a photo a player
+            sent, newest first. Search goes by file name. Clicking opens,
+            dragging puts it on the map, and right-click has Show to the table,
+            Open with another program, Show in folder and Properties, including
+            where the image is used.
+          </li>
+          <li>
+            The Elements panel changes what's selected on the map. With a wall,
+            fog area, shape or area effect selected, the corner panel works on
+            it: switch its shape between rectangle, circle and freeform, change
+            its type in place, like a shape that becomes an area effect, and
+            adjust each one's settings, like the area's effect and the wall's
+            height.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.8.0" date="2026-10-15">
+      <description>
+        <p>
+          ATO20 1.8 adds an About tab, says it's free and where to support it,
+          and moves to a new license, PolyForm Perimeter.
+        </p>
+        <ul>
+          <li>
+            An About tab in Settings. Settings → About has the version, the
+            website, the code and where to reach the project: email, X and
+            Instagram. The email has a copy button next to it.
+          </li>
+          <li>
+            ATO20 says it's free, and where to support it. At the bottom of the
+            campaign screen, ATO20 says it's free and shows the website, so
+            anyone who paid for it can find the original. Below that is Ko-fi,
+            for anyone who'd like to support the project. Ko-fi is also in
+            What's new, next to the GitHub releases, and in the About tab.
+          </li>
+          <li>
+            A new license: PolyForm Perimeter. ATO20 is still free, and the code
+            is still open to read, study and modify. What the new license
+            forbids is offering another product that competes with ATO20.
+            Running paid games and writing or selling plugins are still
+            allowed, the plugin documentation stays MIT, and versions up to
+            1.7.0 remain MIT.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.7.0" date="2026-10-14">
+      <description>
+        <p>
+          ATO20 1.7 lets players far away join the table: over the internet
+          through Tailscale Funnel, with nothing for them to install, or through
+          a gaming VPN. The invite now also follows the app's language.
+        </p>
+        <ul>
+          <li>
+            The table over the internet, with nothing for players to install.
+            With Tailscale on the GM's computer, the invite gets an Internet
+            option. A button opens the table at an https address, and players
+            join from their phone's browser, from anywhere. The table closes
+            when you click Close or leave ATO20, and the Join the table button
+            shows a globe while it's open. Whoever comes in over the internet
+            can't read whispers or act as the GM, and anyone who gets the code
+            wrong ten times waits ten minutes.
+          </li>
+          <li>
+            The invite over a gaming VPN. With Tailscale, ZeroTier, Hamachi or
+            Radmin on, the invite shows its network next to the local one, and
+            the QR code carries its address. A VPN turned on with ATO20 open
+            shows up without restarting, and the choice is saved on the
+            computer. An address of your own, like a MagicDNS name or a tunnel,
+            goes in Other address.
+          </li>
+          <li>
+            Fixed: the table invite in English. With the app in English, the
+            invite and the network choice in Options showed up in Portuguese.
+          </li>
+          <li>
+            Fixed: the invite on a network without a gateway. On a local
+            network with no way out, like a LAN party with fixed IPs, the
+            invite said No network. Now it finds the address from the
+            computer's network card.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.6.0" date="2026-10-14">
+      <description>
+        <p>
+          ATO20 1.6 makes items part of the campaign, each with its own card, on
+          the map and at the table, adds zoom to the map on phones and the TV,
+          puts the player's phone in full screen and lets GM windows stretch
+          from every edge. Fixes for what the GM shows on a phone in full
+          screen, the TV's sound button and the phone's dice bag close the list.
+        </p>
+        <ul>
+          <li>
+            Items belong to the campaign, each with its own card. The Items
+            window keeps the catalog in folders, with search. An item's card is
+            edited in place: image, name, description, attributes and meters,
+            and an attribute like 1d8+2 slashing rolls on click. The same sword
+            can be with more than one character, and each backpack keeps its own
+            quantity and meters. Items that were already on sheets move to the
+            catalog. A campaign opened in this version no longer opens in
+            earlier ones.
+          </li>
+          <li>
+            Items on the map, on pins and at the table. Drag an item from the
+            Items window onto a character, the map, a map pin or the handout. On
+            the map, the piece shows the item's name and the button to put it on
+            air. Show at the table sends the item's card to the TV and the
+            phones, without what's hidden, and the backpack on the phone shows
+            attributes and meters.
+          </li>
+          <li>
+            Zoom on the map on phones and the TV. Pinch, Ctrl with the wheel,
+            Ctrl with + − 0 or the buttons in the corner of the map, up to 400%.
+            Zoom only closes in on what the GM framed, never shows beyond it,
+            and every camera change goes back to the GM's framing.
+          </li>
+          <li>
+            The player's phone in full screen. The page goes full screen on the
+            first tap inside the table, and the browser bar disappears, with the
+            sheet, the chat and the dice bag in place. A button at the top turns
+            it on and off, and the phone remembers the choice. On iPhone the
+            browser doesn't allow it.
+          </li>
+          <li>
+            GM windows stretch from every edge and corner. Before, only from the
+            bottom right corner. To widen a sheet to the left, you had to drag
+            the window, stretch it and drag it back.
+          </li>
+          <li>
+            GM columns open and close from the header. A button at each end of
+            the header, showing whether the column is open. And when dragging a
+            note or a board beside the map, the screen shows where it will open
+            before you let go: Split left, Split right or Open as a tab.
+          </li>
+          <li>
+            Boards only go on air from the palette. Put on air left the header
+            and the board's menu: one absent-minded click put your notes on the
+            TV. In the palette (Ctrl+K), putting it on air by the board's name
+            still works.
+          </li>
+          <li>
+            Sheets with many skills and dice got lighter. With a hundred skills,
+            editing one got five times faster, and searching the sidebar ten
+            times. Switching groups got lighter too.
+          </li>
+          <li>
+            Fixed: on a phone with the map in full screen, what the GM shows now
+            appears. Players with the map in full screen didn't see the item,
+            card or portrait the GM put in the spotlight.
+          </li>
+          <li>
+            Fixed: the TV's sound button shows again. When there was room above
+            and below the map, it was invisible but still clickable.
+          </li>
+          <li>
+            Fixed: in the phone's dice bag, scrolling the list no longer throws
+            a die. The dice stay put, and only the recent rolls scroll. With the
+            phone sideways, the dice fit in two rows.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.5.1" date="2026-10-13">
+      <description>
+        <p>
+          ATO20 1.5.1 fixes a freeze when rolling dice in the AppImage.
+        </p>
+        <ul>
+          <li>
+            Fixed: in the AppImage, rolling dice no longer freezes the window.
+            Since 1.4.0, a die rolled after a few idle seconds froze the whole
+            window for up to eight seconds before falling, from the sheet, the
+            dice bag or the command palette. It was the dice sound waking up.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.5.0" date="2026-10-13">
+      <description>
+        <p>
+          ATO20 1.5 gives each plugin its own page, with screenshots and a step
+          by step, and shows the icon of installed plugins.
+        </p>
+        <ul>
+          <li>
+            Each plugin has its own page, with screenshots and a step by step.
+            In the Catalog, clicking a plugin opens its page, like in an
+            extension store: the icon, who made it, the version and what its
+            author wrote about it, with images. Installed plugins open the same
+            page, in Settings, Plugins, Installed, with Update when there's a
+            new version.
+          </li>
+          <li>
+            Installed plugins show their icon. The Installed list shows each
+            plugin's icon next to its name. OBS, Ordem Paranormal and Tormenta20
+            already ship theirs: just update them from the Catalog. Plugin
+            authors declare the icone in manifest.json.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.4.0" date="2026-10-09">
+      <description>
+        <p>
+          ATO20 1.4 turns fillable PDF sheets into characters, brings game
+          systems through plugins, gives the character window tabs, attributes
+          and sheet details, rolls from the sheet and on the phone, installs
+          plugins from the catalog, moves content between campaigns and imports
+          Obsidian vaults. Fixes for condition effects, missing images and
+          flickering on Linux close the list.
+        </p>
+        <ul>
+          <li>
+            A PDF sheet becomes a character. In the Characters list, Import PDF
+            sheet reads the fillable sheet and shows first what becomes an
+            attribute, meter and detail. A plugin teaches how to read each
+            sheet: Tormenta20 and Ordem Paranormal are already in the Catalog.
+          </li>
+          <li>
+            The game system comes from a plugin. Create campaign gains a Game
+            system field, and Campaign settings a System topic: the system's
+            attributes, meters, sheet details and conditions go into the
+            campaign, and whatever is missing can go to the characters that
+            already exist. The Ordem Paranormal one writes the attributes on the
+            ritual circle.
+          </li>
+          <li>
+            The character window has tabs, attributes and sheet details. The
+            portrait, the name and who plays stay at the top, with the Sheet,
+            Inventory and Files tabs below. Attributes like STR 4, and details
+            like skills and powers in groups, in a sidebar with search. The
+            template lives in Campaign settings, under Attributes and Sheet
+            details, with apply to all.
+          </li>
+          <li>
+            Roll from the sheet, and expressions with modifiers. A detail can
+            roll that character's expression, like 2d20+10, with one click on
+            the sheet or on the phone. In the palette (Ctrl+K) and the dice bag,
+            1d20+5 and 2d6+1d4+3 roll the dice and add the rest.
+          </li>
+          <li>
+            The whole sheet on the phone, on a redone screen. Players see
+            attributes and sheet details, with search, and roll details from
+            there. Backpack and dice bag become floating bubbles, a phone held
+            sideways gets a sidebar, and each character has its own notebook.
+          </li>
+          <li>
+            Search, install and update plugins from the Catalog. In Settings →
+            Plugins → Catalog: search by name or tag, install with one click and
+            get told when an installed plugin has a new version. A plugin that
+            runs code asks for confirmation first.
+          </li>
+          <li>
+            Take maps, characters and settings from one campaign to another.
+            Export… and Import… in the campaign menu, the map list and the
+            character list: choose what goes into a zip, with the images, sounds
+            and effects it uses. Importing never overwrites what the campaign
+            already has, and offers to download missing plugins.
+          </li>
+          <li>
+            Import a folder, loose files or an Obsidian vault. With the Import
+            button in Files, or by dragging from your file manager onto the
+            panel. From Obsidian, notes, boards (.canvas) and attachments come
+            in with the same folder tree, and a summary shows everything before
+            saving.
+          </li>
+          <li>
+            Images and files live in Files, with notes and boards. The Library
+            tab is gone, and your collection became a folder inside Files.
+            Sounds stay in Sounds. A campaign opened in this version no longer
+            opens in earlier ones.
+          </li>
+          <li>
+            Dice make a sound when they fall. A real roll on impact and a ping
+            when it stops, on the GM screen. It follows the System volume and
+            turns off in Settings → Options → Dice sounds.
+          </li>
+          <li>
+            The sheet asks before deleting an attribute, detail, meter or item.
+            The sheet has no Ctrl+Z, and one extra click on the trash can
+            deleted it for good.
+          </li>
+          <li>
+            Board shapes and arrows are always hand-drawn, with rounded corners.
+            The option is gone: everything on the board has the sketchy stroke,
+            including what was already drawn.
+          </li>
+          <li>
+            Fixed: conditions draw flames, sparks and areas again. Since 1.2.0,
+            no condition effect showed up on the stage.
+          </li>
+          <li>
+            Fixed: tokens whose image fails to load no longer vanish from the
+            stage. A deleted file, a map moved off the disk or an icon without
+            network turns into a magenta and black checkerboard, on all three
+            screens.
+          </li>
+          <li>
+            Fixed: on Linux, menus and tooltips no longer flicker when opening
+            and closing. With WebKitGTK 2.54, tooltips, menus, popovers and
+            hover icons flickered on the first and last frame of the animation.
+          </li>
+          <li>
+            Fixed: tooltips no longer block clicks on what is underneath.
+          </li>
+          <li>
+            Fixed: Tab no longer walks the focus across the buttons. And a Space
+            after that pressed the highlighted button without anyone asking.
+          </li>
+          <li>
+            Fixed: long text and wide images no longer spill out of a note. And
+            dropping an image from Files on the empty space below the text works
+            now.
+          </li>
+          <li>
+            Fixed: cameras that follow tokens work on a duplicated map. It kept
+            looking for the original's tokens.
+          </li>
+          <li>
+            Fixed: View on GitHub in the Catalog opens the plugin's repository.
+          </li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.3.0" date="2026-10-08">
+      <description>
+        <p>
+          ATO20 1.3 gives the GM a toolbar at the top, a laser to point at the
+          map, dynamic fog that the lanterns open, editable walls and a sky in
+          2.5D, image controls for the spectator window, Discord presence and
+          the plugin catalog inside the app. A blur fix closes the list.
+        </p>
+        <ul>
+          <li>
+            The GM tools sit in a bar at the top. Select, Pan, Laser, Pencil,
+            Eraser, Text and Elements in a single bar, at the top and centered.
+            In the top corners, what you look up (pins, areas, players) is on
+            the left and what adjusts the scene is on the right. Each tool opens
+            its own panel in the bottom corner.
+          </li>
+          <li>
+            A smooth pencil, an eraser that cuts and a text panel. The pencil
+            gained width, opacity and smoothing, and strokes come out as soft
+            curves. The eraser removes only the piece it passes over, or the
+            whole stroke. Text gained font, size, alignment and opacity. Alt +
+            wheel, or [ and ], change the brush size.
+          </li>
+          <li>
+            Dynamic fog: token lanterns reveal the map. A dynamic fog area opens
+            wherever a token's lantern reaches and closes when the light leaves.
+            Walls and doors stop the reveal. And the fog eraser, in the area's
+            gizmo, cuts holes in that area only.
+          </li>
+          <li>
+            A laser to point at the map without marking anything. In the top
+            bar: hold and drag, and the table sees a red trail that fades on its
+            own. Held still, it stays as a lit dot. Nothing goes into the scene.
+          </li>
+          <li>
+            Saved cameras have a photo now, in a strip below the stage. The
+            strip collapses, changes height and splits Cameras and Tripods. Each
+            card shows what the camera frames.
+          </li>
+          <li>
+            Editable walls and a sky in 2.5D. In 2.5D, click a wall to move it,
+            change its size and height, rotate it and change its face color,
+            with suggestions taken from the map and an eyedropper. In Map
+            settings → Outside the map, the Sky in 2.5D can be a color or a
+            panoramic image that turns with the camera.
+          </li>
+          <li>
+            Standing figures turn toward where they face. In 2.5D, the arrows
+            button in the piece's gizmo turns on "Mirror toward where it faces".
+          </li>
+          <li>
+            Token lanterns have an intensity and a wheel to aim. In the lantern
+            menu, Dim, Medium or Bright. With the token selected, its reach
+            shows around it: drag the tip around to aim, and farther or closer
+            to change the reach. In 2.5D, the facing ring aims the lantern too.
+            And tokens and furniture can now get very small in 2D, as in 2.5D.
+          </li>
+          <li>
+            Brightness, contrast, saturation and hue in the spectator window. To
+            get the picture right on the table's TV, monitor or projector
+            without touching the map. It works for the whole campaign, in
+            Campaign settings → Spectator, and for a single map, in Map
+            settings. The GM screen and the phones do not change.
+          </li>
+          <li>
+            Discord shows what the GM is doing. "Playing ATO20" on your profile,
+            with what you are doing (Editing a map, Running a campaign), the
+            session time and how many players are at the table. The window title
+            says the same. Turn it off in Settings → Options → Show on Discord,
+            and the campaign name only shows if you turn it on.
+          </li>
+          <li>
+            The plugin catalog inside the app. In Settings → Plugins, the
+            Catalog tab shows the plugins from the website, with what each one
+            does, whether it runs code and whether it is already installed.
+          </li>
+          <li>
+            Plugins can draw ammo one bullet at a time. The points of a plugin
+            meter can be narrow, like a standing bullet, and turn into one point
+            with "×30" when the maximum goes past a cap, so a full magazine fits
+            on the sheet.
+          </li>
+          <li>
+            Fixed: the zoomed-in map no longer blurs while dragging or
+            selecting. Dragging a token, pulling the camera or clicking on empty
+            space left the map blurry when zoomed in. The lantern wheel and
+            tokens lying down in the GM's 2.5D are sharp now too.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-10-06">
       <description>
         <p>

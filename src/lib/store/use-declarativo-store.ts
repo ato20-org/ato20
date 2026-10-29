@@ -2,10 +2,16 @@
 
 import { create } from "zustand";
 
+import { CHAVE_ESTILO_DOS_ATRIBUTOS } from "@/lib/configuracoes/estilo-dos-atributos";
+import { assinarConfiguracao } from "@/lib/configuracoes/registro";
 import type { Extensao } from "@/lib/extensoes/manifesto";
 import { urlDaExtensao } from "@/lib/extensoes/manifesto";
 import { lerModeloSvg } from "@/lib/extensoes/svg-modelo";
-import type { Declarativo, EstiloDeMedidorPublicado } from "@/lib/sync/declarativo";
+import type {
+  Declarativo,
+  EstiloDeAtributosPublicado,
+  EstiloDeMedidorPublicado,
+} from "@/lib/sync/declarativo";
 import { daemonAddr } from "@/lib/vault/bridge";
 import type { DefinicaoDeEfeito } from "@/types/efeito";
 
@@ -32,6 +38,12 @@ type DeclarativoStore = Declarativo & {
    * plugin. Ver `useEfeitosDaCampanhaStore`.
    */
   definirEfeitosDaCampanha: (efeitos: ReadonlyArray<DefinicaoDeEfeito>) => void;
+  /**
+   * O estilo dos atributos que a campanha escolheu, que viaja para o celular
+   * desenhar a ficha igual. Vem do registro de configurações -- ver o fim
+   * deste arquivo.
+   */
+  definirEstiloDosAtributos: (chave: string) => void;
 };
 
 /**
@@ -98,6 +110,32 @@ async function lerEstilos(
 }
 
 /**
+ * Os estilos de atributos dos plugins habilitados, por `{plugin}/{estilo}`.
+ *
+ * Sem arquivo para ler, como as camadas do medidor: é o JSON do manifesto, e a
+ * imagem cada tela busca pelo endereço dela.
+ */
+function lerEstilosDeAtributos(
+  extensoes: Extensao[],
+): Record<string, EstiloDeAtributosPublicado> {
+  const estilos: Record<string, EstiloDeAtributosPublicado> = {};
+
+  for (const extensao of extensoes) {
+    if (!extensao.habilitada) continue;
+
+    for (const { id, ...estilo } of extensao.contribui?.estilosDeAtributos ?? []) {
+      estilos[`${extensao.id}/${id}`] = {
+        ...estilo,
+        plugin: extensao.id,
+        versao: extensao.versao,
+      };
+    }
+  }
+
+  return estilos;
+}
+
+/**
  * Os efeitos dos plugins habilitados, já com o id da mesa: `{plugin}/{efeito}`.
  *
  * Sem arquivo para ler: é o JSON do manifesto, que o Rust validou ao ler a
@@ -131,10 +169,19 @@ async function publicar(declarativo: Declarativo): Promise<void> {
   }
 }
 
+/** O que vai no fio, tirado do estado: as funções do store ficam de fora. */
+function noFio(estado: Declarativo): Declarativo {
+  const { versao, estilos, efeitos, estilosDeAtributos, estiloDosAtributos, plugins } = estado;
+
+  return { versao, estilos, efeitos, estilosDeAtributos, estiloDosAtributos, plugins };
+}
+
 export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
   versao: 0,
   estilos: {},
   efeitos: {},
+  estilosDeAtributos: {},
+  estiloDosAtributos: "",
   plugins: [],
 
   async sincronizar(extensoes) {
@@ -144,6 +191,7 @@ export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
 
     efeitosDePlugins = lerEfeitos(extensoes);
     const efeitos = juntarEfeitos();
+    const estilosDeAtributos = lerEstilosDeAtributos(extensoes);
 
     // Em ordem: a lista vem na ordem da tela, e reordenar não é mudança.
     const plugins = extensoes
@@ -153,17 +201,18 @@ export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
 
     // Comparado pelo texto: é o que vai no fio, e é a única pergunta que
     // importa -- a TV precisa de outro conjunto ou não?
-    const { estilos: antes, efeitos: antesEfeitos, plugins: antesPlugins } = get();
+    const antes = get();
     if (
-      JSON.stringify(estilos) === JSON.stringify(antes) &&
-      JSON.stringify(efeitos) === JSON.stringify(antesEfeitos) &&
-      JSON.stringify(plugins) === JSON.stringify(antesPlugins)
+      JSON.stringify(estilos) === JSON.stringify(antes.estilos) &&
+      JSON.stringify(efeitos) === JSON.stringify(antes.efeitos) &&
+      JSON.stringify(estilosDeAtributos) === JSON.stringify(antes.estilosDeAtributos) &&
+      JSON.stringify(plugins) === JSON.stringify(antes.plugins)
     )
       return;
 
     const versao = get().versao + 1;
-    set({ estilos, efeitos, plugins, versao });
-    void publicar({ versao, estilos, efeitos, plugins });
+    set({ estilos, efeitos, estilosDeAtributos, plugins, versao });
+    void publicar(noFio(get()));
   },
 
   definirEfeitosDaCampanha(lista) {
@@ -176,6 +225,13 @@ export const useDeclarativoStore = create<DeclarativoStore>((set, get) => ({
     // O Mestre desenha o conjunto novo AGORA -- a prévia anda com o controle.
     // A versão, que é o que manda a TV buscar, só sobe depois do envio.
     set({ efeitos });
+    publicarLogo();
+  },
+
+  definirEstiloDosAtributos(estiloDosAtributos) {
+    if (estiloDosAtributos === get().estiloDosAtributos) return;
+
+    set({ estiloDosAtributos });
     publicarLogo();
   },
 }));
@@ -196,12 +252,23 @@ function publicarLogo(): void {
   if (esperaDaPublicacao) clearTimeout(esperaDaPublicacao);
   esperaDaPublicacao = setTimeout(async () => {
     esperaDaPublicacao = null;
-    const { versao: atual, estilos, efeitos, plugins } = useDeclarativoStore.getState();
-    const versao = atual + 1;
+    const estado = useDeclarativoStore.getState();
+    const versao = estado.versao + 1;
 
-    await publicar({ versao, estilos, efeitos, plugins });
+    await publicar({ ...noFio(estado), versao });
     // Um `sincronizar` no meio já publicou com versão maior, e com este
     // conjunto junto: aí o número dele vale.
     if (useDeclarativoStore.getState().versao < versao) useDeclarativoStore.setState({ versao });
   }, 150);
 }
+
+/**
+ * A escolha da campanha segue o registro: o seletor, o sistema aplicado, o
+ * arquivo editado à mão e a campanha que fecha (o valor volta a `""`) passam
+ * todos por ele.
+ */
+assinarConfiguracao(CHAVE_ESTILO_DOS_ATRIBUTOS, (valor) => {
+  useDeclarativoStore
+    .getState()
+    .definirEstiloDosAtributos(typeof valor === "string" ? valor : "");
+});

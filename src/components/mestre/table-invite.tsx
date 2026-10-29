@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Copy, QrCode, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { Check, Copy, Globe, Network, QrCode, WifiOff } from "lucide-react";
 import QRCode from "qrcode";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,14 +14,40 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  escolherRede,
+  gravarEnderecoProprio,
+  useEnderecoProprio,
+  useEscolhaDeRede,
+} from "@/lib/configuracoes/rede";
+import {
+  baseDoEndereco,
+  disponiveis,
+  escolherEndereco,
+  ESCOLHAS_DE_REDE,
+  type EnderecoDetectado,
+  type EscolhaDeRede,
+  type EstadoDoTailscale,
+  type ProblemaDoTailscale,
+} from "@/lib/endereco-da-mesa";
+import { idioma } from "@/lib/i18n/idioma";
+import { t } from "@/lib/i18n/mestre";
 import { useCampaignStore } from "@/lib/store/use-campaign-store";
-import { daemonAddr } from "@/lib/vault/bridge";
+import {
+  abrirFunil,
+  call,
+  daemonAddr,
+  enderecosDetectados,
+  fecharFunil,
+  tailscaleEstado,
+} from "@/lib/vault/bridge";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,77 +66,156 @@ import { cn } from "@/lib/utils";
  *
  * O código vai no endereço nos dois casos, e é por isso que não há nenhum campo
  * de código em lugar nenhum.
+ *
+ * E a REDE é escolha do mestre: a local, uma VPN de jogo que esteja ligada
+ * nesta máquina, a internet pelo Funnel do Tailscale (o jogador só abre o
+ * link), ou um endereço que ele cola. Nenhum servidor do ATO20 no meio. Ver
+ * `lib/endereco-da-mesa.ts` e `src-tauri/src/tailscale.rs`.
  */
 /** As duas portas da mesa: o celular de quem joga, e a TV que todos veem. */
 type Aba = "jogador" | "espectador";
 
+/** O que o Rust respondeu da última vez que se perguntou pelas redes. */
+type Redes = { porta: number; detectados: EnderecoDetectado[] };
+
 export function TableInvite() {
   const campaign = useCampaignStore((state) => state.campaign);
-  const [lanUrl, setLanUrl] = useState<string | null>(null);
+  const escolha = useEscolhaDeRede();
+  const texto = useEnderecoProprio();
+  const [redes, setRedes] = useState<Redes | null>(null);
+  const [tailscale, setTailscale] = useState<EstadoDoTailscale | null>(null);
+  // Abrindo ou fechando o Funnel: a CLI leva segundos na primeira vez, e o
+  // botão parado nesse meio tempo seria clicado de novo.
+  const [mexendo, setMexendo] = useState(false);
   // A aba escolhida vira estado porque a descrição do diálogo muda com
   // ela: o `Tabs` sozinho guardaria a escolha, mas não a conta a quem
   // está fora dele.
   const [aba, setAba] = useState<Aba>("jogador");
   const [carregado, setCarregado] = useState(false);
 
-  useEffect(() => {
-    let ativo = true;
-
-    void daemonAddr().then(
-      ({ lanUrl }) => {
-        if (!ativo) return;
-
-        setLanUrl(lanUrl);
+  // De novo a cada abertura do diálogo, e não só na montagem: a VPN ligada no
+  // meio da tarde tem de aparecer sem reabrir o aplicativo, e a que caiu tem
+  // de sumir antes de alguém fotografar um QR morto.
+  const detectar = useCallback(() => {
+    void Promise.all([daemonAddr(), enderecosDetectados()]).then(
+      ([{ porta }, detectados]) => {
+        setRedes({ porta, detectados });
         setCarregado(true);
       },
-      () => {
-        if (ativo) setCarregado(true);
-      },
+      () => setCarregado(true),
     );
-
-    return () => {
-      ativo = false;
-    };
+    // À parte, e não no mesmo `Promise.all`: a CLI do Tailscale pode levar
+    // segundos, e a rede local não tem por que esperar por ela.
+    void tailscaleEstado().then(setTailscale, () => setTailscale(null));
   }, []);
+
+  const mexerNoFunil = (acao: () => Promise<EstadoDoTailscale>) => {
+    setMexendo(true);
+    void acao()
+      .then(setTailscale, (causa: unknown) => {
+        // O `call` já escolheu o idioma da mensagem: ela vai igual nos dois.
+        const mensagem = causa instanceof Error ? causa.message : String(causa);
+        setTailscale((anterior) =>
+          anterior
+            ? {
+                ...anterior,
+                problema: { tipo: "outro", mensagem, mensagemEn: mensagem },
+              }
+            : anterior,
+        );
+      })
+      .finally(() => setMexendo(false));
+  };
+
+  useEffect(() => detectar(), [detectar]);
 
   if (!campaign || !carregado) return null;
 
+  const proprio = redes ? baseDoEndereco(texto, redes.porta) : null;
+
   // Sem rota de rede a mesa não alcança esta máquina, e um endereço que não
   // responde é pior que dizer o que está faltando.
-  if (!lanUrl) {
+  const enderecos = redes ? disponiveis(redes.detectados, tailscale) : [];
+
+  if (!redes || (enderecos.length === 0 && !proprio)) {
     return (
-      <Tooltip>
+      <Tooltip
+        onOpenChange={(aberto) => {
+          if (aberto) detectar();
+        }}
+      >
         <TooltipTrigger
           render={
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
               <WifiOff className="size-3.5" />
-              Sem rede
+              {t.convite.semRede}
             </span>
           }
         />
         <TooltipContent>
-          <p className="max-w-52">
-            Esta máquina não está numa rede local, então a TV e os celulares não
-            têm como alcançá-la. Conecte o Wi-Fi ou o cabo e reabra o
-            aplicativo.
-          </p>
+          <p className="max-w-52">{t.convite.semRedeExplicacao}</p>
         </TooltipContent>
       </Tooltip>
     );
   }
 
+  const mesa = escolherEndereco(escolha, enderecos, proprio);
+  // "Outro" sem endereço que preste não cai para a rede local como uma VPN
+  // desligada: o mestre está digitando, e um QR de outra rede no meio disso
+  // seria o convite errado com cara de certo. A internet fechada também não:
+  // o que falta ali é abrir, e o painel dela diz como.
+  const esperandoEndereco = escolha === "outro" && !proprio;
+  const esperandoFunil = escolha === "internet" && !tailscale?.funil;
+  const usada = esperandoEndereco || esperandoFunil ? null : mesa;
+
+  // A escolha aparece mesmo quando não respondeu, para o mestre ver o que
+  // está marcado e por que o convite mostra outra coisa. A internet aparece
+  // com o Tailscale logado, aberta ou não: é dali que ela se abre.
+  const opcoes = ESCOLHAS_DE_REDE.filter(
+    (opcao) =>
+      opcao === "outro" ||
+      opcao === escolha ||
+      (opcao === "internet"
+        ? tailscale?.online === true
+        : enderecos.some((endereco) => endereco.rede === opcao)),
+  );
+  const temVpn = enderecos.some((endereco) => endereco.rede !== "local");
+
+  // O botão diz por onde a mesa entra sem abrir o diálogo. O Funnel aberto
+  // vence a escolha: com ele a porta está na rua, mesmo que o convite mostre a
+  // rede local, e o mestre tem de ver isso de longe.
+  const Icone = tailscale?.funil
+    ? Globe
+    : usada && usada.rede !== "local" && usada.rede !== "outro"
+      ? Network
+      : QrCode;
+
   return (
-    <Dialog>
+    <Dialog
+      onOpenChange={(aberto) => {
+        if (aberto) detectar();
+      }}
+    >
       <DialogTrigger
         render={
-          <Button variant="ghost" size="sm">
-            <QrCode />
-            <span className="hidden lg:inline">Entrar na mesa</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            // Sempre com nome: abaixo de `lg` o botão é só o ícone, e sem isto
+            // ficava mudo para o leitor de tela e sem dica para o ponteiro.
+            title={tailscale?.funil ? t.convite.abertaNaInternet : t.convite.convidar}
+            aria-label={tailscale?.funil ? t.convite.abertaNaInternet : t.convite.convidar}
+          >
+            <Icone />
+            <span className="hidden lg:inline">{t.convite.convidar}</span>
           </Button>
         }
       />
       <DialogContent className="max-w-sm">
-        <DialogTitle>Entrar na mesa</DialogTitle>
+        {/* "Convidar", e não "Entrar na mesa": quem abre isto é o mestre, e ele
+            não está entrando em nada -- está chamando os outros. "Entrar na
+            mesa" é o botão do celular de quem chega. */}
+        <DialogTitle>{t.convite.convidarTitulo}</DialogTitle>
         {/* Uma por aba: o celular tem câmera e um quadrado para apontar, a TV
             não tem nem uma nem outro -- lá alguém digita o endereço com um
             controle remoto. Uma frase só serviria a uma das duas e mentiria
@@ -118,52 +225,148 @@ export function TableInvite() {
             código viaja na URL era resposta para uma pergunta que ninguém faz
             com o celular na mão. */}
         <DialogDescription>
-          {aba === "jogador"
-            ? "Aponte a câmera do celular para o quadrado."
-            : "Digite este endereço no navegador da TV."}
+          {aba === "jogador" ? t.convite.apontarACamera : t.convite.abrirNoEspectador}
         </DialogDescription>
 
-        <Tabs
-          value={aba}
-          onValueChange={(valor) => setAba(valor as Aba)}
-          className="min-w-0 gap-3"
-        >
-          <TabsList>
-            <TabsTrigger value="jogador">Jogador</TabsTrigger>
-            <TabsTrigger value="espectador">TV</TabsTrigger>
-          </TabsList>
+        {/* Botões e não um select: com a rede local e o "Outro" sempre ali, a
+            VPN ligada aparece como uma opção a mais à vista, e é assim que o
+            mestre descobre que a mesa vai pela internet. */}
+        <div className="flex flex-wrap gap-1" role="group" aria-label={t.convite.rede}>
+          {opcoes.map((opcao) => (
+            <Button
+              key={opcao}
+              size="xs"
+              variant={opcao === escolha ? "secondary" : "ghost"}
+              aria-pressed={opcao === escolha}
+              onClick={() => escolherRede(opcao)}
+            >
+              {t.convite.redes[opcao]}
+            </Button>
+          ))}
+        </div>
 
-          <TabsContent value="jogador" className="min-w-0 space-y-3">
-            <Alvo url={`${lanUrl}/jogador?code=${campaign.codigo}`} />
-          </TabsContent>
+        {/* Quem entra por esta rede, logo abaixo da escolha. Era a primeira
+            frase da letra miúda, no pé do diálogo e apagada -- mas é a resposta
+            para a pergunta que o mestre faz ao escolher ("meu amigo que está
+            longe consegue?"), e a resposta mora junto da pergunta. */}
+        <p className="text-muted-foreground -mt-2 text-xs">
+          {alcance(usada?.rede ?? escolha)}
+        </p>
 
-          {/* Sem QR: a TV não tem câmera para apontar para coisa nenhuma. O que
-              acontece ali é alguém digitando o endereço no navegador dela, com
-              um controle remoto — então o que a tela precisa dar é o endereço
-              legível e inteiro, não um quadrado preto.
-
-              E sem instrução escrita: a aba se chama TV, mostra um endereço e
-              um botão de copiar. O parágrafo que havia aqui explicava o que os
-              três já dizem. */}
-          <TabsContent value="espectador" className="min-w-0 space-y-3">
-            <Endereco
-              url={`${lanUrl}/espectador?code=${campaign.codigo}`}
-              grande
+        {escolha === "outro" && (
+          <div className="space-y-1">
+            <Input
+              value={texto}
+              onChange={(evento) => gravarEnderecoProprio(evento.target.value)}
+              placeholder={t.convite.exemploDeEndereco}
+              aria-label={t.convite.redes.outro}
+              aria-invalid={esperandoEndereco && texto.trim() !== ""}
+              className="h-8 text-sm"
             />
-          </TabsContent>
-        </Tabs>
+            {esperandoEndereco && texto.trim() !== "" && (
+              <p className="text-destructive text-xs">{t.convite.enderecoInvalido}</p>
+            )}
+          </div>
+        )}
+
+        {escolha === "internet" && (
+          <PainelDoFunil
+            tailscale={tailscale}
+            mexendo={mexendo}
+            onAbrir={() => mexerNoFunil(abrirFunil)}
+            onFechar={() => mexerNoFunil(fecharFunil)}
+          />
+        )}
+
+        {usada?.caiu && (
+          <p className="text-muted-foreground text-xs">{avisoDeQueda(escolha, usada.rede)}</p>
+        )}
+
+        {usada && (
+          <Tabs
+            value={aba}
+            onValueChange={(valor) => setAba(valor as Aba)}
+            className="min-w-0 gap-3"
+          >
+            <TabsList>
+              <TabsTrigger value="jogador">{t.convite.abaJogador}</TabsTrigger>
+              <TabsTrigger value="espectador">{t.convite.abaEspectador}</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="jogador" className="min-w-0 space-y-3">
+              <Alvo url={`${usada.url}/jogador?code=${campaign.codigo}`} />
+            </TabsContent>
+
+            {/* Sem QR: a TV não tem câmera para apontar para coisa nenhuma. O que
+                acontece ali é alguém digitando o endereço no navegador dela, com
+                um controle remoto — então o que a tela precisa dar é o endereço
+                legível e inteiro, não um quadrado preto.
+
+                E sem instrução escrita: a aba se chama Espectador, mostra um endereço e
+                um botão de copiar. O parágrafo que havia aqui explicava o que os
+                três já dizem. */}
+            <TabsContent value="espectador" className="min-w-0 space-y-3">
+              <Endereco
+                url={`${usada.url}/espectador?code=${campaign.codigo}`}
+                grande
+              />
+            </TabsContent>
+          </Tabs>
+        )}
 
         {/* Mais apagado que a tela: é a letra miúda do convite, e quem a
-            procura já parou para ler. A segunda frase fica porque é a única
-            ressalva que muda uma decisão -- quem acha que o código protege a
-            mesa de um vizinho precisa saber que não. */}
+            procura já parou para ler. A ressalva do código fica porque é a
+            única que muda uma decisão -- quem acha que ele protege a mesa de
+            um vizinho precisa saber que não. */}
         <p className="text-muted-foreground/60 border-t pt-3 text-xs">
-          Vale só na mesma rede. O código evita a entrada por acaso, não alguém
-          decidido no seu Wi-Fi.
+          {letraMiuda(usada?.rede ?? escolha, temVpn)}
         </p>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Por que o convite não mostra a rede que está marcada. */
+function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
+  return t.convite.caiu(t.convite.quemCaiu[escolha], t.convite.ondeFicou[usada]);
+}
+
+/** Quem o endereço alcança, rede por rede. Ver o `<p>` logo abaixo da escolha. */
+function alcance(rede: EscolhaDeRede): string {
+  const frase = t.convite.alcance;
+
+  switch (rede) {
+    case "local":
+      return frase.local;
+    case "outro":
+      return frase.outro;
+    case "internet":
+      return frase.internet;
+    default:
+      return frase.vpn(t.convite.redes[rede]);
+  }
+}
+
+/**
+ * A ressalva de cada rede: o que o código protege, ou o que trava.
+ *
+ * Na VPN, a dica é a do firewall porque é a que mais trava: o Windows costuma
+ * tratar o adaptador dela como rede pública, e a permissão dada na primeira
+ * abertura do ATO20 vale só para a privada.
+ */
+function letraMiuda(rede: EscolhaDeRede, temVpn: boolean): string {
+  const letra = t.convite.letraMiuda;
+
+  switch (rede) {
+    case "local":
+      return temVpn ? letra.local : `${letra.local} ${letra.ligueUmaVpn}`;
+    case "outro":
+      return letra.outro;
+    case "internet":
+      return letra.internet;
+    default:
+      return letra.vpn;
+  }
 }
 
 /**
@@ -207,7 +410,7 @@ function Alvo({ url }: { url: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={dataUrl}
-          alt={`QR code para ${url}`}
+          alt={t.convite.qrPara(url)}
           className="size-48 rounded-md bg-white p-2"
         />
       ) : (
@@ -249,10 +452,13 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
               // parecia um endereço que termina ali. Desbotando na borda,
               // ela diz que continua -- e continua rolando.
               "bg-muted rolagem-limpa scroll-fade-x overflow-x-auto rounded-md px-3 py-2 text-left text-sm whitespace-nowrap"
-            : "text-muted-foreground text-xs break-all",
+            : // Quebra nas juntas do endereço, e não em qualquer letra: com
+              // `break-all` o código partia ao meio ("8UR4" numa linha, "WW" na
+              // outra), e quem o dita lia dois pedaços. Ver `comJuntas`.
+              "text-muted-foreground text-xs [overflow-wrap:anywhere]",
         )}
       >
-        {url}
+        {grande ? url : comJuntas(url)}
       </code>
 
       <Button
@@ -268,8 +474,148 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
         }}
       >
         {copiado ? <Check /> : <Copy />}
-        {copiado ? "Copiado" : "Copiar endereço"}
+        {copiado ? t.convite.copiado : t.convite.copiarEndereco}
       </Button>
     </div>
   );
+}
+
+/**
+ * O endereço com pontos de quebra depois da máquina e antes da consulta.
+ *
+ * `<wbr>` em vez de `break-all`: a linha ainda quebra se não couber, mas no
+ * fim de `host:porta` e antes de `?code=`, que é onde quem lê espera.
+ */
+function comJuntas(url: string): React.ReactNode {
+  const inicioDoCaminho = url.indexOf("/", url.indexOf("://") + 3);
+  if (inicioDoCaminho < 0) return url;
+
+  const maquina = url.slice(0, inicioDoCaminho);
+  const resto = url.slice(inicioDoCaminho);
+  const consulta = resto.indexOf("?");
+
+  if (consulta < 0) {
+    return (
+      <>
+        {maquina}
+        <wbr />
+        {resto}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {maquina}
+      <wbr />
+      {resto.slice(0, consulta)}
+      <wbr />
+      {resto.slice(consulta)}
+    </>
+  );
+}
+
+/**
+ * Abrir e fechar a mesa para a internet.
+ *
+ * Fechada, o que abrir significa já está dito ANTES do clique, na frase do
+ * alcance logo acima: qualquer pessoa com o link entra, e isso é uma decisão,
+ * não um detalhe. Aberta, o QR logo abaixo já é o endereço público, e aqui
+ * fica o estado -- com o ponto verde, que se vê sem ler -- e o botão de fechar.
+ *
+ * Cada problema vem com a saída dele, e não com a mensagem da CLI: quem joga
+ * RPG não tem obrigação de saber o que é um operador do tailscaled.
+ */
+function PainelDoFunil({
+  tailscale,
+  mexendo,
+  onAbrir,
+  onFechar,
+}: {
+  tailscale: EstadoDoTailscale | null;
+  mexendo: boolean;
+  onAbrir: () => void;
+  onFechar: () => void;
+}) {
+  if (!tailscale) {
+    return <p className="text-muted-foreground text-xs">{t.convite.perguntandoAoTailscale}</p>;
+  }
+
+  if (tailscale.funil) {
+    return (
+      // "Fechar a porta", e não só "Fechar": ao lado do X do diálogo, um
+      // "Fechar" solto parecia fechar a janela. A porta é a mesma da letra
+      // miúda, que o ATO20 fecha sozinho ao sair.
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs">
+          <span className="size-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+          <span className="truncate">{t.convite.abertaNaInternet}</span>
+        </p>
+        <Button size="xs" variant="outline" disabled={mexendo} onClick={onFechar}>
+          {mexendo ? t.convite.fechando : t.convite.fecharAPorta}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {tailscale.problema ? <ProblemaDoFunil problema={tailscale.problema} /> : null}
+      {tailscale.online && (
+        <Button size="sm" variant="secondary" disabled={mexendo} onClick={onAbrir}>
+          {mexendo ? t.convite.abrindo : t.convite.abrirParaAInternet}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O painel do Tailscale no navegador do sistema. As mesmas duas portas do
+ * link do chat: o `opener`, e o Rust quando ele desiste. Se as duas falharem,
+ * o link vai no aviso para ser copiado, em vez de o botão não fazer nada.
+ */
+function abrirLink(url: string): void {
+  void openUrl(url).catch(() =>
+    call<string>("abrir_no_navegador", { url }).catch(() =>
+      toast.error(t.convite.semNavegador, { description: url }),
+    ),
+  );
+}
+
+function ProblemaDoFunil({ problema }: { problema: ProblemaDoTailscale }) {
+  switch (problema.tipo) {
+    case "desconectado":
+      return (
+        <p className="text-muted-foreground text-xs">{t.convite.desconectado}</p>
+      );
+    case "funilNaoLiberado":
+      return (
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">{t.convite.funilNaoLiberado}</p>
+          <Button size="xs" variant="ghost" onClick={() => abrirLink(problema.link)}>
+            {t.convite.liberarFunil}
+          </Button>
+        </div>
+      );
+    case "semOperador":
+      return (
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">{t.convite.semOperador}</p>
+          <code className="bg-muted block rounded-md px-2 py-1 text-xs select-all">
+            {problema.comando}
+          </code>
+        </div>
+      );
+    case "portaOcupada":
+      return (
+        <p className="text-muted-foreground text-xs">{t.convite.portaOcupada}</p>
+      );
+    case "outro":
+      return (
+        <p className="text-destructive text-xs">
+          {t.convite.naoAbriu(idioma === "en" ? problema.mensagemEn : problema.mensagem)}
+        </p>
+      );
+  }
 }

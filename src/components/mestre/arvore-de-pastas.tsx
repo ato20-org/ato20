@@ -8,6 +8,7 @@ import {
   FolderPlus,
   MoreVertical,
   TextCursorInput,
+  Trash2,
   Ungroup,
 } from "lucide-react";
 
@@ -92,10 +93,13 @@ export function CampoDeNome({
 export function TresPontos({
   rotulo,
   aoFechar,
+  focoFinal,
   itens,
 }: {
   rotulo: string;
   aoFechar: (aberto: boolean) => void;
+  /** Para onde o foco vai ao fechar. Ver `useRenomearPeloMenu`. */
+  focoFinal?: () => boolean;
   itens: (kit: Kit) => ReactNode;
 }) {
   return (
@@ -113,7 +117,7 @@ export function TresPontos({
           </Button>
         }
       />
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-52" finalFocus={focoFinal}>
         {itens(KIT_TRES_PONTOS)}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -175,6 +179,8 @@ export function PastaRow({
   itensDeCriar,
   alvo,
   aberta = false,
+  aoDesfazer,
+  aoApagar,
 }: {
   pasta: Pasta;
   pastas: Pasta[];
@@ -198,6 +204,18 @@ export function PastaRow({
    * lista -- a nota arrastada do Arquivos, por exemplo. Ver `destinoSob`.
    */
   alvo?: Record<`data-${string}`, string>;
+  /**
+   * O que mais sobe quando a pasta é desfeita, além do que o board guarda. No
+   * Arquivos, os arquivos do acervo: a pasta deles é gravada no Rust, e o
+   * `removerPasta` do store não a alcança. Chamado ANTES de a pasta sair.
+   */
+  aoDesfazer?: (pasta: Pasta) => void;
+  /**
+   * Apaga a pasta COM o que há dentro. Só quem sabe apagar o conteúdo passa:
+   * no Arquivos, os quadros, as notas e os arquivos do acervo. Quem chama
+   * pergunta antes -- o item só pede. Ausente, o menu fica só com o Desfazer.
+   */
+  aoApagar?: (pasta: Pasta) => void;
 }) {
   const [renomeando, setRenomeando] = useState(false);
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
@@ -237,10 +255,21 @@ export function PastaRow({
         <Separator />
         {/* Desfazer solta o que há dentro um nível acima. Nunca apaga o que
             está dentro: é organização, não remoção. */}
-        <Item onClick={() => store().removerPasta(pasta.id)}>
+        <Item
+          onClick={() => {
+            aoDesfazer?.(pasta);
+            store().removerPasta(pasta.id);
+          }}
+        >
           <Ungroup />
           {t.arvoreDePastas.desfazerPasta}
         </Item>
+        {aoApagar ? (
+          <Item variant="destructive" onClick={() => aoApagar(pasta)}>
+            <Trash2 />
+            {t.arvoreDePastas.apagarPasta}
+          </Item>
+        ) : null}
       </>
     );
   };

@@ -2,7 +2,12 @@
 
 import { create } from "zustand";
 
-import { MIN_ITEM_SIZE } from "@/lib/geometry/transform";
+import { MIN_SCENE_ITEM_SIZE } from "@/lib/geometry/transform";
+import type { Condicao } from "@/types/character";
+import type { ListaDePastasDoCompendio } from "@/types/scene";
+
+/** A condição que uma peça ganha quando o arrasto cai nela. */
+export type CondicaoNaMao = Pick<Condicao, "nome" | "cor" | "icone" | "efeito">;
 
 /**
  * A imagem no ar: o que um painel já soltou da mão e o destino ainda não
@@ -57,14 +62,89 @@ export type FonteDoArrasto =
    */
   | { tipo: "ponto"; pinId: string; assetId: string }
   /**
-   * Um item de inventário.
+   * Um item da campanha.
+   *
+   * `personagemId` diz de que INVENTÁRIO ele saiu, quando saiu de um: largado
+   * na ficha de outro personagem ele MUDA de mão. Sem ele o item veio de onde
+   * não é de ninguém — a janela de Itens, um ponto, o handout — e largado num
+   * personagem é DADO, e continua onde estava. Item é item: dar não tira do
+   * catálogo.
    *
    * Carrega a URL já resolvida, e não um `assetId`, porque a imagem do item
-   * pode ser um anexo do personagem, que não tem id de acervo. Ele só vira
-   * asset quando é solto no mapa — ver `promoverImagemDoItem`, que é ida ao
-   * disco e não cabe num `pointerdown`, que é síncrono.
+   * pode ser a foto do jogador, que não tem id de acervo. Ela só vira asset
+   * quando o item é solto no mapa — ver `promoverImagemDoItem`, que é ida ao
+   * disco e não cabe num `pointerdown`, que é síncrono. Sem URL o item não vai
+   * ao mapa, que é onde só a imagem diz alguma coisa; vai a todo o resto.
    */
-  | { tipo: "item"; personagemId: string; itemId: string; url: string }
+  | { tipo: "item"; itemId: string; personagemId?: string; url?: string }
+  /**
+   * Um molde do Compêndio. Solto no mapa, ENTRA EM JOGO: vira um personagem
+   * novo ("Goblin 2"), e é ele que ganha a peça -- quatro goblins com o mesmo
+   * personagem dividiriam a mesma vida. Ver `porEmJogo`.
+   *
+   * `assetId` é a miniatura do molde, que a cópia divide com ele: é o que a
+   * sombra desenha enquanto a ficha nova ainda não existe.
+   */
+  | { tipo: "molde"; personagemId: string; assetId: string }
+  /**
+   * Uma ficha do bestiário de um PLUGIN. Solta no mapa, entra em jogo como o
+   * molde: sai do molde que ela deixou na campanha, trazido na hora se ainda
+   * não estava. Ver `porEmJogoDoBestiario`.
+   *
+   * A URL é a da miniatura do card, só para a sombra: a imagem da ficha só
+   * vira asset quando ela chega à campanha. Sem URL a sombra é a caixa, e a
+   * ficha vai ao mapa mesmo assim -- a imagem por URL é baixada ao trazer.
+   */
+  | { tipo: "molde-plugin"; extensaoId: string; colecaoId: string; moldeId: string; url?: string }
+  /**
+   * Um molde de ITEM do Compêndio. Solto no mapa, entra no catálogo -- vira um
+   * item de verdade -- e é a cópia que ganha a peça. A URL é a da imagem
+   * desenhada, pela razão de `item`: pode ser a foto do jogador.
+   */
+  | { tipo: "molde-item"; itemId: string; url?: string }
+  /**
+   * Um item de um PLUGIN. Solto no mapa, entra no catálogo como o molde de
+   * item: sai do molde que ele deixou na campanha, trazido na hora se ainda
+   * não estava, e a cópia ganha a peça. A URL é a da imagem do card, para a
+   * sombra; sem ela não vai ao mapa -- a peça é a imagem. Ver
+   * `itemDoPluginEmJogo`.
+   */
+  | { tipo: "item-plugin"; extensaoId: string; colecaoId: string; itemId: string; url?: string }
+  /**
+   * Uma condição da biblioteca do Compêndio. Solta num token, o personagem
+   * dele -- ou o objeto -- ganha uma cópia, e a biblioteca continua com a
+   * dela. Leva a condição inteira, e não só o id: a etiqueta no ar mostra o
+   * selo, e a cópia é feita dela.
+   */
+  | { tipo: "condicao"; condicaoId: string; condicao: CondicaoNaMao }
+  /**
+   * Um efeito de personagem do Compêndio. Efeito só aparece na figura por uma
+   * condição, então solto num token ele É uma: a condição que já o usa, ou uma
+   * com o nome dele. Ver `condicaoDoEfeito`.
+   *
+   * `doAto20` é o do Compêndio do ATO20, que não é da campanha: o id é de lá,
+   * e ele tem de ser trazido antes de ir ao token. Ver `doAto20EmJogo`.
+   */
+  | { tipo: "efeito"; efeitoId: string; condicao: CondicaoNaMao; doAto20?: boolean }
+  /**
+   * Um efeito de ÁREA do Compêndio. Solto no mapa, vira uma área redonda de
+   * efeito, onde a mão soltou e do tamanho que a roda escolheu. A cor é a da
+   * sombra; `doAto20` como no efeito de personagem.
+   */
+  | { tipo: "area"; efeitoId: string; cor: string; doAto20?: boolean }
+  /**
+   * Um DISPARO do Compêndio. Não tem o que fazer no mapa nem num token -- ele
+   * se dispara pela mira --, e só se arrasta para uma pasta da aba dele. Ver
+   * `aceita`.
+   */
+  | { tipo: "disparo"; efeitoId: string }
+  /**
+   * Um AMBIENTE do Compêndio. Como o disparo, só se arrasta para uma pasta da
+   * aba dele: a cena o recebe pelo card ("Pôr nesta cena") ou pela
+   * configuração do mapa. Solto no mapa, a sombra seria uma caixa de tamanho
+   * nenhum -- a chuva não tem onde, ela cobre a tela.
+   */
+  | { tipo: "ambiente"; efeitoId: string }
   // Uma nota `.md` da árvore de Arquivos, que vira cartão no quadro.
   | { tipo: "nota"; notaId: string; arquivo: string; titulo: string }
   // Um mapa ou fundo da lista de Cenas. Vira menção `>mapa` numa nota, e entra
@@ -80,10 +160,20 @@ export type FonteDoArrasto =
  */
 export type DestinoDoArrasto =
   | { tipo: "palco" }
-  /** Uma pasta do acervo. `folderId` ausente é a raiz, "Fora de pasta". */
-  | { tipo: "pasta"; folderId: string | undefined }
+  /**
+   * Uma peça no mapa, para o que vai NELA: a condição e o efeito. Para o resto
+   * ela é chão -- o token largado sobre outro cai no mapa. Ver `vaiNaPeca`.
+   */
+  | { tipo: "peca"; itemId: string }
   /** A grade de inventário de outro personagem. */
   | { tipo: "inventario"; personagemId: string }
+  /**
+   * A linha de um personagem na lista de Personagens: o item largado nela vai
+   * para o inventário dele, com a ficha aberta ou não.
+   */
+  | { tipo: "personagem"; personagemId: string }
+  // Uma pasta da janela de Itens. `undefined` é a raiz.
+  | { tipo: "pasta-itens"; pastaId: string | undefined }
   /** A bolinha do handout da cena em edição. */
   | { tipo: "handout" }
   /**
@@ -97,6 +187,13 @@ export type DestinoDoArrasto =
   | {
       tipo: "pasta-cenas";
       lista: "mapas" | "fundos";
+      pastaId: string | undefined;
+    }
+  // Uma pasta do Compêndio da campanha, de uma das abas -- o card de pasta, ou
+  // um passo da trilha. `undefined` é a raiz da aba.
+  | {
+      tipo: "pasta-compendio";
+      lista: ListaDePastasDoCompendio;
       pastaId: string | undefined;
     }
   // Uma pasta de uma seção da lista de personagens. `undefined` é a raiz dela.
@@ -122,13 +219,63 @@ export type ArrastoDeToken = {
   x: number;
   y: number;
   destino: DestinoDoArrasto | null;
+  /**
+   * O gesto é numa janela SOLTA, e não no Mestre: o `x` e o `y` são de lá.
+   * Quem desenha algo seguindo o cursor no Mestre -- a etiqueta da condição,
+   * a prévia do token -- não desenha. Ver `janela-solta.tsx`.
+   */
+  emOutraJanela?: boolean;
 };
 
 /** O arquivo do acervo que está sendo arrastado, quando há um. */
 export function assetIdDoArrasto(fonte: FonteDoArrasto): string | undefined {
-  return fonte.tipo === "item" || fonte.tipo === "nota" || fonte.tipo === "cena"
+  return fonte.tipo === "item" ||
+    fonte.tipo === "molde-item" ||
+    fonte.tipo === "molde-plugin" ||
+    fonte.tipo === "item-plugin" ||
+    fonte.tipo === "nota" ||
+    fonte.tipo === "cena" ||
+    fonte.tipo === "area" ||
+    fonte.tipo === "disparo" ||
+    fonte.tipo === "ambiente" ||
+    vaiNaPeca(fonte)
     ? undefined
     : fonte.assetId || undefined;
+}
+
+/**
+ * O que se solta numa peça, e não no mapa: a condição e o efeito, que não têm
+ * imagem nem tamanho -- não há sombra a desenhar no chão, nem tamanho para a
+ * roda escolher.
+ */
+/**
+ * O id que a pasta do Compêndio guarda em `membros` para o que está na mão, se
+ * ele é daquela aba. `undefined` = não entra nessa árvore.
+ */
+export function membroDaPasta(
+  fonte: FonteDoArrasto,
+  lista: ListaDePastasDoCompendio,
+): string | undefined {
+  switch (lista) {
+    case "compendio":
+      return fonte.tipo === "molde" ? fonte.personagemId : undefined;
+    case "compendio-itens":
+      return fonte.tipo === "molde-item" ? fonte.itemId : undefined;
+    case "compendio-condicoes":
+      return fonte.tipo === "condicao" ? fonte.condicaoId : undefined;
+    case "compendio-efeitos":
+      return fonte.tipo === "area" && !fonte.doAto20 ? fonte.efeitoId : undefined;
+    case "compendio-disparos":
+      return fonte.tipo === "disparo" ? fonte.efeitoId : undefined;
+    case "compendio-ambientes":
+      return fonte.tipo === "ambiente" ? fonte.efeitoId : undefined;
+  }
+}
+
+export function vaiNaPeca(
+  fonte: FonteDoArrasto,
+): fonte is Extract<FonteDoArrasto, { tipo: "condicao" | "efeito" }> {
+  return fonte.tipo === "condicao" || fonte.tipo === "efeito";
 }
 
 /**
@@ -141,10 +288,17 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
   switch (destino.tipo) {
     case "palco":
       return "palco";
-    case "pasta":
-      return "acervo";
+    case "peca":
+      return "peca";
     case "inventario":
       return `inventario:${destino.personagemId}`;
+    // Uma chave só para todas as linhas: quem recebe é a lista, que sabe dar o
+    // item a qualquer personagem -- ao contrário do inventário, que existe uma
+    // vez por ficha aberta.
+    case "personagem":
+      return "linha-personagem";
+    case "pasta-itens":
+      return "itens";
     case "handout":
       return "handout";
     case "ponto":
@@ -153,6 +307,10 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
       return "arquivos";
     case "pasta-personagens":
       return "personagens";
+    // Uma para as abas todas: quem recebe é a janela do Compêndio, que sabe
+    // mover em qualquer árvore -- e só uma aba está aberta por vez.
+    case "pasta-compendio":
+      return "compendio";
     case "pasta-cenas":
       // Uma por aba: Mapas e Fundos registram cada uma o seu alvo, e uma chave
       // só faria a aba que desmonta apagar o alvo da outra.
@@ -172,11 +330,13 @@ export function chaveDoAlvo(destino: DestinoDoArrasto): string {
  * as duas têm de concordar. Quando divergiam, a borda prometia um movimento que
  * o destino recusava.
  *
- * - pasta do acervo só recebe imagem do acervo: ali o gesto é "guarde este
- *   arquivo aqui", e item de inventário e miniatura de personagem não são
+ * - pasta de Arquivos só recebe nota e arquivo do acervo: ali o gesto é
+ *   "guarde isto aqui", e item de inventário e miniatura de personagem não são
  *   arquivos que se guardem — a casa deles é a ficha;
  * - inventário só recebe item, e nunca o do próprio dono: mover um item para
- *   onde ele já está é um gesto sem efeito, e o Rust o recusa.
+ *   onde ele já está é um gesto sem efeito, e o Rust o recusa;
+ * - o mapa só recebe item com imagem: a peça É a imagem, e um item sem ela
+ *   não teria o que desenhar lá.
  */
 export function aceita(
   fonte: FonteDoArrasto,
@@ -187,8 +347,18 @@ export function aceita(
       // Mapa não cai no palco: ele É um palco. Só vira menção. E personagem sem
       // miniatura não tem peça para pôr ali.
       return (
-        fonte.tipo !== "cena" && !(fonte.tipo === "personagem" && !fonte.assetId)
+        fonte.tipo !== "cena" &&
+        fonte.tipo !== "disparo" &&
+        fonte.tipo !== "ambiente" &&
+        !vaiNaPeca(fonte) &&
+        !(fonte.tipo === "personagem" && !fonte.assetId) &&
+        !(fonte.tipo === "molde" && !fonte.assetId) &&
+        !(fonte.tipo === "molde-item" && !fonte.url) &&
+        !(fonte.tipo === "item-plugin" && !fonte.url) &&
+        !(fonte.tipo === "item" && !fonte.url)
       );
+    case "peca":
+      return vaiNaPeca(fonte);
     case "nota":
       // O que tem nome para ser mencionado: `/arquivo`, `@personagem`, `>mapa`.
       return (
@@ -198,33 +368,43 @@ export function aceita(
         fonte.tipo === "personagem" ||
         fonte.tipo === "cena"
       );
-    case "pasta":
-      return fonte.tipo === "acervo";
     case "split":
       // A nota é o que se divide ao lado do mapa. O quadro também, mas ele
       // chega pelo gesto de reordenar a lista -- ver `naMao` em
       // `usePaineisStore`.
       return fonte.tipo === "nota";
     case "pasta-arquivos":
-      return fonte.tipo === "nota";
+      // A árvore é uma só: a nota e o arquivo do acervo mudam de pasta pelo
+      // mesmo gesto. O quadro muda pelo reordenar da lista.
+      return fonte.tipo === "nota" || fonte.tipo === "acervo";
     case "pasta-cenas":
       return fonte.tipo === "cena" && fonte.lista === destino.lista;
     case "pasta-personagens":
       // Da mesma seção: a seção é DERIVADA do vínculo com um jogador, e um
       // Player largado numa pasta de NPCs continuaria aparecendo em Players.
       return fonte.tipo === "personagem" && fonte.secao === destino.lista;
+    case "pasta-compendio":
+      // Cada aba recebe o que é dela: a ficha no Bestiário, o efeito de área
+      // em Área. O do Compêndio do ATO20 não tem pasta aqui -- é de outra
+      // biblioteca.
+      return membroDaPasta(fonte, destino.lista) !== undefined;
     case "inventario":
+    case "personagem":
       return (
         fonte.tipo === "item" && fonte.personagemId !== destino.personagemId
       );
+    case "pasta-itens":
+      // Só o item que veio do catálogo: o de uma ficha largado numa pasta
+      // pareceria sair da mochila e não sairia.
+      return fonte.tipo === "item" && fonte.personagemId === undefined;
     case "handout":
-      // Só do acervo: o handout guarda ids de acervo, e retrato de personagem
-      // e imagem de item já têm dono. Ver `Scene.handout`.
-      return fonte.tipo === "acervo";
+      // Do acervo, e o item da campanha. Retrato de personagem já tem dono, e
+      // a imagem que o handout guarda é id de acervo. Ver `Scene.handout` e
+      // `Scene.handoutItens`.
+      return fonte.tipo === "acervo" || fonte.tipo === "item";
     case "ponto":
-      // Pela mesma razão do handout: o anexo do ponto é id de acervo. Ver
-      // `MapPin.attachments`.
-      return fonte.tipo === "acervo";
+      // Pela mesma razão do handout. Ver `MapPin.attachments` e `MapPin.itens`.
+      return fonte.tipo === "acervo" || fonte.tipo === "item";
   }
 }
 
@@ -246,7 +426,8 @@ type TokenDragStore = {
    * de arquivos do personagem que ela mudou.
    *
    * Quem registra cada um: `TokenFantasma` o palco, `AssetLibrary` o acervo,
-   * `InventarioPersonagem` a própria grade, `PinNote` o cartão do ponto.
+   * `InventarioPersonagem` a própria grade, `PinNote` o cartão do ponto,
+   * `ArrastoParaAPeca` as peças do mapa.
    */
   alvos: Record<string, AoSoltar | undefined>;
 
@@ -288,7 +469,7 @@ const FATOR_MAX = 4;
  * respeita -- assim o que a roda deixa soltar é o que a alça deixa encolher.
  */
 function fatorMinimo(arrasto: Pick<ArrastoDeToken, "largura" | "altura">): number {
-  return MIN_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
+  return MIN_SCENE_ITEM_SIZE / Math.min(arrasto.largura, arrasto.altura);
 }
 
 /** O tamanho que o token terá se for solto agora, em unidades de cena. */

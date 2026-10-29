@@ -1,21 +1,32 @@
 "use client";
 
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   memo,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
+import { useShallow } from "zustand/react/shallow";
 import {
   Columns2,
   CopyPlus,
+  ExternalLink,
+  File,
   FilePlus,
   FileText,
   FolderPlus,
+  Import,
+  Plus,
   Presentation,
   Radio,
+  RadioTower,
   TextCursorInput,
   Trash2,
 } from "lucide-react";
@@ -32,14 +43,23 @@ import {
 } from "@/components/mestre/arvore-de-pastas";
 import { CampoDeBusca } from "@/components/mestre/campo-de-busca";
 import { ConfirmarRemocao } from "@/components/mestre/confirmar-remocao";
+import {
+  BotaoDeImportar,
+  ICONE_DA_ORIGEM,
+  ORIGENS,
+  useImportarDeFora,
+  useRotuloDoArrasto,
+} from "@/components/mestre/importar-de-fora";
 import { KIT_CONTEXTO, type Kit } from "@/components/ui/menu-kit";
 import { ItensDeExtensao } from "@/components/mestre/itens-de-extensao";
+import { MiniaturaDoAcervo } from "@/components/mestre/miniatura-do-acervo";
 import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -48,13 +68,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useArrastoDeArquivo } from "@/hooks/use-arrasto-de-arquivo";
 import { useListReorder } from "@/hooks/use-list-reorder";
 import {
   aoApertarF2,
   useRenomearPeloMenu,
 } from "@/hooks/use-renomear-pelo-menu";
 import { useTokenDrag } from "@/hooks/use-token-drag";
-import { achatarArvore, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
+import { documentoDe } from "@/lib/dom";
+import { achatarArvore, descendentes, pastasDaLista } from "@/lib/mestre/arvore-de-pastas";
 import { buscarArquivos, type Trecho } from "@/lib/mestre/busca-de-arquivos";
 import { useArquivoAbertoStore } from "@/lib/store/use-arquivo-aberto-store";
 import { usePaineisStore } from "@/lib/store/use-paineis-store";
@@ -66,7 +88,12 @@ import {
   fecharNotaEmTodaParte,
 } from "@/lib/mestre/abrir-nota";
 import { useDocumentoStore } from "@/lib/store/use-documento-store";
-import { useSceneStore } from "@/lib/store/use-scene-store";
+import { centeredBox } from "@/lib/geometry/transform";
+import { countAssetUsage } from "@/lib/mestre/asset-usage";
+import { tamanhoNaCena } from "@/lib/mestre/tamanho-na-cena";
+import { useAssetsStore } from "@/lib/store/use-assets-store";
+import { selectEditingScene, useSceneStore } from "@/lib/store/use-scene-store";
+import { useSpotlightStore } from "@/lib/store/use-spotlight-store";
 import { useSelectionStore } from "@/lib/store/use-selection-store";
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { useViewportStore } from "@/lib/store/use-viewport-store";
@@ -78,18 +105,27 @@ import {
   medirDocumentos,
   type MedidaDeDocumento,
 } from "@/lib/vault/documentos";
+import { assetUrl, deleteAsset, renameAsset, setAssetFolder } from "@/lib/vault/assets";
 import {
   DOCUMENTO_ALTURA,
   DOCUMENTO_LARGURA,
   ehQuadro,
+  type AssetMeta,
   type Nota,
   type Pasta,
   type Scene,
 } from "@/types/scene";
 
+/** A marca do painel que aceita o arquivo do sistema. Ver `useArrastoDeArquivo`. */
+const ZONA_DE_ARQUIVOS = "[data-arquivos-solto]";
+
 /**
  * A aba Arquivos: quadros e notas na mesma árvore de pastas, como o painel de
  * arquivos do Obsidian.
+ *
+ * `memo` porque quem a monta -- o conteúdo do dock -- assina a cena editada e
+ * redesenha a cada commit dela. Sem o `memo`, a árvore inteira ia junto, mesmo
+ * sem nada nela ter mudado: 260 linhas recriadas por quadro de gesto.
  *
  * Separada da lista de Cenas de propósito. Cena é fila de sessão -- miniatura,
  * contagem, botão de pôr no ar à vista -- porque o mestre a escolhe olhando.
@@ -103,8 +139,16 @@ import {
  * Quem sabe dos dados é o `useSceneStore`: quadro é `Scene`, nota é
  * `board.notas`, pasta é `board.pastas`. Aqui é só a árvore.
  */
-export function ArquivosList({ ready }: { ready: boolean }) {
-  const scenes = useSceneStore((state) => state.board?.scenes);
+export const ArquivosList = memo(function ArquivosList({ ready }: { ready: boolean }) {
+  // Só os QUADROS, e comparados um a um: o painel assinava `board.scenes`
+  // inteiro, e qualquer cena que mudava -- o mapa sob o gesto, a cada commit --
+  // redesenhava a árvore toda. Medido na bancada (`--gesto commit --aba
+  // quadros --arvore 260`): 15 fps contra 37 do painel vazio. Agora o mapa que
+  // muda não acorda o painel; o quadro que muda acorda só a linha dele, que é
+  // `memo`.
+  const quadros = useSceneStore(
+    useShallow((state) => (state.board?.scenes ?? []).filter((scene) => ehQuadro(scene))),
+  );
   const todasAsPastas = useSceneStore((state) => state.board?.pastas);
   // Só as do Arquivos: Mapas, Fundos e Personagens têm as deles no mesmo
   // `board.pastas`. Ver `ListaDePastas`.
@@ -132,19 +176,71 @@ export function ArquivosList({ ready }: { ready: boolean }) {
   );
   const medidas = useMedidasDasNotas(ready, notas ?? []);
 
-  const quadros = useMemo(
-    () => (scenes ?? []).filter((scene) => ehQuadro(scene)),
-    [scenes],
+  // O acervo entra na mesma árvore: imagens e arquivos, menos o que tem dono
+  // (retrato, fundo de cena, imagem de efeito), que mora onde é usado. Ver
+  // `AssetMeta.escopo`. O som fica em Sons.
+  const imagens = useAssetsStore((state) => state.image.assets);
+  const arquivosDoAcervo = useAssetsStore((state) => state.file.assets);
+  const garantirAcervo = useAssetsStore((state) => state.garantir);
+  useEffect(() => {
+    garantirAcervo("image");
+    garantirAcervo("file");
+  }, [garantirAcervo]);
+  const acervo = useMemo(
+    () =>
+      [...(imagens ?? []), ...(arquivosDoAcervo ?? [])]
+        .filter((asset) => !asset.escopo)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [imagens, arquivosDoAcervo],
   );
+
   const linhas = useMemo(
-    () => achatar(quadros, pastas, notas ?? []),
-    [quadros, pastas, notas],
+    () => achatar(quadros, pastas, notas ?? [], acervo),
+    [quadros, pastas, notas, acervo],
   );
+
+  // A seleção do acervo: clique troca, Ctrl soma ou tira, Shift pega o trecho
+  // desde o último clicado -- o mesmo da Biblioteca de antes. É ela que o
+  // arrasto leva junto para uma pasta. Por ref para o `onSelect` ser estável e
+  // as linhas (`memo`) não redesenharem por causa dele.
+  const [selecionados, setSelecionados] = useState<readonly string[]>([]);
+  const ancora = useRef<string | null>(null);
+  const ordemDoAcervo = useRef<string[]>([]);
+  const selecionadosAgora = useRef<readonly string[]>([]);
+  useEffect(() => {
+    ordemDoAcervo.current = linhas.flatMap((linha) =>
+      linha.tipo === "acervo" ? [linha.asset.id] : [],
+    );
+  }, [linhas]);
+  useEffect(() => {
+    selecionadosAgora.current = selecionados;
+  }, [selecionados]);
+  const selecionarAcervo = useCallback((assetId: string, event: ReactMouseEvent) => {
+    setSelecionados((atuais) => {
+      if (event.shiftKey && ancora.current) {
+        const ordem = ordemDoAcervo.current;
+        const a = ordem.indexOf(ancora.current);
+        const b = ordem.indexOf(assetId);
+        if (a !== -1 && b !== -1)
+          return [...new Set([...atuais, ...ordem.slice(Math.min(a, b), Math.max(a, b) + 1)])];
+      }
+
+      ancora.current = assetId;
+
+      if (event.ctrlKey || event.metaKey)
+        return atuais.includes(assetId)
+          ? atuais.filter((id) => id !== assetId)
+          : [...atuais, assetId];
+
+      return [assetId];
+    });
+  }, []);
 
   const { listRef, dropIndex, startReorder } = useListReorder<string>(
     (arrastado, index) => {
-      if (!scenes) return;
       const store = useSceneStore.getState();
+      const scenes = store.board?.scenes;
+      if (!scenes) return;
       const alvo = linhas[index];
       const pastaDoAlvo = !alvo
         ? undefined
@@ -152,7 +248,9 @@ export function ArquivosList({ ready }: { ready: boolean }) {
           ? alvo.pasta.id
           : alvo.tipo === "nota"
             ? alvo.nota.pastaId
-            : alvo.scene.pastaId;
+            : alvo.tipo === "acervo"
+              ? alvo.asset.folderId
+              : alvo.scene.pastaId;
 
       // Pasta arrastada: só muda de mãe. O store recusa ciclo.
       if (arrastado.startsWith(PREFIXO_PASTA)) {
@@ -180,8 +278,21 @@ export function ArquivosList({ ready }: { ready: boolean }) {
   useEffect(
     () =>
       useTokenDragStore.getState().registrarAlvo("arquivos", (solto, destino) => {
-        if (solto.fonte.tipo !== "nota" || destino.tipo !== "pasta-arquivos") return;
-        useSceneStore.getState().moverNotaParaPasta(solto.fonte.notaId, destino.pastaId);
+        if (destino.tipo !== "pasta-arquivos") return;
+
+        if (solto.fonte.tipo === "nota") {
+          useSceneStore.getState().moverNotaParaPasta(solto.fonte.notaId, destino.pastaId);
+          return;
+        }
+
+        // Arrastou um dos selecionados: vão todos. Arrastou outro: só ele.
+        if (solto.fonte.tipo === "acervo") {
+          const { assetId } = solto.fonte;
+          const juntos = selecionadosAgora.current.includes(assetId)
+            ? selecionadosAgora.current
+            : [assetId];
+          void moverAcervo(juntos, destino.pastaId);
+        }
       }),
     [],
   );
@@ -210,6 +321,18 @@ export function ArquivosList({ ready }: { ready: boolean }) {
    * `buscarArquivos` para o que cada tipo acha e por quê.
    */
   const [busca, setBusca] = useState("");
+  // A pasta do "Apagar pasta", enquanto o diálogo pergunta. Aqui, e não na
+  // linha: o menu fecha antes de o diálogo abrir, e a linha da pasta some
+  // quando ela é apagada.
+  const [pastaAApagar, setPastaAApagar] = useState<Pasta | null>(null);
+  const importar = useImportarDeFora();
+  // O que vem do sistema e cai no painel: pasta, vault ou arquivos, pelo mesmo
+  // import do botão. Sempre na raiz, como no acervo: o arrasto do sistema não
+  // tem retorno visual fino o bastante para mirar uma pasta da árvore.
+  const noAr = useArrastoDeArquivo(ZONA_DE_ARQUIVOS, (caminhos) => {
+    if (ready) importar.soltar(caminhos);
+  });
+  const vem = useRotuloDoArrasto(noAr?.caminhos);
   const buscando = busca.trim() !== "";
 
   // O texto das notas entra na PRIMEIRA tecla, e não antes: só a nota aberta e
@@ -232,15 +355,23 @@ export function ArquivosList({ ready }: { ready: boolean }) {
     () =>
       buscando
         ? buscarArquivos(
-            { quadros, pastas, notas: notas ?? [], textos: textos ?? {} },
+            { quadros, pastas, notas: notas ?? [], textos: textos ?? {}, acervo },
             busca,
           )
         : null,
-    [buscando, busca, quadros, pastas, notas, textos],
+    [buscando, busca, quadros, pastas, notas, textos, acervo],
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      data-arquivos-solto
+      className={cn(
+        "flex min-h-0 flex-1 flex-col",
+        // Por dentro, como o do acervo: o painel atracado encosta na borda da
+        // coluna, e um anel por fora sairia cortado.
+        noAr && "ring-primary/60 bg-primary/5 ring-2 ring-inset",
+      )}
+    >
       {/* Três botões iguais: criar é criar, seja o que for. O que cada um cria
           está no ícone e na dica; o título da aba já diz "Arquivos".
 
@@ -285,7 +416,19 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         >
           <FolderPlus />
         </BotaoDeCriar>
+        {/* Junto dos de criar: importar é o outro jeito de encher esta lista.
+            Um botão só, com as origens no menu. Ver `useImportarDeFora`. */}
+        <BotaoDeImportar disabled={!ready} onEscolher={importar.iniciar} />
       </div>
+
+      {/* O que está vindo, antes de soltar: a borda acesa diz que o painel
+          aceita; esta linha diz o quê. */}
+      {noAr && vem ? (
+        <p className="border-primary/60 bg-primary/10 mx-2 mb-2 flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-[11px]">
+          <Import className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{vem}</span>
+        </p>
+      ) : null}
 
       <ScrollArea className="min-h-0 flex-1">
         {/* O fundo da lista, e SÓ ele, é o gatilho do menu do vazio. Envolver
@@ -293,7 +436,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
         <div className="relative min-h-full">
           <ContextMenu>
             <ContextMenuTrigger render={<div className="absolute inset-0" aria-hidden />} />
-            <ContextMenuContent className="w-48">
+            <ContextMenuContent className="w-60">
               <ContextMenuItem onClick={() => criar.quadro()}>
                 <Presentation />
                 {t.arquivosList.novoQuadro}
@@ -306,6 +449,16 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                 <FolderPlus />
                 {t.geral.novaPasta}
               </ContextMenuItem>
+              <ContextMenuSeparator />
+              {ORIGENS.map((origem) => {
+                const Icone = ICONE_DA_ORIGEM[origem];
+                return (
+                  <ContextMenuItem key={origem} onClick={() => importar.iniciar(origem)}>
+                    <Icone />
+                    {t.importarDeFora.botao}: {t.importarDeFora[origem].toLowerCase()}
+                  </ContextMenuItem>
+                );
+              })}
             </ContextMenuContent>
           </ContextMenu>
 
@@ -348,6 +501,15 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     itensDeCriar={itensDeCriarNa(achado.pasta.id)}
                     alvo={ALVO_DE_NOTA}
                   />
+                ) : achado.tipo === "acervo" ? (
+                  <AcervoRow
+                    key={achado.asset.id}
+                    asset={achado.asset}
+                    pastas={pastas}
+                    depth={achado.depth}
+                    selecionado={selecionados.includes(achado.asset.id)}
+                    onSelect={selecionarAcervo}
+                  />
                 ) : achado.tipo === "nota" ? (
                   <NotaRow
                     key={achado.nota.id}
@@ -389,6 +551,8 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     onReorderStart={startReorder}
                     itensDeCriar={itensDeCriarNa(linha.pasta.id)}
                     alvo={ALVO_DE_NOTA}
+                    aoDesfazer={desfazerNoAcervo}
+                    aoApagar={setPastaAApagar}
                   />
                 ) : linha.tipo === "nota" ? (
                   <NotaRow
@@ -401,6 +565,15 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     }
                     medida={medidas.get(linha.nota.arquivo)}
                   />
+                ) : linha.tipo === "acervo" ? (
+                  <AcervoRow
+                    key={linha.asset.id}
+                    asset={linha.asset}
+                    pastas={pastas}
+                    depth={linha.depth}
+                    selecionado={selecionados.includes(linha.asset.id)}
+                    onSelect={selecionarAcervo}
+                  />
                 ) : (
                   <QuadroRow
                     key={linha.scene.id}
@@ -410,9 +583,7 @@ export function ArquivosList({ ready }: { ready: boolean }) {
                     aberto={linha.scene.id === editingSceneId && !notaAbertaId}
                     noAr={linha.scene.id === liveSceneId}
                     dropTarget={dropIndex === index}
-                    onReorderStart={(event) =>
-                      startReorder(event, linha.scene.id, LIMIAR_ARRASTO_PX)
-                    }
+                    onReorderStart={startReorder}
                   />
                 ),
               )}
@@ -423,7 +594,154 @@ export function ArquivosList({ ready }: { ready: boolean }) {
           <FimDaLista ativo={dropIndex === linhas.length} />
         </div>
       </ScrollArea>
+
+      <ConfirmarApagarPasta
+        pasta={pastaAApagar}
+        pastas={pastas}
+        quadros={quadros}
+        notas={notas ?? []}
+        acervo={acervo}
+        onFechar={() => setPastaAApagar(null)}
+      />
+
+      {importar.dialogo}
     </div>
+  );
+});
+
+/** O que uma pasta do Arquivos leva junto: as subpastas e o que há em todas. */
+type ConteudoDaPasta = {
+  /** A pasta e as subpastas, por id. */
+  ids: Set<string>;
+  quadros: Scene[];
+  notas: Nota[];
+  /** Os arquivos do acervo que nenhum mapa que FICA usa: estes se apagam. */
+  livres: AssetMeta[];
+  /** Os que um mapa de fora usa: não se apagam, sobem para a mãe da pasta. */
+  emUso: AssetMeta[];
+};
+
+function conteudoDaPasta(
+  pasta: Pasta,
+  pastas: Pasta[],
+  quadros: Scene[],
+  notas: Nota[],
+  acervo: AssetMeta[],
+): ConteudoDaPasta {
+  const ids = new Set(descendentes(pastas, pasta.id));
+  const dentro = (pastaId: string | undefined) => pastaId !== undefined && ids.has(pastaId);
+  const quadrosDentro = quadros.filter((quadro) => dentro(quadro.pastaId));
+  const arquivos = acervo.filter((asset) => dentro(asset.folderId));
+
+  // O uso é contado nos mapas que FICAM: o quadro apagado junto não segura a
+  // imagem que só ele usava.
+  const saem = new Set(quadrosDentro.map((quadro) => quadro.id));
+  const ficam = (useSceneStore.getState().board?.scenes ?? []).filter((scene) => !saem.has(scene.id));
+  const emUso = arquivos.filter((asset) => countAssetUsage(ficam, asset.id) > 0);
+
+  return {
+    ids,
+    quadros: quadrosDentro,
+    notas: notas.filter((nota) => dentro(nota.pastaId)),
+    livres: arquivos.filter((asset) => !emUso.includes(asset)),
+    emUso,
+  };
+}
+
+/**
+ * Apaga a pasta com o que há dentro: os quadros, as notas e os arquivos do
+ * acervo, dela e das subpastas.
+ *
+ * O arquivo em uso num mapa de fora não se apaga -- a cena ficaria apontando
+ * para o que não existe, a mesma regra do "Apagar" do arquivo --: sobe para a
+ * mãe da pasta. As pastas saem por último, das mais fundas para cima, já
+ * vazias, e o `removerPasta` não tem o que soltar.
+ */
+async function apagarPasta(pasta: Pasta, pastas: Pasta[], conteudo: ConteudoDaPasta) {
+  for (const quadro of conteudo.quadros) useSceneStore.getState().removeScene(quadro.id);
+
+  for (const nota of conteudo.notas) {
+    fecharNotaEmTodaParte(nota.id);
+    useSceneStore.getState().removerNota(nota.id);
+    void apagarDocumento(nota.arquivo).catch((cause: unknown) => {
+      console.error("falha ao apagar a nota", cause);
+    });
+  }
+
+  // Em série, como o `moverAcervo`: cada chamada reescreve o índice do acervo.
+  try {
+    for (const asset of conteudo.livres) {
+      if (useSpotlightStore.getState().spotlight?.assetId === asset.id) useSpotlightStore.getState().clear();
+      await deleteAsset(asset.id);
+    }
+    for (const asset of conteudo.emUso) await setAssetFolder(asset.id, pasta.parentId);
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : String(cause));
+  }
+  useAssetsStore.getState().recarregar();
+
+  const profundidade = (id: string) => {
+    let nivel = 0;
+    for (let atual = pastas.find((p) => p.id === id); atual?.parentId; nivel++) {
+      const mae = atual.parentId;
+      atual = pastas.find((p) => p.id === mae);
+    }
+    return nivel;
+  };
+  for (const id of [...conteudo.ids].sort((a, b) => profundidade(b) - profundidade(a))) {
+    useSceneStore.getState().removerPasta(id);
+  }
+}
+
+/**
+ * A pergunta do "Apagar pasta", com o preço contado de relance: quantos
+ * quadros, notas, arquivos e subpastas vão junto, e o que fica.
+ */
+function ConfirmarApagarPasta({
+  pasta,
+  pastas,
+  quadros,
+  notas,
+  acervo,
+  onFechar,
+}: {
+  pasta: Pasta | null;
+  pastas: Pasta[];
+  quadros: Scene[];
+  notas: Nota[];
+  acervo: AssetMeta[];
+  onFechar: () => void;
+}) {
+  const conteudo = pasta ? conteudoDaPasta(pasta, pastas, quadros, notas, acervo) : null;
+  const texto = t.arquivosList;
+
+  const itens = conteudo
+    ? [
+        conteudo.quadros.length > 0 ? texto.apagarPastaQuadros(conteudo.quadros.length) : null,
+        conteudo.notas.length > 0 ? texto.apagarPastaNotas(conteudo.notas.length) : null,
+        conteudo.livres.length > 0 ? texto.apagarPastaArquivos(conteudo.livres.length) : null,
+        conteudo.ids.size > 1 ? texto.apagarPastaSubpastas(conteudo.ids.size - 1) : null,
+      ].filter((item): item is string => item !== null)
+    : [];
+  const mae = pasta?.parentId ? pastas.find((p) => p.id === pasta.parentId) : undefined;
+
+  return (
+    <ConfirmarRemocao
+      aberto={pasta !== null}
+      onAberto={(aberto) => {
+        if (!aberto) onFechar();
+      }}
+      titulo={texto.apagarPastaTitulo(pasta?.nome ?? "")}
+      itens={itens.length > 0 ? itens : [texto.apagarPastaVazia]}
+      ressalva={
+        conteudo && conteudo.emUso.length > 0
+          ? texto.apagarPastaEmUso(conteudo.emUso.length, mae?.nome ?? texto.aRaiz)
+          : undefined
+      }
+      onConfirmar={() => {
+        if (pasta && conteudo) void apagarPasta(pasta, pastas, conteudo);
+      }}
+    />
   );
 }
 
@@ -630,12 +948,14 @@ const QUADRO_PARA_O_SPLIT: ForaDaLista<string> = {
     }
 
     paineis.pegarParaSplit({ tipo: "quadro", sceneId: id });
-    paineis.mirarSplit(zonaDeSplitSob(native.clientX, native.clientY));
+    paineis.mirarSplit(
+      zonaDeSplitSob(native.clientX, native.clientY, documentoDe(native.target as Node)),
+    );
   },
   soltar(id, native) {
     if (id.startsWith(PREFIXO_PASTA)) return false;
 
-    const alvo = zonaDeSplitSob(native.clientX, native.clientY);
+    const alvo = zonaDeSplitSob(native.clientX, native.clientY, documentoDe(native.target as Node));
     if (!alvo) return false;
 
     usePaineisStore.getState().abrirEm({ tipo: "quadro", sceneId: id }, alvo);
@@ -662,33 +982,78 @@ function Detalhe({ children }: { children: ReactNode }) {
 type Linha =
   | { tipo: "pasta"; pasta: Pasta; depth: number; total: number }
   | { tipo: "cena"; scene: Scene; depth: number }
-  | { tipo: "nota"; nota: Nota; depth: number };
+  | { tipo: "nota"; nota: Nota; depth: number }
+  | { tipo: "acervo"; asset: AssetMeta; depth: number };
 
-type ItemDoArquivo = { tipo: "cena"; scene: Scene } | { tipo: "nota"; nota: Nota };
+type ItemDoArquivo =
+  | { tipo: "cena"; scene: Scene }
+  | { tipo: "nota"; nota: Nota }
+  | { tipo: "acervo"; asset: AssetMeta };
 
 /**
  * A árvore achatada em linhas, na ordem em que aparecem: em cada nível as
- * pastas, depois os quadros na ordem do board, depois as notas por título. A
- * conta da árvore é a de todo painel -- ver `achatarArvore`.
+ * pastas, depois os quadros na ordem do board, as notas por título e por último
+ * os arquivos do acervo, por nome -- quem procura uma nota não atravessa
+ * quarenta imagens. A conta da árvore é a de todo painel: ver `achatarArvore`.
+ *
+ * O arquivo guarda a pasta no `folderId`, gravado pelo Rust; desde a versão 2
+ * da campanha ele é o id de uma pasta desta árvore. Ver `vault/migrar.rs`.
  */
-function achatar(quadros: Scene[], pastas: Pasta[], notas: Nota[]): Linha[] {
+function achatar(quadros: Scene[], pastas: Pasta[], notas: Nota[], acervo: AssetMeta[]): Linha[] {
   const itens: ItemDoArquivo[] = [
     ...quadros.map((scene) => ({ tipo: "cena" as const, scene })),
     ...[...notas]
       .sort((a, b) => a.titulo.localeCompare(b.titulo))
       .map((nota) => ({ tipo: "nota" as const, nota })),
+    ...acervo.map((asset) => ({ tipo: "acervo" as const, asset })),
   ];
 
   return achatarArvore(itens, pastas, (item) =>
-    item.tipo === "cena" ? item.scene.pastaId : item.nota.pastaId,
+    item.tipo === "cena"
+      ? item.scene.pastaId
+      : item.tipo === "nota"
+        ? item.nota.pastaId
+        : item.asset.folderId,
   ).map((linha) =>
     linha.tipo === "pasta" ? linha : { ...linha.item, depth: linha.depth },
   );
 }
 
+/**
+ * Muda arquivos do acervo de pasta. Em série: cada chamada reescreve o índice
+ * do acervo inteiro no Rust. Uma releitura no fim, e não uma por arquivo.
+ */
+async function moverAcervo(ids: readonly string[], pastaId: string | undefined) {
+  try {
+    for (const id of ids) await setAssetFolder(id, pastaId);
+  } catch (cause) {
+    toast.error(cause instanceof Error ? cause.message : String(cause));
+  }
+  useAssetsStore.getState().recarregar();
+}
+
+/**
+ * O que sobe quando uma pasta é desfeita, além do que o board guarda: os
+ * arquivos do acervo dela, para a mãe -- como as notas e os quadros. Ver
+ * `aoDesfazer` em `PastaRow`.
+ */
+function desfazerNoAcervo(pasta: Pasta) {
+  const { image, file } = useAssetsStore.getState();
+  const dentro = [...(image.assets ?? []), ...(file.assets ?? [])]
+    .filter((asset) => asset.folderId === pasta.id)
+    .map((asset) => asset.id);
+  if (dentro.length > 0) void moverAcervo(dentro, pasta.parentId);
+}
+
 // --- quadro -----------------------------------------------------------------
 
-function QuadroRow({
+/**
+ * `memo`: a árvore redesenha quando um quadro muda, e o quadro que muda é o que
+ * está aberto no palco -- a cada commit dele, as outras linhas ficam como
+ * estão. Só vale com props estáveis: o `onReorderStart` recebe o id, e não uma
+ * seta nova por linha.
+ */
+const QuadroRow = memo(function QuadroRow({
   scene,
   pastas,
   depth,
@@ -704,7 +1069,7 @@ function QuadroRow({
   aberto: boolean;
   noAr: boolean;
   dropTarget: boolean;
-  onReorderStart: (event: ReactPointerEvent) => void;
+  onReorderStart: (event: ReactPointerEvent, id: string, limiar?: number) => void;
   /** Onde a busca achou o termo dentro do quadro. No lugar das medidas. */
   trecho?: Trecho;
 }) {
@@ -713,6 +1078,8 @@ function QuadroRow({
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
   const store = () => useSceneStore.getState();
   const elementos = elementosDoQuadro(scene);
+  // O `JSON.stringify` da cena inteira, só quando ela muda.
+  const bytes = useMemo(() => bytesDoQuadro(scene), [scene]);
 
   function abrir() {
     useArquivoAbertoStore.getState().fechar();
@@ -739,10 +1106,8 @@ function QuadroRow({
           <Columns2 />
           {t.geral.abrirAoLado}
         </Item>
-        <Item disabled={noAr} onClick={() => store().setLiveSceneId(scene.id)}>
-          <Radio />
-          {t.arquivosList.colocarNoAr}
-        </Item>
+        {/* Sem "Colocar no ar": a mesa de trabalho do mestre só vai à TV
+            de propósito, pela paleta. Ver `OnAirControl`. */}
         <Separator />
         <Item onClick={renomear.pedir}>
           <TextCursorInput />
@@ -785,7 +1150,7 @@ function QuadroRow({
               dropTarget && "ring-primary ring-1",
             )}
             style={{ paddingLeft: 4 + depth * RECUO_PX }}
-            onPointerDown={onReorderStart}
+            onPointerDown={(event) => onReorderStart(event, scene.id, LIMIAR_ARRASTO_PX)}
           />
         }
       >
@@ -825,7 +1190,7 @@ function QuadroRow({
             ) : (
               <Detalhe>
                 {t.arquivosList.contarElementos(elementos)} ·{" "}
-                {tamanhoCurto(bytesDoQuadro(scene))}
+                {tamanhoCurto(bytes)}
               </Detalhe>
             )}
           </button>
@@ -848,9 +1213,234 @@ function QuadroRow({
     />
     </>
   );
-}
+});
 
 // --- nota -------------------------------------------------------------------
+
+// --- arquivo do acervo -------------------------------------------------------
+
+/**
+ * Um arquivo do acervo na árvore: a imagem, o PDF, o vídeo. O som não entra --
+ * ele mora em Sons, que é mesa de som e não gaveta.
+ *
+ * O clique SELECIONA, como na Biblioteca de antes, e não abre: abrir uma imagem
+ * não leva a lugar nenhum, e o que se faz com ela é arrastar -- para o mapa,
+ * onde vira token, ou para uma pasta, onde vai junto com os outros selecionados.
+ * O resto no menu, o mesmo no botão direito e nos três pontos.
+ *
+ * `memo` como as outras linhas: ela só redesenha quando o arquivo, a seleção ou
+ * a evidência dela mudam. Por isso o que depende da cena -- quantas usam o
+ * arquivo, onde ele entra -- é lido na hora do clique, e não assinado.
+ */
+const AcervoRow = memo(function AcervoRow({
+  asset,
+  pastas,
+  depth,
+  selecionado,
+  onSelect,
+}: {
+  asset: AssetMeta;
+  pastas: Pasta[];
+  depth: number;
+  selecionado: boolean;
+  /** Estável: a lista inteira usa o mesmo. Ver `selecionarAcervo`. */
+  onSelect: (assetId: string, event: ReactMouseEvent) => void;
+}) {
+  const [renomeando, setRenomeando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const renomear = useRenomearPeloMenu(() => setRenomeando(true));
+  const imagem = asset.kind === "image";
+
+  // Boolean, e não o `spotlight` inteiro: assim só a linha que entra e a que
+  // sai da evidência redesenham.
+  const noAr = useSpotlightStore((state) => state.spotlight?.assetId === asset.id);
+  const arrastar = useTokenDrag();
+  const naMao = useTokenDragStore(
+    (state) =>
+      state.arrasto?.fonte.tipo === "acervo" && state.arrasto.fonte.assetId === asset.id,
+  );
+  const temCena = useSceneStore((state) => Boolean(state.board?.editingSceneId));
+
+  const recarregar = () => useAssetsStore.getState().recarregar(asset.kind);
+
+  function adicionarACena() {
+    const scene = selectEditingScene(useSceneStore.getState());
+    if (!scene || !imagem) return;
+    const tamanho = tamanhoNaCena(asset);
+    useSelectionStore
+      .getState()
+      .select([
+        useSceneStore
+          .getState()
+          .addItem(scene.id, { assetId: asset.id, ...centeredBox(tamanho.x, tamanho.y) }),
+      ]);
+  }
+
+  function abrirPorFora() {
+    void assetUrl(asset.id)
+      .then((url) => openUrl(url))
+      .catch(() => toast.error(t.assetLibrary.naoAbriu));
+  }
+
+  function mover(pastaId: string | undefined) {
+    void setAssetFolder(asset.id, pastaId).then(recarregar, (cause: unknown) =>
+      toast.error(cause instanceof Error ? cause.message : String(cause)),
+    );
+  }
+
+  function apagar() {
+    if (noAr) useSpotlightStore.getState().clear();
+    void deleteAsset(asset.id).then(recarregar, (cause: unknown) =>
+      toast.error(cause instanceof Error ? cause.message : String(cause)),
+    );
+  }
+
+  const itens = (kit: Kit) => {
+    const { Item, Separator } = kit;
+    // Lido ao abrir o menu, e não assinado: a linha não pode redesenhar a
+    // cada commit da cena só para saber se o botão de apagar fica cinza.
+    const emUso = countAssetUsage(useSceneStore.getState().board?.scenes ?? [], asset.id);
+    return (
+      <>
+        {imagem ? (
+          <>
+            <Item disabled={!temCena} onClick={adicionarACena}>
+              <Plus />
+              {t.arquivosList.adicionarACena}
+            </Item>
+            {/* O que a mesa vê acontecer: mapa é cenário que fica, evidência
+                é "olha isto" -- o retrato, a carta. */}
+            <Item
+              onClick={() =>
+                noAr
+                  ? useSpotlightStore.getState().clear()
+                  : useSpotlightStore.getState().transmit(asset.id)
+              }
+            >
+              {noAr ? <RadioTower /> : <Radio />}
+              {noAr ? t.assetLibrary.tirarDaEvidencia : t.assetLibrary.transmitirParaMesa}
+            </Item>
+          </>
+        ) : (
+          // Quem lê PDF e vídeo é o programa do sistema.
+          <Item onClick={abrirPorFora}>
+            <ExternalLink />
+            {t.geral.abrir}
+          </Item>
+        )}
+        <Separator />
+        <Item onClick={renomear.pedir}>
+          <TextCursorInput />
+          {t.geral.renomear}
+        </Item>
+        <ItensDeMover kit={kit} atual={asset.folderId} destinos={pastas} onMover={mover} />
+        <Separator />
+        {/* Em uso no mapa, não apaga: a cena ficaria apontando para um arquivo
+            que não existe mais. */}
+        <Item variant="destructive" disabled={emUso > 0} onClick={() => setConfirmando(true)}>
+          <Trash2 />
+          {emUso > 0 ? t.assetLibrary.emUso(emUso) : t.arquivosList.apagarArquivo}
+        </Item>
+
+        <ItensDeExtensao
+          alvo="linha.imagem"
+          contexto={{ alvo: "linha.imagem", assetId: asset.id }}
+          kit={kit}
+        />
+      </>
+    );
+  };
+
+  return (
+    <>
+    <ContextMenu onOpenChangeComplete={renomear.aoFechar}>
+      <ContextMenuTrigger
+        render={
+          <li
+            className={cn(
+              "group flex cursor-grab touch-none items-center gap-1 rounded-md p-1",
+              selecionado ? "bg-accent" : "hover:bg-accent/50",
+              naMao && "opacity-40",
+            )}
+            style={{ paddingLeft: 4 + depth * RECUO_PX }}
+            data-selecionado={selecionado ? "" : undefined}
+            onClick={(event) => onSelect(asset.id, event)}
+            // O mesmo gesto da Biblioteca de antes: a imagem sai com a sombra do
+            // tamanho com que entra no mapa. O arquivo que não é imagem só muda
+            // de pasta.
+            onPointerDown={(event) => {
+              const tamanho = imagem ? tamanhoNaCena(asset) : { x: 1, y: 1 };
+              arrastar(event, {
+                fonte: { tipo: "acervo", assetId: asset.id },
+                largura: tamanho.x,
+                altura: tamanho.y,
+              });
+            }}
+          />
+        }
+      >
+        <span className="bg-muted text-muted-foreground relative grid size-7 shrink-0 place-items-center overflow-hidden rounded">
+          {imagem ? (
+            <MiniaturaDoAcervo assetId={asset.id} animada={asset.animada} />
+          ) : (
+            <File className="size-3.5" aria-hidden />
+          )}
+        </span>
+        {renomeando ? (
+          <CampoDeNome
+            valor={asset.name}
+            rotulo={t.arquivosList.nomeDoArquivo}
+            onConfirmar={(nome) => {
+              const limpo = nome.trim();
+              if (limpo && limpo !== asset.name)
+                void renameAsset(asset.id, limpo).then(recarregar);
+              setRenomeando(false);
+            }}
+            onCancelar={() => setRenomeando(false)}
+          />
+        ) : (
+          // Botão para ser alcançável pelo teclado (F2 renomeia); o clique
+          // sobe até a linha, que é quem seleciona.
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 flex-col items-start text-left text-sm"
+            aria-pressed={selecionado}
+            onDoubleClick={() => setRenomeando(true)}
+            onKeyDown={aoApertarF2(() => setRenomeando(true))}
+          >
+            <span className="max-w-full truncate" title={asset.name}>
+              {asset.name}
+            </span>
+            <Detalhe>{detalheDoArquivo(asset)}</Detalhe>
+          </button>
+        )}
+        <TresPontos rotulo={asset.name} aoFechar={renomear.aoFechar} itens={itens} />
+      </ContextMenuTrigger>
+
+      <ContextMenuContent className="w-52">{itens(KIT_CONTEXTO)}</ContextMenuContent>
+    </ContextMenu>
+    <ConfirmarRemocao
+      aberto={confirmando}
+      onAberto={setConfirmando}
+      titulo={t.arquivosList.apagarArquivoTitulo(asset.name)}
+      itens={[t.arquivosList.apagarArquivoItem]}
+      onConfirmar={apagar}
+    />
+    </>
+  );
+});
+
+/**
+ * A linha de baixo do arquivo: a medida da imagem, ou o tipo pela extensão, e
+ * o peso. O que se olha para escolher entre dois mapas de nome parecido.
+ */
+function detalheDoArquivo(asset: AssetMeta): string {
+  const tipo =
+    asset.kind === "image" && asset.naturalWidth && asset.naturalHeight
+      ? `${asset.naturalWidth}×${asset.naturalHeight}`
+      : (asset.name.includes(".") ? asset.name.split(".").pop()! : asset.kind).toUpperCase();
+  return `${tipo} · ${tamanhoCurto(asset.size)}`;
+}
 
 /**
  * `memo` porque a lista re-renderiza a cada commit do board -- e com o quadro

@@ -5,6 +5,8 @@ import { useEffect, useRef } from "react";
 import { DockGhost } from "@/components/mestre/dock/dock-ghost";
 import { DockOverlay } from "@/components/mestre/dock/dock-overlay";
 import {
+  AcoesDaJanela,
+  FundoDaJanela,
   JanelaCorpo,
   alturaPadrao,
   larguraPadrao,
@@ -78,7 +80,13 @@ export function WindowLayer() {
       // `data-dock-camada`: é este retângulo que o arrasto mede para converter
       // a posição do ponteiro em coordenadas do alvo aceso. Ver `medir`.
       data-dock-camada
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      // `z-40`: a camada é o contexto de empilhamento das janelas, e não só um
+      // retângulo. Sem ele, cada janela disputava com o palco pelo `z-index`
+      // dela (20 mais a posição na pilha), e as bolinhas do saquinho e do
+      // handout (`z-30`) atravessavam por cima da ficha aberta. O arrasto de
+      // atracar mora aqui dentro (`z-[100]`, `z-[110]`), e continua por cima
+      // das janelas.
+      className="pointer-events-none absolute inset-0 z-40 overflow-hidden"
     >
       {montadas.map((janela) => (
         <Conteudo
@@ -113,6 +121,8 @@ function Conteudo({ janela, ordem }: { janela: Janela; ordem: number }) {
       subtitulo={subtitulo}
       largura={larguraPadrao(janela.conteudo)}
       altura={alturaPadrao(janela.conteudo)}
+      acoes={<AcoesDaJanela conteudo={janela.conteudo} />}
+      fundo={<FundoDaJanela conteudo={janela.conteudo} />}
     >
       <JanelaCorpo conteudo={janela.conteudo} />
     </InnerWindow>
