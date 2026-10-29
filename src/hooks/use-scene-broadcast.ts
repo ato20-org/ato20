@@ -51,6 +51,7 @@ const SEM_EFEITOS: EfeitosDoPersonagem[] = [];
 
 /** Nenhum ping, pela mesma razão: o `PingLayer` filtra esta lista por cena. */
 const SEM_PINGS: Ping[] = [];
+const SEM_SEGURADOS: string[] = [];
 
 /** Nenhum tiro no ar, pela mesma razão dos pings. */
 const SEM_DISPARADOS: EfeitoDisparado[] = [];
@@ -116,6 +117,23 @@ export function publicarLaser(laser: LaserNaMesa | undefined): void {
   publicadorDoLaser?.();
 }
 
+/**
+ * Os tokens na mão do mestre, pela mesma porta lateral do laser.
+ *
+ * Muda só ao pegar e ao soltar -- quem chama compara antes --, então não há
+ * cadência a segurar. Guardado no módulo pela razão do laser: o quadro que o
+ * Mestre monte por outro motivo leva a lista junto. Lista vazia tira o campo
+ * do quadro. Ver `LiveState.seguradosPeloMestre` e `useSeguradosDoMestre`.
+ */
+let seguradosNaMesa: string[] | undefined;
+
+let publicadorDosSegurados: (() => void) | null = null;
+
+export function publicarSegurados(ids: string[]): void {
+  seguradosNaMesa = ids.length > 0 ? ids : undefined;
+  publicadorDosSegurados?.();
+}
+
 export function usePublisher(state: LiveState, pronto = true): void {
   const channelRef = useRef<SceneChannel | null>(null);
 
@@ -156,9 +174,22 @@ export function usePublisher(state: LiveState, pronto = true): void {
       channel.publish(paraMesa);
     };
 
+    publicadorDosSegurados = () => {
+      const channel = channelRef.current;
+      if (!channel || !pronto) return;
+
+      const paraMesa: LiveState = {
+        ...stateRef.current,
+        seguradosPeloMestre: seguradosNaMesa,
+      };
+      stateRef.current = paraMesa;
+      channel.publish(paraMesa);
+    };
+
     return () => {
       publicadorAoVivo = null;
       publicadorDoLaser = null;
+      publicadorDosSegurados = null;
     };
   }, [pronto]);
 
@@ -199,6 +230,8 @@ export function usePublisher(state: LiveState, pronto = true): void {
       // Do módulo, como o idioma logo abaixo: o laser não passa pelo estado.
       // Ver `publicarLaser`.
       laser: laserNaMesa,
+      // Do módulo, pelo mesmo caminho do laser. Ver `publicarSegurados`.
+      seguradosPeloMestre: seguradosNaMesa,
       // Do módulo, e não do estado: o idioma é constante enquanto a janela
       // vive, e trocá-lo recarrega o Mestre -- que volta publicando o novo.
       idioma,
@@ -278,6 +311,8 @@ export type Subscription = {
   disparados: EfeitoDisparado[];
   /** O laser do mestre, enquanto aceso. `null` = nenhum. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
+  /** Os itens na mão do mestre agora. Ver `LiveState.seguradosPeloMestre`. */
+  segurados: string[];
   /** A versão do declarativo dos plugins. Zero = nada. Ver `LiveState`. */
   declarativoVersao: number;
   /** A versão do elenco no Mestre. Ver `LiveState`. */
@@ -370,6 +405,8 @@ export function useSubscription(codigo: string, base = ""): Subscription {
     pings: live.pings ?? SEM_PINGS,
     disparados: live.disparados ?? SEM_DISPARADOS,
     laser: live.laser ?? null,
+    // Constante quando vazia, como os pings: a cena compara por identidade.
+    segurados: live.seguradosPeloMestre ?? SEM_SEGURADOS,
     declarativoVersao: live.declarativoVersao ?? 0,
     fichasVersao: live.fichasVersao ?? 0,
     imagem: live.imagem,

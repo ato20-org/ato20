@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { podeMoverNaVez, vezNaMesa } from "@/lib/iniciativa/rodadas";
+import { useGestoStore } from "@/lib/store/use-gesto-store";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
 import { useQuemMoveStore } from "@/lib/store/use-quem-move-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
@@ -67,6 +68,19 @@ export function useMovimentosDaMesa(): void {
             (scene) => scene.id === board.liveSceneId,
           );
           if (!noAr) return;
+
+          // Na mão do mestre, o token é dele até soltar. Dois arrastos no
+          // mesmo token o puxariam de um lado para o outro, e o do jogador
+          // ainda passaria por cima do resultado do mestre ao chegar depois.
+          // O celular novo nem tenta -- ver `LiveState.seguradosPeloMestre` --,
+          // e o de uma versão anterior para aqui.
+          const gesto = useGestoStore.getState();
+          if (
+            gesto.sceneId === noAr.id &&
+            gesto.patches?.some((patch) => patch.id === movimento.itemId)
+          ) {
+            return;
+          }
 
           const destino = destinoAceito(noAr, movimento);
           if (!destino) return;
