@@ -30,7 +30,7 @@ import {
   estiloDoLugar,
   useEstiloDosAtributos,
 } from "@/components/playground/atributos-em-imagem";
-import { DesenhoDoMedidor } from "@/components/playground/desenho-do-medidor";
+import { MedidoresDoItem } from "@/components/playground/medidores-do-item";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import { InventarioJogador } from "./inventario-jogador";
 import { BlocosDePlugin } from "./blocos-de-plugin";
@@ -356,17 +356,16 @@ function CharacterCard({
         {/* A mesma peça que desenha ao lado do retrato na TV, e é o ponto:
             o jogador confere o próprio número na forma em que a mesa o vê.
             Sem sombra — aqui não há mapa por baixo, e o contorno só sujaria um
-            texto que já tem contraste. */}
-        <div className="space-y-1.5">
-          {medidores.map((medidor) => (
-            <DesenhoDoMedidor
-              key={medidor.id}
-              medidor={medidor}
-              largura={180}
-              corpo={12}
-            />
-          ))}
-        </div>
+            texto que já tem contraste.
+
+            Na largura da coluna, medida, e não nos 180px de antes: com os
+            atributos embaixo a coluna é a ficha inteira, e a barra parava no
+            meio dela com um vão à direita. O texto fica no corpo fixo. */}
+        <MedidoresDoItem
+          medidores={medidores}
+          corpo={12}
+          className="flex flex-col gap-1.5"
+        />
       </section>
     ) : null;
 

@@ -234,12 +234,13 @@ const pt = {
     rotulo: "Seu personagem, mochila, anotações e arquivos",
     // Curtos: a faixa das abas tem 44px, e "Personagem" virava "Persona…".
     curtos: { personagem: "Ficha", mochila: "Mochila", chat: "Chat", anotacoes: "Notas", arquivos: "Arquivos" },
+    largura: "Largura da barra. Arraste para mudar; duplo clique volta ao padrão.",
   },
 
   mochila: {
     titulo: "Mochila",
     abrir: "Abrir a mochila",
-    vazia: "Nada na mochila ainda. Toque no + para pôr o primeiro item.",
+    vazia: "Nada na mochila ainda. Toque aqui para pôr o primeiro item.",
     escolha: "Toque num item para ver o que é.",
   },
 
@@ -494,12 +495,13 @@ const en: typeof pt = {
   barraLateral: {
     rotulo: "Your character, backpack, notes and files",
     curtos: { personagem: "Sheet", mochila: "Backpack", chat: "Chat", anotacoes: "Notes", arquivos: "Files" },
+    largura: "Sidebar width. Drag to change it; double-click resets it.",
   },
 
   mochila: {
     titulo: "Backpack",
     abrir: "Open the backpack",
-    vazia: "Nothing in the backpack yet. Tap + to add the first item.",
+    vazia: "Nothing in the backpack yet. Tap here to add the first item.",
     escolha: "Tap an item to see what it is.",
   },
 
