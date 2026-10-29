@@ -134,7 +134,7 @@ getrandom = "0.3"
 # Exportar e importar a campanha. So `deflate`: os outros codecs trariam AES,
 # lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
 # ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
-zip = { version = "4", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Baixa o zip de um plugin do catalogo (ver `catalogo.rs`). Com as mesmas
 # features que o `tauri-plugin-updater` ja liga, e nao as padrao: assim nao
 # entra crate novo no lock, e a versao da loja, que compila sem o atualizador,
