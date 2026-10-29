@@ -44,7 +44,8 @@ export function useTrackPeaks(asset: AssetMeta | undefined): number[] | null {
   const [medido, setMedido] = useState<{ id: string; peaks: number[] } | null>(null);
 
   useEffect(() => {
-    if (!asset || asset.kind !== "audio" || jaTem) return;
+    // O som do YouTube não tem arquivo para medir, e a barra fica lisa.
+    if (!asset || asset.kind !== "audio" || asset.youtube || jaTem) return;
 
     let ativo = true;
 

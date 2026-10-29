@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSaindo } from "@/hooks/use-saindo";
+import { PlayerDoYoutube, type Reprodutor } from "@/lib/player-do-youtube";
 import { outputVolume, useAudioStore } from "@/lib/store/use-audio-store";
-import type { Ambiente, Disparo, SessionTrack } from "@/types/scene";
+import { useYoutubeRecusadosStore } from "@/lib/store/use-youtube-recusados-store";
+import { enderecoDaPonte } from "@/lib/youtube";
+import type {
+  Ambiente,
+  Disparo,
+  SessionTrack,
+  SomDoYoutube,
+} from "@/types/scene";
 
 /** Só busca a posição da faixa se estiver atrasada mais que isto. */
 const SEEK_TOLERANCE_SECONDS = 2;
@@ -87,6 +102,12 @@ type Canal = {
   reportaProgresso: boolean;
   /** Está se despedindo: desce o ganho e cala. */
   saindo?: boolean;
+  /**
+   * Toca do YouTube, e não do arquivo. Ver `SessionTrack.youtube`.
+   *
+   * Só trilha e ambiente: o disparo do YouTube não existe.
+   */
+  youtube?: SomDoYoutube;
 };
 
 /**
@@ -153,6 +174,7 @@ export function SessionAudio({
         startedAt: track.startedAt,
         fade: true,
         reportaProgresso: true,
+        youtube: track.youtube,
       });
     }
 
@@ -168,6 +190,7 @@ export function SessionAudio({
         startedAt: ambiente.startedAt,
         fade: true,
         reportaProgresso: true,
+        youtube: ambiente.youtube,
       });
     }
 
@@ -216,7 +239,11 @@ export function SessionAudio({
 }
 
 function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
-  const url = useAssetUrl(canal.assetId);
+  // Um dos dois, nunca os dois: o `/asset/{id}` de um som do YouTube é 404, e
+  // pedi-lo seria uma ida ao daemon só para ouvir isso.
+  const urlDoArquivo = useAssetUrl(canal.youtube ? undefined : canal.assetId);
+  const urlDaPonte = usePonte(canal.youtube);
+  const url = canal.youtube ? urlDaPonte : urlDoArquivo;
 
   const enabled = useAudioStore((state) => state.enabled);
   const blocked = useAudioStore((state) => state.blocked);
@@ -224,7 +251,11 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
   const setBlocked = useAudioStore((state) => state.setBlocked);
   const retry = useAudioStore((state) => state.retry);
 
-  const elementRef = useRef<HTMLAudioElement>(null);
+  /**
+   * Quem toca: o `<audio>`, ou o player do YouTube com a mesma cara. Tudo o que
+   * vem abaixo é escrito contra `Reprodutor`, e não sabe qual dos dois é.
+   */
+  const elementRef = useRef<Reprodutor | null>(null);
   /**
    * O ganho que este canal deve ter em regime.
    *
@@ -427,7 +458,184 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
 
   if (!url) return null;
 
-  return <audio ref={elementRef} src={url} loop={loop} />;
+  if (canal.youtube) {
+    return (
+      <PonteDoYoutube
+        // A ponte nasce de novo quando o endereço muda — outro vídeo, ou o
+        // trecho editado —, e o player com ela: um player velho escutando um
+        // iframe novo misturaria os tempos dos dois.
+        key={url}
+        src={url}
+        video={canal.youtube.video}
+        inicio={canal.youtube.inicio}
+        fim={canal.youtube.fim}
+        loop={loop}
+        reprodutorRef={elementRef}
+        chave={chave}
+        reportaSituacao={reportaProgresso}
+      />
+    );
+  }
+
+  return (
+    <audio
+      ref={elementRef as RefObject<HTMLAudioElement | null>}
+      src={url}
+      loop={loop}
+    />
+  );
+}
+
+/**
+ * O endereço da ponte para este vídeo. `null` enquanto não se sabe, ou quando
+ * o som não é do YouTube.
+ *
+ * Assíncrono pela mesma razão do `useAssetUrl`: no Mestre empacotado a ponte
+ * mora no daemon, e o endereço dele é uma pergunta ao Rust.
+ */
+function usePonte(som: SomDoYoutube | undefined): string | null {
+  const video = som?.video;
+  const inicio = som?.inicio;
+  const fim = som?.fim;
+  const [resolvido, setResolvido] = useState<{ chave: string; url: string } | null>(
+    null,
+  );
+
+  const chave = video ? `${video}:${inicio ?? 0}:${fim ?? 0}` : null;
+
+  useEffect(() => {
+    if (!video || !chave) return;
+
+    let ativo = true;
+
+    void enderecoDaPonte({ video, inicio, fim }).then(
+      (url) => {
+        if (ativo) setResolvido({ chave, url });
+      },
+      () => {
+        // Sem daemon, sem ponte: o canal fica mudo, e a mesa segue.
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [video, inicio, fim, chave]);
+
+  return chave && resolvido?.chave === chave ? resolvido.url : null;
+}
+
+/**
+ * O player do YouTube, escondido: um iframe de um pixel, transparente.
+ *
+ * Um pixel e não `display: none`: o player escondido de todo é o que um
+ * navegador para de alimentar, e um tamanho pequeno faz o YouTube escolher a
+ * menor qualidade de vídeo — que é a que ninguém vê e a que menos pesa.
+ * Medido no WebKitGTK: toca, busca e pausa assim.
+ *
+ * O player nasce no ref do iframe e é entregue ao `CanalAudio` ali mesmo,
+ * ANTES dos efeitos do canal rodarem: os efeitos do pai rodam depois dos do
+ * filho, e o ref de um elemento é ligado antes de efeito nenhum.
+ *
+ * O vídeo chega em três primitivos, e não no objeto `SomDoYoutube`, e é isso
+ * que segura o player vivo. Na TV e no celular o canal chega do SSE como
+ * objeto NOVO a cada quadro, dez vezes por segundo; um ref que dependesse do
+ * objeto trocaria de identidade a cada quadro, e o React desligaria e
+ * religaria o player junto.
+ */
+function PonteDoYoutube({
+  src,
+  video,
+  inicio,
+  fim,
+  loop,
+  reprodutorRef,
+  chave,
+  reportaSituacao,
+}: {
+  src: string;
+  video: string;
+  inicio: number | undefined;
+  fim: number | undefined;
+  loop: boolean;
+  reprodutorRef: RefObject<Reprodutor | null>;
+  /** Onde a situação do player é escrita no store. Ver `situacaoDoYoutube`. */
+  chave: string;
+  /** Só a tela que mostra o progresso precisa saber. Ver `reportaProgresso`. */
+  reportaSituacao: boolean;
+}) {
+  /**
+   * UM player por ponte, nascido com ela, e não um por ligação do `ref`.
+   *
+   * Criá-lo dentro do `ref` era o defeito que deixava o YouTube mudo no `next
+   * dev`: o React 19, em modo estrito, liga, desliga e liga de novo cada `ref`
+   * na montagem. Nascia um player a cada ligação; o canal punha os ouvintes --
+   * o `loadedmetadata` que manda tocar, o `timeupdate` da barra -- no primeiro,
+   * e o iframe ficava com o segundo. A ponte avisava `pronto` a um player que
+   * ninguém ouvia, o play nunca saía, e a barra parava em `--:--`. Medido pelo
+   * inspetor: o YouTube parado em "cued" esperando um play que não vinha.
+   *
+   * Um player só, o `ref` só o liga e desliga do iframe, e quem o guardou --
+   * o canal, os ouvintes dele -- segue falando com o mesmo objeto. Vídeo ou
+   * trecho novo é ponte nova: o `key={url}` de quem a monta remonta tudo.
+   */
+  const [player] = useState(() => new PlayerDoYoutube({ video, inicio, fim }));
+
+  useEffect(() => {
+    player.definirLoop(loop);
+  }, [player, loop]);
+
+  const ligar = useCallback(
+    (iframe: HTMLIFrameElement | null) => {
+      if (!iframe) return;
+
+      player.conectar(iframe);
+      reprodutorRef.current = player;
+
+      // Carregando ou recusado, para a barra e o painel dizerem em vez de
+      // ficarem em `--:--`. Pelo `getState`, como o progresso: o player muda
+      // de situação poucas vezes, e quem redesenha é só quem lê.
+      const { setSituacaoDoYoutube } = useAudioStore.getState();
+      const contar = () => {
+        if (!reportaSituacao) return;
+
+        const situacao = player.situacao;
+        setSituacaoDoYoutube(chave, situacao);
+        // E o acervo lembra: a linha do som avisa antes do próximo play. Ver
+        // `useYoutubeRecusadosStore`.
+        if (situacao?.tipo === "erro") {
+          useYoutubeRecusadosStore.getState().marcar(video, situacao.codigo);
+        }
+      };
+      // Tocou: se o acervo lembrava de uma recusa, ela não vale mais.
+      const tocou = () => {
+        if (reportaSituacao) useYoutubeRecusadosStore.getState().esquecer(video);
+      };
+      player.addEventListener("situacao", contar);
+      player.addEventListener("playing", tocou);
+      contar();
+
+      return () => {
+        player.removeEventListener("situacao", contar);
+        player.removeEventListener("playing", tocou);
+        player.desconectar();
+        if (reprodutorRef.current === player) reprodutorRef.current = null;
+        if (reportaSituacao) setSituacaoDoYoutube(chave, null);
+      };
+    },
+    [player, video, reprodutorRef, chave, reportaSituacao],
+  );
+
+  return (
+    <iframe
+      ref={ligar}
+      src={src}
+      aria-hidden
+      tabIndex={-1}
+      allow="autoplay; encrypted-media"
+      className="pointer-events-none fixed right-0 bottom-0 size-px border-0 opacity-0"
+    />
+  );
 }
 
 /**
@@ -438,7 +646,7 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
  * última batida o deixou.
  */
 function rampa(
-  element: HTMLAudioElement,
+  element: Reprodutor,
   destino: number,
   duracaoMs: number,
   aoTerminar?: () => void,

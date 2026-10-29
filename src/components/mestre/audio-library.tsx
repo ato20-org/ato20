@@ -11,8 +11,10 @@ import {
   Pencil,
   Play,
   Plus,
+  Scissors,
   Search,
   Square,
+  SquarePlay,
   Trash2,
   Upload,
   Waves,
@@ -21,6 +23,8 @@ import {
 } from "lucide-react";
 
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { useYoutubeRecusadosStore } from "@/lib/store/use-youtube-recusados-store";
+import { motivoDoErro } from "@/lib/youtube";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -51,6 +55,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { SomAtual } from "@/components/mestre/som-atual";
+import {
+  SomDoYoutubeDialog,
+  TrechoDoYoutubeDialog,
+} from "@/components/mestre/youtube-dialog";
 import { useAssetList } from "@/hooks/use-asset-list";
 import {
   aoApertarF2,
@@ -159,6 +167,12 @@ function filtrarSons(assets: AssetMeta[], busca: string): AssetMeta[] {
   return assets.filter((asset) => {
     if (normaliza(asset.name).includes(alvo)) return true;
 
+    // "youtube" acha os sons que tocam de lá: são os que ficam mudos sem
+    // internet, e é atrás deles que se vai quando a rede cai.
+    if (asset.youtube && alvo.length >= 2 && "youtube".startsWith(alvo)) {
+      return true;
+    }
+
     const tipo = asset.tipoDeSom;
     if (!tipo) return false;
 
@@ -229,9 +243,18 @@ export function AudioLibrary() {
     remove,
     rename,
     definirTipoDeSom,
+    refresh,
   } = useAssetList("audio");
 
   const [busca, setBusca] = useState("");
+  const [youtubeAberto, setYoutubeAberto] = useState(false);
+  /** O som do YouTube cujo trecho se edita. `null` = diálogo fechado. */
+  const [trechoDe, setTrechoDe] = useState<AssetMeta | null>(null);
+
+  // O diálogo só abre depois de o menu terminar de fechar: o foco devolvido ao
+  // botão de importar tirava o cursor do campo do link. A mesma armadilha do
+  // renomear — ver `useRenomearPeloMenu`.
+  const pedirYoutube = useRenomearPeloMenu(() => setYoutubeAberto(true));
 
   const scenes = useSceneStore((state) => state.board?.scenes);
 
@@ -541,7 +564,7 @@ export function AudioLibrary() {
               </div>
             ) : null}
 
-            <DropdownMenu>
+            <DropdownMenu onOpenChangeComplete={pedirYoutube.aoFechar}>
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -591,6 +614,20 @@ export function AudioLibrary() {
                     </DropdownMenuItem>
                   );
                 })}
+
+                {/* Separado dos três de cima porque é outra ORIGEM, e não
+                    outro tipo: o tipo se escolhe dentro do diálogo, junto do
+                    link. */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={pedirYoutube.pedir}>
+                  <SquarePlay />
+                  <span>
+                    {t.audioLibrary.doYoutube}
+                    <span className="text-muted-foreground block text-[10px]">
+                      {t.audioLibrary.doYoutubeDica}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -641,6 +678,9 @@ export function AudioLibrary() {
                           void definirTipoDeSom(asset.id, escolhido)
                         }
                         onRenomear={(nome) => void rename(asset.id, nome)}
+                        onTrecho={
+                          asset.youtube ? () => setTrechoDe(asset) : undefined
+                        }
                         onRemove={() => void remove(asset.id)}
                       />
                     ))}
@@ -651,6 +691,17 @@ export function AudioLibrary() {
           )}
         </TabsContent>
       </Tabs>
+
+      <SomDoYoutubeDialog
+        aberto={youtubeAberto}
+        onFechar={() => setYoutubeAberto(false)}
+        onAdicionados={refresh}
+      />
+      <TrechoDoYoutubeDialog
+        asset={trechoDe}
+        onFechar={() => setTrechoDe(null)}
+        onSalvo={refresh}
+      />
     </div>
   );
 }
@@ -1056,6 +1107,8 @@ type AudioRowProps = {
   onTocar: () => void;
   onTipo: (tipo: TipoDeSom) => void;
   onRenomear: (nome: string) => void;
+  /** Editar o trecho. Só existe para o som do YouTube. */
+  onTrecho?: () => void;
   onRemove: () => void;
 };
 
@@ -1075,10 +1128,16 @@ function AudioRow({
   onTocar,
   onTipo,
   onRenomear,
+  onTrecho,
   onRemove,
 }: AudioRowProps) {
   const emUso = usageCount > 0;
   const tipo = asset.tipoDeSom;
+  // O YouTube já recusou tocar este vídeo neste aparelho. Ver
+  // `useYoutubeRecusadosStore`.
+  const recusado = useYoutubeRecusadosStore((state) =>
+    asset.youtube ? state.recusados[asset.youtube.video] : undefined,
+  );
 
   const [renomeando, setRenomeando] = useState(false);
 
@@ -1086,6 +1145,9 @@ function AudioRow({
   // menu, e o foco devolvido a um gatilho que já saiu do ar matava o campo no
   // mesmo quadro. Ver `useRenomearPeloMenu`.
   const renomear = useRenomearPeloMenu(() => setRenomeando(true));
+  // O diálogo do trecho, pela mesma razão: abrir no clique o fazia disputar o
+  // foco com o menu que fechava.
+  const trecho = useRenomearPeloMenu(() => onTrecho?.());
 
   function confirmar(bruto: string) {
     const nome = bruto.trim();
@@ -1127,8 +1189,22 @@ function AudioRow({
           {asset.name}
         </button>
         <span className="text-muted-foreground block text-[10px]">
-          {`${Math.round(asset.size / 1024)} KB`}
+          {/* O som do YouTube não tem tamanho: diz de onde vem, que é o que
+              explica ele ficar mudo sem internet. */}
+          {asset.youtube
+            ? t.audioLibrary.linhaDoYoutube
+            : `${Math.round(asset.size / 1024)} KB`}
           {noAr ? ` · ${t.audioLibrary.noAr}` : ""}
+          {/* Em vermelho, na linha, antes de alguém apertar play no meio da
+              cena: tocar já foi tentado, e o YouTube disse que não. */}
+          {recusado !== undefined ? (
+            <span className="text-destructive">
+              {" · "}
+              {motivoDoErro(recusado) === "sumiu"
+                ? t.audioLibrary.youtube.indisponivel
+                : t.audioLibrary.youtube.naoToca}
+            </span>
+          ) : null}
         </span>
       </span>
 
@@ -1151,7 +1227,12 @@ function AudioRow({
         </Button>
       ) : null}
 
-      <DropdownMenu onOpenChangeComplete={renomear.aoFechar}>
+      <DropdownMenu
+        onOpenChangeComplete={(aberto) => {
+          renomear.aoFechar(aberto);
+          trecho.aoFechar(aberto);
+        }}
+      >
         <DropdownMenuTrigger
           render={
             <Button
@@ -1178,7 +1259,12 @@ function AudioRow({
                 return (
                   <DropdownMenuItem
                     key={candidato}
-                    disabled={candidato === tipo}
+                    // Efeito do YouTube não existe: o player leva um ou dois
+                    // segundos para começar. Ver `AssetMeta.youtube`.
+                    disabled={
+                      candidato === tipo ||
+                      (Boolean(asset.youtube) && candidato === "disparo")
+                    }
                     onClick={() => onTipo(candidato)}
                   >
                     <Icone className={CORES_DO_SOM[candidato].texto} />
@@ -1197,6 +1283,13 @@ function AudioRow({
             <Pencil />
             {t.geral.renomear}
           </DropdownMenuItem>
+
+          {onTrecho ? (
+            <DropdownMenuItem onClick={trecho.pedir}>
+              <Scissors />
+              {t.audioLibrary.editarTrecho}
+            </DropdownMenuItem>
+          ) : null}
 
           <DropdownMenuSeparator />
 

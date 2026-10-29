@@ -72,6 +72,10 @@ pub enum AppError {
     /// porque a providencia e outra: aqui quem esta velho e o ATO20, e a tela
     /// tem de dizer isso em vez de mandar falar com quem escreveu a extensao.
     ExtensaoIncompativel { pede: u32, temos: u32 },
+    /// O som do YouTube nao serve: id que nao e de video, ou trecho que acaba
+    /// antes de comecar. A tela confere antes de mandar; isto e o Rust nao
+    /// gravando no `assets.json` o que a tela deixou passar.
+    SomInvalido(Texto),
     /// Nao deu para baixar um plugin do catalogo: sem rede, GitHub fora, zip
     /// grande demais.
     ///
@@ -115,6 +119,7 @@ impl std::fmt::Display for AppError {
                 f,
                 "Esta extensao pede a API {pede} e este ATO20 fala a {temos}. Atualize o aplicativo."
             ),
+            Self::SomInvalido(motivo) => write!(f, "{}", motivo.pt),
             Self::DownloadFalhou(motivo) => {
                 write!(f, "Nao foi possivel baixar o plugin: {}.", motivo.pt)
             }
@@ -140,6 +145,7 @@ impl AppError {
             Self::ExtensaoIncompativel { pede, temos } => format!(
                 "This plugin needs API {pede} and this ATO20 speaks {temos}. Update the app."
             ),
+            Self::SomInvalido(motivo) => motivo.en.clone(),
             Self::DownloadFalhou(motivo) => {
                 format!("Could not download the plugin: {}.", motivo.en)
             }
@@ -179,6 +185,7 @@ impl Serialize for AppError {
             Self::SemNavegador(_) => "sem-navegador",
             Self::ExtensaoInvalida(_) => "extensao-invalida",
             Self::ExtensaoIncompativel { .. } => "extensao-incompativel",
+            Self::SomInvalido(_) => "som-invalido",
             Self::DownloadFalhou(_) => "download",
             Self::PastaInvalida(_) => "pasta-invalida",
             Self::Recusado(_) => "recusado",

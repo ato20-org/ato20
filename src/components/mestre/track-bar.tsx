@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import {
   Pause,
   Play,
@@ -23,7 +24,12 @@ import { useAssetList } from "@/hooks/use-asset-list";
 import { useTrackPeaks } from "@/hooks/use-track-peaks";
 import { t } from "@/lib/i18n/arquivos";
 import { mmss } from "@/lib/mestre/tempo";
-import { useAudioStore, useProgresso } from "@/lib/store/use-audio-store";
+import {
+  useAudioStore,
+  useProgresso,
+  useSituacaoDoYoutube,
+} from "@/lib/store/use-audio-store";
+import { AvisoDoYoutube } from "@/components/mestre/aviso-do-youtube";
 import { usePreferenciasStore } from "@/lib/store/use-preferencias-store";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
@@ -59,6 +65,18 @@ export function TrackBar() {
   const { position, duration } = useProgresso(
     track ? chaveDaTrilha(track.assetId) : null,
   );
+  // Carregando ou recusado, quando a trilha é do YouTube. Ver `AvisoDoYoutube`.
+  const situacao = useSituacaoDoYoutube(track ? chaveDaTrilha(track.assetId) : null);
+
+  // Recusada pelo YouTube, a trilha para na SESSÃO: o botão passa a dizer
+  // "tocar" em vez de "pausar" um som que não toca, e a TV e os celulares param
+  // de tentar o mesmo vídeo. O aviso fica -- o canal pausado continua montado,
+  // e o erro do player não sai com a pausa. Ver `PlayerDoYoutube.situacao`.
+  const recusada = situacao?.tipo === "erro";
+  const tocando = track?.playing ?? false;
+  useEffect(() => {
+    if (recusada && tocando) setPlaying(false);
+  }, [recusada, tocando, setPlaying]);
 
   const enabled = useAudioStore((state) => state.enabled);
   const setEnabled = useAudioStore((state) => state.setEnabled);
@@ -99,13 +117,19 @@ export function TrackBar() {
       {/* A forma da onda, com a parte tocada acesa. Arrastar reescreve
           `startedAt`, então a TV e os celulares acompanham — ver `seek` no
           store. */}
-      <TrackWave
-        nome={nome}
-        peaks={peaks}
-        position={position}
-        duration={duration}
-        onSeek={seek}
-      />
+      {/* No lugar da onda, e não ao lado: enquanto o YouTube não toca, a onda
+          vazia não tem o que mostrar, e é ela que tem o espaço da linha. */}
+      {situacao ? (
+        <AvisoDoYoutube situacao={situacao} className="flex-1" />
+      ) : (
+        <TrackWave
+          nome={nome}
+          peaks={peaks}
+          position={position}
+          duration={duration}
+          onSeek={seek}
+        />
+      )}
 
       <span className="text-muted-foreground w-10 shrink-0 text-[10px] tabular-nums">
         {conhecida ? mmss(duration) : "--:--"}

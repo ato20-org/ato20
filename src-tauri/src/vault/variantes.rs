@@ -753,6 +753,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -787,6 +788,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -929,6 +931,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -971,6 +974,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         // A "miniatura" de som e `AssetMeta::peaks`, e quem a calcula e a
@@ -999,6 +1003,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");
@@ -1162,6 +1167,7 @@ mod tests {
             peaks: None,
             tipo_de_som: None,
             animada: None,
+            youtube: None,
         };
 
         std::fs::create_dir_all(vault.assets_dir()).expect("assets dir");

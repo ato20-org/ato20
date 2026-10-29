@@ -22,7 +22,8 @@ import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { t } from "@/lib/i18n/arquivos";
-import { useProgresso } from "@/lib/store/use-audio-store";
+import { useProgresso, useSituacaoDoYoutube } from "@/lib/store/use-audio-store";
+import { AvisoDoYoutube } from "@/components/mestre/aviso-do-youtube";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
 import type { AssetMeta, Disparo } from "@/types/scene";
@@ -168,6 +169,8 @@ function LinhaDoCanal({
   // Sempre chamado, mesmo sem chave: hook não pode ficar atrás de um `if`, e é
   // por isso que `useProgresso` aceita `null`.
   const { position, duration } = useProgresso(chave ?? null);
+  // Carregando ou recusado, quando o som é do YouTube. Ver `AvisoDoYoutube`.
+  const situacao = useSituacaoDoYoutube(chave ?? null);
 
   return (
     // Borda e fundo em cada linha, e não texto solto sobre o painel: com três
@@ -270,12 +273,16 @@ function LinhaDoCanal({
           margem é o que separa uma linha da seguinte numa lista sem divisória. */}
       {chave ? (
         <div className="mt-1 pl-4">
-          <BarraDeProgresso
-            nome={nome}
-            position={position}
-            duration={duration}
-            onSeek={onSeek}
-          />
+          {situacao ? (
+            <AvisoDoYoutube situacao={situacao} />
+          ) : (
+            <BarraDeProgresso
+              nome={nome}
+              position={position}
+              duration={duration}
+              onSeek={onSeek}
+            />
+          )}
         </div>
       ) : null}
     </li>
