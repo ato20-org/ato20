@@ -6,7 +6,6 @@ import { escolher } from "@/lib/i18n/idioma";
  */
 const pt = {
   janela: {
-    editando: (cena: string) => `Editando ${cena}`,
     minimizar: "Minimizar",
     maximizar: "Maximizar",
     restaurar: "Restaurar",
@@ -214,6 +213,7 @@ const pt = {
 
   novidades: {
     oQueMudou: "O que mudou",
+    oQueMudouNa: (versao: string) => `O que mudou na ${versao}`,
     estaVersao: "esta versão",
     antesDisso: "Antes disso",
     novidades: "Novidades",
@@ -241,7 +241,6 @@ const pt = {
 
 const en: typeof pt = {
   janela: {
-    editando: (cena) => `Editing ${cena}`,
     minimizar: "Minimize",
     maximizar: "Maximize",
     restaurar: "Restore",
@@ -442,6 +441,7 @@ const en: typeof pt = {
 
   novidades: {
     oQueMudou: "What's new",
+    oQueMudouNa: (versao) => `What's new in ${versao}`,
     estaVersao: "this version",
     antesDisso: "Before that",
     novidades: "New",

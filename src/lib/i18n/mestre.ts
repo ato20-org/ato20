@@ -767,7 +767,6 @@ const pt = {
 
   /** O menu Abas, na barra da janela. */
   abas: {
-    titulo: "Abas",
     rotulo: (abertas: number, total: number) => `Abas (${abertas} de ${total} abertas)`,
     abertas: "Abas abertas",
     comandos: "Comandos",
@@ -2174,7 +2173,6 @@ const en: typeof pt = {
   },
 
   abas: {
-    titulo: "Tabs",
     rotulo: (abertas, total) => `Tabs (${abertas} of ${total} open)`,
     abertas: "Open tabs",
     comandos: "Commands",
