@@ -489,7 +489,7 @@ function CelulaDoHandout({
             variant={noAr ? "default" : "secondary"}
             size="icon-xs"
             aria-label={
-              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNoEspectador(nome)
             }
             onPointerDown={(event) => event.stopPropagation()}
             onClick={noAr ? clear : () => transmit(assetId)}

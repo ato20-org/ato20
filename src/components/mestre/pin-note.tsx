@@ -603,7 +603,7 @@ function Anexo({
             size="icon-xs"
             className={cn(!noAr && REVELAR)}
             aria-label={
-              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNaTv(nome)
+              noAr ? t.geral.tirarDaEvidencia(nome) : t.geral.mostrarNoEspectador(nome)
             }
             aria-pressed={noAr}
             // Apertar o botão não levanta a célula: sem isto, o tremor da mão

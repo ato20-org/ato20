@@ -277,7 +277,7 @@ const pt = {
     tirarDaMesa: "Tirar da mesa",
     mostrarParaAMesa: "Mostrar para a mesa",
     mesaVendoDica: "A mesa está vendo. Clique para esconder.",
-    soVoceVeDica: "Só você vê. Clique para mostrar na TV e nos celulares.",
+    soVoceVeDica: "Só você vê. Clique para mostrar na janela do espectador e nos celulares.",
     fecharPorta: "Fechar a porta",
     abrirPorta: "Abrir a porta",
     ligarNevoaDinamica: "Ligar a névoa dinâmica",

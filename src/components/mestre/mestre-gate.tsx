@@ -118,7 +118,7 @@ function NoApp() {
           size="sm"
         >
           <Tv aria-hidden />
-          {t.porta.tvDaMesa}
+          {t.porta.espectador}
         </Button>
         <Button
           render={<Link href="/jogador" />}
@@ -127,7 +127,7 @@ function NoApp() {
           size="sm"
         >
           <Smartphone aria-hidden />
-          {t.porta.teuCelular}
+          {t.porta.jogador}
         </Button>
       </div>
     </Centered>
