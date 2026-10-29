@@ -228,8 +228,9 @@ pub fn import(zip_path: &Path, parent: &Path) -> AppResult<Vault> {
     for i in 0..arquivo.len() {
         let mut entrada = arquivo.by_index(i).map_err(zip_error)?;
 
-        // `enclosed_name` devolve `None` para nome absoluto, com `..` ou fora do
-        // arquivo -- e a defesa contra zip-slip, e e ela que impede um zip
+        // `enclosed_name` devolve o caminho ja limpo -- nome absoluto perde a
+        // raiz, `a/../b` vira `b` -- e `None` quando um `..` sairia do destino.
+        // E a defesa contra zip-slip, e e ela que impede um zip
         // preparado de escrever em `~/.ssh/authorized_keys` ao ser importado.
         // Ela vem do crate de proposito: reimplementar essa checagem a mao e
         // exatamente onde esse tipo de bug nasce.
@@ -584,7 +585,7 @@ mod tests {
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
 
         let nomes: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).expect("entrada").name().to_string())
+            .map(|i| zip.by_index(i).expect("entrada").name().expect("nome").into_owned())
             .collect();
 
         assert!(
@@ -611,7 +612,7 @@ mod tests {
         let arquivo = File::open(&zip_path).expect("open");
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
         let nomes: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).expect("entrada").name().to_string())
+            .map(|i| zip.by_index(i).expect("entrada").name().expect("nome").into_owned())
             .collect();
 
         assert!(nomes.iter().any(|n| n == "cenas/a-taverna.json"), "{nomes:?}");

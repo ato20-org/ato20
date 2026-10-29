@@ -6,7 +6,7 @@ authors = ["valb-mig"]
 license-file = "../LICENSE"
 repository = "https://github.com/ato20-org/ato20"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.90"
 
 [features]
 # `updater` liga a atualizacao automatica, e sai nas versoes de LOJA.
@@ -35,7 +35,7 @@ name = "ato20_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.6.3", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 # O mapa Universal VTT traz a imagem em base64 dentro do JSON. Ver `uvtt.rs`.
@@ -43,7 +43,7 @@ base64 = "0.22"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.3", features = [] }
+tauri = { version = "2.12.5", features = [] }
 tauri-plugin-log = "2"
 # Escolher a pasta da campanha e um dialogo nativo: um seletor desenhado na
 # webview nao alcanca o disco, e digitar caminho a mao e o que Obsidian
@@ -133,8 +133,11 @@ uuid = { version = "1", features = ["v4"] }
 getrandom = "0.3"
 # Exportar e importar a campanha. So `deflate`: os outros codecs trariam AES,
 # lzma e bzip2 para dentro do binario, e o que se comprime aqui e JSON e imagem
-# ja comprimida -- deflate resolve o primeiro e nao piora o segundo.
-zip = { version = "4", default-features = false, features = ["deflate"] }
+# ja comprimida -- deflate resolve o primeiro e nao piora o segundo. E so o
+# flate2 com zlib-rs, e nao a feature `deflate` inteira: ela traz tambem o
+# zopfli, que so comprime acima do nivel 9, e aqui o nivel e o padrao. O 9.0.5
+# e o piso: abaixo dele o leitor tem os avisos do Dependabot de outubro/2026.
+zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 # Baixa o zip de um plugin do catalogo (ver `catalogo.rs`). Com as mesmas
 # features que o `tauri-plugin-updater` ja liga, e nao as padrao: assim nao
 # entra crate novo no lock, e a versao da loja, que compila sem o atualizador,
@@ -163,7 +166,10 @@ if-addrs = "0.15"
 # releases, ou de alguem no meio do caminho. A chave publica esta no
 # `tauri.conf.json`; a privada vive nos segredos do repositorio e em lugar
 # nenhum do codigo.
-tauri-plugin-updater = { version = "2", optional = true }
+#
+# A 2.14.1 e a primeira com o zip 9: abaixo dela o lock carrega um zip 4 que o
+# Dependabot marca, ainda que no Linux o atualizador nem o use.
+tauri-plugin-updater = { version = "2.14.1", optional = true }
 # Reiniciar depois de instalar a atualizacao. Sozinho o updater baixa e aplica,
 # mas quem estava com o aplicativo aberto continuaria na versao velha ate
 # fechar na mao.
