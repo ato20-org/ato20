@@ -6,11 +6,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { deslocamentoDoBrilho } from "@/components/mestre/dock/dock-brilho";
 import { soltarJanela } from "@/components/mestre/janela-solta";
 import { useScreenDrag } from "@/hooks/use-screen-drag";
 import {
   useDockDragStore,
+  type Beirada,
   type Retangulo,
+  type Saida,
 } from "@/lib/store/use-dock-drag-store";
 import {
   useLayoutStore,
@@ -222,7 +225,7 @@ export function useDockDrag() {
   const medida = useRef<Medida | null>(null);
   const alvo = useRef<{ alvo: AlvoDock; retangulo: Retangulo } | null>(null);
   const mexeu = useRef(false);
-  const fora = useRef(false);
+  const fora = useRef<Beirada | null>(null);
 
   return useCallback(
     (
@@ -259,7 +262,7 @@ export function useDockDrag() {
       medida.current = medir(vazios);
       alvo.current = null;
       mexeu.current = false;
-      fora.current = false;
+      fora.current = null;
 
       startDrag(event, {
         onMove: (delta, nativo) => {
@@ -290,10 +293,19 @@ export function useDockDrag() {
           // continua chegando com o cursor no outro monitor. Soltar lá solta a
           // janela -- ver `onEnd`. Só no app: no navegador não há janela
           // própria a abrir.
-          const saiu = isDesktop() && foraDaJanela(nativo);
-          if (saiu !== fora.current) {
-            fora.current = saiu;
-            marcarFora(saiu);
+          const saida = isDesktop() ? saidaDaJanela(nativo) : null;
+          if ((saida?.beirada ?? null) !== fora.current) {
+            fora.current = saida?.beirada ?? null;
+            marcarFora(saida);
+          }
+
+          // O brilho da beirada segue a mão ao longo dela; pelo DOM pelo mesmo
+          // motivo da etiqueta logo abaixo.
+          if (saida) {
+            const brilho = document.querySelector<HTMLElement>(
+              "[data-dock-brilho]",
+            );
+            if (brilho) brilho.style.transform = deslocamentoDoBrilho(saida);
           }
 
           // Direto no DOM, como o resto dos gestos: a etiqueta acompanha o
@@ -330,7 +342,7 @@ export function useDockDrag() {
           // Largada fora do ATO20: a janela vai para uma janela do sistema, com
           // o canto um pouco acima e à esquerda da mão -- a mão cai no
           // cabeçalho, como ao soltar uma aba na bancada.
-          if (fora.current && foraDaJanela(nativo)) {
+          if (fora.current && saidaDaJanela(nativo)) {
             void soltarJanela(opcoes.conteudo, {
               x: nativo.screenX - SOLTA_RECUO.x,
               y: nativo.screenY - SOLTA_RECUO.y,
@@ -354,14 +366,35 @@ export function useDockDrag() {
   );
 }
 
-/** O ponteiro está fora da janela do ATO20? */
-function foraDaJanela(nativo: PointerEvent): boolean {
-  return (
-    nativo.clientX < 0 ||
-    nativo.clientY < 0 ||
-    nativo.clientX >= window.innerWidth ||
-    nativo.clientY >= window.innerHeight
+/**
+ * Por que beirada o ponteiro saiu da janela do ATO20, se saiu.
+ *
+ * No canto, vale a beirada que ele passou por mais: é para lá que a mão está
+ * indo, e o brilho acende do lado que o mestre está olhando.
+ */
+function saidaDaJanela(nativo: PointerEvent): Saida | null {
+  const { clientX: x, clientY: y } = nativo;
+  const largura = window.innerWidth;
+  const altura = window.innerHeight;
+
+  // Quanto passou de cada beirada que ficou para trás.
+  const alem: [Beirada, number][] = [];
+  if (x < 0) alem.push(["esquerda", -x]);
+  if (x >= largura) alem.push(["direita", x - largura]);
+  if (y < 0) alem.push(["topo", -y]);
+  if (y >= altura) alem.push(["base", y - altura]);
+
+  if (alem.length === 0) return null;
+
+  const [beirada] = alem.reduce((maior, lado) =>
+    lado[1] > maior[1] ? lado : maior,
   );
+  const posicao =
+    beirada === "esquerda" || beirada === "direita"
+      ? Math.min(Math.max(y, 0), altura)
+      : Math.min(Math.max(x, 0), largura);
+
+  return { beirada, posicao };
 }
 
 /** Quanto o canto da janela solta fica acima e à esquerda da mão. */
