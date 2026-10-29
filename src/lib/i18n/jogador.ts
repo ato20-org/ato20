@@ -75,10 +75,13 @@ const pt = {
     conta: "Tua conta nesta mesa",
     mudarNome: "Mudar de nome",
     sair: "Sair da mesa",
-    sairTitulo: "Sair desta mesa?",
+    sairTitulo: "Sair da mesa?",
+    // O caderno é do par jogador e personagem, não só do personagem: quem
+    // volta entra como jogador novo, e as notas ficam com o antigo mesmo depois
+    // de o mestre devolver o personagem. É a perda que importa dizer.
     sairExplicacao:
-      "Este aparelho esquece a credencial e volta a pedir um nome. O que você já mandou para a mesa fica lá, mas entrar de novo cria um jogador novo — o mestre precisa te ligar de volta ao teu personagem.",
-    sairConfirmar: "Sair",
+      "Seu personagem e o que você mandou continuam na mesa. Mas as notas do seu caderno não voltam, e o mestre vai precisar te entregar o personagem de novo.",
+    sairConfirmar: "Sair da mesa",
     renomearExplicacao:
       "É o nome que o mestre vê na lista da mesa. Trocar não mexe no teu personagem.",
     teuNome: "Teu nome",
@@ -341,10 +344,10 @@ const en: typeof pt = {
     conta: "Your account at this table",
     mudarNome: "Change name",
     sair: "Leave the table",
-    sairTitulo: "Leave this table?",
+    sairTitulo: "Leave the table?",
     sairExplicacao:
-      "This device forgets the credential and asks for a name again. What you already sent to the table stays there, but joining again creates a new player, and the GM has to link you back to your character.",
-    sairConfirmar: "Leave",
+      "Your character and everything you sent stay at the table. But your notebook notes won't come back, and the GM will need to hand you the character again.",
+    sairConfirmar: "Leave the table",
     renomearExplicacao:
       "This is the name the GM sees in the table's list. Changing it doesn't affect your character.",
     teuNome: "Your name",
