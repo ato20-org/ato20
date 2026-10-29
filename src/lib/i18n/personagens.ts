@@ -95,7 +95,7 @@ const pt = {
       },
       retrato: {
         titulo: "Retrato",
-        nota: "Imagem. Entra no acervo, porque a TV alcança imagem só por lá.",
+        nota: "Imagem. Entra no acervo, porque a janela do espectador só alcança imagem por lá.",
       },
       miniatura: {
         titulo: "Miniatura",
@@ -117,7 +117,7 @@ const pt = {
       tirar: "Tirar o retrato ao vivo",
       semPaginaViva:
         "Esta tela não desenha página viva — ela usa o motor WebKit, e é uma limitação do serviço, não do link. Aqui aparece o Retrato do acervo. {destaque}; iPhone, não, porque todo navegador de iOS é WebKit.",
-      destaque: "A TV e os celulares Android mostram normalmente",
+      destaque: "A janela do espectador e os celulares Android mostram normalmente",
     },
     abrir: (nome: string) => `Abrir ${nome}`,
     trocar: (campo: string) => `Trocar ${campo}`,

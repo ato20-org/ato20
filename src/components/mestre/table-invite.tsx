@@ -225,7 +225,7 @@ export function TableInvite() {
             código viaja na URL era resposta para uma pergunta que ninguém faz
             com o celular na mão. */}
         <DialogDescription>
-          {aba === "jogador" ? t.convite.apontarACamera : t.convite.digitarNaTv}
+          {aba === "jogador" ? t.convite.apontarACamera : t.convite.abrirNoEspectador}
         </DialogDescription>
 
         {/* Botões e não um select: com a rede local e o "Outro" sempre ali, a
@@ -290,7 +290,7 @@ export function TableInvite() {
           >
             <TabsList>
               <TabsTrigger value="jogador">{t.convite.abaJogador}</TabsTrigger>
-              <TabsTrigger value="espectador">{t.convite.abaTv}</TabsTrigger>
+              <TabsTrigger value="espectador">{t.convite.abaEspectador}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="jogador" className="min-w-0 space-y-3">
@@ -302,7 +302,7 @@ export function TableInvite() {
                 um controle remoto — então o que a tela precisa dar é o endereço
                 legível e inteiro, não um quadrado preto.
 
-                E sem instrução escrita: a aba se chama TV, mostra um endereço e
+                E sem instrução escrita: a aba se chama Espectador, mostra um endereço e
                 um botão de copiar. O parágrafo que havia aqui explicava o que os
                 três já dizem. */}
             <TabsContent value="espectador" className="min-w-0 space-y-3">

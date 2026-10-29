@@ -10,8 +10,8 @@ const pt = {
     abraPeloAplicativo: "Abra pelo aplicativo",
     abraPeloAplicativoExplicacao:
       "O Mestre lê e grava a campanha numa pasta do computador, e uma aba do navegador não alcança o disco. Quem baixou o aplicativo é o mestre; ele abre direto nesta tela.",
-    tvDaMesa: "A TV da mesa",
-    teuCelular: "O teu celular",
+    espectador: "Espectador",
+    jogador: "Jogador",
     soltarInvalido: "Aqui entram PDF, para a estante, e zip de campanha.",
     bemVindo: "Bem-vindo ao ATO20",
     encontrarCampanha: "Encontrar campanha",
@@ -61,7 +61,7 @@ const pt = {
     trocar: "Trocar de campanha",
     fecharTitulo: (nome: string) => `Fechar ${nome}?`,
     fecharExplicacao:
-      "A mesa sai da tela e você volta para a lista de campanhas. A TV e os celulares continuam conectados enquanto você olha a lista.",
+      "A mesa sai da tela e você volta para a lista de campanhas. A janela do espectador e os celulares continuam conectados enquanto você olha a lista.",
     fechar: "Fechar campanha",
     codigoAjuda:
       "O código desta campanha. Ele viaja no zip, então continua o mesmo depois de importar noutra máquina.",
@@ -178,7 +178,7 @@ const pt = {
     titulo: "A pasta da campanha sumiu",
     estavaEm: "{nome} estava em",
     explicacao:
-      "Nada foi gravado desde então, e nada será: gravar agora recriaria a pasta pela metade. O que está na tela continua aqui, e a TV e os celulares seguem vendo a cena. Se a pasta voltar para o mesmo lugar, abra a campanha de novo pela lista.",
+      "Nada foi gravado desde então, e nada será: gravar agora recriaria a pasta pela metade. O que está na tela continua aqui, e a janela do espectador e os celulares seguem vendo a cena. Se a pasta voltar para o mesmo lugar, abra a campanha de novo pela lista.",
     escolherOutra: "Escolher outra campanha",
   },
 
@@ -531,9 +531,9 @@ const pt = {
     abertaNaInternet: "A mesa está aberta na internet",
     semRede: "Sem rede",
     semRedeExplicacao:
-      "Esta máquina não está em rede nenhuma, então a TV e os celulares não têm como alcançá-la. Conecte o Wi-Fi, o cabo ou a VPN.",
+      "Esta máquina não está em rede nenhuma, então a janela do espectador e os celulares não têm como alcançá-la. Conecte o Wi-Fi, o cabo ou a VPN.",
     apontarACamera: "Aponte a câmera do celular para o quadrado.",
-    digitarNaTv: "Digite este endereço no navegador da TV.",
+    abrirNoEspectador: "Abra este endereço na tela que todos veem: uma TV, um projetor ou outro computador.",
     rede: "Rede",
     redes: {
       local: "Mesmo Wi-Fi",
@@ -547,7 +547,7 @@ const pt = {
     exemploDeEndereco: "pc.tailnet.ts.net ou 10.147.17.5",
     enderecoInvalido: "Esse endereço não dá para usar.",
     abaJogador: "Jogador",
-    abaTv: "TV",
+    abaEspectador: "Espectador",
     /** A rede que não respondeu, como sujeito da frase: o artigo muda com ela. */
     quemCaiu: {
       local: "O Wi-Fi",
@@ -649,7 +649,7 @@ const pt = {
     transmitir: (arquivo: string) => `Transmitir ${arquivo} para a mesa`,
     noAr: "No ar agora. Clique para tirar.",
     transmitirDica:
-      "Põe este arquivo na frente de tudo, na TV e nos celulares. O endereço morre quando sair do ar.",
+      "Põe este arquivo na frente de tudo, na janela do espectador e nos celulares. O endereço morre quando sair do ar.",
     rolagens: "O que ele tirou",
     rolagensVazio: "nenhum dado nesta sessão",
     rolagensDica: "Só desta sessão. O daemon sorteia, não o celular.",
@@ -1445,8 +1445,8 @@ const en: typeof pt = {
     abraPeloAplicativo: "Open it in the app",
     abraPeloAplicativoExplicacao:
       "The GM screen reads and writes the campaign in a folder on the computer, and a browser tab cannot reach the disk. Whoever downloaded the app is the GM; it opens straight to this screen.",
-    tvDaMesa: "The spectator window",
-    teuCelular: "Your phone",
+    espectador: "Spectator",
+    jogador: "Player",
     soltarInvalido: "Drop a PDF here for the shelf, or a campaign zip.",
     bemVindo: "Welcome to ATO20",
     encontrarCampanha: "Find campaign",
@@ -1952,9 +1952,9 @@ const en: typeof pt = {
     abertaNaInternet: "The table is open on the internet",
     semRede: "No network",
     semRedeExplicacao:
-      "This computer is not on any network, so the TV and the phones have no way to reach it. Connect the Wi-Fi, the cable or the VPN.",
+      "This computer is not on any network, so the spectator window and the phones have no way to reach it. Connect the Wi-Fi, the cable or the VPN.",
     apontarACamera: "Point the phone camera at the square.",
-    digitarNaTv: "Type this address in the TV browser.",
+    abrirNoEspectador: "Open this address on the screen everyone watches: a TV, a projector or another computer.",
     rede: "Network",
     redes: {
       local: "Same Wi-Fi",
@@ -1968,7 +1968,7 @@ const en: typeof pt = {
     exemploDeEndereco: "pc.tailnet.ts.net or 10.147.17.5",
     enderecoInvalido: "That address can't be used.",
     abaJogador: "Player",
-    abaTv: "TV",
+    abaEspectador: "Spectator",
     quemCaiu: {
       local: "The Wi-Fi",
       tailscale: "Tailscale",

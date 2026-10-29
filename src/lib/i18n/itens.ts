@@ -73,7 +73,7 @@ const pt = {
     nomeDoAtributo: "Nome",
     valorDoAtributo: "Valor",
     valorExemplo: "1d8+2 cortante, 2 kg… vazio vira tag",
-    atributoEscondido: "O jogador não vê, nem na mochila nem na TV.",
+    atributoEscondido: "O jogador não vê, nem na mochila nem na janela do espectador.",
     atributoAVista: "O jogador vê. Esconda a maldição do anel, o veneno na lâmina.",
     apagarAtributo: "Apagar atributo",
     novoAtributoExemplo: "Fogo, ou Dano: 1d8",
@@ -90,7 +90,7 @@ const pt = {
     ],
     medidorEscondido: "O jogador não vê",
     medidorAVista: "O jogador vê",
-    olhoDoMedidor: "Escondido, ele some do celular e do cartão da TV.",
+    olhoDoMedidor: "Escondido, ele some do celular e do cartão na janela do espectador.",
     valorAtual: "Valor atual",
     valorMaximo: "Valor máximo",
     deMaximo: (atual: number, maximo: number) => `${atual} de ${maximo}`,
@@ -130,7 +130,7 @@ const pt = {
     tirar: "Tirar da mesa",
     noAr: "No ar",
     noArAgora: "Está no ar agora. Clique para tirar.",
-    dica: "Põe o cartão deste item na frente de tudo, na TV e nos celulares.",
+    dica: "Põe o cartão deste item na frente de tudo, na janela do espectador e nos celulares.",
   },
 
   anexado: {
@@ -223,7 +223,7 @@ const en: typeof pt = {
     nomeDoAtributo: "Name",
     valorDoAtributo: "Value",
     valorExemplo: "1d8+2 slashing, 2 kg… empty makes a tag",
-    atributoEscondido: "The player can't see it, in the backpack or on the TV.",
+    atributoEscondido: "The player can't see it, in the backpack or on the spectator window.",
     atributoAVista: "The player sees it. Hide the ring's curse, the poison on the blade.",
     apagarAtributo: "Delete attribute",
     novoAtributoExemplo: "Fire, or Damage: 1d8",
@@ -240,7 +240,7 @@ const en: typeof pt = {
     ],
     medidorEscondido: "The player can't see it",
     medidorAVista: "The player sees it",
-    olhoDoMedidor: "Hidden, it leaves the phone and the TV card.",
+    olhoDoMedidor: "Hidden, it leaves the phone and the card on the spectator window.",
     valorAtual: "Current value",
     valorMaximo: "Maximum value",
     deMaximo: (atual, maximo) => `${atual} of ${maximo}`,
@@ -280,7 +280,7 @@ const en: typeof pt = {
     tirar: "Take off the table",
     noAr: "On air",
     noArAgora: "It is on air now. Click to take it off.",
-    dica: "Puts this item's card in front of everything, on the TV and the phones.",
+    dica: "Puts this item's card in front of everything, on the spectator window and the phones.",
   },
 
   anexado: {

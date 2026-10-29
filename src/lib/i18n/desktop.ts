@@ -13,7 +13,7 @@ const pt = {
     fechar: "Fechar",
     confirmarFechar: "Fechar o ATO20?",
     confirmarFecharExplicacao:
-      "A campanha fecha junto, e a TV e os celulares perdem a conexão com a mesa.",
+      "A campanha fecha junto, e a janela do espectador e os celulares perdem a conexão com a mesa.",
   },
 
   configuracoes: {
@@ -47,7 +47,7 @@ const pt = {
     idioma: {
       titulo: "Idioma",
       explicacao:
-        "Trocar reinicia a janela. A campanha aberta volta sozinha, e a TV e os celulares acompanham.",
+        "Trocar reinicia a janela. A campanha aberta volta sozinha, e a janela do espectador e os celulares acompanham.",
       doSistema: (nome: string) => `Do sistema (${nome})`,
     },
     versao: {

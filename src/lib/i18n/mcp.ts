@@ -69,7 +69,7 @@ const pt = {
       titulo: "Campanha aberta",
       descricao:
         "Diz qual campanha está aberta no ATO20 e o que ela tem: quantas cenas de cada tipo, notas, " +
-        "personagens, itens e imagens, a cena que o mestre está editando e a que está no ar na TV. " +
+        "personagens, itens e imagens, a cena que o mestre está editando e a que está no ar na janela do espectador. " +
         "Comece por aqui. Sem campanha aberta, devolve as recentes.",
     },
     listar: {
@@ -82,7 +82,7 @@ const pt = {
       titulo: "Abrir campanha",
       descricao:
         "Abre no ATO20 a campanha que mora na pasta indicada, fechando a que estiver aberta (o que " +
-        "estava por gravar é gravado antes). A TV e os celulares passam a ver a campanha nova.",
+        "estava por gravar é gravado antes). A janela do espectador e os celulares passam a ver a campanha nova.",
       pasta: "Caminho absoluto da pasta da campanha.",
     },
     criar: {
@@ -133,7 +133,7 @@ const pt = {
       titulo: "Listar cenas",
       descricao:
         "As cenas da campanha, na ordem da sessão: mapas (o tabuleiro com peças), quadros (cartões, " +
-        "notas e ligações, como um quadro de investigação) e fundos (uma imagem para a TV). Diz qual o " +
+        "notas e ligações, como um quadro de investigação) e fundos (uma imagem para a janela do espectador). Diz qual o " +
         "mestre está editando e qual está no ar.",
     },
     ler: {
@@ -181,7 +181,7 @@ const pt = {
 
   personagens: {
     sumiu: "O personagem sumiu no meio do caminho.",
-    retrato: "Caminho absoluto de uma imagem para o retrato: o rosto, de frente, que aparece na TV.",
+    retrato: "Caminho absoluto de uma imagem para o retrato: o rosto, de frente, que aparece na janela do espectador.",
     miniatura:
       "Caminho absoluto de uma imagem para a miniatura: o token visto no mapa, de preferência recortado.",
     medidores:
@@ -356,7 +356,7 @@ const en: typeof pt = {
       titulo: "Open campaign",
       descricao:
         "Tells which campaign is open in ATO20 and what it has: how many scenes of each kind, notes, " +
-        "characters, items and images, the scene the GM is editing and the one on the TV. Start here. " +
+        "characters, items and images, the scene the GM is editing and the one on the spectator window. Start here. " +
         "With no campaign open, returns the recent ones.",
     },
     listar: {
@@ -369,7 +369,7 @@ const en: typeof pt = {
       titulo: "Open a campaign",
       descricao:
         "Opens in ATO20 the campaign in the given folder, closing the open one (anything pending is " +
-        "saved first). The TV and the phones switch to the new campaign.",
+        "saved first). The spectator window and the phones switch to the new campaign.",
       pasta: "Absolute path to the campaign folder.",
     },
     criar: {
@@ -420,7 +420,7 @@ const en: typeof pt = {
       titulo: "List scenes",
       descricao:
         "The campaign scenes, in session order: maps (the board with pieces), boards (cards, notes and " +
-        "links, like an investigation board) and backdrops (an image for the TV). Tells which one the " +
+        "links, like an investigation board) and backdrops (an image for the spectator window). Tells which one the " +
         "GM is editing and which is on the air.",
     },
     ler: {
@@ -468,7 +468,7 @@ const en: typeof pt = {
 
   personagens: {
     sumiu: "The character vanished midway.",
-    retrato: "Absolute path to an image for the portrait: the face, from the front, shown on the TV.",
+    retrato: "Absolute path to an image for the portrait: the face, from the front, shown on the spectator window.",
     miniatura: "Absolute path to an image for the miniature: the token seen on the map, ideally cut out.",
     medidores:
       "Numbers between zero and a maximum that the table sees (health, sanity, ammo). By name: what " +
