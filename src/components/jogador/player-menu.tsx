@@ -245,7 +245,7 @@ function RenomearForm({
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="player-nome">{t.menu.teuNome}</Label>
+        <Label htmlFor="player-nome">{t.menu.seuNome}</Label>
         <Input
           id="player-nome"
           value={nome}
