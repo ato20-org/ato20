@@ -171,6 +171,19 @@ export type LiveState = {
    */
   laser?: LaserNaMesa;
   /**
+   * Os itens que o mestre está arrastando agora, por id.
+   *
+   * O celular não deixa o jogador pegar o próprio token enquanto ele está na
+   * mão do mestre, e larga o que já estava pegando: dois arrastos no mesmo
+   * token o puxariam de um lado para o outro. Quem garante de verdade é o
+   * Mestre, que recusa o movimento -- ver `useMovimentosDaMesa`; isto é o que
+   * deixa o celular saber antes de tentar.
+   *
+   * Some do quadro quando o mestre solta, como o laser. Opcional: ausente é
+   * ninguém segurando, e é o que um quadro de versão anterior diz.
+   */
+  seguradosPeloMestre?: string[];
+  /**
    * O idioma do Mestre. A janela do espectador recarrega nele quando muda, e o
    * celular também, enquanto o jogador não escolheu outro. Ver
    * `seguirIdiomaDaMesa`.

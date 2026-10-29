@@ -381,6 +381,7 @@ function LandscapeLayout({ codigo, live, emCena, expandida, onTelaCheia }: Layou
           pings={live.pings}
           disparados={live.disparados}
           laser={live.laser}
+          segurados={live.segurados}
           synced={live.synced}
           stalled={live.stalled}
           conexao={live.conexao}
@@ -424,6 +425,7 @@ function StackedLayout({ codigo, live, emCena, expandida, onTelaCheia }: LayoutP
           pings={live.pings}
           disparados={live.disparados}
           laser={live.laser}
+          segurados={live.segurados}
           synced={live.synced}
           stalled={live.stalled}
           conexao={live.conexao}

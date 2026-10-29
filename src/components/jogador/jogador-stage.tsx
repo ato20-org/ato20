@@ -59,6 +59,7 @@ export function JogadorStage({
   pings,
   disparados,
   laser,
+  segurados,
   synced,
   stalled,
   conexao,
@@ -89,6 +90,8 @@ export function JogadorStage({
   disparados: EfeitoDisparado[];
   /** O laser do mestre. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
+  /** Os itens na mão do mestre. Ver `LiveState.seguradosPeloMestre`. */
+  segurados: string[];
   synced: boolean;
   stalled: boolean;
   /** O fio com o daemon no meio da sessão. Ver `Subscription.conexao`. */
@@ -158,6 +161,7 @@ export function JogadorStage({
                 pings={pings}
                 disparados={disparados}
                 laser={laser}
+                segurados={segurados}
                 tripe={tripe}
                 corte={corte}
               />

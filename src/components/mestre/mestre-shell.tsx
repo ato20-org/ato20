@@ -58,6 +58,7 @@ import { useFioDaMesa } from "@/hooks/use-fio-da-mesa";
 import { useEscribaDoHistorico } from "@/hooks/use-escriba-do-historico";
 import { usePingsDaMesa } from "@/hooks/use-pings-da-mesa";
 import { useMovimentosDaMesa } from "@/hooks/use-movimentos-da-mesa";
+import { useSeguradosDoMestre } from "@/hooks/use-segurados-do-mestre";
 import { useAcoesDaMesa } from "@/hooks/use-acoes-da-mesa";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
@@ -380,6 +381,9 @@ export function MestreShell() {
   // E os tokens que eles arrastam. Mesma rota de loopback, mesmo desenho: o
   // celular pede, esta janela confere e move. Ver `useMovimentosDaMesa`.
   useMovimentosDaMesa();
+  // E conta à mesa qual token está na mão do mestre, para o celular não
+  // disputá-lo. Ver `useSeguradosDoMestre`.
+  useSeguradosDoMestre();
   // E os botões que eles apertam nas seções dos plugins. Ver `useAcoesDaMesa`.
   useAcoesDaMesa();
   // E o fio da campanha: o que a mesa escreve e o que ela rolou, gravado pelo

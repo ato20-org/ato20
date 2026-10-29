@@ -190,6 +190,7 @@ export function CenaDoJogador({
   pings,
   disparados,
   laser,
+  segurados,
   tripe,
   corte,
 }: {
@@ -209,6 +210,8 @@ export function CenaDoJogador({
   disparados: EfeitoDisparado[];
   /** O laser do mestre. Ver `LiveState.laser`. */
   laser: LaserNaMesa | null;
+  /** Os itens na mão do mestre. Ver `LiveState.seguradosPeloMestre`. */
+  segurados: string[];
   /**
    * O tripé no ar, quando a mesa vê de esguelha. Aí o celular também vê, e o
    * dedo pega o token pelo chão do tripé. Ver `AlcasDeEsguelha`.
@@ -251,6 +254,10 @@ export function CenaDoJogador({
     return new Set([...meus].filter((id) => podeMoverNaVez(vez, id)));
   }, [meus, emCombate, vezDe]);
 
+  // Na mão do mestre o token não é pegável, como o travado: some a alça, e o
+  // que já estava no dedo é largado logo abaixo. Ver `seguradosPeloMestre`.
+  const naMaoDoMestre = useMemo(() => new Set(segurados), [segurados]);
+
   const { scale, toScene } = useSceneScale();
   const startDrag = useSceneDrag();
 
@@ -290,7 +297,8 @@ export function CenaDoJogador({
    *
    * Três saídas: o eco trouxe o token ao lugar E ao ângulo em que o dedo
    * soltou; o token saiu da cena; ou deixou de ser deste jogador no meio do
-   * gesto -- o mestre o travou, ou tirou o personagem dele. Nas duas últimas a
+   * gesto -- o mestre o travou, tirou o personagem dele, ou o pegou na mão
+   * (`segurados`). Nas duas últimas a
    * alça desmonta sob o dedo e o `pointerup` nunca chega, então é aqui que o
    * token é largado.
    *
@@ -307,6 +315,7 @@ export function CenaDoJogador({
     naMao &&
     (!noAr ||
       !podePegar(noAr, meusNaVez) ||
+      naMaoDoMestre.has(noAr.id) ||
       (naMao.solto &&
         Math.abs(noAr.x - naMao.x) < MESMO_LUGAR &&
         Math.abs(noAr.y - naMao.y) < MESMO_LUGAR &&
@@ -331,8 +340,13 @@ export function CenaDoJogador({
   }, [cena, naMao]);
 
   const pegaveis = useMemo(
-    () => (quadro ? [] : exibida.items.filter((item) => podePegar(item, meusNaVez))),
-    [quadro, exibida.items, meusNaVez],
+    () =>
+      quadro
+        ? []
+        : exibida.items.filter(
+            (item) => podePegar(item, meusNaVez) && !naMaoDoMestre.has(item.id),
+          ),
+    [quadro, exibida.items, meusNaVez, naMaoDoMestre],
   );
 
   /**
