@@ -223,6 +223,18 @@ const pt = {
       bloqueado: "O dono deste vídeo não deixa tocar fora do YouTube.",
       sumiu: "Vídeo privado, apagado ou inexistente.",
       rede: "O YouTube não respondeu. Confira a internet.",
+      /** Na barra e no painel, enquanto o player não toca. Ver `AvisoDoYoutube`. */
+      carregando: "Carregando do YouTube…",
+      /** O teste pela ponte, no diálogo. Ver `testarNaPonte`. */
+      testando: "Testando se toca fora do YouTube…",
+      testandoLista: (feitos: number, total: number) =>
+        `Testando se tocam fora do YouTube: ${feitos} de ${total}`,
+      /** O seletor de trecho. Ver `TrechoNoSlider`. */
+      lendoDuracao: "Lendo a duração do vídeo…",
+      trechoDura: (dura: string) => `trecho de ${dura}`,
+      semVideo: "O link deste som não tem um vídeo do YouTube.",
+      player: (codigo: number | string) =>
+        `O player do YouTube não tocou este vídeo (erro ${codigo}).`,
       listaIlegivel: "Não deu para ler essa playlist. Ela pode ser privada.",
       playlistInteira: "Trazer a playlist inteira",
       soEsteVideo: "Só este vídeo",
@@ -774,6 +786,13 @@ const en: typeof pt = {
       bloqueado: "The owner of this video does not allow playing it outside YouTube.",
       sumiu: "Private, deleted or missing video.",
       rede: "YouTube did not answer. Check the internet.",
+      carregando: "Loading from YouTube…",
+      testando: "Checking whether it plays outside YouTube…",
+      testandoLista: (feitos, total) => `Checking which play outside YouTube: ${feitos} of ${total}`,
+      lendoDuracao: "Reading the video length…",
+      trechoDura: (dura) => `${dura} clip`,
+      semVideo: "This sound's link has no YouTube video.",
+      player: (codigo) => `The YouTube player didn't play this video (error ${codigo}).`,
       listaIlegivel: "Could not read that playlist. It may be private.",
       playlistInteira: "Bring the whole playlist",
       soEsteVideo: "Just this video",

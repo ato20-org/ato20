@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Slider as SliderPrimitive } from "@base-ui/react/slider";
 import { Check, ListVideo, Loader2, Music, Waves } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/arquivos";
 import { CORES_DO_SOM } from "@/lib/mestre/cores-do-som";
-import { listarPlaylist } from "@/lib/player-do-youtube";
+import { listarPlaylist, testarNaPonte, type TesteDaPonte } from "@/lib/player-do-youtube";
 import { useTrackStore } from "@/lib/store/use-track-store";
 import { cn } from "@/lib/utils";
 import { addYoutube, setTrechoDoYoutube } from "@/lib/vault/assets";
@@ -52,6 +53,32 @@ const TETO_DA_LISTA = 200;
 /** Quantas perguntas ao oEmbed ao mesmo tempo, para a lista encher rápido sem afogar a rede. */
 const EM_PARALELO = 6;
 
+/**
+ * Quantos vídeos testados na ponte ao mesmo tempo.
+ *
+ * Menos que o oEmbed: cada teste é um player do YouTube inteiro num iframe,
+ * com o script dele, e seis de uma vez pesariam numa máquina que está com o
+ * mapa aberto. Três passam uma playlist de vinte em uns quinze segundos.
+ */
+const TESTES_EM_PARALELO = 3;
+
+/** O vídeo do link: buscando o título, testando na ponte, ou a resposta. */
+type VideoDoLink = VideoBuscado | "lendo" | "testando";
+
+/** A resposta, quando já há uma. */
+function respondido(video: VideoDoLink | null): VideoBuscado | null {
+  return video !== null && typeof video === "object" ? video : null;
+}
+
+/** O teste da ponte, como resposta do diálogo: só bloqueado e sumido recusam. */
+function comOTeste(resposta: VideoBuscado, teste: TesteDaPonte): VideoBuscado {
+  const { resultado } = teste;
+
+  return resultado === "bloqueado" || resultado === "sumiu"
+    ? { ok: false, video: resposta.video, motivo: resultado }
+    : resposta;
+}
+
 /** O que o YouTube respondeu sobre a playlist. */
 type Lista =
   | { fase: "lendo" }
@@ -81,7 +108,20 @@ export function SomDoYoutubeDialog({
   const [texto, setTexto] = useState("");
   const [link, setLink] = useState<LinkDoYoutube | null>(null);
   const [erroDoLink, setErroDoLink] = useState<string | null>(null);
-  const [video, setVideo] = useState<VideoBuscado | "lendo" | null>(null);
+  const [video, setVideo] = useState<VideoDoLink | null>(null);
+  /**
+   * Os vídeos da playlist que já passaram pela ponte. `null` = nenhum teste
+   * correndo. O oEmbed não vê a trava de quem tem os direitos da música, e
+   * só o player a mostra -- ver `testarNaPonte`. Enquanto há teste, o
+   * "Adicionar" espera: o que entrasse antes poderia ser um dos recusados.
+   */
+  const [testes, setTestes] = useState<{ feitos: number; total: number } | null>(null);
+  /**
+   * Quanto o vídeo do link dura, que o teste na ponte traz junto. É o que
+   * deixa o trecho ser um slider em vez de dois campos. `null` = não se sabe,
+   * e aí os campos voltam. Ver `TrechoNoSlider`.
+   */
+  const [duracao, setDuracao] = useState<number | null>(null);
   const [lista, setLista] = useState<Lista | null>(null);
   const [usarLista, setUsarLista] = useState(false);
   const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
@@ -108,6 +148,8 @@ export function SomDoYoutubeDialog({
     setLista(null);
     setUsarLista(false);
     setEscolhidos(new Set());
+    setTestes(null);
+    setDuracao(null);
     setInicioTexto("");
     setFimTexto("");
     setSalvando(false);
@@ -126,6 +168,8 @@ export function SomDoYoutubeDialog({
     setVideo(null);
     setLista(null);
     setEscolhidos(new Set());
+    setTestes(null);
+    setDuracao(null);
 
     if (!lido) {
       setErroDoLink(t.audioLibrary.youtube.naoEhLink);
@@ -142,8 +186,20 @@ export function SomDoYoutubeDialog({
 
     if (lido.video) {
       setVideo("lendo");
-      void buscarVideo(lido.video).then((resposta) => {
-        if (geracao.current === minha) setVideo(resposta);
+      void buscarVideo(lido.video).then(async (resposta) => {
+        if (geracao.current !== minha) return;
+        if (!resposta.ok) {
+          setVideo(resposta);
+          return;
+        }
+
+        // O título veio; falta saber se o player deixa tocar. Ver `testarNaPonte`.
+        setVideo("testando");
+        const teste = await testarNaPonte(resposta.video);
+        if (geracao.current !== minha) return;
+
+        setVideo(comOTeste(resposta, teste));
+        setDuracao(teste.duracao);
       });
     } else if (lido.lista) {
       lerLista(lido.lista, minha);
@@ -177,6 +233,36 @@ export function SomDoYoutubeDialog({
             return depois;
           });
         }
+
+        // Com os títulos na tela, o teste na ponte: o oEmbed deixou passar,
+        // mas quem tem os direitos da música pode recusar o player. O
+        // recusado vira linha desligada e sai da escolha.
+        const aTestar = ids.filter((id) => itens[id]?.ok);
+        setTestes({ feitos: 0, total: aTestar.length });
+
+        for (let i = 0; i < aTestar.length; i += TESTES_EM_PARALELO) {
+          const leva = aTestar.slice(i, i + TESTES_EM_PARALELO);
+          const resultados = await Promise.all(leva.map(testarNaPonte));
+          if (geracao.current !== minha) return;
+
+          const recusados = new Set<string>();
+          leva.forEach((id, k) => {
+            const antes = itens[id];
+            const teste = resultados[k];
+            if (!antes || !teste) return;
+
+            itens[id] = comOTeste(antes, teste);
+            if (!itens[id].ok) recusados.add(id);
+          });
+
+          setLista({ fase: "pronta", ids, itens: { ...itens } });
+          if (recusados.size > 0) {
+            setEscolhidos((antes) => new Set([...antes].filter((id) => !recusados.has(id))));
+          }
+          setTestes({ feitos: i + leva.length, total: aTestar.length });
+        }
+
+        setTestes(null);
       },
       () => {
         if (geracao.current === minha) setLista({ fase: "erro" });
@@ -199,8 +285,10 @@ export function SomDoYoutubeDialog({
       ? lista.ids.filter((id) => escolhidos.has(id) && lista.itens[id]?.ok)
       : [];
 
-  const quantos = usarLista ? naLista.length : video !== "lendo" && video?.ok ? 1 : 0;
-  const pode = quantos > 0 && !salvando && (usarLista || trecho.ok);
+  const doLink = respondido(video);
+  const quantos = usarLista ? naLista.length : doLink?.ok ? 1 : 0;
+  const pode =
+    quantos > 0 && !salvando && (usarLista ? testes === null : trecho.ok);
 
   async function adicionar() {
     if (!pode) return;
@@ -211,8 +299,8 @@ export function SomDoYoutubeDialog({
             const item = lista.itens[id];
             return { video: id, nome: item?.ok ? item.titulo : "" };
           })
-        : video && video !== "lendo" && video.ok && trecho.ok
-          ? [{ video: video.video, nome: video.titulo, inicio: trecho.inicio, fim: trecho.fim }]
+        : doLink?.ok && trecho.ok
+          ? [{ video: doLink.video, nome: doLink.titulo, inicio: trecho.inicio, fim: trecho.fim }]
           : [];
 
     setSalvando(true);
@@ -231,8 +319,17 @@ export function SomDoYoutubeDialog({
   const textos = t.audioLibrary.youtube;
 
   return (
-    <Dialog open={aberto} onOpenChange={(abrir) => !abrir && fechar()}>
-      <DialogContent className="max-w-md">
+    // `modal="trap-focus"` e o fundo começando em `top-8`, como as Novidades e
+    // as Configurações: a barra da janela mora fora do diálogo, e o modal
+    // cheio a borrava e deixava os botões dela mortos.
+    <Dialog modal="trap-focus" open={aberto} onOpenChange={(abrir) => !abrir && fechar()}>
+      {/* `sm:max-w-lg`, com o prefixo: a base do diálogo tem `sm:max-w-sm`,
+          e um `max-w-md` sem ele perde para ela a partir do `sm` -- a caixa
+          ficava em 384px. E a coluna do grid em `minmax(0,1fr)`: item de grid
+          tem largura mínima igual à do conteúdo, e o título mais longo da
+          playlist, numa linha só, empurrava tudo para fora da caixa. Presa na
+          coluna, a lista trunca o título como a linha manda. */}
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-lg" overlayClassName="top-8">
         <DialogTitle>{textos.titulo}</DialogTitle>
         <DialogDescription>{textos.descricao}</DialogDescription>
 
@@ -272,6 +369,7 @@ export function SomDoYoutubeDialog({
             lista={lista}
             escolhidos={escolhidos}
             onEscolhidos={setEscolhidos}
+            testes={testes}
           />
         ) : null}
 
@@ -298,7 +396,16 @@ export function SomDoYoutubeDialog({
                 tem o seu, e um campo para todos cortaria o mesmo minuto de
                 músicas diferentes; o trecho de cada um se acerta depois, no
                 menu da linha. */}
-            {!usarLista ? (
+            {!usarLista && doLink?.ok && duracao ? (
+              <TrechoNoSlider
+                video={doLink.video}
+                duracao={duracao}
+                inicio={inicioTexto}
+                fim={fimTexto}
+                onInicio={setInicioTexto}
+                onFim={setFimTexto}
+              />
+            ) : !usarLista ? (
               <CamposDoTrecho
                 inicio={inicioTexto}
                 fim={fimTexto}
@@ -325,14 +432,14 @@ export function SomDoYoutubeDialog({
 }
 
 /** O vídeo achado: miniatura e título, ou por que ele não serve. */
-function Previa({ video }: { video: VideoBuscado | "lendo" }) {
+function Previa({ video }: { video: VideoDoLink }) {
   const textos = t.audioLibrary.youtube;
 
-  if (video === "lendo") {
+  if (video === "lendo" || video === "testando") {
     return (
       <p className="text-muted-foreground flex items-center gap-2 text-xs">
         <Loader2 className="size-3.5 animate-spin" />
-        {textos.buscando}
+        {video === "lendo" ? textos.buscando : textos.testando}
       </p>
     );
   }
@@ -366,10 +473,13 @@ function ListaDaPlaylist({
   lista,
   escolhidos,
   onEscolhidos,
+  testes,
 }: {
   lista: Lista;
   escolhidos: Set<string>;
   onEscolhidos: (escolhidos: Set<string>) => void;
+  /** O teste na ponte correndo. Ver `testes`, no diálogo. */
+  testes: { feitos: number; total: number } | null;
 }) {
   const textos = t.audioLibrary.youtube;
 
@@ -392,8 +502,17 @@ function ListaDaPlaylist({
   return (
     <div className="space-y-1">
       <div className="text-muted-foreground flex items-center gap-2 text-xs">
-        <span className="flex-1">
-          {faltam > 0 ? textos.lendoLista(lista.ids.length) : null}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          {faltam > 0 ? (
+            textos.lendoLista(lista.ids.length)
+          ) : testes ? (
+            <>
+              <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden />
+              <span className="truncate">
+                {textos.testandoLista(testes.feitos, testes.total)}
+              </span>
+            </>
+          ) : null}
         </span>
         <Button
           type="button"
@@ -455,6 +574,123 @@ function ListaDaPlaylist({
         })}
       </ul>
     </div>
+  );
+}
+
+/**
+ * O trecho num slider de duas pontas, sobre o vídeo inteiro -- como a régua de
+ * corte de um editor de vídeo.
+ *
+ * Um trecho é um INTERVALO, e dois campos de texto o mostravam como dois
+ * números soltos: não se via quanto do vídeo ficava de fora, e acertar o fim de
+ * uma introdução era digitar, tocar, errar e digitar de novo. A faixa mostra o
+ * vídeo inteiro, o pedaço escolhido aceso e o resto apagado.
+ *
+ * A tira de fundo é a miniatura do vídeo repetida: o YouTube não dá os quadros
+ * do meio sem chave, e a repetição basta para a faixa ler como "o vídeo" e não
+ * como um controle de volume.
+ *
+ * Os valores continuam sendo os textos do trecho (`inicio`, `fim`), e não
+ * números à parte: o resto do diálogo -- validar, salvar -- já fala com eles, e
+ * ponta encostada na borda grava vazio, que é "do começo" e "até o fim". Setas
+ * mexem de um em um segundo, e Shift de dez em dez: num vídeo de uma hora o
+ * mouse anda segundos por pixel, e o teclado é o ajuste fino.
+ */
+function TrechoNoSlider({
+  video,
+  duracao,
+  inicio,
+  fim,
+  onInicio,
+  onFim,
+}: {
+  video: string;
+  /** Em segundos. Ver `testarNaPonte`. */
+  duracao: number;
+  inicio: string;
+  fim: string;
+  onInicio: (texto: string) => void;
+  onFim: (texto: string) => void;
+}) {
+  const textos = t.audioLibrary.youtube;
+  const total = Math.max(1, Math.floor(duracao));
+
+  // Do texto para a faixa. Ilegível ou além do vídeo, encosta na borda: o
+  // slider sempre desenha um trecho que existe.
+  const lido = lerTrecho(inicio, fim);
+  const de = lido.ok ? Math.min(Math.max(0, Math.floor(lido.inicio ?? 0)), total - 1) : 0;
+  const ate = lido.ok ? Math.min(Math.max(de + 1, Math.floor(lido.fim ?? total)), total) : total;
+
+  const porcento = (segundos: number) => `${(segundos / total) * 100}%`;
+
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="text-muted-foreground mb-1 text-xs">{textos.trecho}</legend>
+
+      <SliderPrimitive.Root
+        value={[de, ate]}
+        min={0}
+        max={total}
+        step={1}
+        largeStep={10}
+        minStepsBetweenValues={1}
+        // As alças não se atravessam: o início empurra o fim, e não troca de
+        // lugar com ele no meio do gesto.
+        thumbCollisionBehavior="push"
+        onValueChange={(valor) => {
+          const [novoDe, novoAte] = Array.isArray(valor) ? valor : [valor, total];
+          onInicio(novoDe && novoDe > 0 ? formatarTempo(novoDe) : "");
+          onFim(novoAte !== undefined && novoAte < total ? formatarTempo(novoAte) : "");
+        }}
+      >
+        <SliderPrimitive.Control className="relative flex h-11 w-full touch-none items-center select-none">
+          <SliderPrimitive.Track
+            className="relative h-11 w-full overflow-hidden rounded-md bg-black"
+            style={{
+              backgroundImage: `url(${miniaturaDo(video)})`,
+              backgroundSize: "auto 100%",
+              backgroundRepeat: "repeat-x",
+            }}
+          >
+            {/* O que fica de fora, apagado dos dois lados. */}
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 bg-black/70"
+              style={{ width: porcento(de) }}
+            />
+            <div
+              className="pointer-events-none absolute inset-y-0 right-0 bg-black/70"
+              style={{ width: `calc(100% - ${porcento(ate)})` }}
+            />
+            {/* A moldura do trecho, entre as alças. */}
+            <SliderPrimitive.Indicator className="border-primary pointer-events-none absolute inset-y-0 border-y-2" />
+          </SliderPrimitive.Track>
+
+          {[0, 1].map((indice) => (
+            <SliderPrimitive.Thumb
+              key={indice}
+              index={indice}
+              getAriaLabel={(qual) => (qual === 0 ? textos.inicio : textos.fim)}
+              getAriaValueText={(_formatado, valor) => formatarTempo(valor)}
+              className={cn(
+                "bg-primary focus-visible:ring-ring grid h-11 w-3 cursor-ew-resize place-items-center shadow-sm outline-none focus-visible:ring-2",
+                indice === 0 ? "rounded-l-md" : "rounded-r-md",
+              )}
+            >
+              {/* O risco no meio da alça, que diz que ela se arrasta. */}
+              <span aria-hidden className="bg-primary-foreground/80 h-4 w-0.5 rounded-full" />
+            </SliderPrimitive.Thumb>
+          ))}
+        </SliderPrimitive.Control>
+      </SliderPrimitive.Root>
+
+      <div className="text-muted-foreground flex items-center justify-between text-[11px] tabular-nums">
+        <span>{de > 0 ? formatarTempo(de) : textos.doComeco}</span>
+        <span className="text-foreground font-medium">
+          {textos.trechoDura(formatarTempo(ate - de))}
+        </span>
+        <span>{ate < total ? formatarTempo(ate) : textos.ateOFim}</span>
+      </div>
+    </fieldset>
   );
 }
 
@@ -526,8 +762,13 @@ export function TrechoDoYoutubeDialog({
   onSalvo: () => void;
 }) {
   return (
-    <Dialog open={asset !== null} onOpenChange={(abrir) => !abrir && onFechar()}>
-      <DialogContent className="max-w-sm">
+    // Fora da barra da janela, como o diálogo de pôr o som. Ver lá.
+    <Dialog
+      modal="trap-focus"
+      open={asset !== null}
+      onOpenChange={(abrir) => !abrir && onFechar()}
+    >
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-md" overlayClassName="top-8">
         {/* Por dentro, e com `key`: os campos nascem do trecho de QUEM abriu,
             e reabrir em outro som não pode trazer o texto do anterior. */}
         {asset?.youtube ? (
@@ -552,6 +793,31 @@ function EditorDoTrecho({
   const [fim, setFim] = useState(atual?.fim ? formatarTempo(atual.fim) : "");
   const [salvando, setSalvando] = useState(false);
   const trocarYoutube = useTrackStore((state) => state.trocarYoutube);
+  /**
+   * Quanto o vídeo dura, para o slider. O acervo não guarda -- o som é um
+   * link --, então a ponte carrega o vídeo ao abrir, sem tocar, e diz. `null`
+   * = ainda lendo; `0` = não deu, e voltam os dois campos. Ver `testarNaPonte`.
+   */
+  const [duracao, setDuracao] = useState<number | null>(null);
+  const video = atual?.video;
+
+  useEffect(() => {
+    if (!video) return;
+
+    let ativo = true;
+    void testarNaPonte(video).then(
+      (teste) => {
+        if (ativo) setDuracao(teste.duracao ?? 0);
+      },
+      () => {
+        if (ativo) setDuracao(0);
+      },
+    );
+
+    return () => {
+      ativo = false;
+    };
+  }, [video]);
 
   const trecho = lerTrecho(inicio, fim);
   const textos = t.audioLibrary.youtube;
@@ -585,13 +851,29 @@ function EditorDoTrecho({
           void salvar();
         }}
       >
-        <CamposDoTrecho
-          inicio={inicio}
-          fim={fim}
-          onInicio={setInicio}
-          onFim={setFim}
-          erro={trecho.ok ? null : trecho.erro}
-        />
+        {duracao === null ? (
+          <p className="text-muted-foreground flex items-center gap-2 text-xs">
+            <Loader2 className="size-3.5 animate-spin" />
+            {textos.lendoDuracao}
+          </p>
+        ) : duracao > 0 && video ? (
+          <TrechoNoSlider
+            video={video}
+            duracao={duracao}
+            inicio={inicio}
+            fim={fim}
+            onInicio={setInicio}
+            onFim={setFim}
+          />
+        ) : (
+          <CamposDoTrecho
+            inicio={inicio}
+            fim={fim}
+            onInicio={setInicio}
+            onFim={setFim}
+            erro={trecho.ok ? null : trecho.erro}
+          />
+        )}
 
         <DialogFooter className="mt-4">
           <Button type="button" variant="outline" onClick={onFechar}>

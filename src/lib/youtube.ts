@@ -347,3 +347,22 @@ export function lerMensagem(dado: unknown): MensagemDaPonte | null {
 
   return typeof tipo === "string" ? (dado as MensagemDaPonte) : null;
 }
+
+/**
+ * Por que o player não tocou, nos motivos que a tela já sabe dizer.
+ *
+ * O código é o do player do YouTube -- 2 parâmetro ruim, 5 o player falhou
+ * neste navegador, 100 vídeo sumido, 101 e 150 o dono não deixa embutir -- ou
+ * um que a ponte inventa: "rede" quando o script do YouTube não chegou,
+ * "endereco" quando o link não tinha vídeo. O que não se conhece cai em
+ * `player`, que mostra o número: é o que se pesquisa para saber o que houve.
+ */
+export function motivoDoErro(
+  codigo: number | string,
+): "bloqueado" | "sumiu" | "rede" | "semVideo" | "player" {
+  if (codigo === 101 || codigo === 150) return "bloqueado";
+  if (codigo === 100) return "sumiu";
+  if (codigo === "rede") return "rede";
+  if (codigo === 2 || codigo === "endereco") return "semVideo";
+  return "player";
+}

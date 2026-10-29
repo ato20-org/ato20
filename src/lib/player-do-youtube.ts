@@ -3,10 +3,12 @@ import {
   enderecoDaPonte,
   fimNoVideo,
   lerMensagem,
+  motivoDoErro,
   noClipe,
   noVideo,
   passouDoFim,
 } from "@/lib/youtube";
+import type { SituacaoDoYoutube } from "@/lib/store/use-audio-store";
 import type { SomDoYoutube } from "@/types/scene";
 
 /**
@@ -83,6 +85,15 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
   /** `play()` pedido e ainda não respondido. */
   private pedidos: Pedido[] = [];
   private prazo: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * O que o player está fazendo, quando não é só tocar ou estar parado.
+   *
+   * Nasce carregando: até a ponte dizer `pronto` há um script do YouTube
+   * chegando pela rede, e isso leva segundos. O erro é para ficar -- vídeo
+   * recusado não volta a tocar neste player. Avisa pelo evento `situacao`.
+   * Ver `SituacaoDoYoutube`.
+   */
+  private _situacao: SituacaoDoYoutube | null = { tipo: "carregando" };
 
   constructor(private readonly som: SomDoYoutube) {
     super();
@@ -101,6 +112,19 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
     this.iframe = null;
     this.limparPrazo();
     this.pedidos = [];
+  }
+
+  get situacao(): SituacaoDoYoutube | null {
+    return this._situacao;
+  }
+
+  private mudarSituacao(nova: SituacaoDoYoutube | null): void {
+    // O erro fica: nada que chegue depois dele faz o vídeo tocar.
+    if (this._situacao?.tipo === "erro") return;
+    if (this._situacao?.tipo === nova?.tipo) return;
+
+    this._situacao = nova;
+    this.dispatchEvent(new Event("situacao"));
   }
 
   get readyState(): number {
@@ -135,6 +159,12 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
 
   play(): Promise<void> {
     if (this.estado === TOCANDO) return Promise.resolve();
+    // Recusado, fica sem resposta, como os pedidos que o erro já largou: a
+    // falha seria lida como bloqueio de autoplay, e a tela pediria "Ativar
+    // som" para um vídeo que gesto nenhum faz tocar.
+    if (this._situacao?.tipo === "erro") return new Promise<void>(() => {});
+
+    this.mudarSituacao({ tipo: "carregando" });
 
     return new Promise<void>((ok, falha) => {
       this.pedidos.push({ ok, falha });
@@ -149,6 +179,7 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
     // isso como bloqueio: o mestre pausou, e a tela pediria "Ativar som".
     this.pedidos = [];
     this.limparPrazo();
+    this.mudarSituacao(null);
     this.mandar({ ato20: "pause" });
   }
 
@@ -184,6 +215,8 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
 
       const pedidos = this.pedidos;
       this.pedidos = [];
+      // Quem diz o que houve aqui é o canal, com o "Ativar som".
+      this.mudarSituacao(null);
 
       for (const pedido of pedidos) {
         pedido.falha(new Error("O navegador recusou tocar o vídeo."));
@@ -209,6 +242,8 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
         this.tDoVideo = this.som.inicio ?? 0;
         this.reportadoEm = performance.now();
         this.enviarVolume();
+        // Pronto e parado: o play, se vier, volta a dizer "carregando".
+        this.mudarSituacao(null);
         this.dispatchEvent(new Event("loadedmetadata"));
         this.dispatchEvent(new Event("durationchange"));
         return;
@@ -244,6 +279,18 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
         this.reportadoEm = performance.now();
 
         if (mensagem.estado === TOCANDO) {
+          this.mudarSituacao(null);
+          // Como o `<audio>`: quem quer saber que o vídeo TOCA -- e não só
+          // que carregou -- escuta isto. Ver `useYoutubeRecusadosStore`.
+          this.dispatchEvent(new Event("playing"));
+        } else if (mensagem.estado === CARREGANDO) {
+          // O vídeo enchendo o buffer: no começo, ou num seek longe.
+          this.mudarSituacao({ tipo: "carregando" });
+        } else if (mensagem.estado === PAUSADO || mensagem.estado === ACABOU) {
+          this.mudarSituacao(null);
+        }
+
+        if (mensagem.estado === TOCANDO) {
           this.limparPrazo();
           const pedidos = this.pedidos;
           this.pedidos = [];
@@ -269,6 +316,9 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
         this.pedidos = [];
         this.limparPrazo();
         console.warn(`[youtube] ${this.som.video}: erro ${mensagem.codigo}`);
+        // E a tela diz: era só este aviso no console, e a barra parada em
+        // `--:--` não deixava saber se esperava ou se tinha falhado.
+        this.mudarSituacao({ tipo: "erro", codigo: mensagem.codigo });
         return;
       }
 
@@ -348,6 +398,85 @@ export async function listarPlaylist(lista: string): Promise<string[]> {
       acabar();
       falha(new Error("rede"));
     }, 20_000);
+
+    window.addEventListener("message", ouvir);
+    document.body.appendChild(iframe);
+  });
+}
+
+/** O que a ponte disse de um vídeo carregado sem tocar. Ver `testarNaPonte`. */
+export type ResultadoDoTeste = "toca" | "bloqueado" | "sumiu" | "indefinido";
+
+/**
+ * O teste, e a duração que o `pronto` trouxe de graça.
+ *
+ * A duração é o que o seletor de trecho precisa para desenhar o vídeo inteiro,
+ * e o oEmbed não a dá. `null` quando o player não ficou pronto, ou disse zero --
+ * o recusado responde `pronto` com duração zero antes do erro.
+ */
+export type TesteDaPonte = { resultado: ResultadoDoTeste; duracao: number | null };
+
+/**
+ * Quanto esperar por um erro depois do `pronto`.
+ *
+ * Medido: o erro 150 chega um milissegundo depois do `pronto`, os dois por
+ * volta de dois segundos depois de a ponte abrir. A folga cobre a máquina
+ * lenta sem deixar o vídeo bom esperando à toa.
+ */
+const FOLGA_DEPOIS_DO_PRONTO_MS = 800;
+
+/**
+ * Carrega um vídeo na ponte, sem tocar, e diz se ele toca embutido.
+ *
+ * Existe porque o oEmbed não vê a trava de quem tem os direitos da música: o
+ * vídeo diz que pode ser embutido, entra no acervo, e o player responde 150
+ * na hora de tocar. O player responde o mesmo 150 só de CARREGAR -- medido,
+ * sem `play` --, então o teste é mudo e não esbarra no bloqueio de autoplay.
+ *
+ * "indefinido" quando a ponte não respondeu a tempo: sem rede, ou o YouTube
+ * lento. Quem chama não deve recusar o vídeo por isso -- o oEmbed já disse
+ * que ele existe.
+ */
+export async function testarNaPonte(video: string): Promise<TesteDaPonte> {
+  const src = await enderecoDaPonte({ video });
+
+  return new Promise<TesteDaPonte>((ok) => {
+    const iframe = document.createElement("iframe");
+    iframe.src = src;
+    iframe.title = "YouTube";
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.tabIndex = -1;
+    iframe.className =
+      "pointer-events-none fixed right-0 bottom-0 size-px border-0 opacity-0";
+
+    let folga: ReturnType<typeof setTimeout> | undefined;
+    let duracao: number | null = null;
+
+    function acabar(resultado: ResultadoDoTeste) {
+      window.removeEventListener("message", ouvir);
+      clearTimeout(prazo);
+      clearTimeout(folga);
+      iframe.remove();
+      ok({ resultado, duracao: resultado === "toca" ? duracao : null });
+    }
+
+    function ouvir(evento: MessageEvent) {
+      if (evento.source !== iframe.contentWindow) return;
+
+      const mensagem = lerMensagem(evento.data);
+
+      if (mensagem?.ato20 === "erro") {
+        const motivo = motivoDoErro(mensagem.codigo);
+        acabar(motivo === "bloqueado" || motivo === "sumiu" ? motivo : "indefinido");
+      } else if (mensagem?.ato20 === "pronto" && folga === undefined) {
+        duracao = mensagem.duracao > 0 ? mensagem.duracao : null;
+        folga = setTimeout(() => acabar("toca"), FOLGA_DEPOIS_DO_PRONTO_MS);
+      }
+    }
+
+    // Abaixo dos quinze segundos da própria ponte para a rede: quem espera é
+    // um diálogo, e um vídeo sem resposta não pode segurar a lista inteira.
+    const prazo = setTimeout(() => acabar("indefinido"), 12_000);
 
     window.addEventListener("message", ouvir);
     document.body.appendChild(iframe);

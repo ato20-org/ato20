@@ -35,6 +35,15 @@ type AudioStore = {
    * `startedAt`, e cada um calcula a própria posição a partir dele.
    */
   progresso: Record<string, Progresso>;
+  /**
+   * O que um som do YouTube está fazendo, por canal, quando não é só tocar.
+   *
+   * O `<audio>` carrega um arquivo do disco, e o "carregando" dele não se vê.
+   * O YouTube leva segundos para trazer o player, e pode recusar o vídeo --
+   * sem isto a barra ficava em `0:00` e `--:--` com o botão de pausa, e não
+   * dava para saber se esperava ou se tinha falhado. Ausente = nada a dizer.
+   */
+  situacaoDoYoutube: Record<string, SituacaoDoYoutube>;
 
   setEnabled: (enabled: boolean) => void;
   setBlocked: (blocked: boolean) => void;
@@ -42,7 +51,17 @@ type AudioStore = {
   setProgress: (chave: string, position: number, duration: number) => void;
   /** O canal saiu do ar: a linha dele não fica parada no último instante. */
   esquecerProgresso: (chave: string) => void;
+  /** `null` tira a entrada: tocando, ou o canal saiu. */
+  setSituacaoDoYoutube: (chave: string, situacao: SituacaoDoYoutube | null) => void;
 };
+
+/**
+ * Carregando o player ou o vídeo, ou o YouTube recusou. O código é o do player
+ * (100, 101, 150...) ou um da ponte ("rede", "endereco"). Ver `PlayerDoYoutube`.
+ */
+export type SituacaoDoYoutube =
+  | { tipo: "carregando" }
+  | { tipo: "erro"; codigo: number | string };
 
 /**
  * Onde um canal está, em segundos, e quanto ele tem.
@@ -72,6 +91,7 @@ export const useAudioStore = create<AudioStore>((set) => ({
   blocked: false,
   nudge: 0,
   progresso: {},
+  situacaoDoYoutube: {},
 
   setEnabled: (enabled) => set({ enabled }),
   setBlocked: (blocked) => set({ blocked }),
@@ -99,7 +119,37 @@ export const useAudioStore = create<AudioStore>((set) => ({
 
       return { progresso: resto };
     }),
+
+  setSituacaoDoYoutube: (chave, situacao) =>
+    set((state) => {
+      const atual = state.situacaoDoYoutube[chave];
+
+      if (situacao === null) {
+        if (!atual) return state;
+        const resto = { ...state.situacaoDoYoutube };
+        delete resto[chave];
+        return { situacaoDoYoutube: resto };
+      }
+
+      // Mesma referência quando nada mudou: o player repete o estado a cada
+      // relato, e a barra não precisa redesenhar o mesmo aviso.
+      if (
+        atual?.tipo === situacao.tipo &&
+        (atual.tipo !== "erro" || (situacao.tipo === "erro" && atual.codigo === situacao.codigo))
+      ) {
+        return state;
+      }
+
+      return { situacaoDoYoutube: { ...state.situacaoDoYoutube, [chave]: situacao } };
+    }),
 }));
+
+/** O que o som do YouTube deste canal está fazendo. `null` = nada a dizer. */
+export function useSituacaoDoYoutube(chave: string | null): SituacaoDoYoutube | null {
+  return useAudioStore((state) =>
+    chave === null ? null : (state.situacaoDoYoutube[chave] ?? null),
+  );
+}
 
 /**
  * Onde este canal está. Re-renderiza só quem o lê.

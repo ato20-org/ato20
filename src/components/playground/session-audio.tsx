@@ -13,6 +13,7 @@ import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useSaindo } from "@/hooks/use-saindo";
 import { PlayerDoYoutube, type Reprodutor } from "@/lib/player-do-youtube";
 import { outputVolume, useAudioStore } from "@/lib/store/use-audio-store";
+import { useYoutubeRecusadosStore } from "@/lib/store/use-youtube-recusados-store";
 import { enderecoDaPonte } from "@/lib/youtube";
 import type {
   Ambiente,
@@ -470,6 +471,8 @@ function CanalAudio({ canal, volume }: { canal: Canal; volume: number }) {
         fim={canal.youtube.fim}
         loop={loop}
         reprodutorRef={elementRef}
+        chave={chave}
+        reportaSituacao={reportaProgresso}
       />
     );
   }
@@ -547,6 +550,8 @@ function PonteDoYoutube({
   fim,
   loop,
   reprodutorRef,
+  chave,
+  reportaSituacao,
 }: {
   src: string;
   video: string;
@@ -554,6 +559,10 @@ function PonteDoYoutube({
   fim: number | undefined;
   loop: boolean;
   reprodutorRef: RefObject<Reprodutor | null>;
+  /** Onde a situação do player é escrita no store. Ver `situacaoDoYoutube`. */
+  chave: string;
+  /** Só a tela que mostra o progresso precisa saber. Ver `reportaProgresso`. */
+  reportaSituacao: boolean;
 }) {
   /** O `loop` de agora, para o player que nascer depois de ele mudar. */
   const loopRef = useRef(loop);
@@ -574,12 +583,38 @@ function PonteDoYoutube({
       player.conectar(iframe);
       reprodutorRef.current = player;
 
+      // Carregando ou recusado, para a barra e o painel dizerem em vez de
+      // ficarem em `--:--`. Pelo `getState`, como o progresso: o player muda
+      // de situação poucas vezes, e quem redesenha é só quem lê.
+      const { setSituacaoDoYoutube } = useAudioStore.getState();
+      const contar = () => {
+        if (!reportaSituacao) return;
+
+        const situacao = player.situacao;
+        setSituacaoDoYoutube(chave, situacao);
+        // E o acervo lembra: a linha do som avisa antes do próximo play. Ver
+        // `useYoutubeRecusadosStore`.
+        if (situacao?.tipo === "erro") {
+          useYoutubeRecusadosStore.getState().marcar(video, situacao.codigo);
+        }
+      };
+      // Tocou: se o acervo lembrava de uma recusa, ela não vale mais.
+      const tocou = () => {
+        if (reportaSituacao) useYoutubeRecusadosStore.getState().esquecer(video);
+      };
+      player.addEventListener("situacao", contar);
+      player.addEventListener("playing", tocou);
+      contar();
+
       return () => {
+        player.removeEventListener("situacao", contar);
+        player.removeEventListener("playing", tocou);
         player.desconectar();
         if (reprodutorRef.current === player) reprodutorRef.current = null;
+        if (reportaSituacao) setSituacaoDoYoutube(chave, null);
       };
     },
-    [video, inicio, fim, reprodutorRef],
+    [video, inicio, fim, reprodutorRef, chave, reportaSituacao],
   );
 
   return (

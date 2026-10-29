@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 
 import { PainelVazio } from "@/components/mestre/painel-vazio";
+import { useYoutubeRecusadosStore } from "@/lib/store/use-youtube-recusados-store";
+import { motivoDoErro } from "@/lib/youtube";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1131,6 +1133,11 @@ function AudioRow({
 }: AudioRowProps) {
   const emUso = usageCount > 0;
   const tipo = asset.tipoDeSom;
+  // O YouTube já recusou tocar este vídeo neste aparelho. Ver
+  // `useYoutubeRecusadosStore`.
+  const recusado = useYoutubeRecusadosStore((state) =>
+    asset.youtube ? state.recusados[asset.youtube.video] : undefined,
+  );
 
   const [renomeando, setRenomeando] = useState(false);
 
@@ -1188,6 +1195,16 @@ function AudioRow({
             ? t.audioLibrary.linhaDoYoutube
             : `${Math.round(asset.size / 1024)} KB`}
           {noAr ? ` · ${t.audioLibrary.noAr}` : ""}
+          {/* Em vermelho, na linha, antes de alguém apertar play no meio da
+              cena: tocar já foi tentado, e o YouTube disse que não. */}
+          {recusado !== undefined ? (
+            <span className="text-destructive">
+              {" · "}
+              {motivoDoErro(recusado) === "sumiu"
+                ? t.audioLibrary.youtube.indisponivel
+                : t.audioLibrary.youtube.naoToca}
+            </span>
+          ) : null}
         </span>
       </span>
 

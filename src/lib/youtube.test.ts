@@ -8,6 +8,7 @@ import {
   lerMensagem,
   lerTempo,
   lerTrecho,
+  motivoDoErro,
   noClipe,
   noVideo,
   passouDoFim,
@@ -164,5 +165,18 @@ describe("lerMensagem", () => {
     expect(lerMensagem("pronto")).toBeNull();
     expect(lerMensagem({ type: "outro" })).toBeNull();
     expect(lerMensagem({ ato20: 1 })).toBeNull();
+  });
+});
+
+describe("motivoDoErro", () => {
+  it("lê os códigos do player e os da ponte", () => {
+    expect(motivoDoErro(150)).toBe("bloqueado");
+    expect(motivoDoErro(101)).toBe("bloqueado");
+    expect(motivoDoErro(100)).toBe("sumiu");
+    expect(motivoDoErro("rede")).toBe("rede");
+    expect(motivoDoErro(2)).toBe("semVideo");
+    expect(motivoDoErro("endereco")).toBe("semVideo");
+    expect(motivoDoErro(5)).toBe("player");
+    expect(motivoDoErro(153)).toBe("player");
   });
 });
