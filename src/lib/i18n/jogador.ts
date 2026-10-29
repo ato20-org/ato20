@@ -231,6 +231,7 @@ const pt = {
     rotulo: "Teu personagem, mochila, anotações e arquivos",
     // Curtos: a faixa das abas tem 44px, e "Personagem" virava "Persona…".
     curtos: { personagem: "Ficha", mochila: "Mochila", chat: "Chat", anotacoes: "Notas", arquivos: "Arquivos" },
+    largura: "Largura da barra. Arraste para mudar; duplo clique volta ao padrão.",
   },
 
   mochila: {
@@ -491,6 +492,7 @@ const en: typeof pt = {
   barraLateral: {
     rotulo: "Your character, backpack, notes and files",
     curtos: { personagem: "Sheet", mochila: "Backpack", chat: "Chat", anotacoes: "Notes", arquivos: "Files" },
+    largura: "Sidebar width. Drag to change it; double-click resets it.",
   },
 
   mochila: {
