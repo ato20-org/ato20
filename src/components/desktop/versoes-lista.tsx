@@ -295,7 +295,9 @@ export function NovidadesDialog() {
       <DialogTrigger
         render={
           <ChromeButton
-            label={t.novidades.oQueMudou}
+            // Com o número: a versão saiu da ponta esquerda da barra, e o
+            // passar do ponteiro aqui é onde ela se acha agora sem abrir nada.
+            label={t.novidades.oQueMudouNa(atual.versao)}
             icon={<Sparkles className="size-3.5" />}
           />
         }

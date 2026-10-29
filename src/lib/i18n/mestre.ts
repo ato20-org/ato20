@@ -64,7 +64,8 @@ const pt = {
       "A mesa sai da tela e você volta para a lista de campanhas. A TV e os celulares continuam conectados enquanto você olha a lista.",
     fechar: "Fechar campanha",
     codigoAjuda:
-      "O código desta campanha. Ele viaja no zip, então continua o mesmo depois de importar noutra máquina.",
+      "Clique para copiar o código desta campanha. Ele viaja no zip, então continua o mesmo depois de importar noutra máquina.",
+    codigoCopiado: "Código copiado",
   },
 
   /** Exportar e importar partes da campanha. Ver `vault/pacote.rs`. */
@@ -767,7 +768,6 @@ const pt = {
 
   /** O menu Abas, na barra da janela. */
   abas: {
-    titulo: "Abas",
     rotulo: (abertas: number, total: number) => `Abas (${abertas} de ${total} abertas)`,
     abertas: "Abas abertas",
     comandos: "Comandos",
@@ -1496,7 +1496,8 @@ const en: typeof pt = {
       "The table leaves the screen and you go back to the campaign list. The spectator window and the phones stay connected while you look at the list.",
     fechar: "Close campaign",
     codigoAjuda:
-      "This campaign's code. It travels in the zip, so it stays the same after importing on another machine.",
+      "Click to copy this campaign's code. It travels in the zip, so it stays the same after importing on another machine.",
+    codigoCopiado: "Code copied",
   },
 
   pacote: {
@@ -2174,7 +2175,6 @@ const en: typeof pt = {
   },
 
   abas: {
-    titulo: "Tabs",
     rotulo: (abertas, total) => `Tabs (${abertas} of ${total} open)`,
     abertas: "Open tabs",
     comandos: "Commands",

@@ -19,7 +19,6 @@ import {
 import { isDesktop } from "@/lib/vault/bridge";
 import { comum } from "@/lib/i18n/comum";
 import { t } from "@/lib/i18n/desktop";
-import { versaoAtual } from "@/lib/versoes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -97,11 +96,6 @@ export function WindowChrome({
   confirmarFechar?: boolean;
 }) {
   const noApp = useIsDesktop();
-
-  // Da lista de versões e não de `getVersion()` do Tauri: aquele é assíncrono,
-  // e a barra apareceria por um quadro sem o número e empurraria o logo quando
-  // ele chegasse. Ver `versaoAtual`.
-  const versao = versaoAtual()?.versao;
   const [maximizada, setMaximizada] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
 
@@ -149,66 +143,66 @@ export function WindowChrome({
         // faz isso sozinho num elemento de arraste.
         onDoubleClick={() => void janela.toggleMaximize()}
       >
-        {/* Ponta esquerda: o nome, e o que quem chama quiser pôr ao lado dele
-            — hoje a campanha. */}
-        <span
-          data-tauri-drag-region
-          className="text-muted-foreground flex shrink-0 items-center gap-1.5 text-xs"
-        >
-          {/* A versão ANTES do logo, e não depois do nome.
+        {/* As duas pontas com `flex-1` -- base zero e o mesmo crescimento --, e
+            o centro só com o tamanho dele. O que sobra da janela se divide
+            igual entre as pontas, então o centro cai no meio EXATO da janela, e
+            não no meio do espaço entre elas: um nome de campanha comprido não o
+            arrasta mais para a direita.
+            E sem `min-w-0` nas pontas, de propósito: o mínimo automático de um
+            item flex é o conteúdo dele, então a ponta que não cabe na metade
+            cresce, e o centro anda só o que falta para não encostar. Numa
+            janela estreita demais até para isso, quem encolhe é o centro, que
+            corta o nome com reticências. A primeira versão usava posição
+            absoluta para acertar o meio, e numa janela de 830px o texto passava
+            por cima do nome da campanha -- num gerenciador de janelas de
+            mosaico o `minWidth` é ignorado, então "estreito" acontece de
+            verdade.
+            O `data-tauri-drag-region` vai em cada ponta porque o Tauri só
+            arrasta pelo elemento que tem o atributo, e o vão vazio de cada
+            ponta agora é dela, não da barra. */}
+        <div data-tauri-drag-region className="flex flex-1 items-center gap-2">
+          {/* Só o logo, sem o nome escrito ao lado nem a versão.
 
-              Ali ela é a primeira coisa da barra, que é onde se procura quando
-              se quer responder "qual versão é esta?" — a pergunta de quem vai
-              relatar um problema. Depois do nome ela leria como parte dele.
+              A barra juntava sete coisas antes do meio, e duas diziam o que o
+              logo já diz. A versão mudou de casa: está no rótulo do "O que
+              mudou" e no topo do diálogo dele, que é onde quem vai relatar um
+              problema acaba de qualquer jeito, e no Sobre das Configurações.
 
-              Fonte tabular para o número não dançar de largura entre uma versão
-              e outra: `0.0.11` é mais largo que `0.0.3` em fonte proporcional, e
-              o logo ao lado andaria junto. */}
-          {versao ? (
-            <span className="text-muted-foreground/60 tabular-nums">
-              {versao}
-            </span>
-          ) : null}
-
-          {/* `pointer-events-none` no logo pelo mesmo motivo do subtitulo: uma
+              `pointer-events-none` no logo pelo mesmo motivo do subtitulo: uma
               imagem no meio da faixa de arraste roubaria o gesto. */}
-          <Image
-            src={logo}
-            alt=""
-            priority
-            className="pointer-events-none h-3.5 w-auto opacity-70"
-          />
-          ATO20
-        </span>
-        {inicio}
+          <span data-tauri-drag-region className="flex shrink-0 items-center">
+            <Image
+              src={logo}
+              alt="ATO20"
+              priority
+              className="pointer-events-none h-3.5 w-auto opacity-70"
+            />
+          </span>
+          {inicio}
+        </div>
 
         {/* Centro da barra: o que está sendo editado.
-            Centrado DENTRO do espaço que sobra, e não na largura da janela.
-            A primeira versão usava posição absoluta para acertar o meio exato,
-            e o preço apareceu numa janela de 830px: o texto passava por cima do
-            nome da campanha. Num gerenciador de janelas de mosaico o `minWidth`
-            é ignorado, então "estreito" acontece de verdade.
-            Perde-se o centro perfeito quando as pontas têm larguras muito
-            diferentes; ganha-se nunca sobrepor.
             `pointer-events-none` para o texto não roubar o gesto de arrastar:
             sem ele, o alvo do clique seria este span, e a janela só se moveria
-            pelas beiradas. */}
-        <span
-          data-tauri-drag-region
-          className="flex min-w-0 flex-1 items-center justify-center"
-        >
+            pelas beiradas.
+            Só o nome da cena, sem "Editando" na frente: a claquete já diz que é
+            a cena aberta, e a palavra era a mais larga da barra inteira. */}
+        <span data-tauri-drag-region className="flex min-w-0 items-center">
           {subtitulo ? (
             <span className="pointer-events-none flex min-w-0 items-center gap-1.5 text-xs">
               <Clapperboard
                 className="text-muted-foreground size-3.5 shrink-0"
                 aria-hidden
               />
-              <span className="truncate">{t.janela.editando(subtitulo)}</span>
+              <span className="truncate">{subtitulo}</span>
             </span>
           ) : null}
         </span>
 
-        <div className="flex items-center">
+        <div
+          data-tauri-drag-region
+          className="flex flex-1 items-center justify-end"
+        >
           {acoes}
 
           <ChromeButton

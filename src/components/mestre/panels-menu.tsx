@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, PanelsTopLeft } from "lucide-react";
+import { PanelsTopLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useMemo } from "react";
 
 import { useTelas } from "@/components/mestre/dock/window-content";
@@ -66,21 +71,29 @@ export function PanelsMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            // 24px de altura como o botão da campanha: a barra tem 32.
-            className="text-muted-foreground h-6 gap-1 px-1.5 text-xs"
-            aria-label={t.abas.rotulo(quantas, telas.length)}
-          >
-            <PanelsTopLeft className="size-3.5" />
-            {t.abas.titulo}
-            <ChevronDown className="size-3" />
-          </Button>
-        }
-      />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  // Só o ícone, sem "Abas" e sem a seta: é um controle que se
+                  // aprende uma vez, e o texto disputava a ponta esquerda com o
+                  // nome da campanha. A contagem vai na dica.
+                  // 24px de altura como o botão da campanha: a barra tem 32.
+                  size="icon-xs"
+                  className="text-muted-foreground"
+                  aria-label={t.abas.rotulo(quantas, telas.length)}
+                >
+                  <PanelsTopLeft className="size-3.5" />
+                </Button>
+              }
+            />
+          }
+        />
+        <TooltipContent>{t.abas.rotulo(quantas, telas.length)}</TooltipContent>
+      </Tooltip>
 
       <DropdownMenuContent align="start" className="w-52">
         {/* Tudo dentro de um `Group`: o rótulo é `Menu.GroupLabel` no Base UI, e
