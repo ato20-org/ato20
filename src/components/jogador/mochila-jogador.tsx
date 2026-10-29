@@ -1,6 +1,6 @@
 "use client";
 
-import { Backpack, Package, Plus, X } from "lucide-react";
+import { Backpack, Package, PackagePlus, Plus, X } from "lucide-react";
 import { useState } from "react";
 
 import { BolinhaFlutuante } from "@/components/jogador/bolinha-flutuante";
@@ -202,10 +202,22 @@ function MochilaDoPersonagem({
             onFechar={() => setSelecionado(null)}
             onChanged={recarregar}
           />
+        ) : itens !== null && itens.length === 0 ? (
+          // Vazia, a caixa inteira é o "+": o quadro tracejado tem cara de
+          // lugar onde se põe algo, e quem tocava nele não via nada acontecer.
+          // O "+" do cabeçalho continua -- é o caminho quando já há itens.
+          <button
+            type="button"
+            onClick={() => setNovo(true)}
+            className="text-muted-foreground hover:text-foreground hover:border-foreground/40 hover:bg-accent/30 focus-visible:ring-ring flex h-full min-h-32 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed p-4 text-center text-xs transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          >
+            <PackagePlus className="size-6 opacity-60" aria-hidden />
+            {t.mochila.vazia}
+          </button>
         ) : itens !== null ? (
           <div className="text-muted-foreground flex h-full min-h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed p-4 text-center text-xs">
             <Package className="size-6 opacity-60" aria-hidden />
-            {itens.length === 0 ? t.mochila.vazia : t.mochila.escolha}
+            {t.mochila.escolha}
           </div>
         ) : null}
       </div>

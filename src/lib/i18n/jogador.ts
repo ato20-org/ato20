@@ -237,7 +237,7 @@ const pt = {
   mochila: {
     titulo: "Mochila",
     abrir: "Abrir a mochila",
-    vazia: "Nada na mochila ainda. Toque no + para pôr o primeiro item.",
+    vazia: "Nada na mochila ainda. Toque aqui para pôr o primeiro item.",
     escolha: "Toque num item para ver o que é.",
   },
 
@@ -498,7 +498,7 @@ const en: typeof pt = {
   mochila: {
     titulo: "Backpack",
     abrir: "Open the backpack",
-    vazia: "Nothing in the backpack yet. Tap + to add the first item.",
+    vazia: "Nothing in the backpack yet. Tap here to add the first item.",
     escolha: "Tap an item to see what it is.",
   },
 
