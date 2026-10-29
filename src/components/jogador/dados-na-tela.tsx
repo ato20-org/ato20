@@ -8,6 +8,7 @@ import {
   type EspacoDoDado,
   type Jogada,
 } from "@/components/mestre/dado-layer";
+import { soltouNaLixeira } from "@/components/jogador/lixeira-do-dado";
 import { t } from "@/lib/i18n/jogador";
 import { recusaPorMesaCheia } from "@/lib/mesa-cheia";
 import { rolarDado } from "@/lib/player/rolagens";
@@ -152,6 +153,14 @@ export function DadosNaTela({ codigo }: { codigo: string }) {
    */
   const aoArremessar = useMemo(
     () => (jogada: Jogada) => {
+      // Solto na faixa do pé da tela: o dado sai da mesa e não rola de novo.
+      // Nada vai ao daemon -- tirar não é jogada, e o dado é só deste vidro.
+      // Ver `LixeiraDoDado`.
+      if (jogada.daMesa && jogada.solto && soltouNaLixeira(jogada.solto)) {
+        guardar(jogada.daMesa);
+        return;
+      }
+
       // ANTES de pedir o número: a rolagem é registrada na mesa do mestre, e
       // gastá-la para depois não ter onde pôr o dado mostraria à mesa inteira
       // um resultado que nunca apareceu na tela de quem rolou. O dado que veio

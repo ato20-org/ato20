@@ -16,6 +16,8 @@ import logo from "@/assets/logo-white.png";
 import { AnotacoesJogador } from "@/components/jogador/anotacoes-jogador";
 import { ChatJogador } from "@/components/jogador/chat-jogador";
 import { DadosNaTela } from "@/components/jogador/dados-na-tela";
+import { LixeiraDoDado } from "@/components/jogador/lixeira-do-dado";
+import { LimparDadosDaTela } from "@/components/jogador/limpar-dados-da-tela";
 import { MyCharacters } from "@/components/jogador/my-characters";
 import { MochilaFlutuante } from "@/components/jogador/mochila-jogador";
 import { BarraLateralDoJogador } from "@/components/jogador/barra-lateral-jogador";
@@ -233,6 +235,10 @@ export function JogadorShell({
             fina={tabbed}
           />
         ) : null}
+
+        {/* Pendurado embaixo da faixa enquanto houver dado na tela. Ver
+            `LimparDadosDaTela`. */}
+        {dentro ? <LimparDadosDaTela /> : null}
       </header>
 
       {dentro ? (
@@ -257,6 +263,9 @@ export function JogadorShell({
       {dentro ? (
         <>
           <DadosNaTela codigo={codigo} />
+          {/* Onde o dado da mesa se solta para sair dela, no pé da tela.
+              Ver `LixeiraDoDado`. */}
+          <LixeiraDoDado />
 
           {/* Fora das abas: a trilha não pode parar porque o jogador foi
               consultar a própria ficha. Música cortada no meio quebra a imersão

@@ -123,6 +123,11 @@ const pt = {
 
   dados: {
     naoRecebeu: "A mesa não recebeu o dado",
+    /** A faixa no pé da tela que tira o dado da mesa. Ver `LixeiraDoDado`. */
+    lixeira: {
+      arraste: "Arraste para baixo para tirar o dado da mesa",
+      solte: "Solte para tirar o dado da mesa",
+    },
   },
 
   saquinho: {
@@ -132,7 +137,11 @@ const pt = {
     ajuda: "Arremesse na tela, ou toque para jogar no meio.",
     naTela: "Na tela",
     ultimas: "Últimas rolagens",
-    recolher: (n: number) => (n === 1 ? "Recolher o dado" : `Recolher os ${n} dados`),
+    limpar: (n: number) => `Limpar (${n})`,
+    limparRotulo: (n: number) =>
+      n === 1 ? "Limpar o dado da tela" : `Limpar os ${n} dados da tela`,
+    /** A barrinha embaixo da faixa de cima. Ver `LimparDadosDaTela`. */
+    limparTodos: (n: number): string => (n === 1 ? "Limpar o dado" : "Limpar todos os dados"),
   },
 
   plugins: {
@@ -387,6 +396,10 @@ const en: typeof pt = {
 
   dados: {
     naoRecebeu: "The table didn't get the die",
+    lixeira: {
+      arraste: "Drag down to take the die off the table",
+      solte: "Release to take the die off the table",
+    },
   },
 
   saquinho: {
@@ -396,7 +409,10 @@ const en: typeof pt = {
     ajuda: "Throw them onto the screen, or tap to roll in the middle.",
     naTela: "On screen",
     ultimas: "Latest rolls",
-    recolher: (n) => (n === 1 ? "Pick up the die" : `Pick up the ${n} dice`),
+    limpar: (n) => `Clear (${n})`,
+    limparRotulo: (n) =>
+      n === 1 ? "Clear the die from the screen" : `Clear the ${n} dice from the screen`,
+    limparTodos: (n) => (n === 1 ? "Clear the die" : "Clear all dice"),
   },
 
   plugins: {
