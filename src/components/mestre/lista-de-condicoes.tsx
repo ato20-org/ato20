@@ -14,9 +14,13 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { useListReorder } from "@/hooks/use-list-reorder";
-import { temCondicao } from "@/lib/condicao";
+import { chaveDoNome, temCondicao } from "@/lib/condicao";
 import { t } from "@/lib/i18n/personagens";
-import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
+import {
+  prontaParaAPeca,
+  useCondicoesParaMarcar,
+  type CondicaoParaMarcar,
+} from "@/lib/mestre/condicoes-para-marcar";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import { MAX_CONDICOES, type Condicao, type PatchCondicao } from "@/types/character";
 
@@ -38,7 +42,14 @@ export type DonoDeCondicoes = {
   reordenar: (ordem: string[]) => Promise<unknown> | void;
   /** Liga ou desliga um modelo do cardápio. Devolve se mudou alguma coisa. */
   alternar: (modelo: Condicao, ligar: boolean) => Promise<number> | number;
-  criarAvulsa: (condicao: Omit<Condicao, "id" | "escondido">) => Promise<unknown> | void;
+  /**
+   * Uma condição nova no fim da lista: a avulsa, ou a cópia de uma do
+   * Compêndio. `escondido` é o da condição do Compêndio, para o segredo não
+   * chegar à vista; quem não tem mesa a esconder o ignora.
+   */
+  criarAvulsa: (
+    condicao: Omit<Condicao, "id" | "escondido"> & { escondido?: boolean },
+  ) => Promise<unknown> | void;
   /** O que o olho diz: "escondida" quer dizer uma coisa em cada tela. */
   dicaDoOlho: (escondido: boolean) => Dica;
 };
@@ -110,20 +121,36 @@ export function ListaDeCondicoes({ dono }: { dono: DonoDeCondicoes }) {
 }
 
 /**
- * O mais: o cardápio da campanha, e a condição avulsa embaixo.
+ * O mais: o cardápio da campanha e as condições do Compêndio, e a condição
+ * avulsa embaixo. Ver `useCondicoesParaMarcar`.
  *
- * O cardápio marca o que o dono já tem, e tocar numa marcada TIRA -- o mesmo
+ * A lista marca o que o dono já tem, e tocar numa marcada TIRA -- o mesmo
  * gesto do menu do token, para a mão aprender uma vez só.
  */
 export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
-  const { modelos } = useCondicoesDaCampanha();
+  const opcoes = useCondicoesParaMarcar();
   const [aberto, setAberto] = useState(false);
   const cheio = (dono.condicoes?.length ?? 0) >= MAX_CONDICOES;
 
-  async function alternar(modelo: Condicao) {
+  async function alternar({ condicao: modelo, doCompendio }: CondicaoParaMarcar) {
     const ligar = !temCondicao(dono.condicoes, modelo.nome);
 
     await tentar(async () => {
+      // A do Compêndio não está no cardápio, e o `alternar` do dono só acha
+      // modelo de lá: ela entra como cópia, com o efeito posto em jogo antes,
+      // e sai pelo nome -- o mesmo do menu do token.
+      if (doCompendio) {
+        if (ligar) {
+          const pronta = await prontaParaAPeca(modelo);
+          if (pronta) await dono.criarAvulsa(pronta);
+        } else {
+          const chave = chaveDoNome(modelo.nome);
+          const tem = dono.condicoes?.find((atual) => chaveDoNome(atual.nome) === chave);
+          if (tem) await dono.remover(tem.id);
+        }
+        return;
+      }
+
       const mudaram = await dono.alternar(modelo, ligar);
       // Ligar num dono cheio não muda nada, e a conta não reclama -- ela pula
       // quem está cheio para a horda não parar no primeiro. Aqui, com um só,
@@ -160,25 +187,26 @@ export function AcrescentarCondicao({ dono }: { dono: DonoDeCondicoes }) {
       />
 
       <PopoverContent align="end" className="w-56 space-y-1 p-1.5" side="bottom">
-        {modelos === null ? (
+        {opcoes === null ? (
           <p className="text-muted-foreground px-1.5 py-1 text-[11px]">{t.geral.lendo}</p>
-        ) : modelos.length === 0 ? (
+        ) : opcoes.length === 0 ? (
           <p className="text-muted-foreground px-1.5 py-1 text-[11px] leading-snug">
             {t.listaDeCondicoes.semCondicoes(dono.nome)}
           </p>
         ) : (
           <ul className="space-y-0.5">
-            {modelos.map((modelo) => {
+            {opcoes.map((opcao) => {
+              const modelo = opcao.condicao;
               const tem = temCondicao(dono.condicoes, modelo.nome);
 
               return (
-                <li key={modelo.id}>
+                <li key={`${opcao.doCompendio ? "compendio" : "menu"}:${modelo.id}`}>
                   <button
                     type="button"
                     aria-pressed={tem}
                     disabled={!tem && cheio}
                     className="hover:bg-muted flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs disabled:opacity-50"
-                    onClick={() => void alternar(modelo)}
+                    onClick={() => void alternar(opcao)}
                   >
                     <SeloDaCondicao condicao={modelo} tamanho={18} />
                     <span className="min-w-0 flex-1 truncate">{modelo.nome}</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Minus, Settings2, Sparkles } from "lucide-react";
+import { BookMarked, Check, Minus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
@@ -20,7 +20,12 @@ import {
   ehObjeto,
   removerCondicaoDoObjeto,
 } from "@/lib/mestre/condicoes-do-objeto";
-import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
+import {
+  alternarNosPersonagens,
+  prontaParaAPeca,
+  useCondicoesParaMarcar,
+  type CondicaoParaMarcar,
+} from "@/lib/mestre/condicoes-para-marcar";
 import { alternarCondicao, removerCondicao } from "@/lib/vault/characters";
 import type { Condicao, Personagem } from "@/types/character";
 import type { CanvasItem } from "@/types/scene";
@@ -30,7 +35,8 @@ import type { CanvasItem } from "@/types/scene";
  *
  * Vale para a SELEÇÃO inteira, ao contrário do submenu de aparências. Lá cada
  * personagem tem aparências próprias e não há lista comum; aqui a lista é o
- * cardápio da campanha, e envenenar a horda de uma vez é justamente o pedido.
+ * cardápio da campanha e as condições do Compêndio, e envenenar a horda de uma
+ * vez é justamente o pedido. Ver `useCondicoesParaMarcar`.
  *
  * Cada linha diz o estado da seleção: marcada se todos têm, um traço se só
  * alguns têm. Tocar LIGA em todos, a menos que todos já tenham -- aí desliga.
@@ -47,7 +53,7 @@ import type { CanvasItem } from "@/types/scene";
 export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
   const personagens = useCharactersStore((state) => state.personagens);
   const recarregar = useCharactersStore((state) => state.recarregar);
-  const { modelos } = useCondicoesDaCampanha();
+  const opcoes = useCondicoesParaMarcar();
   const abrirJanela = useAbrirJanela();
 
   // Um personagem por token, sem repetir a horda de clones: são eles que
@@ -67,11 +73,13 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
 
   if (total === 0) return null;
 
-  const cardapio = modelos ?? [];
-  const nomesDoCardapio = new Set(cardapio.map((modelo) => chaveDoNome(modelo.nome)));
+  const cardapio = opcoes ?? [];
+  const nomesDoCardapio = new Set(
+    cardapio.map(({ condicao }) => chaveDoNome(condicao.nome)),
+  );
 
-  // Com UM alvo, as condições dele que não estão no cardápio -- a maldição
-  // que só ele tem -- aparecem também, para sair pelo mesmo menu. Com vários,
+  // Com UM alvo, as condições dele que não estão em lista nenhuma -- a
+  // maldição que só ele tem -- aparecem também, para sair pelo mesmo menu. Com vários,
   // não: "tirar a maldição do Edgar" num menu de cinco tokens é um gesto que
   // ninguém procura ali.
   const doUnico = total === 1 ? (alvos[0]?.condicoes ?? objetos[0]?.condicoes ?? []) : [];
@@ -79,8 +87,13 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
     (condicao) => !nomesDoCardapio.has(chaveDoNome(condicao.nome)),
   );
 
-  async function alternar(modelo: Condicao, ligar: boolean) {
+  async function alternar({ condicao, doCompendio }: CondicaoParaMarcar, ligar: boolean) {
     try {
+      // A do Compêndio leva o efeito dela ao jogo antes de chegar a alguém,
+      // como no arrasto do card até o token. Desligar não precisa.
+      const modelo = doCompendio && ligar ? await prontaParaAPeca(condicao) : condicao;
+      if (!modelo) return;
+
       // Os objetos primeiro: são do store, não falham, e um erro do Rust não
       // pode deixar a metade da seleção sem a marca que o mestre pediu.
       let mudaram = alternarCondicaoNosObjetos(
@@ -89,11 +102,13 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         ligar,
       );
       if (alvos.length > 0) {
-        mudaram += await alternarCondicao(
-          alvos.map((alvo) => alvo.id),
-          modelo.id,
-          ligar,
-        );
+        mudaram += doCompendio
+          ? await alternarNosPersonagens(alvos, modelo, ligar)
+          : await alternarCondicao(
+              alvos.map((alvo) => alvo.id),
+              modelo.id,
+              ligar,
+            );
         recarregar();
       }
       if (ligar && mudaram === 0) {
@@ -124,7 +139,8 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         {t.geral.condicoes}
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="min-w-44">
-        {cardapio.map((modelo) => {
+        {cardapio.map((opcao) => {
+          const modelo = opcao.condicao;
           const quantos =
             alvos.filter((alvo) => temCondicao(alvo.condicoes, modelo.nome)).length +
             objetos.filter((item) => temCondicao(item.condicoes, modelo.nome)).length;
@@ -132,10 +148,10 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
 
           return (
             <ContextMenuItem
-              key={modelo.id}
+              key={`${opcao.doCompendio ? "compendio" : "menu"}:${modelo.id}`}
               closeOnClick={false}
               aria-checked={todos ? true : quantos > 0 ? "mixed" : false}
-              onClick={() => void alternar(modelo, !todos)}
+              onClick={() => void alternar(opcao, !todos)}
             >
               {/* O espaço fica reservado sem a marca, pela razão do submenu de
                   aparências: sem ele os nomes andam a cada toque. */}
@@ -175,11 +191,12 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         <ContextMenuSeparator />
 
         {/* O caminho até o cardápio, para quem abriu o menu e não achou o que
-            queria. Criar no próprio menu pediria um campo de texto dentro de
-            um submenu, que fecha ao primeiro movimento errado do mouse. */}
-        <ContextMenuItem onClick={() => abrirJanela({ tipo: "configuracao" })}>
-          <Settings2 />
-          {t.menuDeCondicoes.daCampanha}
+            queria: o Compêndio, de onde a condição vem para o menu. Criar no
+            próprio menu pediria um campo de texto dentro de um submenu, que
+            fecha ao primeiro movimento errado do mouse. */}
+        <ContextMenuItem onClick={() => abrirJanela({ tipo: "compendio" })}>
+          <BookMarked />
+          {t.menuDeCondicoes.noCompendio}
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>

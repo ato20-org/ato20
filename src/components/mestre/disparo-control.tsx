@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { BookOpen, Check, Crosshair, Minus, Search, Settings2, Triangle } from "lucide-react";
+import { BookOpen, Check, Crosshair, Minus, Search, Triangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,11 +119,6 @@ export function BotaoDoDisparo({ lado = "left" }: { lado?: "top" | "left" }) {
   const ativa = tool === "disparo";
 
   const { doCompendio, dosPlugins } = filtrarDisparos(todos, busca);
-  const escolhido = efeitoDoDisparo
-    ? [...todos.doCompendio, ...todos.dosPlugins.flatMap((grupo) => grupo.efeitos)].find(
-        (efeito) => efeito.id === efeitoDoDisparo.id,
-      )
-    : undefined;
   const nenhum = todos.doCompendio.length === 0 && todos.dosPlugins.length === 0;
   const nadaAchado = !nenhum && doCompendio.length === 0 && dosPlugins.length === 0;
 
@@ -207,23 +202,8 @@ export function BotaoDoDisparo({ lado = "left" }: { lado?: "top" | "left" }) {
         )}
 
         <div className="flex flex-col gap-0.5 border-t pt-1.5">
-          {/* A forma é do efeito, e não do tiro: o caminho para mudá-la é o
-              editor dele, à mão. Só o da campanha se edita -- o de plugin vem
-              pronto. */}
-          {escolhido && !(escolhido.origem && "plugin" in escolhido.origem) ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 justify-start text-xs"
-              onClick={() => {
-                setAberto(false);
-                abrirJanela({ tipo: "efeito", efeitoId: escolhido.id });
-              }}
-            >
-              <Settings2 />
-              <span className="truncate">{t.disparo.configurar(escolhido.titulo)}</span>
-            </Button>
-          ) : null}
+          {/* Só o Compêndio: é lá que o disparo se cria e se ajusta, a forma
+              inclusive -- ela é do efeito, e não do tiro. */}
           <Button
             variant="ghost"
             size="sm"

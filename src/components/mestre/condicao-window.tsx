@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { BookMarked, ListPlus } from "lucide-react";
+import { BookMarked } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   editarNaBiblioteca,
   guardarNaBiblioteca,
-  porNoMenu,
 } from "@/components/mestre/compendio-condicoes";
 import { TelaDaCondicao } from "@/components/mestre/efeitos-da-campanha";
 import { FundoDeCor } from "@/components/mestre/efeito-window";
@@ -134,15 +133,17 @@ export function useRotuloDaCondicao(
 }
 
 /**
- * O botão do topo: o caminho para a outra lista. Da biblioteca, "Pôr no menu";
- * do menu, "Guardar no Compêndio". A janela segue a condição -- ver
- * `trocarJanela`.
+ * O botão do topo, na condição do cardápio: "Guardar no Compêndio", o caminho
+ * para a biblioteca. A janela segue a condição -- ver `trocarJanela`.
+ *
+ * A do Compêndio não tem botão: ela já está no menu do token, e marcar não a
+ * tira de lá. Ver `useCondicoesParaMarcar`.
  */
 export function MudarDeListaNoTopo({ lugar, condicaoId }: { lugar: Lugar; condicaoId: string }) {
   const { condicao } = useCondicaoDaJanela(lugar, condicaoId);
-  if (!condicao) return null;
+  if (!condicao || lugar === "compendio") return null;
 
-  const rotulo = lugar === "compendio" ? t.compendio.porNoMenu : t.compendio.guardarNoCompendio;
+  const rotulo = t.compendio.guardarNoCompendio;
 
   return (
     <Tooltip>
@@ -152,11 +153,9 @@ export function MudarDeListaNoTopo({ lugar, condicaoId }: { lugar: Lugar; condic
             variant="ghost"
             size="icon-xs"
             aria-label={rotulo}
-            onClick={() =>
-              lugar === "compendio" ? porNoMenu(condicao) : void guardarNaBiblioteca(condicao)
-            }
+            onClick={() => void guardarNaBiblioteca(condicao)}
           >
-            {lugar === "compendio" ? <ListPlus /> : <BookMarked />}
+            <BookMarked />
           </Button>
         }
       />

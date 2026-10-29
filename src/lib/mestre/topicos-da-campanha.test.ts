@@ -9,19 +9,18 @@ describe("topicosAchados", () => {
       "medidores",
       "atributos",
       "detalhes",
-      "efeitos",
       "espectador",
       "ajustes",
     ]);
   });
 
-  it("quem procura o fogo acha os efeitos: o da condição e o da área moram lá", () => {
-    expect(topicosAchados("fagulha", {})).toEqual(["efeitos"]);
-    expect(topicosAchados("área", {})).toEqual(["efeitos"]);
+  it("as condições e os efeitos não moram mais aqui: são do Compêndio", () => {
+    expect(topicosAchados("condições", {})).toEqual([]);
+    expect(topicosAchados("fagulha", {})).toEqual([]);
   });
 
-  it("acha pelo nome da aba sem ligar para acento nem caixa", () => {
-    expect(topicosAchados("CONDICOES", {})).toEqual(["efeitos"]);
+  it("acha sem ligar para acento nem caixa", () => {
+    expect(topicosAchados("PERÍCIA", {})).toEqual(["detalhes"]);
   });
 
   it("acha pela palavra de quem não sabe o nome do tópico", () => {
@@ -38,14 +37,14 @@ describe("topicosAchados", () => {
 
   it("acha pelo que o mestre criou dentro do tópico", () => {
     expect(
-      topicosAchados("envenen", { efeitos: ["Envenenado", "Caído"] }),
-    ).toEqual(["efeitos"]);
+      topicosAchados("sanid", { medidores: ["Sanidade", "Vida"] }),
+    ).toEqual(["medidores"]);
   });
 
   it("um termo pode achar mais de um tópico", () => {
     expect(
-      topicosAchados("fogo", { medidores: ["Fogo interior"] }),
-    ).toEqual(["medidores", "efeitos"]);
+      topicosAchados("fogo", { medidores: ["Fogo interior"], atributos: ["FOGO"] }),
+    ).toEqual(["medidores", "atributos"]);
   });
 
   it("o retrato não mora mais aqui: layout e posição são da janela Retratos", () => {
@@ -66,8 +65,8 @@ describe("topicosAchados", () => {
     expect(topicosAchados("SÉPIA", {})).toEqual(["espectador"]);
   });
 
-  it("o brilho mora nos dois: o da fagulha e o da TV", () => {
-    expect(topicosAchados("brilho", {})).toEqual(["efeitos", "espectador"]);
+  it("o brilho é o da TV", () => {
+    expect(topicosAchados("brilho", {})).toEqual(["espectador"]);
   });
 
   it("nada bate, nada volta", () => {

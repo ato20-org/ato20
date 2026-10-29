@@ -42,14 +42,6 @@ export const TOPICOS_DA_CAMPANHA = [
     palavras: t.topicos.detalhes.palavras,
   },
   {
-    chave: "efeitos",
-    titulo: t.topicos.efeitos.titulo,
-    descricao: t.topicos.efeitos.descricao,
-    // Duas abas: as condições, com o efeito de cada uma pela engrenagem, e os
-    // efeitos em área. Quem procura o fogo, a fagulha ou a área acha aqui.
-    palavras: t.topicos.efeitos.palavras,
-  },
-  {
     // A imagem da TV: brilho, contraste e cor da janela do espectador. Quem
     // procura "projetor" ou "sepia" acha aqui -- ver as palavras.
     chave: "espectador",
@@ -74,8 +66,8 @@ export type TopicoDaCampanha = (typeof TOPICOS_DA_CAMPANHA)[number]["chave"];
  * O que cada tópico tem DENTRO, pelo nome -- a outra metade da busca.
  *
  * O título e as palavras dizem do que o tópico trata; os nomes dizem o que o
- * mestre criou nele. "Envenenado" não está nas palavras de Condições, mas é
- * uma condição que ele fez, e é por ela que ele vai procurar.
+ * mestre criou nele. "Sanidade" não está nas palavras de Medidores, mas é
+ * um medidor que ele fez, e é por ele que ele vai procurar.
  */
 export type ConteudoDosTopicos = Partial<Record<TopicoDaCampanha, string[]>>;
 

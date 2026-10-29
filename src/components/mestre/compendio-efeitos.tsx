@@ -24,19 +24,18 @@ import {
   Lendo,
   NadaCom,
   useEmCimaDoCartao,
+  VazioComSugestoes,
   type EdicaoDeTags,
 } from "@/components/mestre/compendio-cartao";
-import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { AmbienteNaLente } from "@/components/playground/ambiente-na-lente";
 import { TiroEmLaco } from "@/components/playground/tiro-em-laco";
-import { Button } from "@/components/ui/button";
 import { AreaDeEfeitoLayer } from "@/components/playground/area-de-efeito-layer";
 import { DeclarativoProvider, useDeclarativo } from "@/components/playground/declarativo";
 import { FiguraComEfeitos } from "@/components/playground/figura-com-efeitos";
 import type { Kit } from "@/components/ui/menu-kit";
 import { useTokenDrag, type TokenParaArrastar } from "@/hooks/use-token-drag";
 import { ambienteDaCena, EFEITOS_DE_AMBIENTE } from "@/lib/ambiente";
-import { COR_DA_AREA, ladoDaCasa } from "@/lib/area-de-efeito";
+import { COR_DA_AREA, EFEITOS_DE_AREA, ladoDaCasa } from "@/lib/area-de-efeito";
 import { SUGESTOES } from "@/lib/condicao";
 import { EFEITOS_DE_DISPARO } from "@/lib/disparo-de-efeito";
 import { copiaParaACampanha, EFEITOS_DE_FABRICA, especieDoEfeito } from "@/lib/efeitos";
@@ -504,6 +503,20 @@ export const LISTA_DA_ESPECIE: Readonly<Record<EspecieDoCompendio, ListaDoCompen
   ambiente: "compendio-ambientes",
 };
 
+/** O que "Usar sugestões" traz em cada aba: os de fábrica daquela espécie. */
+const SUGESTOES_DA_ESPECIE: Readonly<Record<EspecieDoCompendio, ReadonlyArray<DefinicaoDeEfeito>>> = {
+  area: EFEITOS_DE_AREA,
+  disparo: EFEITOS_DE_DISPARO,
+  ambiente: EFEITOS_DE_AMBIENTE,
+};
+
+/** A frase da aba vazia. */
+const VAZIO_DA_ESPECIE: Readonly<Record<EspecieDoCompendio, string>> = {
+  area: texto.vazioEfeitosDeArea,
+  disparo: texto.vazioDisparos,
+  ambiente: texto.vazioAmbientes,
+};
+
 export function EfeitosNoCompendio({
   especie = "area",
   filtro,
@@ -528,7 +541,7 @@ export function EfeitosNoCompendio({
   const moldes = useEfeitosDaCampanhaStore((state) => state.moldes);
   const cores = useCoresPelasCondicoes();
   const buscando = filtrando(filtro);
-  const [trazendo, setTrazendo] = useState(false);
+  const [sugerindo, setSugerindo] = useState(false);
 
   const lista = useMemo(
     () => moldes?.filter((efeito) => especieDoEfeito(efeito) === especie) ?? null,
@@ -536,19 +549,19 @@ export function EfeitosNoCompendio({
   );
 
   /**
-   * Os disparos (ou os ambientes) de fábrica, guardados no Compêndio como
-   * moldes da campanha: o ponto de partida de quem nunca fez um. Só com a
-   * lista vazia, como as sugestões de condição -- no meio de uma lista
-   * montada, duplicaria o fogo.
+   * Os efeitos de fábrica da aba -- de área, disparos ou ambientes --,
+   * guardados no Compêndio como moldes da campanha: o ponto de partida de quem
+   * nunca fez um. Só com a lista vazia, como as sugestões de condição -- no
+   * meio de uma lista montada, duplicaria o fogo.
    */
-  async function trazerOsProntos() {
-    setTrazendo(true);
+  async function usarSugestoes() {
+    setSugerindo(true);
     const { criarMolde, salvar } = useEfeitosDaCampanhaStore.getState();
-    for (const pronto of especie === "ambiente" ? EFEITOS_DE_AMBIENTE : EFEITOS_DE_DISPARO) {
+    for (const pronto of SUGESTOES_DA_ESPECIE[especie]) {
       const novo = await criarMolde();
       if (novo) salvar({ ...copiaParaACampanha(pronto, novo.id, pronto.titulo), compendio: true });
     }
-    setTrazendo(false);
+    setSugerindo(false);
   }
   const achados = useMemo(
     () =>
@@ -570,25 +583,10 @@ export function EfeitosNoCompendio({
 
   if (achados === null) return <Lendo />;
   if (lista?.length === 0 && pastas.length === 0)
-    return especie !== "area" ? (
-      <div className="space-y-2 p-2">
-        <PainelVazio conteudo={{ tipo: "compendio" }}>
-          {especie === "ambiente" ? texto.vazioAmbientes : texto.vazioDisparos}
-        </PainelVazio>
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          disabled={trazendo}
-          onClick={() => void trazerOsProntos()}
-        >
-          {especie === "ambiente" ? texto.trazerAmbientesProntos : texto.trazerDisparosProntos}
-        </Button>
-      </div>
-    ) : (
-      <PainelVazio conteudo={{ tipo: "compendio" }}>
-        {texto.vazioEfeitosDeArea}
-      </PainelVazio>
+    return (
+      <VazioComSugestoes sugerindo={sugerindo} onSugerir={() => void usarSugestoes()}>
+        {VAZIO_DA_ESPECIE[especie]}
+      </VazioComSugestoes>
     );
   if (buscando && achados.length === 0) return <NadaCom filtro={filtro} />;
 
