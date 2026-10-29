@@ -376,7 +376,35 @@ export function ConteudoDoSaquinho({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 space-y-1">
-        {semTitulo ? null : <p className="text-sm font-medium">{t.saquinho.titulo}</p>}
+        {/* O limpar mora no CABEÇALHO, em vermelho. Ficava entre a grade e o
+            histórico, sem cor, com cara de mais uma linha da lista -- um
+            jogador testando procurou e não achou. Aqui é o primeiro lugar que
+            o olho bate ao abrir, e não anda quando a soma ou o histórico
+            crescem.
+
+            Limpa o que está NESTE aparelho. Não tira da mesa: o que a mesa viu,
+            viu -- e quem tira de lá é o mestre.
+
+            `min-h-7` na linha para ela não mudar de altura quando o botão
+            aparece com o primeiro dado e some com o último. */}
+        <div className="flex min-h-7 items-center gap-2">
+          {semTitulo ? null : (
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">{t.saquinho.titulo}</p>
+          )}
+          {dados.length > 0 ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className={cn("h-7 shrink-0", semTitulo && "ml-auto")}
+              aria-label={t.saquinho.limparRotulo(dados.length)}
+              title={t.saquinho.limparRotulo(dados.length)}
+              onClick={(event) => recolher(boca?.() ?? centroDe(event.currentTarget))}
+            >
+              <Trash2 />
+              {t.saquinho.limpar(dados.length)}
+            </Button>
+          ) : null}
+        </div>
         {/* Em tela baixa (celular deitado) a ajuda sai: a altura é dos dados. */}
         <p className="text-muted-foreground text-xs [@media(max-height:520px)]:hidden">
           {t.saquinho.ajuda}
@@ -436,23 +464,6 @@ export function ConteudoDoSaquinho({
             {soma}
           </span>
         </div>
-      ) : null}
-
-      {/* Recolhe o que está NESTE aparelho. Não tira da mesa: o que a mesa viu,
-          viu -- e quem tira de lá é o mestre. Acima do histórico, e não no
-          fim dele: com a lista rolando, o fim dela é o que fica fora da vista. */}
-      {dados.length > 0 ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full shrink-0 justify-start"
-          onClick={(event) =>
-            recolher(boca?.() ?? centroDe(event.currentTarget))
-          }
-        >
-          <Trash2 />
-          {t.saquinho.recolher(dados.length)}
-        </Button>
       ) : null}
 
       {/* A única parte que rola. `min-h-12` para o título e uma linha
