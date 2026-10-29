@@ -100,6 +100,11 @@ export class PlayerDoYoutube extends EventTarget implements Reprodutor {
     this.ouvir = this.ouvir.bind(this);
   }
 
+  /** O `loop` vindo de quem guarda o player num estado do React. Ver `PonteDoYoutube`. */
+  definirLoop(ligado: boolean): void {
+    this.loop = ligado;
+  }
+
   /** Liga ao iframe da ponte. Chamado quando o iframe entra na árvore. */
   conectar(iframe: HTMLIFrameElement): void {
     this.iframe = iframe;

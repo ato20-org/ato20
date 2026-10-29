@@ -564,22 +564,31 @@ function PonteDoYoutube({
   /** Só a tela que mostra o progresso precisa saber. Ver `reportaProgresso`. */
   reportaSituacao: boolean;
 }) {
-  /** O `loop` de agora, para o player que nascer depois de ele mudar. */
-  const loopRef = useRef(loop);
+  /**
+   * UM player por ponte, nascido com ela, e não um por ligação do `ref`.
+   *
+   * Criá-lo dentro do `ref` era o defeito que deixava o YouTube mudo no `next
+   * dev`: o React 19, em modo estrito, liga, desliga e liga de novo cada `ref`
+   * na montagem. Nascia um player a cada ligação; o canal punha os ouvintes --
+   * o `loadedmetadata` que manda tocar, o `timeupdate` da barra -- no primeiro,
+   * e o iframe ficava com o segundo. A ponte avisava `pronto` a um player que
+   * ninguém ouvia, o play nunca saía, e a barra parava em `--:--`. Medido pelo
+   * inspetor: o YouTube parado em "cued" esperando um play que não vinha.
+   *
+   * Um player só, o `ref` só o liga e desliga do iframe, e quem o guardou --
+   * o canal, os ouvintes dele -- segue falando com o mesmo objeto. Vídeo ou
+   * trecho novo é ponte nova: o `key={url}` de quem a monta remonta tudo.
+   */
+  const [player] = useState(() => new PlayerDoYoutube({ video, inicio, fim }));
 
   useEffect(() => {
-    loopRef.current = loop;
-
-    const player = reprodutorRef.current;
-    if (player instanceof PlayerDoYoutube) player.loop = loop;
-  }, [loop, reprodutorRef]);
+    player.definirLoop(loop);
+  }, [player, loop]);
 
   const ligar = useCallback(
     (iframe: HTMLIFrameElement | null) => {
       if (!iframe) return;
 
-      const player = new PlayerDoYoutube({ video, inicio, fim });
-      player.loop = loopRef.current;
       player.conectar(iframe);
       reprodutorRef.current = player;
 
@@ -614,7 +623,7 @@ function PonteDoYoutube({
         if (reportaSituacao) setSituacaoDoYoutube(chave, null);
       };
     },
-    [video, inicio, fim, reprodutorRef, chave, reportaSituacao],
+    [player, video, reprodutorRef, chave, reportaSituacao],
   );
 
   return (
