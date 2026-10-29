@@ -59,6 +59,7 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
   const limparCaderno = useCadernoStore((state) => state.limpar);
 
   const [renomeando, setRenomeando] = useState(false);
+  const [saindo, setSaindo] = useState(false);
 
   // Antes de entrar não há o que mostrar: a tela inteira já é o campo do nome.
   if (status !== "dentro" || !sheet) return null;
@@ -115,24 +116,33 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
 
           <DropdownMenuSeparator />
 
-          <SairItem
-            onSair={() => {
-              sair(codigo);
-              // O caderno vai junto: ele está em memória, e quem entrar em
-              // seguida neste aparelho veria as notas de quem saiu piscando na
-              // tela até a leitura nova voltar.
-              limparCaderno();
-            }}
-          />
+          <DropdownMenuItem variant="destructive" onClick={() => setSaindo(true)}>
+            <LogOut />
+            {t.menu.sair}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Controlado de fora do menu: o item que abre o diálogo desmonta junto
-          com o menu, e um gatilho desmontado leva o diálogo embora com ele. */}
+      {/* Os dois diálogos controlados de fora do menu: o item que abre o
+          diálogo desmonta junto com o menu, e um gatilho desmontado leva o
+          diálogo embora com ele. O de sair morava dentro, ao lado do item, e
+          era o que se via: abria, ficava só o tempo da animação de fechar o
+          menu, e sumia com ela. */}
       <RenomearDialog
         codigo={codigo}
         aberto={renomeando}
         onFechar={() => setRenomeando(false)}
+      />
+      <SairDialog
+        aberto={saindo}
+        onAbertoChange={setSaindo}
+        onSair={() => {
+          sair(codigo);
+          // O caderno vai junto: ele está em memória, e quem entrar em
+          // seguida neste aparelho veria as notas de quem saiu piscando na
+          // tela até a leitura nova voltar.
+          limparCaderno();
+        }}
       />
     </>
   );
@@ -144,34 +154,31 @@ export function PlayerMenu({ codigo }: { codigo: string }) {
  * A ficha continua na mesa do mestre; quem volta com o mesmo nome ganha uma
  * linha nova, não a antiga. Vale dizer isso antes, não depois.
  */
-function SairItem({ onSair }: { onSair: () => void }) {
-  const [aberto, setAberto] = useState(false);
-
+function SairDialog({
+  aberto,
+  onAbertoChange,
+  onSair,
+}: {
+  aberto: boolean;
+  onAbertoChange: (aberto: boolean) => void;
+  onSair: () => void;
+}) {
   return (
-    <>
-      <DropdownMenuItem variant="destructive" onClick={() => setAberto(true)}>
-        <LogOut />
-        {t.menu.sair}
-      </DropdownMenuItem>
+    <AlertDialog open={aberto} onOpenChange={onAbertoChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t.menu.sairTitulo}</AlertDialogTitle>
+          <AlertDialogDescription>{t.menu.sairExplicacao}</AlertDialogDescription>
+        </AlertDialogHeader>
 
-      <AlertDialog open={aberto} onOpenChange={setAberto}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t.menu.sairTitulo}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t.menu.sairExplicacao}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
-            <AlertDialogAction onClick={onSair}>
-              {t.menu.sairConfirmar}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{comum.cancelar}</AlertDialogCancel>
+          <AlertDialogAction onClick={onSair}>
+            {t.menu.sairConfirmar}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -238,7 +245,7 @@ function RenomearForm({
       </DialogHeader>
 
       <div className="space-y-2">
-        <Label htmlFor="player-nome">{t.menu.teuNome}</Label>
+        <Label htmlFor="player-nome">{t.menu.seuNome}</Label>
         <Input
           id="player-nome"
           value={nome}

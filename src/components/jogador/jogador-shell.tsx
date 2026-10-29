@@ -244,7 +244,7 @@ export function JogadorShell({
           )}
         </DeclarativoProvider>
       ) : (
-        <PlayerEntrada codigo={codigo} />
+        <PlayerEntrada codigo={codigo} nomeDaMesa={nomeDaMesa} />
       )}
 
       {/* Os dados, sobre a página inteira. O celular na mão é a mesa: o dado
