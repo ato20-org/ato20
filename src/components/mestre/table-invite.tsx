@@ -201,15 +201,21 @@ export function TableInvite() {
           <Button
             variant="ghost"
             size="sm"
-            title={tailscale?.funil ? t.convite.abertaNaInternet : undefined}
+            // Sempre com nome: abaixo de `lg` o botão é só o ícone, e sem isto
+            // ficava mudo para o leitor de tela e sem dica para o ponteiro.
+            title={tailscale?.funil ? t.convite.abertaNaInternet : t.convite.convidar}
+            aria-label={tailscale?.funil ? t.convite.abertaNaInternet : t.convite.convidar}
           >
             <Icone />
-            <span className="hidden lg:inline">{t.convite.entrar}</span>
+            <span className="hidden lg:inline">{t.convite.convidar}</span>
           </Button>
         }
       />
       <DialogContent className="max-w-sm">
-        <DialogTitle>{t.convite.entrar}</DialogTitle>
+        {/* "Convidar", e não "Entrar na mesa": quem abre isto é o mestre, e ele
+            não está entrando em nada -- está chamando os outros. "Entrar na
+            mesa" é o botão do celular de quem chega. */}
+        <DialogTitle>{t.convite.convidarTitulo}</DialogTitle>
         {/* Uma por aba: o celular tem câmera e um quadrado para apontar, a TV
             não tem nem uma nem outro -- lá alguém digita o endereço com um
             controle remoto. Uma frase só serviria a uma das duas e mentiria
@@ -238,6 +244,14 @@ export function TableInvite() {
             </Button>
           ))}
         </div>
+
+        {/* Quem entra por esta rede, logo abaixo da escolha. Era a primeira
+            frase da letra miúda, no pé do diálogo e apagada -- mas é a resposta
+            para a pergunta que o mestre faz ao escolher ("meu amigo que está
+            longe consegue?"), e a resposta mora junto da pergunta. */}
+        <p className="text-muted-foreground -mt-2 text-xs">
+          {alcance(usada?.rede ?? escolha)}
+        </p>
 
         {escolha === "outro" && (
           <div className="space-y-1">
@@ -317,8 +331,24 @@ function avisoDeQueda(escolha: EscolhaDeRede, usada: EscolhaDeRede): string {
   return t.convite.caiu(t.convite.quemCaiu[escolha], t.convite.ondeFicou[usada]);
 }
 
+/** Quem o endereço alcança, rede por rede. Ver o `<p>` logo abaixo da escolha. */
+function alcance(rede: EscolhaDeRede): string {
+  const frase = t.convite.alcance;
+
+  switch (rede) {
+    case "local":
+      return frase.local;
+    case "outro":
+      return frase.outro;
+    case "internet":
+      return frase.internet;
+    default:
+      return frase.vpn(t.convite.redes[rede]);
+  }
+}
+
 /**
- * Quem o endereço alcança, e o que o código protege, rede por rede.
+ * A ressalva de cada rede: o que o código protege, ou o que trava.
  *
  * Na VPN, a dica é a do firewall porque é a que mais trava: o Windows costuma
  * tratar o adaptador dela como rede pública, e a permissão dada na primeira
@@ -335,7 +365,7 @@ function letraMiuda(rede: EscolhaDeRede, temVpn: boolean): string {
     case "internet":
       return letra.internet;
     default:
-      return letra.vpn(t.convite.redes[rede]);
+      return letra.vpn;
   }
 }
 
@@ -422,10 +452,13 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
               // parecia um endereço que termina ali. Desbotando na borda,
               // ela diz que continua -- e continua rolando.
               "bg-muted rolagem-limpa scroll-fade-x overflow-x-auto rounded-md px-3 py-2 text-left text-sm whitespace-nowrap"
-            : "text-muted-foreground text-xs break-all",
+            : // Quebra nas juntas do endereço, e não em qualquer letra: com
+              // `break-all` o código partia ao meio ("8UR4" numa linha, "WW" na
+              // outra), e quem o dita lia dois pedaços. Ver `comJuntas`.
+              "text-muted-foreground text-xs [overflow-wrap:anywhere]",
         )}
       >
-        {url}
+        {grande ? url : comJuntas(url)}
       </code>
 
       <Button
@@ -448,11 +481,47 @@ function Endereco({ url, grande }: { url: string; grande?: boolean }) {
 }
 
 /**
+ * O endereço com pontos de quebra depois da máquina e antes da consulta.
+ *
+ * `<wbr>` em vez de `break-all`: a linha ainda quebra se não couber, mas no
+ * fim de `host:porta` e antes de `?code=`, que é onde quem lê espera.
+ */
+function comJuntas(url: string): React.ReactNode {
+  const inicioDoCaminho = url.indexOf("/", url.indexOf("://") + 3);
+  if (inicioDoCaminho < 0) return url;
+
+  const maquina = url.slice(0, inicioDoCaminho);
+  const resto = url.slice(inicioDoCaminho);
+  const consulta = resto.indexOf("?");
+
+  if (consulta < 0) {
+    return (
+      <>
+        {maquina}
+        <wbr />
+        {resto}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {maquina}
+      <wbr />
+      {resto.slice(0, consulta)}
+      <wbr />
+      {resto.slice(consulta)}
+    </>
+  );
+}
+
+/**
  * Abrir e fechar a mesa para a internet.
  *
- * Fechada, diz o que abrir significa ANTES do clique: qualquer pessoa com o
- * link e o código entra, e isso é uma decisão, não um detalhe. Aberta, o QR
- * logo abaixo já é o endereço público, e aqui fica só o botão de fechar.
+ * Fechada, o que abrir significa já está dito ANTES do clique, na frase do
+ * alcance logo acima: qualquer pessoa com o link entra, e isso é uma decisão,
+ * não um detalhe. Aberta, o QR logo abaixo já é o endereço público, e aqui
+ * fica o estado -- com o ponto verde, que se vê sem ler -- e o botão de fechar.
  *
  * Cada problema vem com a saída dele, e não com a mensagem da CLI: quem joga
  * RPG não tem obrigação de saber o que é um operador do tailscaled.
@@ -474,12 +543,16 @@ function PainelDoFunil({
 
   if (tailscale.funil) {
     return (
+      // "Fechar a porta", e não só "Fechar": ao lado do X do diálogo, um
+      // "Fechar" solto parecia fechar a janela. A porta é a mesma da letra
+      // miúda, que o ATO20 fecha sozinho ao sair.
       <div className="flex items-center justify-between gap-2">
-        <p className="text-muted-foreground min-w-0 truncate text-xs">
-          {t.convite.abertaEm(tailscale.funil.replace("https://", ""))}
+        <p className="flex min-w-0 items-center gap-1.5 text-xs">
+          <span className="size-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+          <span className="truncate">{t.convite.abertaNaInternet}</span>
         </p>
-        <Button size="xs" variant="ghost" disabled={mexendo} onClick={onFechar}>
-          {mexendo ? t.convite.fechando : t.convite.fechar}
+        <Button size="xs" variant="outline" disabled={mexendo} onClick={onFechar}>
+          {mexendo ? t.convite.fechando : t.convite.fecharAPorta}
         </Button>
       </div>
     );
@@ -487,11 +560,7 @@ function PainelDoFunil({
 
   return (
     <div className="space-y-2">
-      {tailscale.problema ? (
-        <ProblemaDoFunil problema={tailscale.problema} />
-      ) : (
-        <p className="text-muted-foreground text-xs">{t.convite.oQueAbrirSignifica}</p>
-      )}
+      {tailscale.problema ? <ProblemaDoFunil problema={tailscale.problema} /> : null}
       {tailscale.online && (
         <Button size="sm" variant="secondary" disabled={mexendo} onClick={onAbrir}>
           {mexendo ? t.convite.abrindo : t.convite.abrirParaAInternet}

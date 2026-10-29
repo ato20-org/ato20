@@ -526,7 +526,8 @@ const pt = {
 
   /** O convite da mesa: o QR, a rede por onde ela entra e a internet pelo Funnel. */
   convite: {
-    entrar: "Entrar na mesa",
+    convidar: "Convidar",
+    convidarTitulo: "Convidar para a mesa",
     abertaNaInternet: "A mesa está aberta na internet",
     semRede: "Sem rede",
     semRedeExplicacao:
@@ -535,7 +536,7 @@ const pt = {
     digitarNaTv: "Digite este endereço no navegador da TV.",
     rede: "Rede",
     redes: {
-      local: "Rede local",
+      local: "Mesmo Wi-Fi",
       tailscale: "Tailscale",
       hamachi: "Hamachi",
       radmin: "Radmin",
@@ -549,7 +550,7 @@ const pt = {
     abaTv: "TV",
     /** A rede que não respondeu, como sujeito da frase: o artigo muda com ela. */
     quemCaiu: {
-      local: "A rede local",
+      local: "O Wi-Fi",
       tailscale: "O Tailscale",
       hamachi: "O Hamachi",
       radmin: "O Radmin",
@@ -559,7 +560,7 @@ const pt = {
     },
     /** A rede que ficou no lugar, como objeto da frase. */
     ondeFicou: {
-      local: "a rede local",
+      local: "o Wi-Fi",
       tailscale: "o Tailscale",
       hamachi: "o Hamachi",
       radmin: "o Radmin",
@@ -569,27 +570,29 @@ const pt = {
     },
     caiu: (quem: string, onde: string) =>
       `${quem} não respondeu nesta máquina, então o convite usa ${onde}.`,
+    /** Quem entra pela rede escolhida, logo abaixo dos botões de rede. */
+    alcance: {
+      local: "Entra quem está no mesmo Wi-Fi que você.",
+      internet: "Entra qualquer pessoa com o link, de qualquer lugar, sem instalar nada.",
+      outro: "Entra quem alcança o endereço que você digitar.",
+      vpn: (rede: string) => `Entra quem tem o ${rede} no aparelho e está na sua rede.`,
+    },
+    /** A ressalva de cada rede, no pé do diálogo. */
     letraMiuda: {
-      local:
-        "Vale só na mesma rede. O código evita a entrada por acaso, não alguém decidido no seu Wi-Fi.",
+      local: "O código evita a entrada por acaso, não alguém decidido no seu Wi-Fi.",
       ligueUmaVpn:
-        "Para jogar pela internet, ligue o Tailscale, o ZeroTier, o Hamachi ou o Radmin aqui e nos aparelhos da mesa: a rede aparece nesta lista.",
-      outro:
-        "Vale para quem alcança esse endereço. Se ele estiver aberto na internet, o código não segura alguém decidido.",
+        "Para jogar com quem está longe, ligue o Tailscale, o ZeroTier, o Hamachi ou o Radmin aqui e nos aparelhos da mesa: a rede aparece nesta lista.",
+      outro: "Se esse endereço estiver aberto na internet, o código não segura alguém decidido.",
       internet:
-        "Vale para qualquer pessoa com o link e o código, de qualquer lugar. O ATO20 fecha a porta quando você sai dele.",
-      vpn: (rede: string) =>
-        `Vale para quem entrou na sua rede do ${rede}. Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.`,
+        "Mande o link só para quem vai jogar: o código é a única tranca. O ATO20 fecha a porta quando você sai dele.",
+      vpn: "Se alguém não conseguir abrir, libere o ATO20 no firewall do Windows também para rede pública.",
     },
     qrPara: (url: string) => `QR code para ${url}`,
     copiado: "Copiado",
-    copiarEndereco: "Copiar endereço",
+    copiarEndereco: "Copiar link",
     perguntandoAoTailscale: "Perguntando ao Tailscale…",
-    abertaEm: (endereco: string) => `Aberta em ${endereco}`,
     fechando: "Fechando…",
-    fechar: "Fechar",
-    oQueAbrirSignifica:
-      "A mesa fica aberta para qualquer pessoa com o link e o código, até você fechar ou sair do ATO20.",
+    fecharAPorta: "Fechar a porta",
     abrindo: "Abrindo…",
     abrirParaAInternet: "Abrir para a internet",
     semNavegador: "Não foi possível abrir o navegador.",
@@ -601,7 +604,7 @@ const pt = {
     semOperador:
       "O Linux só deixa o Tailscale abrir a porta para quem é operador dele. Rode isto uma vez no terminal e clique em abrir de novo:",
     portaOcupada:
-      "O Funnel desta máquina já serve outra coisa na porta 443. Feche aquilo para abrir a mesa.",
+      "Outro programa desta máquina já usa o Funnel do Tailscale (porta 443). Desligue-o e clique em abrir de novo.",
     naoAbriu: (motivo: string) => `O Tailscale não abriu: ${motivo}`,
   },
 
@@ -614,7 +617,7 @@ const pt = {
       `${presentes} de ${total} na mesa agora. Escolha um para ver arquivos e notas.`,
     carregando: "Carregando",
     ninguemEntrou:
-      "Ninguém entrou ainda. Mostre o QR de \"Entrar na mesa\" e peça para abrirem a aba Personagem.",
+      "Ninguém entrou ainda. Mostre o QR do \"Convidar\" e peça para abrirem a aba Personagem.",
     buscar: "Buscar por nome ou personagem",
     buscarRotulo: "Buscar jogador",
     ninguemComEsseNome: "Ninguém com esse nome.",
@@ -1944,7 +1947,8 @@ const en: typeof pt = {
   },
 
   convite: {
-    entrar: "Join the table",
+    convidar: "Invite",
+    convidarTitulo: "Invite to the table",
     abertaNaInternet: "The table is open on the internet",
     semRede: "No network",
     semRedeExplicacao:
@@ -1953,7 +1957,7 @@ const en: typeof pt = {
     digitarNaTv: "Type this address in the TV browser.",
     rede: "Network",
     redes: {
-      local: "Local network",
+      local: "Same Wi-Fi",
       tailscale: "Tailscale",
       hamachi: "Hamachi",
       radmin: "Radmin",
@@ -1966,7 +1970,7 @@ const en: typeof pt = {
     abaJogador: "Player",
     abaTv: "TV",
     quemCaiu: {
-      local: "The local network",
+      local: "The Wi-Fi",
       tailscale: "Tailscale",
       hamachi: "Hamachi",
       radmin: "Radmin",
@@ -1975,7 +1979,7 @@ const en: typeof pt = {
       outro: "The typed address",
     },
     ondeFicou: {
-      local: "the local network",
+      local: "the Wi-Fi",
       tailscale: "Tailscale",
       hamachi: "Hamachi",
       radmin: "Radmin",
@@ -1984,27 +1988,27 @@ const en: typeof pt = {
       outro: "the typed address",
     },
     caiu: (quem, onde) => `${quem} did not respond on this computer, so the invite uses ${onde}.`,
+    alcance: {
+      local: "Anyone on the same Wi-Fi as you can join.",
+      internet: "Anyone with the link can join, from anywhere, without installing anything.",
+      outro: "Anyone who can reach the address you type can join.",
+      vpn: (rede) => `Anyone with ${rede} on their device and in your network can join.`,
+    },
     letraMiuda: {
-      local:
-        "Works only on the same network. The code keeps people from wandering in, not someone determined on your Wi-Fi.",
+      local: "The code keeps people from wandering in, not someone determined on your Wi-Fi.",
       ligueUmaVpn:
-        "To play over the internet, turn on Tailscale, ZeroTier, Hamachi or Radmin here and on the table's devices: the network shows up in this list.",
-      outro:
-        "Works for anyone who can reach that address. If it is open on the internet, the code won't stop someone determined.",
+        "To play with people far away, turn on Tailscale, ZeroTier, Hamachi or Radmin here and on the table's devices: the network shows up in this list.",
+      outro: "If that address is open on the internet, the code won't stop someone determined.",
       internet:
-        "Works for anyone with the link and the code, from anywhere. ATO20 closes the door when you leave it.",
-      vpn: (rede) =>
-        `Works for whoever joined your ${rede} network. If someone can't open it, allow ATO20 in the Windows firewall for public networks too.`,
+        "Send the link only to who's playing: the code is the only lock. ATO20 closes the door when you leave it.",
+      vpn: "If someone can't open it, allow ATO20 in the Windows firewall for public networks too.",
     },
     qrPara: (url) => `QR code for ${url}`,
     copiado: "Copied",
-    copiarEndereco: "Copy address",
+    copiarEndereco: "Copy link",
     perguntandoAoTailscale: "Asking Tailscale…",
-    abertaEm: (endereco) => `Open at ${endereco}`,
     fechando: "Closing…",
-    fechar: "Close",
-    oQueAbrirSignifica:
-      "The table stays open to anyone with the link and the code, until you close it or leave ATO20.",
+    fecharAPorta: "Close the door",
     abrindo: "Opening…",
     abrirParaAInternet: "Open to the internet",
     semNavegador: "Could not open the browser.",
@@ -2016,7 +2020,7 @@ const en: typeof pt = {
     semOperador:
       "On Linux, Tailscale only opens the port for its operator. Run this once in the terminal and click open again:",
     portaOcupada:
-      "Funnel on this computer already serves something else on port 443. Close that to open the table.",
+      "Another program on this computer already uses Tailscale Funnel (port 443). Turn it off and click open again.",
     naoAbriu: (motivo) => `Tailscale did not open: ${motivo}`,
   },
 
@@ -2028,7 +2032,7 @@ const en: typeof pt = {
       `${presentes} of ${total} at the table now. Pick one to see files and notes.`,
     carregando: "Loading",
     ninguemEntrou:
-      "No one has joined yet. Show the \"Join the table\" QR code and ask them to open the Character tab.",
+      "No one has joined yet. Show the \"Invite\" QR code and ask them to open the Character tab.",
     buscar: "Search by name or character",
     buscarRotulo: "Search player",
     ninguemComEsseNome: "No one by that name.",
