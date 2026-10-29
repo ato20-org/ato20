@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ListPlus, Maximize2, Tags, Trash2, Upload } from "lucide-react";
 
@@ -15,13 +15,14 @@ import {
   Lendo,
   NadaCom,
   useEmCimaDoCartao,
+  VazioComSugestoes,
   type EdicaoDeTags,
 } from "@/components/mestre/compendio-cartao";
 import { BonecoComEfeito } from "@/components/mestre/compendio-efeitos";
-import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
 import type { Kit } from "@/components/ui/menu-kit";
 import { useTokenDrag } from "@/hooks/use-token-drag";
+import { SUGESTOES } from "@/lib/condicao";
 import { definicaoDoEfeito, especieDoEfeito, type EfeitosDeFora } from "@/lib/efeitos";
 import { abrirJanela, trocarJanela } from "@/lib/extensoes/janelas";
 import { t } from "@/lib/i18n/mestre";
@@ -37,6 +38,7 @@ import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
 import {
   condicaoNoMenu,
+  criarCondicaoDoCompendio,
   editarCondicaoDoCompendio,
   guardarCondicaoNoCompendio,
   levarAoCompendio,
@@ -150,6 +152,7 @@ export function CondicoesNoCompendio({
   const { lista } = useCondicoesDoCompendio();
   const efeitos = useEfeitosDePersonagemDaCampanha();
   const buscando = filtrando(filtro);
+  const [sugerindo, setSugerindo] = useState(false);
 
   const achados = useMemo(
     () =>
@@ -169,9 +172,37 @@ export function CondicoesNoCompendio({
     [onGuardado],
   );
 
+  /**
+   * O cardápio de partida, na biblioteca: as condições de `SUGESTOES`. Só com
+   * a biblioteca vazia, como os disparos prontos -- no meio de uma lista
+   * montada, duplicaria o "Em chamas".
+   *
+   * Criar e depois pôr o efeito: o `compendio_condicao_criar` não recebe
+   * efeito, e a condição sem ele já é uma condição -- se o segundo passo
+   * falhar, sobra o selo, e não um buraco.
+   */
+  async function usarSugestoes() {
+    setSugerindo(true);
+    try {
+      for (const sugestao of SUGESTOES) {
+        const nova = await criarCondicaoDoCompendio(sugestao.nome, sugestao.cor, sugestao.icone);
+        if (sugestao.efeito) await editarCondicaoDoCompendio(nova.id, { efeito: sugestao.efeito });
+      }
+    } catch (cause) {
+      falhou(cause);
+    } finally {
+      useCondicoesDoCompendioStore.getState().recarregar();
+      setSugerindo(false);
+    }
+  }
+
   if (achados === null) return <Lendo />;
   if (lista?.length === 0 && pastas.length === 0)
-    return <PainelVazio conteudo={{ tipo: "compendio" }}>{texto.vazioCondicoes}</PainelVazio>;
+    return (
+      <VazioComSugestoes sugerindo={sugerindo} onSugerir={() => void usarSugestoes()}>
+        {texto.vazioCondicoes}
+      </VazioComSugestoes>
+    );
   if (buscando && achados.length === 0) return <NadaCom filtro={filtro} />;
 
   return (

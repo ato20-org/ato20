@@ -30,6 +30,7 @@ import {
   TresPontos,
 } from "@/components/mestre/arvore-de-pastas";
 import { LuzDaAura } from "@/components/mestre/luz-da-aura";
+import { PainelVazio } from "@/components/mestre/painel-vazio";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -573,6 +574,37 @@ function ImagemPedida({
 
 export function Lendo() {
   return <p className="text-muted-foreground p-3 text-xs">{texto.lendo}</p>;
+}
+
+/**
+ * A aba vazia, com o convite e o ponto de partida: "Usar sugestões" traz as
+ * de fábrica daquela aba -- as condições do cardápio, os efeitos de área, os
+ * disparos, os ambientes.
+ *
+ * Um só para as quatro abas: nasceram três com a mesma frase em formas
+ * diferentes ("ou traga os que vêm no ATO20" num, nada no outro), e o botão
+ * com outro nome em cada uma.
+ */
+export function VazioComSugestoes({
+  sugerindo,
+  onSugerir,
+  children,
+}: {
+  /** As sugestões estão sendo criadas: o botão espera, e não cria duas vezes. */
+  sugerindo: boolean;
+  onSugerir: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center pb-6">
+      <PainelVazio conteudo={{ tipo: "compendio" }} className="h-auto">
+        {children}
+      </PainelVazio>
+      <Button variant="outline" size="sm" disabled={sugerindo} onClick={onSugerir}>
+        {texto.usarSugestoes}
+      </Button>
+    </div>
+  );
 }
 
 export function NadaCom({ filtro }: { filtro: FiltroDoCompendio }) {
