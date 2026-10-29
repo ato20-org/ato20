@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ListPlus, Maximize2, Tags, Trash2, Upload } from "lucide-react";
+import { Maximize2, Tags, Trash2, Upload } from "lucide-react";
 
 import { ItensDeMover } from "@/components/mestre/arvore-de-pastas";
 import {
@@ -37,7 +37,6 @@ import { useEfeitosDaCampanhaStore } from "@/lib/store/use-efeitos-da-campanha-s
 import { useTokenDragStore } from "@/lib/store/use-token-drag-store";
 import { cn } from "@/lib/utils";
 import {
-  condicaoNoMenu,
   criarCondicaoDoCompendio,
   editarCondicaoDoCompendio,
   guardarCondicaoNoCompendio,
@@ -123,15 +122,13 @@ export function DesenhoDaCondicao({
 }
 
 /**
- * A biblioteca de condições da campanha, em cards: o que NÃO está no menu do
- * token. O menu tem dezesseis lugares; aqui cabe o sistema inteiro, e o mestre
- * escolhe o que esta sessão precisa à mão.
+ * A biblioteca de condições da campanha, em cards. É ela que o botão direito
+ * do token oferece, junto do cardápio -- ver `useCondicoesParaMarcar` --, e
+ * marcar não a tira daqui: a ficha ganha uma cópia, como no arrasto do card
+ * até o token.
  *
  * Clicar abre a janela da condição, como o card do item abre a do item: o
- * selo, o nome, a mesa vê ou não, e o efeito com o editor inteiro. "Pôr no
- * menu" a MUDA de lugar -- uma condição é definição, e duas cópias dela
- * confundiriam o menu, que reconhece as fichas pelo nome. Ver
- * `compendio::condicao_no_menu`.
+ * selo, o nome, a mesa vê ou não, e o efeito com o editor inteiro.
  */
 export function CondicoesNoCompendio({
   filtro,
@@ -219,7 +216,6 @@ export function CondicoesNoCompendio({
           caminho={caminho}
           pastas={pastas}
           efeitos={efeitos}
-          onPorNoMenu={porNoMenu}
           onGuardarNoAto20={guardarNoAto20}
           onApagar={onApagar}
           onEditarTags={onEditarTags}
@@ -255,25 +251,7 @@ export function editarNaBiblioteca(id: string, patch: PatchCondicao): void {
 }
 
 /**
- * A condição sai da biblioteca e vai ao menu do token -- com outro id, porque
- * é outro arquivo. A janela dela, se estava aberta, vai junto.
- */
-export function porNoMenu(condicao: MoldeDeCondicao): void {
-  void condicaoNoMenu(condicao.id).then((noMenu) => {
-    useCondicoesDoCompendioStore.getState().recarregar();
-    useCondicoesStore.getState().recarregar();
-    // O efeito dela pode ter entrado em jogo junto.
-    void useEfeitosDaCampanhaStore.getState().carregar();
-    trocarJanela(
-      { tipo: "condicao", lugar: "compendio", condicaoId: condicao.id },
-      { tipo: "condicao", lugar: "menu", condicaoId: noMenu.id },
-    );
-    toast.success(texto.noMenu(condicao.nome));
-  }, falhou);
-}
-
-/**
- * O avesso: a condição sai do menu e volta à biblioteca, com outro id. As
+ * Do cardápio para a biblioteca: a condição sai do menu, com outro id. As
  * fichas que já estão com ela continuam, e o efeito dela vai junto quando
  * ninguém mais o usa -- ver `compendio::guardar_condicao`. A janela segue.
  */
@@ -322,7 +300,6 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
   caminho,
   pastas,
   efeitos,
-  onPorNoMenu,
   onGuardarNoAto20,
   onApagar,
   onEditarTags,
@@ -332,7 +309,6 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
   caminho?: string;
   pastas: Pasta[];
   efeitos: DefinicaoDeEfeito[];
-  onPorNoMenu: (condicao: MoldeDeCondicao) => void;
   onGuardarNoAto20: (condicao: MoldeDeCondicao) => void;
   onApagar: (condicao: MoldeDeCondicao) => void;
   onEditarTags: (edicao: EdicaoDeTags) => void;
@@ -357,10 +333,6 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
       <Item onClick={abrir}>
         <Maximize2 />
         {texto.abrir}
-      </Item>
-      <Item onClick={() => onPorNoMenu(condicao)}>
-        <ListPlus />
-        {texto.porNoMenu}
       </Item>
       <Item onClick={() => onGuardarNoAto20(condicao)}>
         <Upload />
@@ -431,8 +403,8 @@ const CartaoDaCondicao = memo(function CartaoDaCondicao({
       }
       onAbrir={abrir}
       acao={
-        <AcaoDaLinha rotulo={texto.porNoMenu} onClick={() => onPorNoMenu(condicao)}>
-          <ListPlus />
+        <AcaoDaLinha rotulo={texto.abrir} onClick={abrir}>
+          <Maximize2 />
         </AcaoDaLinha>
       }
       itens={itens}

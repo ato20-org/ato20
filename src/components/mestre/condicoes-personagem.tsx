@@ -9,10 +9,10 @@ import {
 } from "@/components/mestre/lista-de-condicoes";
 import { SecaoFicha } from "@/components/mestre/secao-ficha";
 import { t } from "@/lib/i18n/personagens";
+import { criarNaFicha } from "@/lib/mestre/condicoes-para-marcar";
 import { useCharactersStore } from "@/lib/store/use-characters-store";
 import {
   alternarCondicao,
-  criarCondicao,
   editarCondicao,
   removerCondicao,
   reordenarCondicoes,
@@ -132,13 +132,9 @@ function useDonoDoPersonagem(personagem: Personagem, onChanged: () => void): Don
         return mudaram;
       },
       criarAvulsa: (condicao) =>
-        criarCondicao(
-          personagem.id,
-          condicao.nome,
-          condicao.cor,
-          condicao.icone,
-          condicao.efeito ?? null,
-        ).then(onChanged),
+        criarNaFicha(personagem.id, { ...condicao, escondido: condicao.escondido ?? false }).then(
+          onChanged,
+        ),
       dicaDoOlho: (escondido) => ({
         titulo: escondido ? t.geral.soVoceVe : t.geral.aMesaVe,
         texto: t.condicoesPersonagem.escondida,

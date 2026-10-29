@@ -176,14 +176,6 @@ export function apagarCondicaoDoCompendio(id: string): Promise<void> {
   return call("compendio_condicao_apagar", { id });
 }
 
-/**
- * Da biblioteca para o menu do token. O efeito da campanha que ela usa entra em
- * jogo junto. Recusa com o motivo quando o menu está cheio ou já tem o nome.
- */
-export function condicaoNoMenu(id: string): Promise<Condicao> {
-  return call<Condicao>("compendio_condicao_no_menu", { id });
-}
-
 /** Do menu para a biblioteca. As fichas que já têm a condição ficam com ela. */
 export function guardarCondicaoNoCompendio(modeloId: string): Promise<MoldeDeCondicao> {
   return call<MoldeDeCondicao>("compendio_condicao_guardar", { modeloId });
