@@ -187,6 +187,14 @@ export type Jogada = {
   semente: number;
   /** O dado da mesa que saiu para virar esta jogada, se veio de um. */
   daMesa?: string;
+  /**
+   * Onde o dedo soltou, em pixel de tela, quando a jogada veio de um arrasto.
+   *
+   * `x` e `y` já vêm presos na mesa, e perto da borda a trava os empurra para
+   * dentro: quem precisa saber se a soltura caiu num lugar da TELA -- a faixa
+   * de tirar o dado, no celular -- pergunta por aqui. Ver `LixeiraDoDado`.
+   */
+  solto?: { clientX: number; clientY: number };
 };
 
 /** As bordas em que o dado para: a mesa declarada, ou o espaço inteiro. */
@@ -314,6 +322,7 @@ export function DadosNoEspaco({
       impulso: { x: arremesso.vx / scale, y: arremesso.vy / scale },
       semente: arremesso.semente,
       daMesa: arremesso.daMesa,
+      solto: { clientX: arremesso.clientX, clientY: arremesso.clientY },
     };
 
     // Consome ANTES de executar: quem executa pode ser assíncrono -- no celular

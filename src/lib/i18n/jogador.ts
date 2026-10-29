@@ -120,6 +120,11 @@ const pt = {
 
   dados: {
     naoRecebeu: "A mesa não recebeu o dado",
+    /** A faixa no pé da tela que tira o dado da mesa. Ver `LixeiraDoDado`. */
+    lixeira: {
+      arraste: "Arraste para baixo para tirar o dado da mesa",
+      solte: "Solte para tirar o dado da mesa",
+    },
   },
 
   saquinho: {
@@ -383,6 +388,10 @@ const en: typeof pt = {
 
   dados: {
     naoRecebeu: "The table didn't get the die",
+    lixeira: {
+      arraste: "Drag down to take the die off the table",
+      solte: "Release to take the die off the table",
+    },
   },
 
   saquinho: {
