@@ -94,7 +94,12 @@ export function PaletaDeComandos() {
         showCloseButton={false}
         // `self-start` + margem: o invólucro centra por flex, e uma paleta no meio
         // da tela cobre o palco; no alto ela fica onde o olho já procura.
-        className="mt-[12vh] gap-0 self-start p-0 sm:max-w-[min(36rem,calc(100%-2rem))]"
+        //
+        // Borda, e não o `ring` do diálogo: o `ring` é sombra, pintada FORA da
+        // caixa, e a WebKitGTK não repinta o que fica fora dela quando a caixa
+        // encolhe. Filtrar a lista deixava o contorno da paleta cheia desenhado
+        // sobre o palco, com o fundo já limpo por dentro.
+        className="border-foreground/10 mt-[12vh] gap-0 self-start border p-0 ring-0 sm:max-w-[min(36rem,calc(100%-2rem))]"
       >
         <DialogTitle className="sr-only">{t.paleta.titulo}</DialogTitle>
         <DialogDescription className="sr-only">
