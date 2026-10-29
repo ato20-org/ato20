@@ -72,8 +72,8 @@ export function useEfeitosEmAreaDosPlugins(): EfeitosEmAreaDoPlugin[] {
 /**
  * O painel do gizmo da área: qual efeito ela tem.
  *
- * Os da CAMPANHA, e depois os dos plugins ligados: é na configuração da
- * campanha que o fogo ganha nome, cor e camadas, e aqui ele só se aplica --
+ * Os da CAMPANHA, e depois os dos plugins ligados: é no Compêndio que o
+ * fogo ganha nome, cor e camadas, e aqui ele só se aplica --
  * como a condição, que se marca no botão direito e se configura no cardápio.
  * Os de plugin vêm prontos, e valem enquanto o plugin estiver ligado.
  * A área que já tem um efeito de fora da lista (o fogo de fábrica, de antes da

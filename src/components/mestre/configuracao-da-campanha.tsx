@@ -18,16 +18,10 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Tv,
   Wand2,
   X,
 } from "lucide-react";
-import {
-  useEfeitosEmAreaDaCampanha,
-  useEfeitosEmAreaDosPlugins,
-} from "@/components/mestre/efeito-da-area";
-import { guardarNaBiblioteca } from "@/components/mestre/compendio-condicoes";
 import { SistemaDaCampanha } from "@/components/mestre/sistema-da-campanha";
 import {
   AtributosDaCampanha,
@@ -36,14 +30,12 @@ import {
 } from "@/components/mestre/atributos-da-campanha";
 import { DetalhesDaCampanha } from "@/components/mestre/detalhes-da-campanha";
 import { useMoldeDeDetalhes } from "@/lib/store/use-molde-de-detalhes-store";
-import { EfeitosEmAreaDaCampanha } from "@/components/mestre/efeitos-em-area-da-campanha";
 import { toast } from "sonner";
 
 import {
   AjustesDaCampanha,
   bateNaBusca,
 } from "@/components/desktop/lista-de-configuracoes";
-import { LinhaDeCondicao } from "@/components/mestre/linha-de-condicao";
 import {
   LinhaDeMedidor,
   SeloDoMedidor,
@@ -54,7 +46,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -62,7 +53,6 @@ import {
 } from "@/components/ui/tooltip";
 import { useCharacters } from "@/hooks/use-characters";
 import { useListReorder } from "@/hooks/use-list-reorder";
-import { SUGESTOES } from "@/lib/condicao";
 import { t } from "@/lib/i18n/mestre";
 import { useConfiguracoesStore } from "@/lib/configuracoes/registro";
 import {
@@ -75,26 +65,17 @@ import {
   topicosAchados,
   type TopicoDaCampanha,
 } from "@/lib/mestre/topicos-da-campanha";
-import { useCondicoesDaCampanha } from "@/lib/store/use-condicoes-store";
-import { abrirJanela, fecharJanela } from "@/lib/extensoes/janelas";
-import { chaveDe } from "@/lib/store/use-window-store";
 import { CORES_LAPIS } from "@/lib/store/use-tool-store";
 import {
   aplicarModelosEmTodos,
-  criarCondicaoDaCampanha,
   criarModelo,
-  editarCondicaoDaCampanha,
   editarModelo,
   listarModelos,
-  removerCondicaoDaCampanha,
   removerModelo,
-  reordenarCondicoesDaCampanha,
   reordenarModelos,
 } from "@/lib/vault/characters";
 import {
   MAX_MODELOS,
-  MAX_MODELOS_DE_CONDICAO,
-  type Condicao,
   type ModeloDeMedidor,
   type PatchModelo,
 } from "@/types/character";
@@ -108,7 +89,6 @@ const ICONE: Record<TopicoDaCampanha, typeof Gauge> = {
   medidores: Gauge,
   atributos: Hash,
   detalhes: ListTree,
-  efeitos: Sparkles,
   espectador: Tv,
   ajustes: SlidersHorizontal,
 };
@@ -141,14 +121,11 @@ export function ConfiguracaoDaCampanhaBody() {
   const [busca, setBusca] = useState("");
 
   // No alto, e não dentro de cada tópico: a busca precisa dos nomes do que foi
-  // criado -- "Envenenado" acha Condições --, e o tópico fechado não está
+  // criado -- "Vida" acha Medidores --, e o tópico fechado não está
   // montado para contar.
   const medidores = useModelosDaCampanha();
   const atributos = useAtributosDaCampanha();
   const moldeDeDetalhes = useMoldeDeDetalhes();
-  const { modelos: condicoes } = useCondicoesDaCampanha();
-  const efeitosEmArea = useEfeitosEmAreaDaCampanha();
-  const efeitosEmAreaDosPlugins = useEfeitosEmAreaDosPlugins();
   const definicoes = useConfiguracoesStore((state) => state.definicoes);
 
   const ajustes = useMemo(
@@ -169,13 +146,6 @@ export function ConfiguracaoDaCampanhaBody() {
         ...(moldeDeDetalhes?.grupos ?? []).map((grupo) => grupo.nome),
         ...(moldeDeDetalhes?.modelos ?? []).map((modelo) => modelo.rotulo),
       ],
-      efeitos: [
-        ...(condicoes ?? []).map((condicao) => condicao.nome),
-        ...efeitosEmArea.map((efeito) => efeito.titulo),
-        ...efeitosEmAreaDosPlugins.flatMap((grupo) =>
-          grupo.efeitos.map((efeito) => efeito.titulo),
-        ),
-      ],
     });
     // Ajustes só existe com algo para ajustar -- hoje, só quando um plugin
     // declara. E acha pelos próprios ajustes, com a MESMA conta da lista.
@@ -193,9 +163,6 @@ export function ConfiguracaoDaCampanhaBody() {
     medidores.modelos,
     atributos.modelos,
     moldeDeDetalhes,
-    condicoes,
-    efeitosEmArea,
-    efeitosEmAreaDosPlugins,
     ajustes,
   ]);
 
@@ -332,8 +299,6 @@ function Topico({
       return <AtributosDaCampanha {...atributos} />;
     case "detalhes":
       return <DetalhesDaCampanha />;
-    case "efeitos":
-      return <EfeitosDaCampanha />;
     case "espectador":
       return <ImagemDaCampanha />;
     case "ajustes":
@@ -669,225 +634,5 @@ function LinhaDeModelo({
         />
       }
     />
-  );
-}
-
-/**
- * O tópico Efeitos: as condições do token e os efeitos em área, em duas abas.
- * Os dois são o mesmo formato de efeito e o mesmo editor, e o mestre que
- * procura "o fogo" não deveria ter de saber em qual dos dois ele mora.
- */
-function EfeitosDaCampanha() {
-  const [aba, setAba] = useState<"condicoes" | "area">("condicoes");
-
-  return (
-    <div className="space-y-3">
-      <Tabs value={aba} onValueChange={(valor) => setAba(valor as typeof aba)}>
-        <TabsList className="w-full">
-          <TabsTrigger value="condicoes" className="flex-1">
-            {t.configuracao.condicoes}
-          </TabsTrigger>
-          <TabsTrigger value="area" className="flex-1">
-            {t.configuracao.efeitoEmArea}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {aba === "condicoes" ? <CondicoesDaCampanha /> : <EfeitosEmAreaDaCampanha />}
-    </div>
-  );
-}
-
-/**
- * O cardápio de condições: o que o menu do token oferece.
- *
- * CARDÁPIO, e não molde -- o avesso dos medidores logo acima. Criar uma
- * condição aqui não toca em ficha nenhuma, porque ninguém nasce envenenado:
- * ela só passa a estar a um clique no botão direito do token. Quando o mestre
- * a marca, o personagem ganha uma cópia, e editar o cardápio depois não muda a
- * cor do veneno que a mesa já está vendo. Ver `vault::condicoes`.
- */
-function CondicoesDaCampanha() {
-  const { modelos, recarregar } = useCondicoesDaCampanha();
-  const [ocupado, setOcupado] = useState(false);
-  /** A ordem depois de um arrasto, até o cardápio relido chegar. */
-  const [arrastada, setArrastada] = useState<{
-    de: Condicao[] | null;
-    lista: Condicao[];
-  } | null>(null);
-
-  const lista =
-    arrastada && arrastada.de === modelos ? arrastada.lista : (modelos ?? []);
-  const cheio = lista.length >= MAX_MODELOS_DE_CONDICAO;
-
-  async function mexer(acao: () => Promise<unknown>, erro: string) {
-    setOcupado(true);
-    try {
-      await acao();
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : erro);
-    } finally {
-      recarregar();
-      setOcupado(false);
-    }
-  }
-
-  const { listRef, dropIndex, startReorder } = useListReorder<string>(
-    (modeloId, index) => {
-      const de = lista.findIndex((modelo) => modelo.id === modeloId);
-      if (de < 0 || de === index) return;
-
-      const arrumada = [...lista];
-      const [movido] = arrumada.splice(de, 1);
-      arrumada.splice(index, 0, movido!);
-
-      setArrastada({ de: modelos, lista: arrumada });
-      void mexer(
-        () => reordenarCondicoesDaCampanha(arrumada.map((modelo) => modelo.id)),
-        t.configuracao.falhaAoReordenar,
-      );
-    },
-  );
-
-  async function criar() {
-    await mexer(
-      () =>
-        criarCondicaoDaCampanha(
-          t.configuracao.condicao,
-          CORES_LAPIS[lista.length % CORES_LAPIS.length] ?? CORES_LAPIS[0],
-          "circulo",
-          null,
-        ),
-      t.configuracao.falhaAoCriarCondicao,
-    );
-  }
-
-  /**
-   * O cardápio de partida, num gesto com nome. Só existe com o cardápio vazio:
-   * no meio de uma lista que o mestre já montou, ele duplicaria "Em chamas"
-   * ao lado do "Em chamas" que o mestre configurou.
-   */
-  async function sugerir() {
-    await mexer(async () => {
-      for (const sugestao of SUGESTOES) {
-        await criarCondicaoDaCampanha(
-          sugestao.nome,
-          sugestao.cor,
-          sugestao.icone,
-          sugestao.efeito ?? null,
-        );
-      }
-    }, t.configuracao.falhaAoCriarSugestoes);
-  }
-
-  /**
-   * Do menu para a biblioteca do Compêndio: abre o lugar no menu sem perder a
-   * condição. O efeito dela vai junto quando ninguém mais o usa -- ver
-   * `compendio::guardar_condicao`.
-   */
-  async function guardarNoCompendio(modelo: Condicao) {
-    setOcupado(true);
-    await guardarNaBiblioteca(modelo);
-    setOcupado(false);
-  }
-
-  return (
-    <section className="space-y-2">
-      <div className="flex items-center gap-1">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium">
-            {t.configuracao.condicoesDaCampanha}
-          </h3>
-          <p className="text-muted-foreground text-[11px] leading-snug">
-            {t.configuracao.condicoesDaCampanhaNota}
-          </p>
-        </div>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t.configuracao.criarCondicao}
-                disabled={cheio || ocupado}
-                onClick={() => void criar()}
-              >
-                <Plus />
-              </Button>
-            }
-          />
-          <TooltipContent>
-            <p className="font-medium">{t.configuracao.criarCondicao}</p>
-            {cheio ? (
-              <p className="text-muted-foreground max-w-48">
-                {t.configuracao.limiteDeCondicoes(MAX_MODELOS_DE_CONDICAO)}
-              </p>
-            ) : null}
-          </TooltipContent>
-        </Tooltip>
-      </div>
-
-      {modelos === null ? (
-        <p className="text-muted-foreground text-[11px]">
-          {t.configuracao.lendo}
-        </p>
-      ) : lista.length === 0 ? (
-        <div className="space-y-2">
-          <PainelVazio icone={Sparkles}>
-            {t.configuracao.nenhumaCondicao}
-          </PainelVazio>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={ocupado}
-            onClick={() => void sugerir()}
-          >
-            {t.configuracao.usarSugestoes}
-          </Button>
-        </div>
-      ) : (
-        <ul ref={listRef} className="space-y-0.5">
-          {lista.map((modelo, index) => (
-            <LinhaDeCondicao
-              key={modelo.id}
-              condicao={modelo}
-              ocupado={ocupado}
-              dropTarget={dropIndex === index}
-              onReorderStart={(event) => startReorder(event, modelo.id)}
-              onEditar={(patch) =>
-                void mexer(
-                  () => editarCondicaoDaCampanha(modelo.id, patch),
-                  t.configuracao.falhaAoGravar,
-                )
-              }
-              // A engrenagem abre a janela da condição, ao lado, e a lista
-              // fica: o editor do efeito é comprido, e é o cardápio que o
-              // mestre está arrumando. Ver `CondicaoBody`.
-              onConfigurar={() =>
-                abrirJanela({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id })
-              }
-              guardar={{
-                rotulo: t.compendio.guardarNoCompendio,
-                onGuardar: () => void guardarNoCompendio(modelo),
-              }}
-              onApagar={() =>
-                void mexer(async () => {
-                  await removerCondicaoDaCampanha(modelo.id);
-                  fecharJanela(chaveDe({ tipo: "condicao", lugar: "menu", condicaoId: modelo.id }));
-                }, t.configuracao.falhaAoApagarCondicao)
-              }
-              dicaDoOlho={{
-                titulo: modelo.escondido
-                  ? t.configuracao.chegaEscondida
-                  : t.configuracao.chegaAVista,
-                texto: t.configuracao.olhoDaCondicao,
-              }}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }

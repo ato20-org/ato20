@@ -609,8 +609,7 @@ function PainelDoCompendio({ onde }: { onde: Onde }) {
 
   /**
    * Um efeito de área novo, em branco como o efeito novo sempre foi, e já
-   * aberto na janela dele. Nasce com a cor -- é o que o faz de área. Ver
-   * `EfeitosEmAreaDaCampanha`.
+   * aberto na janela dele. Nasce com a cor -- é o que o faz de área.
    */
   async function criarEfeito(pastaId?: string) {
     const { criarMolde: criarMoldeDeEfeito, salvar } = useEfeitosDaCampanhaStore.getState();

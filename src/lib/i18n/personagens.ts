@@ -405,7 +405,7 @@ const pt = {
     nova: "Condição",
     marcar: "Marcar condição",
     semCondicoes: (nome: string) =>
-      `A campanha ainda não tem condições. Crie as de sempre na configuração da campanha, ou uma só para ${nome} aqui embaixo.`,
+      `A campanha ainda não tem condições. Ponha as de sempre no menu pelo Compêndio, ou crie uma só para ${nome} aqui embaixo.`,
     soPara: (nome: string) => `Só para ${nome}`,
   },
 
@@ -413,7 +413,7 @@ const pt = {
     semLugar: "Ninguém da seleção tem lugar para mais uma condição.",
     falhaAoTirar: "Falha ao tirar.",
     nenhuma: "Nenhuma condição na campanha",
-    daCampanha: "Condições da campanha…",
+    noCompendio: "Condições no Compêndio…",
   },
 
   linhaDeCondicao: {
@@ -977,7 +977,7 @@ const en: typeof pt = {
     nova: "Condition",
     marcar: "Mark condition",
     semCondicoes: (nome) =>
-      `The campaign has no conditions yet. Create the usual ones in the campaign settings, or one just for ${nome} below.`,
+      `The campaign has no conditions yet. Put the usual ones on the menu from the Compendium, or create one just for ${nome} below.`,
     soPara: (nome) => `Just for ${nome}`,
   },
 
@@ -985,7 +985,7 @@ const en: typeof pt = {
     semLugar: "No one in the selection has room for another condition.",
     falhaAoTirar: "Could not remove.",
     nenhuma: "No conditions in the campaign",
-    daCampanha: "Campaign conditions…",
+    noCompendio: "Conditions in the Compendium…",
   },
 
   linhaDeCondicao: {

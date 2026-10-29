@@ -395,7 +395,7 @@ const pt = {
     titulo: "Efeito da área",
     nenhum: "Nenhum",
     semEfeitos:
-      "A campanha ainda não tem efeitos em área. Eles se criam na Configuração da campanha, em Efeitos, Efeito em área.",
+      "A campanha ainda não tem efeitos em área. Eles se criam no Compêndio, em Efeitos, Área.",
   },
 
   disparo: {
@@ -900,7 +900,7 @@ const en: typeof pt = {
     titulo: "Area effect",
     nenhum: "None",
     semEfeitos:
-      "The campaign has no area effects yet. Create them in Campaign settings, under Effects, Area effect.",
+      "The campaign has no area effects yet. Create them in the Compendium, under Effects, Area.",
   },
 
   disparo: {

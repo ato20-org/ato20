@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Minus, Settings2, Sparkles } from "lucide-react";
+import { BookMarked, Check, Minus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { SeloDaCondicao } from "@/components/playground/selos-da-condicao";
@@ -175,11 +175,12 @@ export function SubmenuDeCondicoes({ itens }: { itens: CanvasItem[] }) {
         <ContextMenuSeparator />
 
         {/* O caminho até o cardápio, para quem abriu o menu e não achou o que
-            queria. Criar no próprio menu pediria um campo de texto dentro de
-            um submenu, que fecha ao primeiro movimento errado do mouse. */}
-        <ContextMenuItem onClick={() => abrirJanela({ tipo: "configuracao" })}>
-          <Settings2 />
-          {t.menuDeCondicoes.daCampanha}
+            queria: o Compêndio, de onde a condição vem para o menu. Criar no
+            próprio menu pediria um campo de texto dentro de um submenu, que
+            fecha ao primeiro movimento errado do mouse. */}
+        <ContextMenuItem onClick={() => abrirJanela({ tipo: "compendio" })}>
+          <BookMarked />
+          {t.menuDeCondicoes.noCompendio}
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>
