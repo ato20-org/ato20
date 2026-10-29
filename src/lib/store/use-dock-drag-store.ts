@@ -7,6 +7,18 @@ import type { AlvoDock } from "@/lib/store/use-layout-store";
 /** O retângulo que acende, em pixels relativos à camada de janelas. */
 export type Retangulo = { left: number; top: number; width: number; height: number };
 
+/** Um lado da janela do ATO20, por onde o ponteiro pode sair. */
+export type Beirada = "esquerda" | "direita" | "topo" | "base";
+
+/**
+ * Por onde o ponteiro saiu, e em que ponto da beirada.
+ *
+ * `posicao` é ao longo da beirada, em pixels da janela: o `y` nas laterais, o
+ * `x` em cima e embaixo. Entra aqui só quando a beirada muda; o resto do gesto
+ * escreve direto no DOM, como a etiqueta.
+ */
+export type Saida = { beirada: Beirada; posicao: number };
+
 type DockDragStore = {
   /** Onde a janela vai encostar se soltarem agora. `null` = continua solta. */
   alvo: AlvoDock | null;
@@ -25,12 +37,12 @@ type DockDragStore = {
   fantasma: { titulo: string; x: number; y: number } | null;
   /**
    * O ponteiro saiu da janela do ATO20 no meio do arrasto: soltar ali abre a
-   * janela numa janela do sistema. Ver `soltarJanela`.
+   * janela numa janela do sistema. Ver `soltarJanela`. `null` = está dentro.
    */
-  fora: boolean;
+  fora: Saida | null;
 
   mirar: (alvo: AlvoDock | null, retangulo: Retangulo | null) => void;
-  marcarFora: (fora: boolean) => void;
+  marcarFora: (fora: Saida | null) => void;
   /** Levanta a etiqueta. Chamado quando o gesto passa do limiar de clique. */
   pegar: (titulo: string, x: number, y: number) => void;
   limpar: () => void;
@@ -50,7 +62,7 @@ export const useDockDragStore = create<DockDragStore>((set) => ({
   alvo: null,
   retangulo: null,
   fantasma: null,
-  fora: false,
+  fora: null,
 
   mirar(alvo, retangulo) {
     set({ alvo, retangulo });
@@ -65,6 +77,6 @@ export const useDockDragStore = create<DockDragStore>((set) => ({
   },
 
   limpar() {
-    set({ alvo: null, retangulo: null, fantasma: null, fora: false });
+    set({ alvo: null, retangulo: null, fantasma: null, fora: null });
   },
 }));

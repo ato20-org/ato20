@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
+import { DockBrilho } from "@/components/mestre/dock/dock-brilho";
 import { DockGhost } from "@/components/mestre/dock/dock-ghost";
 import { DockOverlay } from "@/components/mestre/dock/dock-overlay";
 import {
@@ -98,6 +99,7 @@ export function WindowLayer() {
 
       <DockOverlay />
       <DockGhost />
+      <DockBrilho />
     </div>
   );
 }
