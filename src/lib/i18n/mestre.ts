@@ -606,6 +606,11 @@ const pt = {
   },
 
   /** A pílula de jogadores no canto do palco. */
+  /** A etiqueta no token que um jogador arrasta pelo celular. Ver `QuemMove`. */
+  quemMove: {
+    semNome: "Jogador",
+  },
+
   jogadores: {
     titulo: "Jogadores",
     rotulo: (n: number) => `Jogadores (${n})`,
@@ -2018,6 +2023,10 @@ const en: typeof pt = {
     portaOcupada:
       "Funnel on this computer already serves something else on port 443. Close that to open the table.",
     naoAbriu: (motivo) => `Tailscale did not open: ${motivo}`,
+  },
+
+  quemMove: {
+    semNome: "Player",
   },
 
   jogadores: {

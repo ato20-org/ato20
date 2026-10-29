@@ -172,6 +172,7 @@ import {
 import { CamadasDeExtensoes } from "@/components/mestre/camadas-de-extensoes";
 import { ArquivoFantasma } from "@/components/mestre/arquivo-fantasma";
 import { TokenFantasma } from "@/components/mestre/token-fantasma";
+import { QuemMove } from "@/components/mestre/quem-move";
 import { chaveContribuicao } from "@/lib/extensoes/manifesto";
 import { useContribuicoesStore } from "@/lib/store/use-contribuicoes-store";
 import { encaixarNaGrade, gradeDoEncaixe } from "@/lib/geometry/grid";
@@ -3535,6 +3536,11 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           do `SceneLayer` pelo mesmo motivo: é decisão em andamento do mestre, e
           a TV só recebe o que foi decidido. */}
       <TokenFantasma sceneId={scene.id} grid={scene.grid} />
+
+      {/* Quem está arrastando um token pelo celular. Fora do `SceneLayer`
+          pela razão das sombras acima: é aviso para o mestre, e a TV já vê o
+          token andar. Ver `QuemMove`. */}
+      <QuemMove scene={scene} />
 
       {/* A mesma coisa para o arquivo arrastado de FORA do aplicativo, que não
           é gesto próprio e por isso não cabia na sombra acima: ele chega pelo

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import { podeMoverNaVez, vezNaMesa } from "@/lib/iniciativa/rodadas";
 import { useIniciativaStore } from "@/lib/store/use-iniciativa-store";
+import { useQuemMoveStore } from "@/lib/store/use-quem-move-store";
 import { useSceneStore } from "@/lib/store/use-scene-store";
 import { destinoAceito, type MovimentoDoJogador } from "@/lib/sync/movimento";
 import { fluxoDoMestre } from "@/lib/sync/fluxos-do-mestre";
@@ -68,7 +69,16 @@ export function useMovimentosDaMesa(): void {
           if (!noAr) return;
 
           const destino = destinoAceito(noAr, movimento);
-          if (destino) updateItem(noAr.id, movimento.itemId, destino);
+          if (!destino) return;
+
+          updateItem(noAr.id, movimento.itemId, destino);
+          // E o palco mostra de quem é a mão. Só o aceito: o recusado não
+          // anda, e uma etiqueta num token parado diria que alguém o move.
+          // Ver `QuemMove`.
+          useQuemMoveStore.getState().marcar(movimento.itemId, {
+            jogadorId: movimento.jogadorId,
+            sceneId: noAr.id,
+          });
         };
       },
       () => {
