@@ -3007,15 +3007,13 @@ export type Scene = {
    */
   ceuAssetId?: string;
   /**
-   * O ajuste de imagem DESTA cena na janela do espectador: a masmorra mais
-   * clara, o flashback sem cor. Ausente = neutro, e só os canais mexidos são
-   * guardados -- ver `ajusteParaGuardar`.
+   * O tom DESTA cena: a masmorra mais clara, o flashback sem cor. Ausente =
+   * neutro, e só os canais mexidos são guardados -- ver `ajusteParaGuardar`.
    *
-   * Multiplica o ajuste da campanha, que viaja à parte no `LiveState`. Ver
-   * `compor`.
-   *
-   * CHEGA à mesa, mas só a janela do espectador aplica: o jogador vê o mapa
-   * como ele é, e o Mestre também.
+   * CHEGA à mesa, e todo mundo aplica: a TV no palco inteiro, vezes a
+   * calibração da campanha (que viaja à parte no `LiveState`, ver `compor`); o
+   * celular no palco inteiro, sem a calibração; o Mestre só no mapa, pintado
+   * no arquivo. Ver `filtroDaCena` e `tom-do-mapa.ts`.
    */
   imagem?: AjusteDeImagem;
   /**

@@ -44,6 +44,7 @@ import {
 import { useDeclarativo } from "@/components/playground/declarativo";
 import { AMBIENTE_DO_MESTRE, ambienteDaCena } from "@/lib/ambiente";
 import { quadroDaMesa } from "@/lib/geometry/viewport";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { Variante } from "@/lib/vault/assets";
 import type { CameraAssinavel } from "@/lib/geometry/camera-orbital";
 import type { CorrenteDeEsguelha } from "@/lib/geometry/volume";
@@ -255,6 +256,11 @@ type SceneLayerProps = {
    */
   ambienteFraco?: boolean;
   /**
+   * O tom da cena (`Scene.imagem`) pintado só no mapa. Só o Mestre passa; a TV
+   * e o celular o aplicam no palco inteiro. Ver `FundoDaCena`.
+   */
+  tomDoMapa?: AjusteDeImagem;
+  /**
    * O ambiente sai da tela por um instante, sem desmontar: é o Mestre durante
    * um arrasto. Medido na webview, arrastando a moldura com sessenta tokens, a
    * chuva levava o palco de 56 a 50 quadros por segundo -- duas superfícies de
@@ -317,6 +323,7 @@ export function SceneLayer({
   ambienteFraco,
   ambienteEscondido,
   escuroDaMesa = false,
+  tomDoMapa,
 }: SceneLayerProps) {
   // Sem os escondidos, que a mesa já recebe sem eles: aqui é o palco do
   // mestre e a miniatura da lista, que têm a cena inteira. Ver `itensVisiveis`.
@@ -465,6 +472,7 @@ export function SceneLayer({
         assetId={scene.backgroundAssetId}
         variante={variante}
         aoEncaixar={orbital ? setLugarDoFundo : undefined}
+        tom={tomDoMapa}
       />
 
       {/* Depois do fundo e ANTES dos itens: a grade é do mapa, e um token em

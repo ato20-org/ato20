@@ -5,6 +5,12 @@ import { useEffect, useState } from "react";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import { useVarianteDoFundo } from "@/hooks/use-variante-do-fundo";
 import { caberEm } from "@/lib/geometry/caber";
+import {
+  ajusteDeImagemDe,
+  filtroDaImagem,
+  type AjusteDeImagem,
+} from "@/lib/imagem-do-espectador";
+import { assarMapaComTom } from "@/lib/mapa-com-tom";
 import type { Variante } from "@/lib/vault/assets";
 import { SCENE_HEIGHT, SCENE_WIDTH } from "@/types/scene";
 
@@ -29,6 +35,16 @@ type FundoDaCenaProps = {
    * chão corta nele. Ver o envelope orbital da `SceneLayer`.
    */
   aoEncaixar?: (lugar: { x: number; y: number; width: number; height: number }) => void;
+  /**
+   * O tom da cena (`Scene.imagem`), pintado no arquivo do mapa. Ausente ou
+   * neutro = o mapa como ele é.
+   *
+   * Só o Mestre passa: a TV e o celular aplicam o tom no palco inteiro, por
+   * fora dos planos, e aqui ele valeria duas vezes. Só no mapa, para o gizmo e
+   * os tokens ficarem de fora. Pintado e não por `filter` de CSS: ver
+   * `tom-do-mapa.ts`.
+   */
+  tom?: AjusteDeImagem;
 };
 
 /**
@@ -55,11 +71,23 @@ export function FundoDaCena({
   assetId,
   variante,
   aoEncaixar,
+  tom,
 }: FundoDaCenaProps) {
   // Sempre chamado, mesmo quando `variante` decide por fora: o palco é o único
   // lugar sem tamanho fixo, mas a regra dos hooks não admite o "só às vezes".
   const porZoom = useVarianteDoFundo();
-  const url = useAssetUrl(assetId, variante ?? porZoom);
+  // Os quatro canais soltos, e não o objeto: são eles que decidem se o forno
+  // roda de novo, e um objeto novo com os mesmos números não deve rodá-lo.
+  const { brilho, contraste, saturacao, matiz } = ajusteDeImagemDe(tom);
+  const comTom =
+    filtroDaImagem({ brilho, contraste, saturacao, matiz }) !== undefined;
+  // Com tom, nunca o arquivo original: ampliado além do palco, ele pode ter
+  // oito mil pixels de lado, e o forno decodificaria e pintaria tudo isso de
+  // novo a cada mudança. O `palco` tem até 4096, e é o que se vê até ali.
+  const url = useAssetUrl(
+    assetId,
+    variante ?? (comTom ? (porZoom ?? "palco") : porZoom),
+  );
 
   /**
    * O último endereço que TERMINOU de decodificar, com o asset a que ele
@@ -91,6 +119,7 @@ export function FundoDaCena({
     if (!assetId || !url) return;
 
     let vivo = true;
+    let espera: ReturnType<typeof setTimeout> | undefined;
     const carga = new Image();
     carga.src = url;
 
@@ -98,22 +127,43 @@ export function FundoDaCena({
     // ao `<img>` da tela, que já sabe falhar em silêncio, do que segurado aqui
     // — segurar deixaria o palco com o mapa velho para sempre, sem nada dizendo
     // por quê.
-    const entregar = () => {
+    const entregar = (endereco: string) => {
       if (vivo)
         setPronta({
           assetId,
-          url,
+          url: endereco,
           largura: carga.naturalWidth,
           altura: carga.naturalHeight,
         });
     };
 
-    void carga.decode().then(entregar, entregar);
+    // Com tom, o arquivo que vai à tela é o ASSADO, e o mapa sem tom não
+    // aparece no meio: quem fica na tela enquanto o forno trabalha é o que já
+    // estava -- o tom anterior, ao arrastar a régua. A espera curta junta os
+    // passos do arrasto num forno só. Sem forno que preste, o mapa sem tom.
+    const assarEEntregar = () => {
+      espera = setTimeout(() => {
+        void assarMapaComTom(url, { brilho, contraste, saturacao, matiz }).then(
+          async (assado) => {
+            if (!assado) return entregar(url);
+            const pronto = new Image();
+            pronto.src = assado;
+            await pronto.decode().catch(() => undefined);
+            entregar(assado);
+          },
+        );
+      }, 120);
+    };
+
+    void carga
+      .decode()
+      .then(comTom ? assarEEntregar : () => entregar(url), () => entregar(url));
 
     return () => {
       vivo = false;
+      clearTimeout(espera);
     };
-  }, [assetId, url]);
+  }, [assetId, url, comTom, brilho, contraste, saturacao, matiz]);
 
   // A conta do `contain` não pode ser do CSS aqui dentro: sob `zoom` ele a faz
   // com o tamanho natural do arquivo, e erra. O porquê inteiro, com as medidas,

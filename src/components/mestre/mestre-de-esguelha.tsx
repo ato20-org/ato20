@@ -541,6 +541,7 @@ export function MestreDeEsguelha({ scene }: { scene: Scene }) {
               efeitos={efeitos}
               // Só as peças selecionadas animam: ver `animarSo` em `SceneLayer`.
               animarSo={animados}
+              tomDoMapa={daMesa.imagem}
             />
           </PalcoSoTela>
         ) : null}

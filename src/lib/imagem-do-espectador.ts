@@ -1,15 +1,18 @@
 /**
- * O ajuste de imagem da janela do espectador: brilho, contraste, saturação e
- * matiz, e a conta que os vira um `filter` de CSS.
+ * O ajuste de imagem: brilho, contraste, saturação e matiz, e a conta que os
+ * vira um `filter` de CSS.
  *
- * Só a janela do espectador -- e a Janela Mesa, que é a prévia dela -- aplica.
- * O palco do Mestre e o celular do jogador ficam com o mapa como ele é: o
- * ajuste existe para a TV e o projetor, que mostram a mesma imagem mais
- * escura, mais lavada ou mais azul do que a tela do notebook.
+ * Dois níveis, que se multiplicam na TV: a CAMPANHA (a calibração do aparelho)
+ * e a CENA (o tom do mapa: a masmorra mais clara, o flashback sem cor). Ver
+ * `compor`.
  *
- * Dois níveis, que se multiplicam: a CAMPANHA (a calibração do aparelho, o tom
- * da campanha inteira) e a CENA (a masmorra mais clara, o flashback sem cor).
- * Ver `compor`.
+ * A calibração é só da janela do espectador -- e da Janela Mesa, que é a
+ * prévia dela: existe para a TV e o projetor, que mostram a mesma imagem mais
+ * escura, mais lavada ou mais azul do que a tela do notebook. O celular e o
+ * Mestre não passam por esse aparelho.
+ *
+ * O tom da cena é do MAPA, e vale para quem o vê: a TV, o celular do jogador e
+ * o Mestre. Ver `filtroDaCena` e `tom-do-mapa.ts`.
  *
  * Porcento para brilho, contraste e saturação, graus para o matiz: é o que o
  * mestre lê na régua, e o que o arquivo guarda. O neutro de cada canal é o
@@ -163,4 +166,18 @@ export function filtroDaImagem(
   if (ajuste.matiz !== 0) partes.push(`hue-rotate(${ajuste.matiz}deg)`);
 
   return partes.length > 0 ? partes.join(" ") : undefined;
+}
+
+/**
+ * O `filter` só do tom da cena, sem a calibração da TV, ou `undefined` quando
+ * ele é neutro.
+ *
+ * É o que o celular aplica no palco inteiro, como a TV faz com os dois níveis:
+ * o jogador vê a masmorra escurecida junto com a mesa. O Mestre vê o mesmo tom
+ * só no mapa, PINTADO no arquivo e não por `filter` -- ver `tom-do-mapa.ts` --,
+ * e o gizmo, as molduras e os tokens ficam com a cor de sempre enquanto ele
+ * edita.
+ */
+export function filtroDaCena(cena: unknown): string | undefined {
+  return filtroDaImagem(ajusteDeImagemDe(cena));
 }

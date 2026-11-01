@@ -203,7 +203,7 @@ const pt = {
       "O que o ATO20 e os plugins deixam ajustar só nesta campanha. Vence o da máquina.",
     espectador: "Imagem no espectador",
     espectadorDescricao:
-      "Brilho e cor da TV ou do projetor. Só a janela do espectador muda: você e os jogadores veem o mapa como ele é. Cada mapa ainda pode ter o próprio ajuste, por cima deste.",
+      "Brilho e cor da TV ou do projetor. Só a janela do espectador muda: é a calibração do aparelho, e você e os jogadores não olham por ele. O tom de cada mapa fica nas configurações do mapa, e todo mundo vê.",
     falhaAoLerMedidores: "Falha ao ler os medidores.",
     falhaAoReordenar: "Falha ao reordenar.",
     falhaAoGravar: "Falha ao gravar.",
@@ -1574,7 +1574,7 @@ const en: typeof pt = {
       "What ATO20 and its plugins let you adjust in this campaign only. It wins over the machine's.",
     espectador: "Spectator image",
     espectadorDescricao:
-      "Brightness and color for the TV or projector. Only the spectator window changes: you and the players see the map as it is. Each map can still have its own adjustment on top of this one.",
+      "Brightness and color for the TV or projector. Only the spectator window changes: it calibrates the device, and you and the players don't look through it. Each map's tone lives in the map settings, and everyone sees it.",
     falhaAoLerMedidores: "Could not read the meters.",
     falhaAoReordenar: "Could not reorder.",
     falhaAoGravar: "Could not save.",

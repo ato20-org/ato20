@@ -22,6 +22,7 @@ import {
 import { olharDe } from "@/lib/geometry/peca-de-esguelha";
 import { UNIDADES_POR_METRO } from "@/lib/geometry/sombra";
 import { efeitosDoObjeto, type EfeitosDoPersonagem } from "@/lib/condicao";
+import type { AjusteDeImagem } from "@/lib/imagem-do-espectador";
 import type { Variante } from "@/lib/vault/assets";
 import { useAssetUrl } from "@/hooks/use-asset-url";
 import type { RolagemDaMesa } from "@/types/dado";
@@ -138,6 +139,7 @@ export function CenaDeEsguelha({
   animarSo,
   naMao,
   sobre,
+  tomDoMapa,
 }: {
   scene: Scene;
   portraits?: Portrait[];
@@ -175,6 +177,8 @@ export function CenaDeEsguelha({
    * destino. Só de esguelha; de prumo quem chama desenha as suas.
    */
   sobre?: (camera: CameraAssinavel) => ReactNode;
+  /** O tom da cena só no mapa: o Mestre. Ver `tomDoMapa` em `SceneLayer`. */
+  tomDoMapa?: AjusteDeImagem;
 }) {
 
   /**
@@ -327,6 +331,7 @@ export function CenaDeEsguelha({
         smooth={smooth}
         animarSo={animarSo}
         naMao={naMao}
+        tomDoMapa={tomDoMapa}
       />
     );
   }
@@ -348,6 +353,7 @@ export function CenaDeEsguelha({
         naMao={naMao}
         // Com o olhar do Mestre, é o Mestre: o ambiente na metade.
         ambienteFraco={Boolean(olhar)}
+        tomDoMapa={tomDoMapa}
         // Os em pé sobem no chão inclinado; o deitado fica no piso, ou sai
         // dele para a tela no Mestre. Ver `DeitadosNaTela`.
         semItens={deitadoNaTela ? true : emPe}

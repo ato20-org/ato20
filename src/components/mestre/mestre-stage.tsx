@@ -3374,6 +3374,8 @@ export function MestreStage({ scene: cenaDoBoard }: { scene: Scene }) {
           apagando={apagando}
           scene={scene}
           variant="mestre"
+          // O tom do mapa que a mesa vê, só na imagem: ver `FundoDaCena`.
+          tomDoMapa={scene.imagem}
           portaNaMao={gestoPorta?.portaId}
           pings={pings}
           disparados={disparados}

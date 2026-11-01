@@ -12,6 +12,7 @@ import {
 import { SceneStage } from "@/components/playground/scene-stage";
 import { SoundToggle } from "@/components/playground/sound-toggle";
 import { useZoomDaMesa } from "@/hooks/use-zoom-da-mesa";
+import { filtroDaCena } from "@/lib/imagem-do-espectador";
 import { t } from "@/lib/i18n/jogador";
 import { cn } from "@/lib/utils";
 import type { EfeitosDoPersonagem } from "@/lib/condicao";
@@ -112,6 +113,12 @@ export function JogadorStage({
     ativo: Boolean(cena),
     tecladoSempre: expandida,
   });
+  /**
+   * O tom do mapa, o mesmo que a TV mostra, mas sem a calibração dela: o
+   * celular não é o aparelho da sala. Da `cena` do corte, para o tom trocar
+   * atrás da cortina junto com o mapa. Ver `filtroDaCena`.
+   */
+  const tom = filtroDaCena(cena?.imagem);
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2">
@@ -138,38 +145,46 @@ export function JogadorStage({
               "aspect-video max-h-full w-full rounded-lg",
         )}
       >
-        <SceneStage
-          className="size-full"
-          viewport={recorte}
-          corDoVazio={cena?.corDoVazio}
-          corte={corte}
-          semTransicao={direto}
-          smooth
-        >
-          {/* Mesma suavização da TV: o celular também só recebe amostras, e a
-              troca de cena entra em fade em vez de estalar. */}
-          {cena ? (
-            <div key={cena.id} className="scene-fade-in absolute inset-0">
-              <CenaDoJogador
-                codigo={codigo}
-                cena={cena}
-                portraits={portraits}
-                fichas={fichas}
-                efeitos={efeitos}
-                rolagens={rolagens}
-                iniciativa={iniciativa}
-                pings={pings}
-                disparados={disparados}
-                laser={laser}
-                segurados={segurados}
-                tripe={tripe}
-                corte={corte}
-              />
-            </div>
-          ) : null}
-        </SceneStage>
+        {/* O tom cobre o palco e a cortina, por FORA dos planos (ver
+            `debug-do-palco` §3), e deixa de fora os botões e os avisos, que
+            são da tela e não do mapa. A cortina vem junto pela razão da TV: o
+            `filter` faz desta caixa um contexto de empilhamento, e por fora
+            ela mudaria de ordem com o que está dentro. Sempre montada, com ou
+            sem tom: trocar a árvore remontaria o palco. */}
+        <div className="absolute inset-0" style={{ filter: tom }}>
+          <SceneStage
+            className="size-full"
+            viewport={recorte}
+            corDoVazio={cena?.corDoVazio}
+            corte={corte}
+            semTransicao={direto}
+            smooth
+          >
+            {/* Mesma suavização da TV: o celular também só recebe amostras, e a
+                troca de cena entra em fade em vez de estalar. */}
+            {cena ? (
+              <div key={cena.id} className="scene-fade-in absolute inset-0">
+                <CenaDoJogador
+                  codigo={codigo}
+                  cena={cena}
+                  portraits={portraits}
+                  fichas={fichas}
+                  efeitos={efeitos}
+                  rolagens={rolagens}
+                  iniciativa={iniciativa}
+                  pings={pings}
+                  disparados={disparados}
+                  laser={laser}
+                  segurados={segurados}
+                  tripe={tripe}
+                  corte={corte}
+                />
+              </div>
+            ) : null}
+          </SceneStage>
 
-        <CortinaDeCorte fechada={cortando} />
+          <CortinaDeCorte fechada={cortando} />
+        </div>
 
         {/* Irmão do palco, não filho: o `SceneStage` esconde o próprio plano
             enquanto não mediu a moldura, e um aviso lá dentro desapareceria

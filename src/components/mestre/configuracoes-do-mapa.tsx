@@ -2,13 +2,13 @@
 
 import {
   CloudRain,
+  Contrast,
   Frame,
   Moon,
   RotateCcw,
   Settings2,
   Sun,
   Tags,
-  Tv,
 } from "lucide-react";
 
 import { useMemo, useState } from "react";
@@ -245,8 +245,8 @@ export function ConfiguracoesDoMapa({ scene }: { scene: Scene }) {
         />
         <CeuDoMapa scene={scene} />
 
-        {/* Ainda cor da cena, mas só na TV: o mapa que o mestre vê aqui não
-            muda, e a prévia é a Janela Mesa, pelo botão das réguas. */}
+        {/* Ainda cor da cena, e de todo mundo que vê o mapa: a TV, o celular
+            e este palco. Ver `filtroDaCena`. */}
         <span className="bg-border block h-px w-full" />
         <ImagemDoMapa
           valor={scene.imagem}
@@ -522,11 +522,12 @@ function ForaDoMapa({
 }
 
 /**
- * O ajuste de imagem DESTE mapa na janela do espectador: a masmorra mais
- * clara, o flashback sem cor. Ver `Scene.imagem`.
+ * O tom DESTE mapa: a masmorra mais clara, o flashback sem cor. Ver
+ * `Scene.imagem`.
  *
- * Por cima do ajuste da campanha, que é a calibração da TV: os dois valem, e
- * multiplicam -- ver `compor`. Só no mapa, como o resto deste painel.
+ * A mesa, o jogador e o Mestre o veem. Na TV ele multiplica a calibração da
+ * campanha, que só ela tem -- ver `compor`. Só no mapa, como o resto deste
+ * painel.
  */
 function ImagemDoMapa({
   valor,
@@ -538,7 +539,7 @@ function ImagemDoMapa({
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2 text-xs">
-        <Tv className="text-muted-foreground size-3.5" />
+        <Contrast className="text-muted-foreground size-3.5" />
         {t.configuracoesDoMapa.imagem}
       </div>
 

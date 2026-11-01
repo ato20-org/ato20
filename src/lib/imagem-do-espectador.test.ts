@@ -5,6 +5,7 @@ import {
   ajusteNeutro,
   ajusteParaGuardar,
   compor,
+  filtroDaCena,
   filtroDaImagem,
 } from "@/lib/imagem-do-espectador";
 
@@ -88,5 +89,22 @@ describe("filtroDaImagem", () => {
     expect(
       filtroDaImagem({ brilho: 100, contraste: 80, saturacao: 0, matiz: 0 }),
     ).toBe("contrast(0.8) saturate(0)");
+  });
+});
+
+describe("filtroDaCena", () => {
+  // O celular e o Mestre aplicam só o tom do mapa: sem cena ajustada, sem
+  // `filter` nenhum, e a calibração da TV nunca entra nesta conta.
+  it("sem tom não tem filtro nenhum", () => {
+    expect(filtroDaCena(undefined)).toBeUndefined();
+    expect(filtroDaCena({})).toBeUndefined();
+    expect(filtroDaCena({ brilho: 100, matiz: 0 })).toBeUndefined();
+  });
+
+  it("é o filtro do tom da cena, dentro da faixa", () => {
+    expect(filtroDaCena({ brilho: 127, saturacao: 61, matiz: 62 })).toBe(
+      "brightness(1.27) saturate(0.61) hue-rotate(62deg)",
+    );
+    expect(filtroDaCena({ contraste: 999 })).toBe("contrast(2)");
   });
 });
