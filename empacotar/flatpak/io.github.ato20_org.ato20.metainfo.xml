@@ -100,6 +100,92 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.12.0" date="2026-11-01">
+      <description>
+        <p>
+          ATO20 1.12 plays music and ambience from YouTube, shows the
+          map tone on every screen, shows who is moving a token from a
+          phone, and brings the Compendium's conditions to the token
+          menu.
+        </p>
+        <ul>
+          <li>
+            Music and ambience play from YouTube. In Sounds, the
+            import menu gained From YouTube: it takes a link to a
+            video or to a whole playlist, one sound per video. ATO20
+            tests each video before adding it and leaves out, with
+            the reason, the ones whose owner doesn't allow playing
+            outside YouTube. You pick the part that plays on a
+            two-handle slider, and the spectator window and the
+            phones play along. Sound cues still use files only,
+            because they need to play right away.
+          </li>
+          <li>
+            The map tone is for everyone. Brightness, contrast,
+            saturation and hue in the Map settings, now under Map
+            tone, also show on the players' phones and on your own
+            map, with no need to open the Table window to check. The
+            TV calibration, in Campaign settings, stays on the
+            spectator window only.
+          </li>
+          <li>
+            You see who is moving a token from their phone. While a
+            player drags their token, it gets the blue ring and the
+            name of who is moving it. And a token you are dragging
+            can't be grabbed by a player at the same time: before,
+            both of you pulled it back and forth.
+          </li>
+          <li>
+            On the phone, dragging a die to the bottom of the screen
+            takes it off the table. With a die in hand, a strip
+            shows up at the bottom, and dropping it there takes the
+            die away. While there are dice on screen, Clear all dice
+            sits right below the top bar, and the Dice bag's Clear
+            moved up to its header.
+          </li>
+          <li>
+            The player's screen got clearer. The entry screen shows
+            the table's name and explains that the name it asks for
+            is the player's, not the character's. With the phone
+            sideways, the side bar changes width by dragging its
+            edge, and the device remembers it. The sheet's meters
+            fill the whole column, an empty Backpack opens a new
+            item with a tap, and Leave the table warns that the
+            notebook's notes don't come back.
+          </li>
+          <li>
+            The Compendium's conditions show up when you right-click
+            a token. Right-clicking a token and the sheet's + show
+            the campaign's conditions and, after them, the
+            Compendium's. Every empty Compendium tab has Use
+            suggestions, which brings in the built-in ones.
+            Conditions and effects are now created and tuned only in
+            the Compendium: the Effects tab left Campaign settings,
+            and the Shot panel takes you straight there.
+          </li>
+          <li>
+            The invite says who can join on each network, and
+            clicking the campaign code copies it. In Invite, who can
+            join by each route shows up right below the choice, and
+            the link got a Copy link button.
+          </li>
+          <li>
+            The window bar got leaner, with the scene in the exact
+            middle. A long campaign name no longer pushes the scene
+            name aside. And dragging a window out of ATO20 lights up
+            the edge it is leaving through.
+          </li>
+          <li>
+            Fixed: on the phone, the leave-the-table dialog vanished
+            as soon as it opened.
+          </li>
+          <li>
+            Fixed: filtering in the palette (Ctrl+K) left a stray
+            outline over the map.
+          </li>
+        </ul>
+      </description>
+    </release>
     <release version="1.11.0" date="2026-10-26">
       <description>
         <p>
