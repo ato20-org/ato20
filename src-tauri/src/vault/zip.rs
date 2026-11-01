@@ -584,7 +584,7 @@ mod tests {
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
 
         let nomes: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).expect("entrada").name().to_string())
+            .map(|i| zip.by_index(i).expect("entrada").name().expect("nome").to_string())
             .collect();
 
         assert!(
@@ -611,7 +611,7 @@ mod tests {
         let arquivo = File::open(&zip_path).expect("open");
         let mut zip = ZipArchive::new(BufReader::new(arquivo)).expect("archive");
         let nomes: Vec<String> = (0..zip.len())
-            .map(|i| zip.by_index(i).expect("entrada").name().to_string())
+            .map(|i| zip.by_index(i).expect("entrada").name().expect("nome").to_string())
             .collect();
 
         assert!(nomes.iter().any(|n| n == "cenas/a-taverna.json"), "{nomes:?}");
